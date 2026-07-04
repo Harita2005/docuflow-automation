@@ -1,0 +1,528 @@
+
+--- ROUTE: /api/documents/upload ---
+app.post("/api/documents/upload", authenticateToken, upload.single("file"), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!req.file) return res.status(400).json({ error: "No attachment file uploaded." });
+
+    const { originalname, size, mimetype, filename } = req.file;
+    const invoiceId = "DOC-" + Math.floor(10000000 + Math.random() * 90000000);
+    const uploadedPath = `/uploads/${filename}`;
+
+    const newInvoice = await prisma.invoice.create({
+      data: {
+        id: invoiceId,
+        invoice_number: "Extracting...",
+        vendor_name: "Processing...",
+        invoice_date: new Date().toISOString().split("T")[0],
+        po_number: "Extracting...",
+        amount: 0,
+        currency: "USD",
+        status: "Received",
+        document_type: "Processing...",
+        uploaded_by_id: user.id,
+        file_name: originalname,
+        file_size: size,
+        mime_type: mimetype,
+        file_path: uploadedPath,
+        ocr_confidence: 90.0,
+        ocr_text: "Running AP automated OCR pipeline...",
+        tax_details: "Calculating..."
+      }
+    });
+
+    await prisma.goodsReceipt.create({
+      data: {
+        id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+        invoice_id: invoiceId,
+        status: "Waiting",
+        confirmed_by: "",
+        remarks: ""
+      }
+    });
+
+    await prisma.systemLog.create({
+      data: {
+        invoice_id: invoiceId,
+        action: "Invoice Received",
+        user: "n8n Email Integration",
+        details: `File "${originalname}" saved. Size: ${(size / 1024).toFixed(1)} KB. MimeType: ${mimetype}`
+      }
+    });
+
+    // Background processing
+    ocrQueue.push(invoiceId, filename);
+
+    res.json(newInvoice);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. API Endpoint: Confirm Goods Receipt status
+
+--- ROUTE: /api/invoices/:id/apply-workflow ---
+app.post("/api/invoices/:id/apply-workflow", async (req, res) => {
+  try {
+    const { workflowId, customWorkflowSteps } = req.body;
+    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+    if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+
+    let targetWorkflowId = workflowId;
+    let firstStage = "Approval";
+
+    if (customWorkflowSteps) {
+      // Create a new custom workflow on the fly
+      const newWorkflow = await prisma.workflow.create({
+        data: {
+          workflow_name: `Custom Workflow for ${invoice.invoice_number || invoice.id}`,
+          workflow_json: JSON.stringify({ steps: customWorkflowSteps })
+        }
+      });
+      targetWorkflowId = newWorkflow.id;
+      if (customWorkflowSteps.length > 0) firstStage = customWorkflowSteps[0].label;
+    } else if (workflowId) {
+      const wf = await prisma.workflow.findUnique({ where: { id: workflowId } });
+      if (wf && wf.workflow_json) {
+         try {
+           const parsed = JSON.parse(wf.workflow_json);
+           if (parsed.steps && parsed.steps.length > 0) firstStage = parsed.steps[0].label;
+         } catch(e) {}
+      }
+    }
+
+    // Delete existing workflow instance and approvals for this invoice to cleanly override
+    const existingInstance = await prisma.workflowInstance.findUnique({ where: { invoice_id: invoice.id } });
+    if (existingInstance) {
+       await prisma.approval.deleteMany({ where: { workflow_instance_id: existingInstance.id } });
+       await prisma.workflowInstance.delete({ where: { id: existingInstance.id } });
+    }
+
+    // Create new workflow instance
+    const newInstance = await prisma.workflowInstance.create({
+      data: {
+        id: "WF-" + Math.floor(10000000 + Math.random() * 90000000),
+        invoice_id: invoice.id,
+        workflow_id: targetWorkflowId,
+        current_stage: firstStage,
+        status: "In Progress"
+      } as any
+    });
+
+    // Update invoice status to In Approval
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: "In Approval" }
+    });
+
+    await prisma.systemLog.create({
+      data: {
+        invoice_id: invoice.id,
+        action: "Workflow Overridden",
+        user: "Admin Override",
+        details: `Manual override applied. Reset to stage: ${firstStage}.`
+      }
+    });
+
+    res.json({ success: true, instance: newInstance });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. API Endpoint: Perform active step approval action (Approve / Reject / Clarification)
+
+--- ROUTE: /api/invoices/:id/step-action ---
+app.post("/api/invoices/:id/step-action", async (req, res) => {
+  try {
+    const { action, comments, approver } = req.body;
+    if (!action || !approver) return res.status(400).json({ error: "Missing required parameters." });
+
+    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+    if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+
+    let workflowInstance = await prisma.workflowInstance.findUnique({ where: { invoice_id: invoice.id } });
+    if (!workflowInstance) return res.status(400).json({ error: "No active workflow instance." });
+
+    const newApproval = await prisma.approval.create({
+      data: {
+        workflow_instance_id: workflowInstance.id,
+        approver,
+        action,
+        comments: comments || `${action} action completed.`
+      }
+    });
+
+    let defaultWorkflow = await prisma.workflow.findFirst() || null;
+    if ((workflowInstance as any).workflow_id) {
+       const specificWf = await prisma.workflow.findUnique({ where: { id: (workflowInstance as any).workflow_id } });
+       if (specificWf) defaultWorkflow = specificWf;
+    }
+
+    let parsedWf: any = null;
+    if (defaultWorkflow && defaultWorkflow.workflow_json) {
+       try { parsedWf = JSON.parse(defaultWorkflow.workflow_json); } catch(e) {}
+    }
+
+    if (action === "Request Clarification") {
+      await prisma.systemLog.create({
+        data: { invoice_id: invoice.id, action: "Clarification Requested", user: approver, details: `Question: "${comments}"` }
+      });
+      await triggerNotificationFlow(invoice.id, action, comments, approver);
+      return res.json({ invoice, workflow_instance: workflowInstance, approval: newApproval });
+    }
+
+    // --- GRAPH DAG EXECUTOR ---
+    if (parsedWf && parsedWf.nodes && parsedWf.edges) {
+       const nodes = parsedWf.nodes;
+       const edges = parsedWf.edges;
+       
+       let currentState = workflowInstance.state_json ? (typeof workflowInstance.state_json === 'string' ? JSON.parse(workflowInstance.state_json) : workflowInstance.state_json) : { activeNodes: [], completedNodes: [], nodeResults: {} };
+       
+       // Initialize active nodes if empty
+       if (!currentState.activeNodes || currentState.activeNodes.length === 0) {
+          const targetNodes = edges.map((e: any) => e.target);
+          const startNodes = nodes.filter((n: any) => !targetNodes.includes(n.id)).map((n: any) => n.id);
+          currentState.activeNodes = startNodes.length > 0 ? startNodes : (nodes[0] ? [nodes[0].id] : []);
+          if (!currentState.completedNodes) currentState.completedNodes = [];
+          if (!currentState.nodeResults) currentState.nodeResults = {};
+       }
+
+       // Find the node the user is acting upon
+       let actedNodeId = null;
+       let nextNodes: any[] = [];
+       for (const nodeId of currentState.activeNodes) {
+          const node = nodes.find((n: any) => n.id === nodeId);
+          if (node && node.data && node.data.approvers && Array.isArray(node.data.approvers)) {
+             if (node.data.approvers.includes(approver)) {
+                actedNodeId = nodeId;
+                break;
+             }
+          }
+       }
+       // Fallback: act on first active node if approver mapping is missing/generic
+       if (!actedNodeId && currentState.activeNodes.length > 0) actedNodeId = currentState.activeNodes[0];
+
+       if (actedNodeId) {
+          if (action === "Send Back") {
+             const incomingEdges = edges.filter((e: any) => e.target === actedNodeId);
+             const sourceNodeIds = incomingEdges.map((e: any) => e.source);
+             
+             if (sourceNodeIds.length > 0) {
+                currentState.activeNodes = currentState.activeNodes.filter((id: string) => id !== actedNodeId);
+                currentState.activeNodes.push(...sourceNodeIds);
+                currentState.completedNodes = currentState.completedNodes.filter((id: string) => !sourceNodeIds.includes(id));
+                delete currentState.nodeResults[actedNodeId];
+                for (const srcId of sourceNodeIds) {
+                   delete currentState.nodeResults[srcId];
+                }
+             }
+             
+             const activeNodeLabels = currentState.activeNodes.map((id: string) => {
+                const n = nodes.find((no: any) => no.id === id);
+                return n ? (n.data?.label || id) : id;
+             });
+             const nextStageLabel = activeNodeLabels.join(" AND ");
+             
+             workflowInstance = await prisma.workflowInstance.update({
+                where: { id: workflowInstance!.id },
+                data: { current_stage: nextStageLabel, status: "In Approval", state_json: currentState as any }
+             });
+             
+             await prisma.invoice.update({ where: { id: invoice.id }, data: { status: `Sent Back (${nextStageLabel})` } });
+             
+             await prisma.systemLog.create({
+                data: { invoice_id: invoice.id, action: "Step Sent Back", user: approver, details: `Graph node reverted. Transitioning back to: ${nextStageLabel}` }
+             });
+          } else {
+             currentState.nodeResults[actedNodeId] = action;
+             
+             // Remove from active, push to completed
+             currentState.activeNodes = currentState.activeNodes.filter((id: string) => id !== actedNodeId);
+             currentState.completedNodes.push(actedNodeId);
+             
+             // Traverse outgoing edges matching the action
+             const outgoingEdges = edges.filter((e: any) => e.source === actedNodeId);
+             nextNodes = [];
+             for (const edge of outgoingEdges) {
+                if (!edge.label || edge.label.toLowerCase() === action.toLowerCase() || edge.label === "") {
+                   nextNodes.push(edge.target);
+                }
+             }
+             
+             // Fallback if no specific edge matched (e.g., standard sequential edge)
+             if (nextNodes.length === 0 && outgoingEdges.length > 0 && action === "Approve") {
+                nextNodes = outgoingEdges.map((e: any) => e.target);
+             }
+             
+             // Process Condition Nodes automatically
+             let finalNextNodes = [];
+             for (const nId of nextNodes) {
+                const targetNode = nodes.find((n: any) => n.id === nId);
+                if (targetNode && targetNode.type === "condition") {
+                   let conditionMet = false;
+                   try {
+                      const fieldVal = (invoice as any)[targetNode.data.field];
+                      if (targetNode.data.operator === ">") conditionMet = fieldVal > targetNode.data.value;
+                      else if (targetNode.data.operator === "<") conditionMet = fieldVal < targetNode.data.value;
+                      else if (targetNode.data.operator === "===" || targetNode.data.operator === "==") conditionMet = fieldVal == targetNode.data.value;
+                   } catch(e) {}
+                   
+                   const condEdges = edges.filter((e: any) => e.source === targetNode.id);
+                   for (const ce of condEdges) {
+                      if ((conditionMet && ce.label?.toLowerCase() === "true") || (!conditionMet && ce.label?.toLowerCase() === "false")) {
+                         finalNextNodes.push(ce.target);
+                      }
+                   }
+                   currentState.completedNodes.push(targetNode.id);
+                } else {
+                   finalNextNodes.push(nId);
+                }
+             }
+             
+             // Add resolved nodes to active
+             currentState.activeNodes.push(...finalNextNodes);
+          }
+          
+          let nextStageLabel = "Completed";
+          let dbStatus = "In Approval";
+          
+          if (currentState.activeNodes.length > 0) {
+             const activeNodeLabels = currentState.activeNodes.map((id: string) => {
+                const n = nodes.find((no: any) => no.id === id);
+                return n ? (n.data?.label || id) : id;
+             });
+             nextStageLabel = activeNodeLabels.join(" AND "); // For parallel displays
+             await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "In Approval" } });
+          } else {
+             // Workflow reached end
+             if (action === "Reject" && nextNodes.length === 0) {
+                dbStatus = "Rejected";
+                await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "Rejected" } });
+             } else {
+                dbStatus = "Approved";
+                await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "Ready for Payment" } });
+                await prisma.systemLog.create({
+                  data: { invoice_id: invoice.id, action: "Workflow Approved", user: approver, details: `Graph execution completed successfully.` }
+                });
+             }
+          }
+          
+          workflowInstance = await prisma.workflowInstance.update({
+             where: { id: workflowInstance!.id },
+             data: { current_stage: nextStageLabel, status: dbStatus, state_json: currentState as any }
+          });
+          
+          await prisma.systemLog.create({
+             data: { invoice_id: invoice.id, action: `Step ${action}`, user: approver, details: `Graph node processed. Transitioning to: ${nextStageLabel}` }
+          });
+       }
+
+    } else {
+      // --- LEGACY LINEAR EXECUTOR ---
+      let steps: any[] = [{ label: 'GM Approval' }, { label: 'CTO Approval' }, { label: 'MD Approval' }];
+      if (parsedWf && parsedWf.steps && parsedWf.steps.length > 0) {
+         steps = parsedWf.steps;
+      }
+      
+      if (action === "Approve") {
+        const currentIdx = steps.findIndex(s => s.label === workflowInstance!.current_stage);
+        if (currentIdx !== -1 && currentIdx < steps.length - 1) {
+           const nextStage = steps[currentIdx + 1].label;
+           workflowInstance = await prisma.workflowInstance.update({
+              where: { id: workflowInstance!.id },
+              data: { current_stage: nextStage }
+           });
+           await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "In Approval" } });
+           await prisma.systemLog.create({
+             data: { invoice_id: invoice.id, action: "Step Approved", user: approver, details: `${steps[currentIdx].label} passed. Advancing to ${nextStage}.` }
+           });
+        } else {
+          workflowInstance = await prisma.workflowInstance.update({
+            where: { id: workflowInstance!.id },
+            data: { current_stage: "Completed", status: "Approved" }
+          });
+          await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "Ready for Payment" } });
+          await prisma.systemLog.create({
+            data: { invoice_id: invoice.id, action: "Workflow Approved", user: approver, details: `Final checkpoint passed.` }
+          });
+        }
+      } else if (action === "Reject") {
+        workflowInstance = await prisma.workflowInstance.update({
+          where: { id: workflowInstance!.id },
+          data: { status: "Rejected" }
+        });
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "Rejected" } });
+        await prisma.systemLog.create({
+          data: { invoice_id: invoice.id, action: "Step Rejected", user: approver, details: `Workflow rejected. Reason: "${comments}"` }
+        });
+      } else if (action === "Send Back") {
+        const currentIdx = steps.findIndex(s => s.label === workflowInstance!.current_stage);
+        if (currentIdx > 0) {
+          const prevStage = steps[currentIdx - 1].label;
+          workflowInstance = await prisma.workflowInstance.update({
+            where: { id: workflowInstance!.id },
+            data: { current_stage: prevStage }
+          });
+          await prisma.invoice.update({ where: { id: invoice.id }, data: { status: `Sent Back (Stage ${currentIdx})` } });
+          await prisma.systemLog.create({
+            data: { invoice_id: invoice.id, action: "Step Sent Back", user: approver, details: `Sent back from ${steps[currentIdx].label} to ${prevStage}. Comments: ${comments || 'None'}` }
+          });
+        } else {
+          workflowInstance = await prisma.workflowInstance.update({
+            where: { id: workflowInstance!.id },
+            data: { current_stage: steps[0].label }
+          });
+          await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "Received" } });
+          await prisma.systemLog.create({
+            data: { invoice_id: invoice.id, action: "Step Sent Back", user: approver, details: `Sent back from first stage ${steps[0].label} to Received status. Comments: ${comments || 'None'}` }
+          });
+        }
+      }
+    }
+
+    // Trigger notification service for any completed step (Approve/Reject)
+    await triggerNotificationFlow(invoice.id, action, comments, approver);
+
+    res.json({ invoice, workflow_instance: workflowInstance, approval: newApproval });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. API Endpoint: Payment release
+
+--- ROUTE: /api/workflows/approve ---
+app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
+  try {
+    const { invoiceId, comments } = req.body;
+    const user = (req as any).user;
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId }
+    });
+    if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+
+    const activeLog = await prisma.activeApprovalLog.findUnique({
+      where: { invoice_id: invoiceId }
+    });
+
+    if (!activeLog) return res.status(404).json({ error: "No active workflow found." });
+    if (activeLog.status !== "Pending") return res.status(400).json({ error: `Workflow is already ${activeLog.status}` });
+
+    const currentStageDef = await prisma.workflowStepDefinition.findFirst({
+      where: {
+        profile_name: activeLog.workflow_profile,
+        stage_number: activeLog.current_stage_number,
+        document_type: invoice.document_type
+      }
+    });
+
+    if (!currentStageDef) {
+      // If no stages are defined, or we somehow exceeded the stages, just approve it fully.
+      await prisma.activeApprovalLog.update({
+        where: { id: activeLog.id },
+        data: { status: "Approved" }
+      });
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { status: "Approved" }
+      });
+      await prisma.systemLog.create({
+        data: { invoice_id: invoiceId, action: "Workflow Completed", user: user.email, details: `No remaining stages defined for ${activeLog.workflow_profile}. Document fully approved. Comments: ${comments || 'None'}` }
+      });
+      await triggerNotificationFlow(invoiceId, "Approve", comments, user.email);
+      io.emit("workflow_updated", { invoiceId, action: "Approved" });
+      return res.json({ success: true, message: "Auto-approved due to missing or empty workflow definition." });
+    }
+
+    // Dynamic variable resolution e.g., '[PO_OWNER]'
+    let resolvedApprover = currentStageDef.approver_target;
+    if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]') {
+       if (invoice.po_number && invoice.po_number !== "Not Found") {
+          const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
+          if (corpMock) {
+             resolvedApprover = resolvedApprover === '[PO_OWNER]' ? (corpMock.po_owner_email || resolvedApprover) : (corpMock.dept_head_email || resolvedApprover);
+          }
+       }
+    }
+
+    // Advance Stage
+    const nextStageDef = await prisma.workflowStepDefinition.findFirst({
+      where: {
+        profile_name: activeLog.workflow_profile,
+        stage_number: activeLog.current_stage_number + 1,
+        document_type: invoice.document_type
+      }
+    });
+
+    if (nextStageDef) {
+      await prisma.activeApprovalLog.update({
+        where: { id: activeLog.id },
+        data: { current_stage_number: activeLog.current_stage_number + 1 }
+      });
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { status: `Pending Approval (Stage ${activeLog.current_stage_number + 1})` }
+      });
+      await prisma.systemLog.create({
+        data: { invoice_id: invoiceId, action: "Stage Approved", user: user.email, details: `Approved Stage ${activeLog.current_stage_number} as ${resolvedApprover}. Advancing to Stage ${activeLog.current_stage_number + 1}. Comments: ${comments || 'None'}` }
+      });
+    } else {
+      await prisma.activeApprovalLog.update({
+        where: { id: activeLog.id },
+        data: { status: "Approved" }
+      });
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { status: "Approved" }
+      });
+      await prisma.systemLog.create({
+        data: { invoice_id: invoiceId, action: "Workflow Completed", user: user.email, details: `Final stage approved as ${resolvedApprover}. Document fully approved. Comments: ${comments || 'None'}` }
+      });
+    }
+    await triggerNotificationFlow(invoiceId, "Approve", comments, user.email);
+    io.emit("workflow_updated", { invoiceId, action: "Approved" });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 13. API Endpoint: Reject Workflow Stage
+
+--- ROUTE: /api/workflows/reject ---
+app.post("/api/workflows/reject", authenticateToken, async (req, res) => {
+  try {
+    const { invoiceId, comments } = req.body;
+    const user = (req as any).user;
+
+    const activeLog = await prisma.activeApprovalLog.findUnique({
+      where: { invoice_id: invoiceId }
+    });
+
+    if (!activeLog) return res.status(404).json({ error: "No active workflow found." });
+
+    await prisma.activeApprovalLog.update({
+      where: { id: activeLog.id },
+      data: { status: "Rejected" }
+    });
+    
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: "Rejected" }
+    });
+
+    await prisma.systemLog.create({
+      data: { invoice_id: invoiceId, action: "Workflow Rejected", user: user.email, details: `Document rejected at Stage ${activeLog.current_stage_number}. Comments: ${comments || 'None'}` }
+    });
+
+    await triggerNotificationFlow(invoiceId, "Reject", comments, user.email);
+    io.emit("workflow_updated", { invoiceId, action: "Rejected" });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. Admin APIs for Configuration

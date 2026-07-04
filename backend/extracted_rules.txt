@@ -1,0 +1,33 @@
+
+--- GET /api/admin/routing-rules ---
+app.get("/api/admin/routing-rules", authenticateToken, async (req, res) => {
+  try {
+    const rules = await prisma.businessRule.findMany({ orderBy: { priority: 'asc' } });
+    res.json(rules);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+--- POST /api/admin/routing-rules ---
+app.post("/api/admin/routing-rules", authenticateToken, async (req, res) => {
+  try {
+    const { id, rule_name, priority, conditions_json, target_workflow_id, document_type } = req.body;
+    let rule;
+    if (id) {
+      rule = await prisma.businessRule.update({
+        where: { id },
+        data: { rule_name, priority: Number(priority), conditions_json, target_workflow_id, document_type }
+      });
+    } else {
+      rule = await prisma.businessRule.create({
+        data: { rule_name, priority: Number(priority), conditions_json, target_workflow_id, document_type: document_type || "Invoice" }
+      });
+    }
+    res.json(rule);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+

@@ -1,0 +1,16 @@
+{
+  "RECEIVED": "Received",
+  "WAITING": "Waiting",
+  "EXCEPTION": "Exception",
+  "PENDING": "Pending",
+  "IN_APPROVAL": "In Approval",
+  "WAITING_FOR_GRN": "Waiting for GRN",
+  "REJECTED": "Rejected",
+  "READY_FOR_PAYMENT": "Ready for Payment",
+  "PAID": "Paid",
+  "COMPLETED": "Completed",
+  "FAILED": "Failed",
+  "SENT": "Sent",
+  "CLARIFICATION_REQUESTED": "Clarification Requested",
+  "ESCALATED": "ESCALATED"
+}

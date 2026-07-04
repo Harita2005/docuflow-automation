@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  role          String
+  name          String
+  permissions   String?   @default("[]")
+  created_at    DateTime  @default(now())
+
+  uploaded_invoices Invoice[] @relation("UploadedInvoices")
+}
+
+model Invoice {
+  id              String   @id @default(uuid())
+  invoice_number  String
+  vendor_name     String
+  invoice_date    String
+  po_number       String
+  amount          Float
+  currency        String
+  base_currency   String   @default("INR")
+  base_amount     Float?
+  price_variance  Float?
+  is_price_variance Boolean @default(false)
+  erp_sync_status String   @default("Pending") // Pending, Synced, Failed
+  status          String
+  is_exception    Boolean  @default(false)
+  exception_reason String?
+  document_type   String   @default("Invoice")
+  tracking_id     String?  @unique
+  uploaded_by_id  String?
+  uploaded_by     User?    @relation("UploadedInvoices", fields: [uploaded_by_id], references: [id])
+  created_at      DateTime @default(now())
+  
+  // OCR metadata
+  file_name       String
+  file_size       Int
+  mime_type       String
+  file_path       String
+  file_hash       String?  @db.VarChar(255)
+  ocr_confidence  Float
+  ocr_text        String   @db.Text
+  tax_details     String   @db.Text
+  ocr_layout      Json?
+  custom_data     Json?
+
+  // Extended structured fields
+  cgst            Float?
+  sgst            Float?
+  igst            Float?
+  items           Json?
+
+  // Relations
+  goodsReceipt    GoodsReceipt?
+  workflowInst    WorkflowInstance?
+  activeApprovalLog ActiveApprovalLog?
+  logs            SystemLog[]
+  comments        DocumentComment[]
+  notifications   Notification[]
+  corrections     CorrectionLog[]
+  processingQueue ProcessingQueue?
+
+  @@index([status])
+  @@index([created_at])
+  @@index([document_type])
+}
+
+model GoodsReceipt {
+  id           String    @id @default(uuid())
+  invoice_id   String    @unique
+  invoice      Invoice   @relation(fields: [invoice_id], references: [id])
+  status       String
+  confirmed_by String
+  confirmed_at DateTime?
+  remarks      String    @db.Text
+}
+
+model Workflow {
+  id            String   @id @default(uuid())
+  workflow_name String
+  workflow_json String   @db.Text
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  fields_json String   @db.Text
+  created_at  DateTime @default(now())
+}
+
+model BusinessRule {
+  id                 String   @id @default(uuid())
+  rule_name          String
+  priority           Int
+  conditions_json    String   @db.Text
+  target_workflow_id String
+  document_type      String   @default("Invoice")
+  created_at         DateTime @default(now())
+}
+
+model WorkflowInstance {
+  id            String   @id @default(uuid())
+  invoice_id    String   @unique
+  invoice       Invoice  @relation(fields: [invoice_id], references: [id])
+  workflow_id   String?
+  current_stage String
+  status        String
+  state_json    Json?
+  approvals     Approval[]
+}
+
+model Approval {
+  id                   String           @id @default(uuid())
+  workflow_instance_id String
+  workflowInstance     WorkflowInstance @relation(fields: [workflow_instance_id], references: [id])
+  approver             String
+  action               String
+  comments             String           @db.Text
+  timestamp            DateTime         @default(now())
+}
+
+model SystemLog {
+  id         String   @id @default(uuid())
+  invoice_id String?
+  invoice    Invoice? @relation(fields: [invoice_id], references: [id])
+  timestamp  DateTime @default(now())
+  action     String
+  user       String
+  details    String   @db.Text
+
+  @@index([timestamp])
+  @@index([invoice_id])
+}
+
+// Deprecated: Replaced by BusinessRule
+// model KeywordRoutingMatrix {
+
+model WorkflowStepDefinition {
+  id              String   @id @default(uuid())
+  profile_name    String
+  stage_number    Int
+  approver_target String
+  action_required String   @default("Approve")
+  document_type   String   @default("Invoice")
+}
+
+model ActiveApprovalLog {
+  id                   String   @id @default(uuid())
+  invoice_id           String   @unique
+  workflow_profile     String
+  current_stage_number Int      @default(1)
+  status               String   @default("Pending")
+  last_updated         DateTime @default(now())
+  
+  invoice              Invoice  @relation(fields: [invoice_id], references: [id])
+
+  @@index([status])
+  @@index([current_stage_number])
+}
+
+model ERPMaster {
+  po_number        String  @id
+  po_amount        Float   @default(0)
+  po_currency      String  @default("INR")
+  tolerance_amount Float   @default(500.0)
+  division         String?
+  department       String?
+  category         String?
+  cost_center      String?
+  plant            String?
+  vendor           String?
+  requestor_email  String?
+}
+
+model VendorMaster {
+  id          String   @id @default(uuid())
+  vendor_code String   @unique
+  vendor_name String
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+}
+
+model DocumentComment {
+  id          String   @id @default(uuid())
+  invoice_id  String
+  invoice     Invoice  @relation(fields: [invoice_id], references: [id])
+  user_email  String
+  user_name   String?
+  text        String   @db.Text
+  created_at  DateTime @default(now())
+}
+
+model Notification {
+  notification_id   String    @id @default(uuid())
+  document_id       String
+  recipient_user_id String?
+  recipient_email   String
+  notification_type String    // e.g. PENDING_APPROVAL, ASSIGNED, REJECTED, SENT_BACK, COMPLETED, CLARIFICATION
+  title             String
+  message           String    @db.Text
+  status            String    @default("Pending") // Pending, Sent, Failed
+  is_read           Boolean   @default(false)
+  sent_at           DateTime?
+  created_at        DateTime  @default(now())
+  retry_count       Int       @default(0)
+  external_response String?   @db.Text
+
+  invoice           Invoice   @relation(fields: [document_id], references: [id], onDelete: Cascade)
+}
+
+model CorporateAppMock {
+  po_number       String  @id
+  po_owner_email  String?
+  dept_head_email String?
+}
+
+model EmailProviderConfig {
+  id                 String   @id @default(uuid())
+  provider           String   @default("Microsoft 365")
+  smtp_server        String   @default("smtp.office365.com")
+  port               Int      @default(587)
+  username           String?
+  encrypted_password String?
+  sender_email       String?
+  sender_name        String?
+  tls_enabled        Boolean  @default(true)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+}
+
+model NotificationRule {
+  id            String   @id @default(uuid())
+  name          String
+  trigger_event String
+  subject       String
+  template_id   String?
+  enabled       Boolean  @default(true)
+  delay_minutes Int      @default(0)
+  target_workflow String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  recipients    NotificationRecipient[]
+  template      EmailTemplate? @relation(fields: [template_id], references: [id])
+}
+
+model NotificationRecipient {
+  id                   String   @id @default(uuid())
+  notification_rule_id String
+  recipient_type       String   // TO, CC, BCC
+  recipient_source     String   // Dynamic, Role, Custom
+  value                String
+  created_at           DateTime @default(now())
+
+  notification_rule    NotificationRule @relation(fields: [notification_rule_id], references: [id], onDelete: Cascade)
+}
+
+model EmailTemplate {
+  id            String   @id @default(uuid())
+  template_name String
+  html_body     String   @db.Text
+  text_body     String   @db.Text
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  notification_rules NotificationRule[]
+}
+
+model EmailLog {
+  id                   String   @id @default(uuid())
+  notification_rule_id String?
+  event                String
+  sender               String
+  recipients           String   @db.Text
+  cc                   String?  @db.Text
+  bcc                  String?  @db.Text
+  subject              String
+  status               String
+  error_message        String?  @db.Text
+  sent_at              DateTime?
+  created_at           DateTime @default(now())
+}
+
+model CorrectionLog {
+  id                     String   @id @default(uuid())
+  invoice_id             String
+  vendor_name            String
+  original_ai_prediction String   @db.Text
+  human_corrected_data   String   @db.Text
+  created_at             DateTime @default(now())
+
+  invoice                Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updated_at  DateTime @default(now()) @updatedAt
+}
+
+
+model InAppNotificationConfig {
+  id               String   @id @default(uuid())
+  trigger_event    String   @unique
+  enabled          Boolean  @default(true)
+  title_template   String
+  message_template String   @db.Text
+  updated_at       DateTime @updatedAt
+}
+
+model ProcessingQueue {
+  id         String   @id @default(uuid())
+  invoice_id String   @unique
+  filename   String
+  status     String   @default("Pending") // Pending, Processing, Completed, Failed
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  invoice    Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([created_at])
+}
+
+model RACIMatrix {
+  id                 String   @id @default(uuid())
+  workflow_profile   String
+  event_name         String
+  responsible_emails String   @db.Text
+  accountable_emails String   @db.Text
+  consulted_emails   String   @db.Text
+  informed_emails    String   @db.Text
+  title_template     String?  @db.Text
+  message_template   String?  @db.Text
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@unique([workflow_profile, event_name])
+}
+

@@ -1,0 +1,65 @@
+{
+  "users": [
+    {
+      "email": "manager@initech.com",
+      "password": "password123",
+      "role": "manager",
+      "name": "Sarah Connor"
+    },
+    {
+      "email": "executive@initech.com",
+      "password": "password123",
+      "role": "executive",
+      "name": "Bill Lumbergh"
+    },
+    {
+      "email": "employee@initech.com",
+      "password": "password123",
+      "role": "employee",
+      "name": "Peter Gibbons"
+    },
+    {
+      "email": "admin@initech.com",
+      "password": "password123",
+      "role": "admin",
+      "name": "Admin User"
+    }
+  ],
+  "businessRules": [
+    {
+      "rule_name": "High Value PO",
+      "priority": 10,
+      "conditions": [{"field": "amount", "operator": ">", "value": "10000"}],
+      "target_workflow_name": "Manager Approval"
+    },
+    {
+      "rule_name": "IT Department Routing",
+      "priority": 20,
+      "conditions": [{"field": "department", "operator": "==", "value": "IT"}],
+      "target_workflow_name": "IT Review"
+    }
+  ],
+  "documentTemplates": [
+    {
+      "name": "Standard Invoice",
+      "description": "Default required fields for processing standard corporate AP invoices",
+      "fields": [
+        {"name": "vendor_name", "type": "string", "required": true},
+        {"name": "invoice_number", "type": "string", "required": true},
+        {"name": "invoice_date", "type": "date", "required": true},
+        {"name": "amount", "type": "number", "required": true},
+        {"name": "po_number", "type": "string", "required": false}
+      ]
+    },
+    {
+      "name": "Expense Receipt",
+      "description": "Short-form receipt extraction",
+      "fields": [
+        {"name": "merchant", "type": "string", "required": true},
+        {"name": "date", "type": "date", "required": true},
+        {"name": "total", "type": "number", "required": true},
+        {"name": "category", "type": "string", "required": false}
+      ]
+    }
+  ]
+}
