@@ -42,7 +42,7 @@ export default function Dashboard({
   currentUserEmail = "ap.executive@company.com",
   setCurrentView
 }: DashboardProps) {
-  const [listFilter, setListFilter] = useState<'action' | 'approved' | 'review' | 'grn'>('action');
+  const [listFilter, setListFilter] = useState<'all' | 'action' | 'approved' | 'review' | 'grn' | 'action_required' | 'my_approvals'>('all');
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,7 +91,7 @@ export default function Dashboard({
 
   // Role details calculations
   const pendingGRNCount = documents.filter(d => d.status === "Waiting for GRN" || d.status === "Received").length;
-  const pendingApprovalsCount = documents.filter(d => d.status === "In Approval" || d.status === "Ready for Approval").length;
+  const pendingApprovalsCount = documents.filter(d => d.activeApprovalLog?.status === "Pending").length;
   const readyPaymentCount = documents.filter(d => d.status === "Ready for Payment").length;
   const totalPaidInvoicesCount = documents.filter(d => d.status === "Paid").length;
   const bottleneckCount = pendingGRNCount + pendingApprovalsCount;
@@ -143,152 +143,12 @@ export default function Dashboard({
 
       {/* RENDER TAILORED KPIS DEPENDING ON ROLE */}
       
-      {currentUserRole === "md" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide block">Total Spends</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">{formatCurrency(totalSpentVal)}</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Total amount of all uploaded invoices</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block">Pending Invoices</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-amber-600 tracking-tight mt-3">{bottleneckCount} <span className="text-[10px] font-normal text-slate-450">Invoices</span></strong>
-            <span className="text-[9px] text-amber-500 font-medium block mt-1">Invoices waiting for gate entry or manager check</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide block">Processing Time</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-blue-600 tracking-tight mt-3">2.4 Hours</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Average time taken to check and approve</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide block">Paid Invoices</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-emerald-700 tracking-tight mt-3">{totalPaidInvoicesCount} Paid</strong>
-            <span className="text-[9px] text-emerald-600 font-medium block mt-1">Fully completed payouts</span>
-          </div>
-        </div>
-      )}
-
-      {currentUserRole === "gm" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide block">Review Pending</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">{pendingApprovalsCount} Invoices</strong>
-            <span className="text-[10px] text-slate-450 font-medium block mt-1">Invoices waiting for final check</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide block">Active Routing Rules</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-blue-600 tracking-tight mt-3">Active</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Automated workflow gates</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block">Awaiting Gate Entry</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-amber-600 tracking-tight mt-3">{pendingGRNCount} Invoices</strong>
-            <span className="text-[9px] text-amber-500 font-medium block mt-1">Waiting for delivery receipt checkout</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-emerald-650 uppercase tracking-wide block">Ready to Clear</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-emerald-700 tracking-tight mt-3">{totalPaidInvoicesCount + readyPaymentCount} cleared</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Completed matching check list</span>
-          </div>
-        </div>
-      )}
-
-      {currentUserRole === "cio" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide block">System Status</span>
-            <strong className="block text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2 mt-3 text-center uppercase tracking-wider flex items-center justify-center gap-1.5">
-              <Server className="h-4.5 w-4.5 animate-pulse" />
-              <span>System is Online</span>
-            </strong>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide block">Data Extracted</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-blue-600 tracking-tight mt-3">100%</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">All incoming documents parsed</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block">Total Database Invoices</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">{documents.length} Records</strong>
-            <span className="text-[10px] text-slate-450 font-medium block mt-1">Active uploaded items</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wide">Sync Speed</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">4 ms</strong>
-            <span className="text-[10px] text-slate-450 font-medium block mt-1">Database update speed</span>
-          </div>
-        </div>
-      )}
-
-      {currentUserRole === "finance_manager" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wide block">Total Spends</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">{formatCurrency(totalSpentVal)}</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Total active billing amount</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide block">Ready to Pay</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-blue-600 tracking-tight mt-3">{readyPaymentCount} Invoices</strong>
-            <span className="text-[10px] text-blue-500 font-semibold block mt-1">Approved and ready for release</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block">Under Review</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-amber-600 tracking-tight mt-3">{pendingApprovalsCount} Invoices</strong>
-            <span className="text-[9px] text-amber-500 font-medium block mt-1">Waiting for approval</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide block">System Uptime</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-emerald-600 tracking-tight mt-3">99.9%</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Platform availability</span>
-          </div>
-        </div>
-      )}
-
-      {currentUserRole === "department_manager" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5">
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-slate-405 uppercase tracking-wide block">Pending Approvals</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-slate-800 tracking-tight mt-3">{pendingApprovalsCount} Invoices</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Waiting for budget check</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block">Awaiting Gate Entry</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-amber-600 tracking-tight mt-3">{pendingGRNCount} Shipments</strong>
-            <span className="text-[10px] text-amber-550 font-medium block mt-1">Waiting for store checkout</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide block">Approved Budget Spends</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-blue-600 tracking-tight mt-3">{formatCurrency(totalSpentVal - (pendingApprovalsCount * 8000))}</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Completed budget clearance</span>
-          </div>
-
-          <div className="bg-gradient-to-br from-white/80 to-slate-50/50 backdrop-blur-xl border border-white p-2.5 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden">
-            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide block">System Uptime</span>
-            <strong className="block text-lg font-display font-black tracking-tight text-emerald-600 tracking-tight mt-3">99.9%</strong>
-            <span className="text-[9px] text-slate-400 font-medium block mt-1">Platform availability</span>
-          </div>
-        </div>
-      )}
-
-      {/* Fallback metrics for Admin and AP Team */}
-      {(currentUserRole === "ap_executive" || currentUserRole === "admin") && (
+      {currentUserRole === "admin" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3">
-          <div className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group min-h-[100px]">
+          <div 
+            onClick={() => { setListFilter('all'); setDocTypeFilter('All'); }}
+            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
+          >
             <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/0 to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-2 relative z-10">
               <div className="bg-blue-50 text-blue-600 rounded-md flex items-center justify-center p-1 border border-blue-100/50 shadow-sm">
@@ -377,6 +237,46 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mt-3">
+          <div 
+            onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); }}
+            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="flex items-center gap-2 mb-3 relative z-10">
+              <div className="bg-amber-50 text-amber-600 rounded-md flex items-center justify-center p-1.5 border border-amber-100/50 shadow-sm">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <span className="text-[11px] font-bold text-amber-600 uppercase tracking-widest">Action Required</span>
+            </div>
+            <div className="relative z-10 flex flex-col items-center gap-1">
+              <span className="block text-3xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-amber-600 transition-colors">
+                {documents.filter(d => !!d.is_current_approver).length}
+              </span>
+              <span className="text-[10px] text-amber-600/80 font-bold tracking-widest uppercase">Pending Approvals</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); }}
+            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="flex items-center gap-2 mb-3 relative z-10">
+              <div className="bg-emerald-50 text-emerald-600 rounded-md flex items-center justify-center p-1.5 border border-emerald-100/50 shadow-sm">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest">My Approvals</span>
+            </div>
+            <div className="relative z-10 flex flex-col items-center gap-1">
+              <span className="block text-3xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-emerald-600 transition-colors">
+                {documents.filter(d => !d.is_current_approver && (d.status === "Approved" || d.status === "Paid" || d.status === "Ready for Payment" || d.status === "In Approval")).length}
+              </span>
+              <span className="text-[10px] text-emerald-600/80 font-bold tracking-widest uppercase">Documents Approved</span>
+            </div>
+          </div>
+        </div>
       )}
 
 
@@ -413,10 +313,9 @@ export default function Dashboard({
                 className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none"
               >
                 <option value="All">All Types</option>
-                <option value="Invoice">Invoice</option>
-                <option value="Purchase Order">Purchase Order</option>
-                <option value="Credit Note">Credit Note</option>
-                <option value="Debit Note">Debit Note</option>
+                {Array.from(new Set(documents.map(d => d.document_type).filter(Boolean))).map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -431,7 +330,11 @@ export default function Dashboard({
             } else if (listFilter === 'approved') {
               filteredDocs = filteredDocs.filter(d => d.status === "Paid" || d.status === "Approved" || d.status === "Ready for Payment");
             } else if (listFilter === 'review') {
-              filteredDocs = filteredDocs.filter(d => d.status === "In Approval" || d.status === "Ready for Approval");
+              filteredDocs = filteredDocs.filter(d => d.activeApprovalLog?.status === "Pending" || d.status === "Ready for Approval");
+            } else if (listFilter === 'action_required') {
+              filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
+            } else if (listFilter === 'my_approvals') {
+              filteredDocs = filteredDocs.filter(d => !d.is_current_approver && (d.status === "Approved" || d.status === "Paid" || d.status === "Ready for Payment" || d.status === "In Approval" || d.status.includes('Pending Approval')));
             } else if (listFilter === 'grn') {
               filteredDocs = filteredDocs.filter(d => d.status === "Waiting for GRN" || d.status === "Received");
             }
@@ -481,7 +384,7 @@ export default function Dashboard({
                             <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.tracking_id ? `${doc.tracking_id} | ${doc.invoice_number}` : (doc.invoice_number || "Checking...")}</span>
                             <span className="text-slate-300">•</span>
                             <span className={`font-bold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-sm ${doc.status.includes('Approval') ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                              {doc.status === "In Approval" && doc.workflowInst?.current_stage_index 
+                              {doc.status.includes("Approval") && doc.workflowInst?.current_stage_index 
                                 ? `In Approval: ${doc.workflowInst.current_stage_index}${
                                     doc.workflowInst.current_stage_index === 1 ? 'st' :
                                     doc.workflowInst.current_stage_index === 2 ? 'nd' :

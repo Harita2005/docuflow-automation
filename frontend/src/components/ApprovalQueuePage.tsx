@@ -30,7 +30,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
 
         // Fetch workflow instances to accurately map stages to roles
         const docsWithWorkflows = await Promise.all(data.map(async (inv: any) => {
-          if (inv.status === "In Approval" || inv.status === "Ready for Approval") {
+          if (inv.activeApprovalLog?.status === 'Pending' || inv.status.includes('Approval')) {
             try {
               const res = await fetch(`/api/documents/${inv.id}`);
               const fullData = await res.json();
@@ -43,15 +43,16 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
         }));
 
         const matched = docsWithWorkflows.filter((inv: any) => {
-          if (inv.status === "In Approval" || inv.status === "Ready for Approval") {
-            const stage = inv.current_stage || "GM Approval";
-            if (currentUserRole === "gm" && stage === "GM Approval") return true;
-            if (currentUserRole === "cto" && stage === "CTO Approval") return true;
-            if (currentUserRole === "md" && stage === "MD Approval") return true;
-            if (currentUserRole === "admin") return true; // Admins can view all queue items
-            return false;
-          }
+          // Hide already approved and terminal states from the pending queue
+          const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+          if (terminalStates.includes(inv.status)) return false;
+
+          if (currentUserRole === "admin") return true; // Admins can view all pending queue items
           if (inv.status === "AI Processed" && currentUserRole === "ap_executive") return true;
+          
+          if (inv.activeApprovalLog && inv.activeApprovalLog.status === 'Pending') {
+             return !!inv.is_current_approver;
+          }
           return false;
         });
 
@@ -195,7 +196,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
                       </div>
                       <div className="pt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide">
                         <span className={selectedInvoice?.id === inv.id ? "text-blue-200" : "text-amber-600"}>
-                          {inv.status === "In Approval" && inv.workflowInst?.current_stage_index 
+                          {inv.status.includes("Approval") && inv.workflowInst?.current_stage_index 
                             ? `In Approval: ${inv.workflowInst.current_stage_index}${
                                 inv.workflowInst.current_stage_index === 1 ? 'st' :
                                 inv.workflowInst.current_stage_index === 2 ? 'nd' :

@@ -27,6 +27,8 @@ export default function AdminUsers() {
     const payload = {
       name: fd.get('name'),
       email: fd.get('email'),
+      username: fd.get('username'),
+      employee_id: fd.get('employee_id'),
       role: fd.get('role'),
       permissions: fd.getAll('permissions'),
       password: fd.get('password') || undefined
@@ -46,7 +48,8 @@ export default function AdminUsers() {
         fetchUsers();
         setEditingUser(null);
       } else {
-        alert("Error saving user");
+        const errorData = await res.json();
+        alert(`Error saving user: ${errorData.error}`);
       }
     } catch(e) { console.error(e); }
   };
@@ -68,7 +71,7 @@ export default function AdminUsers() {
           Identity & Access Management (IAM)
         </h2>
         <button
-          onClick={() => setEditingUser({ name: '', email: '', role: 'employee', permissions: [] })}
+          onClick={() => setEditingUser({ name: '', email: '', username: '', employee_id: '', role: 'employee', permissions: [] })}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
         >
           <Plus className="h-3.5 w-3.5" /> New User
@@ -90,6 +93,14 @@ export default function AdminUsers() {
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Address</label>
                   <input name="email" type="email" defaultValue={editingUser.email} required className="w-full text-xs p-2 border border-slate-200 rounded focus:border-sky-400 focus:outline-none" placeholder="jane@initech.com" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username</label>
+                  <input name="username" defaultValue={editingUser.username} required className="w-full text-xs p-2 border border-slate-200 rounded focus:border-sky-400 focus:outline-none" placeholder="e.g. jdoe" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Employee ID</label>
+                  <input name="employee_id" defaultValue={editingUser.employee_id} required className="w-full text-xs p-2 border border-slate-200 rounded focus:border-sky-400 focus:outline-none" placeholder="e.g. EMP-1004" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Role / Access Level</label>

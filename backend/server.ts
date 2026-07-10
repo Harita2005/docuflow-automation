@@ -82,12 +82,22 @@ const authenticateToken = (req: any, res: any, next: any) => {
 // Auth Endpoint
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ error: "Identifier and password are required" });
     }
+
+    // Check if identifier matches username, employee_id, or email
+    const user = await prisma.user.findFirst({ 
+      where: { 
+        OR: [
+          { username: identifier },
+          { employee_id: identifier },
+          { email: identifier }
+        ]
+      } 
+    });
     
-    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       return res.status(400).json({ error: "User not found" });
     }
@@ -96,7 +106,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (!validPassword) return res.status(400).json({ error: "Invalid credentials" });
 
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '12h' });
-    res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.name } });
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.name, username: user.username } });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -145,6 +155,110 @@ const upload = multer({ storage: storage, fileFilter: fileFilter });
 
 const LOCAL_LLM_URL = process.env.LOCAL_LLM_URL || "http://localhost:11434/api/generate";
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || "llama3.1:8b";
+
+function evaluateRuleConditions(conditions: any[], invoice: any, erpData?: any): boolean {
+  if (!conditions || conditions.length === 0) return true;
+
+  let isMatch = true;
+
+  for (let i = 0; i < conditions.length; i++) {
+    const cond = conditions[i];
+        const fieldMapping: Record<string, string> = {
+      "Vendor Name": "vendor_name",
+      "Supplier Name": "vendor_name",
+      "Amount": "amount",
+      "Invoice Amount (Total)": "amount",
+      "PO Number": "po_number",
+      "Invoice Number": "invoice_number",
+      "Document Type": "document_type",
+      "Category": "category",
+      "Cost Center": "cost_center",
+      "Department": "department",
+      "Division": "division",
+      "Plant": "plant",
+      "Product Line Items": "items"
+    };
+    const dbField = fieldMapping[cond.field] || cond.field;
+    let fieldVal = invoice[dbField];
+    
+    if (fieldVal === undefined && erpData) {
+       fieldVal = (erpData as any)[dbField];
+    }
+    if (fieldVal === undefined && invoice.custom_data) {
+       try {
+         fieldVal = (typeof invoice.custom_data === 'string' ? JSON.parse(invoice.custom_data) : invoice.custom_data)[dbField];
+       } catch (e) {}
+    }
+
+    let { operator, value } = cond;
+    let operatorLower = String(operator).toLowerCase().trim();
+    let currentMatch = true;
+
+    if (cond.field === 'amount' || !isNaN(Number(value))) {
+       fieldVal = Number(fieldVal) || 0;
+       value = Number(value) || 0;
+    } else {
+       fieldVal = String(fieldVal || "").toLowerCase();
+       value = String(value || "").toLowerCase();
+    }
+
+    switch (operatorLower) {
+      case '==':
+      case '===':
+      case 'equals':
+      case '=':
+        if (fieldVal != value) currentMatch = false;
+        break;
+      case '!=':
+      case '!==':
+      case 'not_equals':
+        if (fieldVal != value) currentMatch = false;
+        break;
+      case '>':
+      case 'gt':
+      case 'greater than':
+        if (fieldVal <= value) currentMatch = false;
+        break;
+      case '<':
+      case 'lt':
+      case 'less than':
+        if (fieldVal >= value) currentMatch = false;
+        break;
+      case '>=':
+      case 'greater than or equal':
+        if (fieldVal < value) currentMatch = false;
+        break;
+      case '<=':
+      case 'less than or equal':
+        if (fieldVal > value) currentMatch = false;
+        break;
+      case 'contains':
+        if (!String(fieldVal).includes(String(value))) currentMatch = false;
+        break;
+      case "is_null":
+      case "is_empty":
+        if (fieldVal !== null && fieldVal !== undefined && fieldVal !== "" && fieldVal !== "Not Found") currentMatch = false;
+        break;
+      case "is_not_null":
+      case "not_empty":
+        if (fieldVal === null || fieldVal === undefined || fieldVal === "" || fieldVal === "Not Found") currentMatch = false;
+        break;
+    }
+
+    if (i === 0) {
+       isMatch = currentMatch;
+    } else {
+       const prevCond = conditions[i - 1];
+       if (prevCond.logicalOperator === 'OR') {
+          isMatch = isMatch || currentMatch;
+       } else {
+          isMatch = isMatch && currentMatch;
+       }
+    }
+  }
+
+  return isMatch;
+}
 
 class DocumentQueue {
   private isProcessing = false;
@@ -234,6 +348,139 @@ const ocrQueue = new DocumentQueue();
 ocrQueue.resume();
 
 // ---------------- API ENDPOINTS ----------------
+function parseInvoiceForFrontend(invoice: any) {
+  if (!invoice) return invoice;
+  const parsed = { ...invoice };
+  try {
+    if (typeof parsed.items === 'string') parsed.items = JSON.parse(parsed.items);
+    if (typeof parsed.custom_data === 'string') parsed.custom_data = JSON.parse(parsed.custom_data);
+    if (typeof parsed.ocr_layout === 'string') parsed.ocr_layout = JSON.parse(parsed.ocr_layout);
+    if (parsed.workflowInst && typeof parsed.workflowInst.state_json === 'string') {
+      parsed.workflowInst.state_json = JSON.parse(parsed.workflowInst.state_json);
+    }
+  } catch(e) {
+    console.error("Failed to parse invoice JSON strings for frontend", e);
+  }
+  return parsed;
+}
+
+// ---------------- WORKFLOW ENGINE ----------------
+async function matchAndStartWorkflow(invoiceId: string) {
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) return { success: false, message: "Invoice not found." };
+
+  let finalWorkflowProfile = null;
+  let erpData = null;
+  if (invoice.po_number && invoice.po_number !== "Not Found") {
+     erpData = await prisma.eRPMaster.findUnique({ where: { po_number: invoice.po_number } });
+     
+     // --- 3. TRUE 3-WAY MATCHING (Price Variance) ---
+     /* Disabled as per user request to ignore ERP PO matching
+     if (erpData && invoice.base_amount !== null && invoice.base_amount !== undefined) {
+       const poAmountInr = (erpData.po_amount || 0);
+       const tolerance = (erpData.tolerance_amount || 0);
+       const maxAllowed = poAmountInr + tolerance;
+       
+       if (invoice.base_amount > maxAllowed) {
+          const variance = invoice.base_amount - poAmountInr;
+          await prisma.invoice.update({
+             where: { id: invoice.id },
+             data: { 
+               status: "Exception", 
+               is_exception: true, 
+               exception_reason: `Price Variance: Invoice exceeds PO by ₹${variance.toFixed(2)}`,
+               price_variance: variance,
+               is_price_variance: true
+             }
+          });
+          await prisma.systemLog.create({
+             data: { invoice_id: invoice.id, action: "Workflow Halted", user: "GRN Verification", details: `Price Variance Exception. PO Amount: ₹${poAmountInr}, Invoice: ₹${invoice.base_amount}, Tolerance: ₹${tolerance}` }
+          });
+          return { success: true, message: "Halted due to Price Variance Exception." };
+       }
+     }
+     */
+  }
+
+  const rules = await prisma.businessRule.findMany({
+    where: { document_type: invoice.document_type },
+    orderBy: { priority: 'asc' }
+  });
+  for (const rule of rules) {
+     let conditionsObj: any = [];
+     try { conditionsObj = JSON.parse(rule.conditions_json); } catch(e) {}
+     
+     let conditionsArray = conditionsObj;
+     if (conditionsObj && !Array.isArray(conditionsObj) && conditionsObj.conditions) {
+       conditionsArray = conditionsObj.conditions;
+     }
+
+     let matches = evaluateRuleConditions(conditionsArray, invoice, erpData);
+     if (matches && conditionsArray.length > 0) {
+        finalWorkflowProfile = rule.target_workflow_id;
+        break;
+     }
+  }
+
+  if (!finalWorkflowProfile) {
+     const fallback = rules.find(r => {
+       try {
+         const obj = JSON.parse(r.conditions_json);
+         if (Array.isArray(obj)) return obj.length === 0;
+         if (obj && obj.conditions) return obj.conditions.length === 0;
+         return false;
+       } catch(e) { return false; }
+     });
+     if (fallback) finalWorkflowProfile = fallback.target_workflow_id;
+  }
+
+  if (!finalWorkflowProfile) {
+     await prisma.invoice.update({
+       where: { id: invoice.id },
+       data: { status: "Exception", is_exception: true, exception_reason: "No Workflow Match Post-GRN" }
+     });
+     await prisma.systemLog.create({
+       data: { invoice_id: invoice.id, action: "Workflow Halted", user: "Routing Engine", details: "No matching business rules post GRN." }
+     });
+     return { success: true, message: "Workflow matching executed but no rule matched." };
+  }
+
+  let finalWorkflowProfileName = finalWorkflowProfile;
+  try {
+    const wff = await prisma.workflow.findUnique({ where: { id: finalWorkflowProfile } });
+    if (wff) finalWorkflowProfileName = wff.workflow_name;
+  } catch (e) {}
+
+  await prisma.activeApprovalLog.upsert({
+    where: { invoice_id: invoice.id },
+    update: {
+      current_stage_number: 1,
+      status: "Pending",
+      workflow_profile: finalWorkflowProfileName
+    },
+    create: {
+      invoice_id: invoice.id,
+      workflow_profile: finalWorkflowProfileName,
+      current_stage_number: 1,
+      status: "Pending"
+    }
+  });
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { status: "In Approval" }
+  });
+
+  await prisma.systemLog.create({
+    data: {
+      invoice_id: invoice.id,
+      action: "Workflow Initialized",
+      user: "Automated Rules Engine",
+      details: `Matched business rules. Started ${finalWorkflowProfile} at Stage 1.`
+    }
+  });
+  return { success: true };
+}
 
 // 1. Get List of all Invoices (Filtered by Involvement)
 app.get("/api/documents", authenticateToken, async (req, res) => {
@@ -241,31 +488,79 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
     const user = (req as any).user;
     let invoices;
     
-    if (user.role === 'admin' || user.role === 'manager' || user.role === 'executive') {
+      // 0. Fetch full user to get username
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      const currentUsername = dbUser?.username || '';
+
+      // 1. Find all workflow profiles where this user is an approver
+      const userSteps = await prisma.workflowStepDefinition.findMany({
+          where: { approver_target: currentUsername }
+      });
+
+    if (user.role === 'admin' || user.role === 'executive') {
       invoices = await prisma.invoice.findMany({ 
         include: { activeApprovalLog: true },
         orderBy: { created_at: 'desc' } 
       });
     } else {
-      // Find invoices this user has approved/interacted with
+      const userProfiles = userSteps.map(s => s.profile_name);
+      
+      // 2. Find all active approval logs for those profiles
+      const userLogs = await prisma.activeApprovalLog.findMany({
+          where: { workflow_profile: { in: userProfiles } }
+      });
+      
+      // Also get invoices they've already approved (historical)
       const approvals = await prisma.approval.findMany({ where: { approver: user.email } });
       const wfInstances = await prisma.workflowInstance.findMany({ 
         where: { id: { in: approvals.map(a => a.workflow_instance_id) } } 
       });
-      const invoiceIds = wfInstances.map(w => w.invoice_id);
+
+      const invoiceIds = new Set([
+        ...userLogs.map(l => l.invoice_id),
+        ...wfInstances.map(w => w.invoice_id)
+      ]);
 
       invoices = await prisma.invoice.findMany({ 
         where: { 
           OR: [
             { uploaded_by_id: user.id },
-            { id: { in: invoiceIds } }
+            { id: { in: Array.from(invoiceIds) } }
           ]
         },
         include: { activeApprovalLog: true },
         orderBy: { created_at: 'desc' } 
       });
     }
-    res.json(invoices);
+
+    const activeProfiles = [...new Set(invoices.map((i: any) => i.activeApprovalLog?.workflow_profile).filter(Boolean))];
+    const allSteps = await prisma.workflowStepDefinition.findMany({
+        where: { profile_name: { in: activeProfiles as string[] } }
+    });
+
+    const enrichedInvoices = invoices.map((inv: any) => {
+      let isCurrent = false;
+      let assigned_to = "-";
+      if (inv.activeApprovalLog && inv.activeApprovalLog.status === 'Pending') {
+         const log = inv.activeApprovalLog;
+         const step = userSteps.find(s => 
+           s.profile_name === log.workflow_profile && 
+           s.stage_number === log.current_stage_number
+         );
+         if (step) isCurrent = true;
+
+         const currentStageStep = allSteps.find(s => 
+            s.profile_name === log.workflow_profile && 
+            s.stage_number === log.current_stage_number
+         );
+         if (currentStageStep) {
+            assigned_to = currentStageStep.approver_target;
+         }
+      }
+      return { ...inv, is_current_approver: isCurrent, assigned_to };
+    });
+
+    res.json(enrichedInvoices.map(parseInvoiceForFrontend));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -277,7 +572,7 @@ app.get("/api/invoices", authenticateToken, async (req, res) => {
     const take = Number(req.query.take) || 100;
 
     let invoices;
-    if (user.role === 'admin' || user.role === 'manager' || user.role === 'executive') {
+    if (user.role === 'admin' || user.role === 'executive') {
       invoices = await prisma.invoice.findMany({ 
         skip,
         take,
@@ -285,37 +580,22 @@ app.get("/api/invoices", authenticateToken, async (req, res) => {
         orderBy: { created_at: 'desc' } 
       });
     } else {
-      // 1. Get invoices from explicit past approvals
-      const approvals = await prisma.approval.findMany({ where: { approver: user.email } });
-      const wfInstancesByApproval = await prisma.workflowInstance.findMany({ where: { id: { in: approvals.map(a => a.workflow_instance_id) } } });
-      const invoiceIds = new Set(wfInstancesByApproval.map(w => w.invoice_id));
+      // 0. Fetch full user to get username
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      const currentUsername = dbUser?.username || '';
 
-      // 2. Get invoices from active workflow JSON configuration (current/future approvals)
-      const allWorkflows = await prisma.workflow.findMany();
-      const defaultWorkflow = allWorkflows.length > 0 ? allWorkflows[0] : null;
+      // 1. Get all workflow profiles where this user is assigned
+      const userSteps = await prisma.workflowStepDefinition.findMany({
+          where: { approver_target: currentUsername }
+      });
+      const userProfiles = userSteps.map(s => s.profile_name);
       
-      const allWfInstances = await prisma.workflowInstance.findMany();
-      for (const inst of allWfInstances) {
-        let wf = null;
-        if ((inst as any).workflow_id) {
-          wf = allWorkflows.find(w => w.id === (inst as any).workflow_id);
-        } else {
-          wf = defaultWorkflow;
-        }
-
-        if (wf && wf.workflow_json) {
-          try {
-            const parsed = JSON.parse(wf.workflow_json);
-            if (parsed.steps && parsed.steps.some((s: any) => s.approver === user.email || s.label === inst.current_stage)) {
-               // If the user's email is explicitly listed, OR if we don't have emails, maybe they are somehow involved? 
-               // Actually just checking if they are the approver in ANY step:
-               if (parsed.steps.some((s: any) => s.approver === user.email)) {
-                 invoiceIds.add(inst.invoice_id);
-               }
-            }
-          } catch(e) {}
-        }
-      }
+      // 2. Find all active approval logs for those profiles
+      const userLogs = await prisma.activeApprovalLog.findMany({
+          where: { workflow_profile: { in: userProfiles } }
+      });
+      
+      const invoiceIds = new Set(userLogs.map(l => l.invoice_id));
 
       invoices = await prisma.invoice.findMany({ 
         skip,
@@ -359,7 +639,7 @@ app.get("/api/invoices", authenticateToken, async (req, res) => {
       return inv;
     });
 
-    res.json(enrichedInvoices);
+    res.json(enrichedInvoices.map(parseInvoiceForFrontend));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -399,7 +679,7 @@ app.get("/api/documents/:id", async (req, res) => {
       orderBy: { stage_number: 'asc' }
     }) : [];
 
-    res.json({ invoice, goods_receipt: grn, workflow_instance: wf_inst, approvals, logs, active_workflow, workflow_steps, active_approval_log, workflow_step_definitions });
+    res.json({ invoice: parseInvoiceForFrontend(invoice), goods_receipt: grn, workflow_instance: wf_inst, approvals, logs, active_workflow, workflow_steps, active_approval_log, workflow_step_definitions });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -438,7 +718,7 @@ app.get("/api/invoices/:id", async (req, res) => {
       orderBy: { stage_number: 'asc' }
     }) : [];
 
-    res.json({ invoice, goods_receipt: grn, workflow_instance: wf_inst, approvals, logs, active_workflow, workflow_steps, active_approval_log, workflow_step_definitions });
+    res.json({ invoice: parseInvoiceForFrontend(invoice), goods_receipt: grn, workflow_instance: wf_inst, approvals, logs, active_workflow, workflow_steps, active_approval_log, workflow_step_definitions });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -449,13 +729,43 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     let invoices;
-    if (user.role === 'admin' || user.role === 'manager') {
+    if (user.role === 'admin' || user.role === 'executive') {
       invoices = await prisma.invoice.findMany();
     } else {
+      // 0. Fetch full user to get username
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      const currentUsername = dbUser?.username || '';
+
+      // 1. Find all workflow profiles where this user is an approver
+      const userSteps = await prisma.workflowStepDefinition.findMany({
+          where: { approver_target: currentUsername }
+      });
+      const userProfiles = userSteps.map(s => s.profile_name);
+      
+      // 2. Find all active approval logs for those profiles
+      const userLogs = await prisma.activeApprovalLog.findMany({
+          where: { workflow_profile: { in: userProfiles } }
+      });
+      
+      // Also get invoices they've already approved (historical)
       const approvals = await prisma.approval.findMany({ where: { approver: user.email } });
-      const wfInstances = await prisma.workflowInstance.findMany({ where: { id: { in: approvals.map(a => a.workflow_instance_id) } } });
-      const invoiceIds = wfInstances.map(w => w.invoice_id);
-      invoices = await prisma.invoice.findMany({ where: { OR: [ { uploaded_by_id: user.id }, { id: { in: invoiceIds } } ] } });
+      const wfInstances = await prisma.workflowInstance.findMany({ 
+        where: { id: { in: approvals.map(a => a.workflow_instance_id) } } 
+      });
+
+      const invoiceIds = new Set([
+        ...userLogs.map(l => l.invoice_id),
+        ...wfInstances.map(w => w.invoice_id)
+      ]);
+
+      invoices = await prisma.invoice.findMany({ 
+        where: { 
+          OR: [
+            { uploaded_by_id: user.id },
+            { id: { in: Array.from(invoiceIds) } }
+          ]
+        }
+      });
     }
     const totalInvoices = invoices.length;
     const waitingForGRN = invoices.filter(i => i.status === "Waiting for GRN").length;
@@ -622,17 +932,7 @@ const matchRoutingRule = async (documentType: string, amount: number, invoice?: 
   for (const rule of rules) {
     let conditions = [];
     try { conditions = JSON.parse(rule.conditions_json); } catch(e) {}
-    let matches = true;
-    for (const cond of conditions) {
-      let actualValue = invoice ? (invoice as any)[cond.field] : undefined;
-      if (actualValue === undefined && cond.field === 'amount') {
-        actualValue = amount;
-      }
-      if (cond.operator === "equals" && String(actualValue).toLowerCase() !== String(cond.value).toLowerCase()) matches = false;
-      if (cond.operator === "gt" && Number(actualValue) <= Number(cond.value)) matches = false;
-      if (cond.operator === "lt" && Number(actualValue) >= Number(cond.value)) matches = false;
-      if (cond.operator === "contains" && !String(actualValue).toLowerCase().includes(String(cond.value).toLowerCase())) matches = false;
-    }
+    let matches = evaluateRuleConditions(conditions, invoice, { amount });
     if (matches) return rule;
   }
   return null;
@@ -662,52 +962,69 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
     const invoiceId = "DOC-" + Math.floor(10000000 + Math.random() * 90000000);
     const uploadedPath = `/uploads/${filename}`;
 
+    const skip_ocr = req.body.skip_ocr === "true";
+    let invoiceStatus = "Received";
+    if (skip_ocr) {
+      invoiceStatus = "Manual Entry"; // Initial state before matching
+    }
+
     const newInvoice = await prisma.invoice.create({
       data: {
         id: invoiceId,
-        invoice_number: "Extracting...",
-        vendor_name: "Processing...",
-        invoice_date: new Date().toISOString().split("T")[0],
-        po_number: "Extracting...",
-        amount: 0,
+        tracking_id: `temp-${invoiceId}`,
+        invoice_number: skip_ocr ? (req.body.invoice_number || "Manual") : "Extracting...",
+        vendor_name: skip_ocr ? (req.body.vendor_name || "Manual") : "Processing...",
+        invoice_date: skip_ocr ? (req.body.invoice_date || new Date().toISOString().split("T")[0]) : new Date().toISOString().split("T")[0],
+        po_number: skip_ocr ? (req.body.po_number || "Not Found") : "Extracting...",
+        amount: skip_ocr ? Number(req.body.amount || 0) : 0,
+        base_amount: skip_ocr ? Number(req.body.amount || 0) : 0,
         currency: "USD",
-        status: "Received",
-        document_type: "Processing...",
+        status: invoiceStatus,
+        document_type: skip_ocr ? "Invoice" : "Processing...",
         uploaded_by_id: user.id,
         file_name: originalname,
         file_size: size,
         mime_type: mimetype,
         file_path: uploadedPath,
         file_hash: fileHash,
-        ocr_confidence: 90.0,
-        ocr_text: "Running AP automated OCR pipeline...",
-        tax_details: "Calculating..."
+        ocr_confidence: skip_ocr ? 100.0 : 90.0,
+        ocr_text: skip_ocr ? "Manual Entry - AI Bypassed" : "Running AP automated OCR pipeline...",
+        tax_details: skip_ocr ? "Manual Entry" : "Calculating..."
       }
     });
 
-    await prisma.goodsReceipt.create({
-      data: {
-        id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
-        invoice_id: invoiceId,
-        status: "Waiting",
-        confirmed_by: "",
-        remarks: ""
-      }
-    });
+    if (!skip_ocr) {
+      await prisma.goodsReceipt.create({
+        data: {
+          id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+          invoice_id: invoiceId,
+          status: "Waiting",
+          confirmed_by: "",
+          remarks: ""
+        }
+      });
+    }
 
     await prisma.systemLog.create({
       data: {
         invoice_id: invoiceId,
         action: "Invoice Received",
-        user: "n8n Email Integration",
-        details: `File "${originalname}" saved. Size: ${(size / 1024).toFixed(1)} KB. MimeType: ${mimetype}`
+        user: "n8n Email Integration / Manual Upload",
+        details: `File "${originalname}" saved. Size: ${(size / 1024).toFixed(1)} KB. MimeType: ${mimetype}. Skip OCR: ${skip_ocr}`
       }
     });
 
-    // Background processing
-    ocrQueue.push(invoiceId, filename);
-
-    res.json(newInvoice);
+    if (skip_ocr) {
+      // Instantly route to workflow
+      await matchAndStartWorkflow(invoiceId);
+      // Fetch the newly updated invoice to return to frontend
+      const routedInvoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+      return res.json(routedInvoice);
+    } else {
+      // Background processing
+      ocrQueue.push(invoiceId, filename);
+      return res.json(newInvoice);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -745,150 +1062,10 @@ app.post("/api/goods-receipt/:id/confirm", async (req, res) => {
     });
 
     if (status === "Received") {
-      let finalWorkflowProfile = null;
-      let erpData = null;
-      if (invoice.po_number && invoice.po_number !== "Not Found") {
-         erpData = await prisma.eRPMaster.findUnique({ where: { po_number: invoice.po_number } });
-         
-         // --- 3. TRUE 3-WAY MATCHING (Price Variance) ---
-         if (erpData && invoice.base_amount !== null && invoice.base_amount !== undefined) {
-           const poAmountInr = (erpData.po_amount || 0);
-           const tolerance = (erpData.tolerance_amount || 0);
-           const maxAllowed = poAmountInr + tolerance;
-           
-           if (invoice.base_amount > maxAllowed) {
-              const variance = invoice.base_amount - poAmountInr;
-              await prisma.invoice.update({
-                 where: { id: invoice.id },
-                 data: { 
-                   status: "Exception", 
-                   is_exception: true, 
-                   exception_reason: `Price Variance: Invoice exceeds PO by ₹${variance.toFixed(2)}`,
-                   price_variance: variance,
-                   is_price_variance: true
-                 }
-              });
-              await prisma.systemLog.create({
-                 data: { invoice_id: invoice.id, action: "Workflow Halted", user: "GRN Verification", details: `Price Variance Exception. PO Amount: ₹${poAmountInr}, Invoice: ₹${invoice.base_amount}, Tolerance: ₹${tolerance}` }
-              });
-              return res.json({ success: true, message: "Halted due to Price Variance Exception." });
-           }
-         }
+      const result = await matchAndStartWorkflow(invoice.id);
+      if (result.message) {
+        return res.json({ success: true, message: result.message });
       }
-
-      const rules = await prisma.businessRule.findMany({
-        where: { document_type: invoice.document_type },
-        orderBy: { priority: 'asc' }
-      });
-      for (const rule of rules) {
-         let conditions = [];
-         try { conditions = JSON.parse(rule.conditions_json); } catch(e) {}
-         let matches = true;
-         for (const cond of conditions) {
-            let actualValue = (invoice as any)[cond.field];
-            if (actualValue === undefined && erpData) {
-               actualValue = (erpData as any)[cond.field];
-            }
-            if (actualValue === undefined && invoice.custom_data) {
-               actualValue = (invoice.custom_data as any)[cond.field];
-            }
-
-            const valNum = Number(actualValue);
-            const condNum = Number(cond.value);
-            const valStr = String(actualValue || "").toLowerCase();
-            const condStr = String(cond.value || "").toLowerCase();
-
-            switch (cond.operator) {
-              case "equals":
-              case "==":
-              case "=":
-                if (valStr !== condStr) matches = false;
-                break;
-              case "not_equals":
-              case "!=":
-                if (valStr === condStr) matches = false;
-                break;
-              case "gt":
-              case ">":
-                if (valNum <= condNum) matches = false;
-                break;
-              case "lt":
-              case "<":
-                if (valNum >= condNum) matches = false;
-                break;
-              case ">=":
-                if (valNum < condNum) matches = false;
-                break;
-              case "<=":
-                if (valNum > condNum) matches = false;
-                break;
-              case "contains":
-                if (!valStr.includes(condStr)) matches = false;
-                break;
-              case "is_null":
-              case "is_empty":
-                if (actualValue !== null && actualValue !== undefined && actualValue !== "" && actualValue !== "Not Found") matches = false;
-                break;
-              case "is_not_null":
-              case "is_not_empty":
-                if (actualValue === null || actualValue === undefined || actualValue === "" || actualValue === "Not Found") matches = false;
-                break;
-              default:
-                matches = false;
-            }
-         }
-         if (matches && conditions.length > 0) {
-            finalWorkflowProfile = rule.target_workflow_id;
-            break;
-         }
-      }
-
-      if (!finalWorkflowProfile) {
-         const fallback = rules.find(r => {
-           try { return JSON.parse(r.conditions_json).length === 0; } catch(e) { return false; }
-         });
-         if (fallback) finalWorkflowProfile = fallback.target_workflow_id;
-      }
-
-      if (!finalWorkflowProfile) {
-         await prisma.invoice.update({
-           where: { id: invoice.id },
-           data: { status: "Exception", is_exception: true, exception_reason: "No Workflow Match Post-GRN" }
-         });
-         await prisma.systemLog.create({
-           data: { invoice_id: invoice.id, action: "Workflow Halted", user: "Routing Engine", details: "No matching business rules post GRN." }
-         });
-         return res.json({ success: true, message: "Goods Receipt confirmed but no workflow matched." });
-      }
-
-      await prisma.activeApprovalLog.upsert({
-        where: { invoice_id: invoice.id },
-        update: {
-          current_stage_number: 1,
-          status: "Pending",
-          workflow_profile: finalWorkflowProfile
-        },
-        create: {
-          invoice_id: invoice.id,
-          workflow_profile: finalWorkflowProfile,
-          current_stage_number: 1,
-          status: "Pending"
-        }
-      });
-
-      await prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { status: "In Approval" }
-      });
-
-      await prisma.systemLog.create({
-        data: {
-          invoice_id: invoice.id,
-          action: "Workflow Initialized",
-          user: "Automated Rules Engine",
-          details: `Goods receipt cleared. Started ${finalWorkflowProfile} at Stage 1.`
-        }
-      });
     } else {
       await prisma.invoice.update({
         where: { id: invoice.id },
@@ -971,55 +1148,7 @@ async function evaluateBusinessRules(invoice: any): Promise<string | null> {
 
     try {
       const conditions = JSON.parse(rule.conditions_json);
-      let isMatch = true;
-
-      for (const cond of conditions) {
-        let fieldVal = invoice[cond.field];
-        let { operator, value } = cond;
-
-        // Strict Type Casting for mathematical operations
-        if (cond.field === 'amount' || !isNaN(Number(value))) {
-           fieldVal = Number(fieldVal) || 0;
-           value = Number(value) || 0;
-        }
-
-        switch (operator) {
-          case '==':
-          case '===':
-            if (fieldVal != value) isMatch = false;
-            break;
-          case '!=':
-          case '!==':
-            if (fieldVal != value) isMatch = false;
-            break;
-          case '>':
-            if (fieldVal <= value) isMatch = false;
-            break;
-          case '>=':
-            if (fieldVal < value) isMatch = false;
-            break;
-          case '<':
-            if (fieldVal >= value) isMatch = false;
-            break;
-          case '<=':
-            if (fieldVal > value) isMatch = false;
-            break;
-          case 'is_null':
-            if (fieldVal !== null && fieldVal !== undefined && fieldVal !== "") isMatch = false;
-            break;
-          case 'is_not_null':
-            if (fieldVal === null || fieldVal === undefined || fieldVal === "") isMatch = false;
-            break;
-          case 'contains':
-            if (!String(fieldVal).toLowerCase().includes(String(value).toLowerCase())) isMatch = false;
-            break;
-          default:
-            isMatch = false; // Unknown operator
-        }
-        if (!isMatch) break; // Optimization: fail fast
-      }
-
-      if (isMatch) {
+      if (evaluateRuleConditions(conditions, invoice)) {
         return rule.target_workflow_id;
       }
     } catch (e) {
@@ -1258,7 +1387,7 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
         data: { invoice_id: invoice.id, action: "Clarification Requested", user: approver, details: `Question: "${comments}"` }
       });
       await triggerNotificationFlow(invoice.id, action, comments, approver);
-      return res.json({ invoice, workflow_instance: workflowInstance, approval: newApproval });
+      return res.json({ invoice: parseInvoiceForFrontend(invoice), workflow_instance: workflowInstance, approval: newApproval });
     }
 
     // --- GRAPH DAG EXECUTOR ---
@@ -1315,7 +1444,7 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
              
              workflowInstance = await prisma.workflowInstance.update({
                 where: { id: workflowInstance!.id },
-                data: { current_stage: nextStageLabel, status: "In Approval", state_json: currentState as any }
+                data: { current_stage: nextStageLabel, status: "In Approval", state_json: currentState ? JSON.stringify(currentState) : null }
              });
              
              await prisma.invoice.update({ where: { id: invoice.id }, data: { status: `Sent Back (${nextStageLabel})` } });
@@ -1399,7 +1528,7 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
           
           workflowInstance = await prisma.workflowInstance.update({
              where: { id: workflowInstance!.id },
-             data: { current_stage: nextStageLabel, status: dbStatus, state_json: currentState as any }
+             data: { current_stage: nextStageLabel, status: dbStatus, state_json: currentState ? JSON.stringify(currentState) : null }
           });
           
           await prisma.systemLog.create({
@@ -1492,7 +1621,7 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
     // Trigger notification service for any completed step (Approve/Reject)
     await triggerNotificationFlow(invoice.id, action, comments, approver);
 
-    res.json({ invoice, workflow_instance: workflowInstance, approval: newApproval });
+    res.json({ invoice: parseInvoiceForFrontend(invoice), workflow_instance: workflowInstance, approval: newApproval });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1523,7 +1652,7 @@ app.post("/api/invoices/:id/pay", async (req, res) => {
       }
     });
 
-    res.json({ success: true, invoice: updated });
+    res.json({ success: true, invoice: parseInvoiceForFrontend(updated) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1603,18 +1732,24 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
     if (existingInvoice.status === "Failed") {
       const isNowInvoice = (documentType || existingInvoice.document_type || "").toLowerCase().includes("invoice");
       if (isNowInvoice) {
-        newStatus = "Waiting for GRN";
-        await prisma.goodsReceipt.upsert({
-          where: { invoice_id: req.params.id },
-          update: { status: "Pending", confirmed_by: "Pending", remarks: "Awaiting physical receipt of goods." },
-          create: {
-            id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
-            invoice_id: req.params.id,
-            status: "Pending",
-            confirmed_by: "Pending",
-            remarks: "Awaiting physical receipt of goods."
-          }
-        });
+        const grnConfig = await prisma.systemConfig.findUnique({ where: { key: "GLOBAL_REQUIRE_GRN" } });
+        if (grnConfig && grnConfig.value.toLowerCase() === "false") {
+            newStatus = "In Approval";
+            triggeredWorkflow = true;
+        } else {
+            newStatus = "Waiting for GRN";
+            await prisma.goodsReceipt.upsert({
+              where: { invoice_id: req.params.id },
+              update: { status: "Pending", confirmed_by: "Pending", remarks: "Awaiting physical receipt of goods." },
+              create: {
+                id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+                invoice_id: req.params.id,
+                status: "Pending",
+                confirmed_by: "Pending",
+                remarks: "Awaiting physical receipt of goods."
+              }
+            });
+        }
       } else {
         newStatus = "In Approval";
         triggeredWorkflow = true;
@@ -1641,8 +1776,8 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
         cgst: Number(cgst),
         sgst: Number(sgst),
         igst: Number(igst),
-        items: items as any,
-        custom_data: customData ? (customData as any) : existingInvoice.custom_data,
+        items: items ? JSON.stringify(items) : existingInvoice.items,
+        custom_data: customData ? JSON.stringify(customData) : existingInvoice.custom_data,
         status: newStatus as any
       }
     });
@@ -1698,7 +1833,7 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
       }
     });
 
-    res.json(invoice);
+    res.json(parseInvoiceForFrontend(invoice));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1759,6 +1894,12 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
        }
     }
 
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+    const realUsername = dbUser?.username || '';
+    if (resolvedApprover !== realUsername && resolvedApprover !== user.email) {
+      return res.status(403).json({ error: `YOU ARE NOT AUTHORIZED TO APPROVE THIS STAGE. ASSIGNED TO: ${resolvedApprover}` });
+    }
+
     // Advance Stage
     const nextStageDef = await prisma.workflowStepDefinition.findFirst({
       where: {
@@ -1813,6 +1954,38 @@ app.post("/api/workflows/reject", authenticateToken, async (req, res) => {
 
     if (!activeLog) return res.status(404).json({ error: "No active workflow found." });
 
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId }
+    });
+    
+    if (invoice) {
+       const currentStageDef = await prisma.workflowStepDefinition.findFirst({
+         where: {
+           profile_name: activeLog.workflow_profile,
+           stage_number: activeLog.current_stage_number,
+           document_type: invoice.document_type
+         }
+       });
+
+       if (currentStageDef) {
+         let resolvedApprover = currentStageDef.approver_target;
+         if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]') {
+            if (invoice.po_number && invoice.po_number !== "Not Found") {
+               const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
+               if (corpMock) {
+                  resolvedApprover = resolvedApprover === '[PO_OWNER]' ? (corpMock.po_owner_email || resolvedApprover) : (corpMock.dept_head_email || resolvedApprover);
+               }
+            }
+         }
+
+         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+         const realUsername = dbUser?.username || '';
+         if (resolvedApprover !== realUsername && resolvedApprover !== user.email) {
+           return res.status(403).json({ error: `You are not authorized to reject this stage. Assigned to: ${resolvedApprover}` });
+         }
+       }
+    }
+
     await prisma.activeApprovalLog.update({
       where: { id: activeLog.id },
       data: { status: "Rejected" }
@@ -1839,7 +2012,14 @@ app.post("/api/workflows/reject", authenticateToken, async (req, res) => {
 app.get("/api/admin/routing-rules", authenticateToken, async (req, res) => {
   try {
     const rules = await prisma.businessRule.findMany({ orderBy: { priority: 'asc' } });
-    res.json(rules);
+    const workflows = await prisma.workflow.findMany({ select: { id: true, workflow_name: true } });
+    
+    const enrichedRules = rules.map(r => {
+      const wf = workflows.find(w => w.id === r.target_workflow_id);
+      return { ...r, target_workflow_name: wf ? wf.workflow_name : r.target_workflow_id };
+    });
+    
+    res.json(enrichedRules);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1885,16 +2065,16 @@ app.get("/api/admin/workflow-steps", authenticateToken, async (req, res) => {
 
 app.post("/api/admin/workflow-steps", authenticateToken, async (req, res) => {
   try {
-    const { id, profile_name, stage_number, approver_target, document_type } = req.body;
+    const { id, profile_name, stage_number, approver_target, document_type, permissions, action_required } = req.body;
     let step;
     if (id) {
       step = await prisma.workflowStepDefinition.update({
         where: { id },
-        data: { profile_name, stage_number: Number(stage_number), approver_target, document_type }
+        data: { profile_name, stage_number: Number(stage_number), approver_target, document_type, permissions, action_required }
       });
     } else {
       step = await prisma.workflowStepDefinition.create({
-        data: { profile_name, stage_number: Number(stage_number), approver_target, document_type: document_type || "Invoice" }
+        data: { profile_name, stage_number: Number(stage_number), approver_target, document_type: document_type || "Invoice", permissions: permissions || "Approve Only", action_required: action_required || "Approve" }
       });
     }
     res.json(step);
@@ -1906,6 +2086,65 @@ app.post("/api/admin/workflow-steps", authenticateToken, async (req, res) => {
 app.delete("/api/admin/workflow-steps/:id", authenticateToken, async (req, res) => {
   try {
     await prisma.workflowStepDefinition.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/workflows", authenticateToken, async (req, res) => {
+  try {
+    const workflows = await prisma.workflowProfile.findMany({
+      include: { steps: { orderBy: { stage_number: 'asc' } } }
+    });
+    res.json(workflows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/workflows", authenticateToken, async (req, res) => {
+  try {
+    const { profile_name, workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation, steps } = req.body;
+    
+    const profile = await prisma.workflowProfile.upsert({
+      where: { profile_name },
+      update: { workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation },
+      create: { profile_name, workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation }
+    });
+
+    // Handle steps
+    if (steps && Array.isArray(steps)) {
+      // Delete existing steps
+      await prisma.workflowStepDefinition.deleteMany({ where: { profile_name } });
+      
+      // Create new steps
+      for (const step of steps) {
+        await prisma.workflowStepDefinition.create({
+          data: {
+            profile_name,
+            stage_number: Number(step.stage_number),
+            step_name: step.step_name || 'Approval Step',
+            role: step.role || 'Employee',
+            approver_type: step.approver_type || 'Specific Employee',
+            approver_target: step.approver_target || '',
+            permissions: step.permissions || 'Approve Only',
+            action_required: step.action_required || 'Approve',
+            document_type: step.document_type || 'Any'
+          }
+        });
+      }
+    }
+    
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/workflows/:profile_name", authenticateToken, async (req, res) => {
+  try {
+    await prisma.workflowProfile.delete({ where: { profile_name: req.params.profile_name } });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -2107,62 +2346,18 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
           } else {
              templatesPrompt = "No known document types configured. Guess the document type autonomously.";
           }
-
           // --- CONTINUOUS LEARNING: DYNAMIC FEW-SHOT INJECTION ---
-          const pastApproved = await prisma.invoice.findMany({
-            where: { status: { in: ["Paid", "Approved"] } },
-            orderBy: { created_at: "desc" },
-            take: 3
-          });
-
+          // Disabled to prevent LLM from hallucinating old schema structures
           let fewShotExample = "";
           
-          if (pastApproved.length > 0) {
-            fewShotExample = "--- DYNAMIC EXAMPLES FROM PAST APPROVED DOCUMENTS ---\n";
-            fewShotExample += "Learn from these past examples. Notice how the JSON fields were formatted based on the document type.\n";
-            pastApproved.forEach((doc, idx) => {
-              const exampleJson = {
-                documentType: doc.document_type,
-                vendorName: doc.vendor_name,
-                invoiceNumber: doc.invoice_number,
-                invoiceDate: doc.invoice_date,
-                poNumber: doc.po_number,
-                amount: doc.amount,
-                currency: doc.currency,
-                cgst: doc.cgst,
-                sgst: doc.sgst,
-                igst: doc.igst,
-                items: typeof doc.items === 'string' ? JSON.parse(doc.items as any) : doc.items,
-                ...(typeof doc.custom_data === 'object' && doc.custom_data !== null ? doc.custom_data : {})
-              };
-
-              Object.keys(exampleJson).forEach(k => {
-                if (exampleJson[k as keyof typeof exampleJson] === null) delete exampleJson[k as keyof typeof exampleJson];
-              });
-
-              // Send the first 800 characters of OCR text to save context length
-              const trimmedOcr = doc.ocr_text ? doc.ocr_text.substring(0, 800) + '...' : '...';
-
-              fewShotExample += `\n[EXAMPLE ${idx+1} - ${doc.document_type}]:\n[OCR TEXT]:\n${trimmedOcr}\n\n[EXPECTED JSON OUTPUT]:\n${JSON.stringify(exampleJson, null, 2)}\n\n`;
-            });
-          }
-          
           // --- CONTINUOUS LEARNING: HUMAN CORRECTIONS (RAG) ---
-          const recentCorrections = await prisma.correctionLog.findMany({
-            orderBy: { created_at: "desc" },
-            take: 3
-          });
-
-          if (recentCorrections.length > 0) {
-            fewShotExample += "\n--- HIGH PRIORITY: LEARN FROM RECENT HUMAN CORRECTIONS ---\n";
-            fewShotExample += "Humans have explicitly corrected your past extractions. Pay close attention to these rules and patterns:\n";
-            recentCorrections.forEach((corr, idx) => {
-              fewShotExample += `\n[CORRECTION ${idx+1} for Vendor: ${corr.vendor_name}]:\n`;
-              fewShotExample += `[AI ORIGINALLY PREDICTED]:\n${corr.original_ai_prediction}\n`;
-              fewShotExample += `[HUMAN CORRECTED TO]:\n${corr.human_corrected_data}\n`;
-              fewShotExample += `Ensure you do not make this mistake again.\n\n`;
-            });
-          }
+          // DISABLED: Injecting past JSON directly into the prompt causes the LLM to regurgitate old values (hallucinate).
+          // const recentCorrections = await prisma.correctionLog.findMany({
+          //   orderBy: { created_at: "desc" },
+          //   take: 3
+          // });
+          //
+          // if (recentCorrections.length > 0) { ... }
 
           // STAGE 1: The Classifier Router
           const rawTextLower = rawText.toLowerCase();
@@ -2174,18 +2369,20 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
           const invoiceIndex = headerText.indexOf("invoice");
           const poIndex = headerText.indexOf("purchase order");
 
-          if (headerText.includes("tax invoice") || headerText.includes("retail invoice")) {
-            classifiedType = "Invoice";
-          } else if (invoiceIndex !== -1 && (poIndex === -1 || invoiceIndex < poIndex)) {
-            classifiedType = "Invoice";
-          } else if (poIndex !== -1) {
-            classifiedType = "Purchase Order";
-          } else if (headerText.includes("credit note")) {
-            classifiedType = "Credit Note";
-          } else if (headerText.includes("debit note")) {
-            classifiedType = "Debit Note";
-          } else if (rawTextLower.includes("purchase order") && !rawTextLower.includes("invoice")) {
-            classifiedType = "Purchase Order";
+          if (headerText.includes("vcc purchase invoice") || headerText.includes("vcc")) {
+            classifiedType = "VCC PURCHASE INVOICE";
+          } else if (headerText.includes("ar creditnote") || headerText.includes("credit note") || headerText.includes("ar credit")) {
+            classifiedType = "AR CREDITNOTE";
+          } else if (headerText.includes("journal entry")) {
+            classifiedType = "JOURNAL ENTRY";
+          } else if (headerText.includes("project budget")) {
+            classifiedType = "PROJECT BUDGET";
+          } else if (headerText.includes("non - returnable") || headerText.includes("non returnable") || headerText.includes("non-returnable")) {
+            classifiedType = "NON - RETURNABLE";
+          } else if (headerText.includes("ap invoice") || headerText.includes("ap debit note") || headerText.includes("debit note") || headerText.includes("tax invoice") || invoiceIndex !== -1) {
+            classifiedType = "AP Invoice";
+          } else if (headerText.includes("ocr") || headerText.includes("inhouse ocr")) {
+            classifiedType = "OCR AND INHOUSE OCR";
           } else {
              for (const t of templates) {
                 if (headerText.includes(t.name.toLowerCase())) {
@@ -2202,7 +2399,7 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-                const classifierPrompt = `You are a document classifier. Categorize this document into exactly one of the following types: Invoice, Purchase Order, Credit Note, Debit Note, ${templates.map(t => t.name).join(', ')}. Reply with ONLY the category name. Do not include any other text.\n\nDocument Text:\n${rawTextLower.substring(0, 1500)}`;
+                const classifierPrompt = `You are a document classifier. Categorize this document into exactly one of the following types: ${templates.map(t => t.name).join(', ')}. Reply with ONLY the category name. Do not include any other text.\n\nDocument Text:\n${rawTextLower.substring(0, 1500)}`;
                 
                 const llmClassResponse = await fetch(LOCAL_LLM_URL, {
                    method: "POST",
@@ -2221,25 +2418,30 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
                    const classData = await llmClassResponse.json();
                    let aiType = classData.response.trim();
                    
-                   const allowedTypes = ["Invoice", "Purchase Order", "Credit Note", "Debit Note", ...templates.map(t => t.name)];
+                   const allowedTypes = templates.map(t => t.name);
                    for (const t of allowedTypes) {
                       if (aiType.toLowerCase().includes(t.toLowerCase())) {
                          classifiedType = t;
                          break;
                       }
                    }
-                   if (classifiedType === "Unknown") classifiedType = "Invoice"; // Ultimate fallback
+                   if (classifiedType === "Unknown") classifiedType = templates.length > 0 ? templates[0].name : "Unknown"; // Ultimate fallback
                 } else {
-                   classifiedType = "Invoice";
+                   classifiedType = templates.length > 0 ? templates[0].name : "Unknown";
                 }
              } catch(e) {
                 console.error("[Classifier] LLM Fallback failed:", e);
-                classifiedType = "Invoice";
+                classifiedType = templates.length > 0 ? templates[0].name : "Unknown";
              }
           }
           
           if (!selectedTemplate && templates.length > 0) {
              selectedTemplate = templates.find((t: any) => t.name.toLowerCase() === classifiedType.toLowerCase()) || null;
+             
+             // Fuzzy match fallback: if it classified as "Invoice" but template is "Standard Invoice"
+             if (!selectedTemplate) {
+                 selectedTemplate = templates.find((t: any) => t.name.toLowerCase().includes(classifiedType.toLowerCase()) || classifiedType.toLowerCase().includes(t.name.toLowerCase())) || null;
+             }
           }
 
           await prisma.systemLog.create({
@@ -2259,20 +2461,37 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
             let instructions = "";
             try {
                const parsed = JSON.parse(selectedTemplate.fields_json);
-               if (parsed.fields && Array.isArray(parsed.fields)) {
-                 const schemaObj: any = {};
-                 parsed.fields.forEach((f: any) => {
-                   let def = `${f.type}`;
-                   if (f.required) def = `[REQUIRED] ` + def;
-                   if (f.description) def += ` (${f.description})`;
-                   schemaObj[f.name] = def;
-                 });
-                 fieldsDef = JSON.stringify(schemaObj, null, 2);
+               let fieldsArray = [];
+               
+               if (Array.isArray(parsed)) {
+                 fieldsArray = parsed;
+                 instructions = "";
+               } else if (parsed.fields && Array.isArray(parsed.fields)) {
+                 fieldsArray = parsed.fields;
                  instructions = parsed.instructions || "";
-               } else {
-                 // Legacy schema handler
+               } else if (parsed.schema) {
                  fieldsDef = typeof parsed.schema === "string" ? parsed.schema : JSON.stringify(parsed.schema || {}, null, 2);
                  instructions = parsed.instructions || "";
+               }
+               
+               if (fieldsArray.length > 0) {
+                 const schemaObj: any = {};
+                 fieldsArray.forEach((f: any) => {
+                   let def = `${f.type || 'string'}`;
+                   if (f.required) def = `[REQUIRED] ` + def;
+                   if (f.description) def += ` (${f.description})`;
+                   
+                   // Explicit hints for common errors
+                   if (f.name === 'vendor_name') {
+                     def += ` (CRITICAL: Extract the SELLER/SUPPLIER name who issued the invoice. NEVER extract the BUYER / 'Bill To' / 'Consignee' name.)`;
+                   }
+                   schemaObj[f.name] = def;
+                 });
+                 // Also explicitly request items array for all templates to be safe
+                 schemaObj["items"] = "[OPTIONAL] array of objects containing line item details. Fields: description, quantity, unitprice, amount, serialNumbers (array of strings), warrantyText. CRITICAL RULES: 1) Merge multi-line descriptions into ONE item. Do NOT split a single product into multiple items. 2) Serial numbers (e.g. WX...) and warranties (e.g. '3 YEARS') usually appear directly below the item description.";
+                 fieldsDef = JSON.stringify(schemaObj, null, 2);
+               } else if (!fieldsDef) {
+                 fieldsDef = "{}";
                }
             } catch(e) {
                fieldsDef = selectedTemplate.fields_json;
@@ -2287,7 +2506,7 @@ STRICT INSTRUCTIONS:
 3. Your output MUST be a JSON object conforming exactly to the schema below.
 4. CRITICAL RULE: YOU MUST ACHIEVE 100% ACCURACY. DO NOT HALLUCINATE OR GUESS VALUES.
 5. Dates: Extract dates exactly as written.
-6. CHAIN OF THOUGHT: You MUST include a "_thoughts" key at the very beginning of your JSON. In this key, explain your step-by-step reasoning for locating the Vendor, PO Number, and Line Items in the text. This will help you extract the data accurately.
+6. CHAIN OF THOUGHT: You MUST include a "_thoughts" key at the very ROOT of your JSON. Do NOT put _thoughts inside every field. All fields must be flat values (strings or numbers) as defined by the schema. Do NOT nest fields inside objects.
 7. REQUIRED FIELDS: If a field is marked as [REQUIRED] and you cannot confidently find it in the document, you MUST set its value to exactly the string "MISSING_REQUIRED_FIELD".
 
 ${instructions}
@@ -2301,7 +2520,15 @@ ${fewShotExample}
           } else {
              await prisma.invoice.update({
                where: { id: invoiceId },
-               data: { status: "Exception", is_exception: true, exception_reason: `Unrecognized Document Type: ${classifiedType}` }
+               data: { 
+                 status: "Exception", 
+                 is_exception: true, 
+                 exception_reason: `Unrecognized Document Type: ${classifiedType}`,
+                 vendor_name: "Unknown Vendor",
+                 document_type: classifiedType,
+                 invoice_number: "N/A",
+                 po_number: "Not Found"
+               }
              });
              await prisma.systemLog.create({
                data: { invoice_id: invoiceId, action: "Extraction Halted", user: "Routing Engine", details: `No template found for ${classifiedType}` }
@@ -2342,7 +2569,13 @@ ${fewShotExample}
           }
 
           const isVisionModel = modelToUse.toLowerCase().includes("vision") || modelToUse.toLowerCase().includes("llava");
-          const llmPayload: any = { prompt: prompt, stream: false, format: "json", model: modelToUse };
+          const llmPayload: any = { 
+            prompt: prompt, 
+            stream: false, 
+            format: "json", 
+            model: modelToUse,
+            options: { temperature: 0.0, seed: 123 }
+          };
           if (isVisionModel) {
              llmPayload.images = [base64Data];
           }
@@ -2473,12 +2706,27 @@ ${fewShotExample}
           if (!obj || typeof obj !== 'object') return null;
           const searchKeys = keys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
           for (const [k, v] of Object.entries(obj)) {
-            if (searchKeys.includes(k.toLowerCase().replace(/[^a-z0-9]/g, ''))) return v;
+            if (searchKeys.includes(k.toLowerCase().replace(/[^a-z0-9]/g, ''))) {
+              if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+                return (v as any).value || (v as any).name || (v as any).text || (v as any).amount || String(v);
+              }
+              return v;
+            }
           }
           return null;
         };
 
-        const itemsArray = extracted.items || extracted.orderedItems || [];
+        let itemsArray = extracted.items || extracted.orderedItems || [];
+        if (!itemsArray.length && (extracted.item_purchased || extracted.serial_number || extracted.warranty)) {
+          itemsArray = [{
+            description: extracted.item_purchased,
+            serialNumbers: extracted.serial_number,
+            warranty: extracted.warranty,
+            quantity: 1,
+            unitprice: getVal(extracted, "amount"),
+            amount: getVal(extracted, "amount")
+          }];
+        }
         const items = Array.isArray(itemsArray) ? itemsArray.map((item: any) => {
           let sns: string[] = [];
           if (Array.isArray(item.serialNumbers)) {
@@ -2517,16 +2765,17 @@ ${fewShotExample}
           prefix = "PO-";
           parsedInvNum = String(getVal(extracted, "ponumber", "po_number", "purchaseorder") || prefix + Math.floor(10000000 + Math.random() * 90000000));
           parsedPoNum = parsedInvNum;
-        } else if (docType.includes("credit")) {
+        } else if (docType.includes("credit") && !docType.includes("invoice")) {
           prefix = "CN-";
           parsedInvNum = String(getVal(extracted, "creditnotenumber", "creditnote") || prefix + Math.floor(10000000 + Math.random() * 90000000));
           if (!parsedPoNum) parsedPoNum = "Not Found";
-        } else if (docType.includes("debit")) {
+        } else if (docType.includes("debit") && !docType.includes("invoice")) {
           prefix = "DN-";
           parsedInvNum = String(getVal(extracted, "debitnotenumber", "debitnote") || prefix + Math.floor(10000000 + Math.random() * 90000000));
           if (!parsedPoNum) parsedPoNum = "Not Found";
         } else {
-          parsedInvNum = String(getVal(extracted, "invoicenumber", "invoicenum", "invoiceno", "invoiceid", "receiptnumber") || prefix + Math.floor(10000000 + Math.random() * 90000000));
+          // Default to invoice logic, but check specific note types first
+          parsedInvNum = String(getVal(extracted, "invoicenumber", "invoicenum", "invoiceno", "invoiceid", "receiptnumber", "debitnotenumber", "creditnotenumber") || prefix + Math.floor(10000000 + Math.random() * 90000000));
           if (!parsedPoNum) parsedPoNum = "Not Found";
         }
 
@@ -2609,17 +2858,8 @@ ${fewShotExample}
         let isException = false;
         let exceptionReason = null;
         
-        if (extracted && extracted._missingRequired && extracted._missingRequired.length > 0) {
-           finalStatus = "Exception";
-           isException = true;
-           exceptionReason = `Missing required fields: ${extracted._missingRequired.join(", ")}`;
-        }
-
-        if (isVendorException) {
-           finalStatus = "Exception";
-           isException = true;
-           exceptionReason = exceptionReason ? exceptionReason + " | Unregistered Vendor: " + finalVendor : "Unregistered Vendor: " + finalVendor;
-        }
+        // Exceptions disabled per user request: unregistered vendors and missing fields 
+        // will no longer halt the ingestion into an Exception state.
 
         const finalDocType = String(parsedDocType).substring(0, 190);
         const finalInvNum = String(parsedInvNum).substring(0, 190);
@@ -2673,9 +2913,9 @@ ${fewShotExample}
             cgst: parseFloat(String(getVal(extracted, "cgst", "cgstamount")).replace(/[^0-9.]/g, '')) || 0,
             sgst: parseFloat(String(getVal(extracted, "sgst", "sgstamount")).replace(/[^0-9.]/g, '')) || 0,
             igst: parseFloat(String(getVal(extracted, "igst", "igstamount")).replace(/[^0-9.]/g, '')) || 0,
-            items: items as any,
-            ocr_layout: ocrLayout as any,
-            custom_data: customData
+            items: items ? JSON.stringify(items) : null,
+            ocr_layout: ocrLayout ? JSON.stringify(ocrLayout) : null,
+            custom_data: customData ? JSON.stringify(customData) : null
           }
         });
 
@@ -2710,7 +2950,14 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
         if (invoice.status !== "Data Verification Pending") return res.status(400).json({ error: "Document is not pending data verification." });
 
         const isInvoice = String(invoice.document_type).toLowerCase().includes("invoice");
-        const nextStatus = isInvoice ? "Waiting for GRN" : "Pending Approval";
+        let nextStatus = isInvoice ? "Waiting for GRN" : "Pending Approval";
+
+        if (nextStatus === "Waiting for GRN") {
+            const grnConfig = await prisma.systemConfig.findUnique({ where: { key: "GLOBAL_REQUIRE_GRN" } });
+            if (grnConfig && grnConfig.value.toLowerCase() === "false") {
+                nextStatus = "Pending Approval";
+            }
+        }
 
         const updatedInv = await prisma.invoice.update({
             where: { id: invoiceId },
@@ -2735,6 +2982,8 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
            erpData = await prisma.eRPMaster.findUnique({ where: { po_number: updatedInv.po_number } });
            
            // --- 3. TRUE 3-WAY MATCHING (Price Variance) ---
+           // Temporarily Disabled as per request to allow straight-through flow
+           /*
            if (erpData && updatedInv.base_amount !== null && updatedInv.base_amount !== undefined) {
              const poAmountInr = (erpData.po_amount || 0);
              const tolerance = (erpData.tolerance_amount || 0);
@@ -2758,8 +3007,11 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
                 return res.json({ success: true, message: "Halted due to Price Variance Exception." });
              }
            }
+           */
         }
 
+        // Temporarily Disabled as per request to allow straight-through flow
+        /*
         if (!erpData && updatedInv.po_number !== "Not Found") {
            await prisma.invoice.update({
              where: { id: invoiceId },
@@ -2770,6 +3022,7 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
            });
            return res.json({ success: true, message: "Halted due to ERP Exception." });
         }
+        */
 
         // STAGE 3: Workflow Resolution Engine
         let finalWorkflowProfile = null;
@@ -2778,25 +3031,17 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
             orderBy: { priority: 'asc' }
         });
         for (const rule of rules) {
-            let conditions = [];
+            let conditionsObj: any = [];
             try {
-                conditions = JSON.parse(rule.conditions_json as string);
+                conditionsObj = JSON.parse(rule.conditions_json as string);
             } catch (e) { }
-            let matches = true;
-            for (const cond of conditions) {
-                let actualValue = (updatedInv as any)[cond.field];
-                if (actualValue === undefined && erpData) {
-                    actualValue = (erpData as any)[cond.field];
-                }
-                if (actualValue === undefined && updatedInv.custom_data) {
-                    actualValue = (updatedInv.custom_data as any)[cond.field];
-                }
-                if (cond.operator === "equals" && String(actualValue).toLowerCase() !== String(cond.value).toLowerCase()) matches = false;
-                if (cond.operator === "gt" && Number(actualValue) <= Number(cond.value)) matches = false;
-                if (cond.operator === "lt" && Number(actualValue) >= Number(cond.value)) matches = false;
-                if (cond.operator === "contains" && !String(actualValue).toLowerCase().includes(String(cond.value).toLowerCase())) matches = false;
+            
+            let conditionsArray = conditionsObj;
+            if (conditionsObj && !Array.isArray(conditionsObj) && conditionsObj.conditions) {
+              conditionsArray = conditionsObj.conditions;
             }
-            if (matches && conditions.length > 0) {
+
+            if (evaluateRuleConditions(conditionsArray, updatedInv, erpData) && conditionsArray.length > 0) {
                 finalWorkflowProfile = rule.target_workflow_id;
                 break;
             }
@@ -2804,7 +3049,10 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
         if (!finalWorkflowProfile) {
             const fallback = rules.find(r => {
                 try {
-                    return JSON.parse(r.conditions_json as string).length === 0;
+                    const obj = JSON.parse(r.conditions_json as string);
+                    if (Array.isArray(obj)) return obj.length === 0;
+                    if (obj && obj.conditions) return obj.conditions.length === 0;
+                    return false;
                 } catch (e) {
                     return false;
                 }
@@ -2822,20 +3070,31 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
             return res.json({ success: true, message: "Halted due to no rules match." });
         }
 
+        let finalWorkflowProfileName = finalWorkflowProfile;
+        try {
+          const wff = await prisma.workflow.findUnique({ where: { id: finalWorkflowProfile } });
+          if (wff) finalWorkflowProfileName = wff.workflow_name;
+        } catch (e) {}
+
         // Initialize Workflow
         await prisma.activeApprovalLog.upsert({
             where: { invoice_id: invoiceId },
             update: {
-                workflow_profile: finalWorkflowProfile,
+                workflow_profile: finalWorkflowProfileName,
                 current_stage_number: 1,
                 status: "Pending"
             },
             create: {
                 invoice_id: invoiceId,
-                workflow_profile: finalWorkflowProfile,
+                workflow_profile: finalWorkflowProfileName,
                 current_stage_number: 1,
                 status: "Pending"
             }
+        });
+        
+        await prisma.invoice.update({
+            where: { id: invoiceId },
+            data: { status: "In Approval" }
         });
         await prisma.systemLog.create({
             data: {
@@ -2870,12 +3129,51 @@ app.get("/api/admin/audit-logs", authenticateToken, async (req: any, res: any) =
 });
 
 app.get("/api/admin/health", authenticateToken, async (req: any, res: any) => {
-    res.json({ database: "Online", aiEngine: "Online", webhookProcessor: "Online", dbLatency: 15, aiLatency: 120, webLatency: 45 });
+    // 1. Webhook Processor (Internal Event Loop)
+    const t0 = Date.now();
+    await new Promise(resolve => setImmediate(resolve));
+    const webLatency = Date.now() - t0;
+
+    // 2. Database Ping
+    let dbLatency = -1;
+    let database = "Offline";
+    try {
+        const t1 = Date.now();
+        await prisma.$queryRaw`SELECT 1`;
+        dbLatency = Date.now() - t1;
+        database = "Online";
+    } catch (e) {
+        console.error("DB Ping Error:", e);
+    }
+
+    // 3. AI Engine Ping
+    let aiLatency = -1;
+    let aiEngine = "Offline";
+    try {
+        const t2 = Date.now();
+        // Just pinging the root of Ollama which returns 'Ollama is running'
+        const aiRes = await fetch("http://localhost:11434/", { signal: AbortSignal.timeout(3000) });
+        if (aiRes.ok) {
+            aiLatency = Date.now() - t2;
+            aiEngine = "Online";
+        }
+    } catch (e) {
+        console.error("AI Ping Error:", e);
+    }
+
+    res.json({ 
+        database, 
+        aiEngine, 
+        webhookProcessor: "Online", 
+        dbLatency, 
+        aiLatency, 
+        webLatency 
+    });
 });
 
 app.get("/api/admin/users", authenticateToken, async (req: any, res: any) => {
     try {
-        const users = await prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, permissions: true, created_at: true } });
+        const users = await prisma.user.findMany({ select: { id: true, name: true, email: true, username: true, employee_id: true, role: true, permissions: true, created_at: true } });
         res.json(users);
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -2884,8 +3182,8 @@ app.get("/api/admin/users", authenticateToken, async (req: any, res: any) => {
 
 app.post("/api/admin/users", authenticateToken, async (req: any, res: any) => {
     try {
-        const { name, email, role, password, permissions } = req.body;
-        const user = await prisma.user.create({ data: { name, email, role, permissions: JSON.stringify(permissions || []), password_hash: password || "default123" } });
+        const { name, email, role, password, permissions, username, employee_id } = req.body;
+        const user = await prisma.user.create({ data: { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []), password_hash: password || "default123" } });
         res.json(user);
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -2894,8 +3192,8 @@ app.post("/api/admin/users", authenticateToken, async (req: any, res: any) => {
 
 app.put("/api/admin/users/:id", authenticateToken, async (req: any, res: any) => {
     try {
-        const { name, email, role, permissions } = req.body;
-        const user = await prisma.user.update({ where: { id: req.params.id }, data: { name, email, role, permissions: JSON.stringify(permissions || []) } });
+        const { name, email, role, permissions, username, employee_id } = req.body;
+        const user = await prisma.user.update({ where: { id: req.params.id }, data: { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []) } });
         res.json(user);
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -3582,9 +3880,13 @@ console.log("[BACKGROUND WORKER] Initialized for SLA and Data Retention processi
 
 // Start the server
 async function startServer() {
-  httpServer.listen(Number(PORT), "0.0.0.0", () => {
-    console.log(`Corporate AP Invoice system backend listening on http://localhost:${PORT}`);
-  });
+  if (process.env.NODE_ENV !== 'test') {
+    httpServer.listen(Number(PORT), "0.0.0.0", () => {
+      console.log(`Corporate AP Invoice system backend listening on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export { app };

@@ -1,14 +1,14 @@
 import React, { useState } from "react";
-import { Lock, Layers, ArrowRight, Mail } from "lucide-react";
+import { Lock, Layers, ArrowRight, User, Eye, EyeOff } from "lucide-react";
 
 interface LoginPageProps {
-  onLoginSuccess: (userId: string, role: string, email: string) => void;
+  onLoginSuccess: (userId: string, role: string, email: string, username: string) => void;
 }
 
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
-  const [username, setUsername] = useState("admin@company.com");
-  const [password, setPassword] = useState("password123");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,13 +18,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: username, password })
+        body: JSON.stringify({ identifier: username, password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
       
       localStorage.setItem("authToken", data.token);
-      onLoginSuccess(data.user.id, data.user.role, data.user.email);
+      localStorage.setItem("currentUserUsername", data.user.username);
+      onLoginSuccess(data.user.id, data.user.role, data.user.email, data.user.username);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -35,17 +36,15 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   return (
     <div className="min-h-screen bg-white flex font-sans selection:bg-blue-100 selection:text-blue-800">
       
-      {/* Left side: Premium Image/Brand Panel */}
+      {/* Left side: Premium Animated Gradient Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden isolate">
-        {/* Abstract Background Image */}
-        <img 
-          src="/login-bg.png" 
-          alt="Abstract Background" 
-          className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-screen"
-        />
+        {/* Animated Gradient Mesh */}
+        <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[120%] bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-indigo-900 via-slate-900 to-black animate-pulse opacity-80 mix-blend-screen" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[80%] h-[80%] bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-600/20 via-transparent to-transparent animate-pulse mix-blend-screen blur-3xl" style={{ animationDuration: '10s' }}></div>
+        <div className="absolute top-[20%] right-[10%] w-[50%] h-[50%] bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-purple-600/20 via-transparent to-transparent animate-pulse mix-blend-screen blur-3xl" style={{ animationDuration: '12s', animationDelay: '2s' }}></div>
         
-        {/* Gradient Overlay for Text Readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/95 via-slate-900/40 to-slate-900/40"></div>
+        {/* Subtle grid pattern overlay */}
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-50"></div>
         {/* Content overlaid on image */}
         <div className="relative z-10 flex flex-col justify-between h-full p-12 lg:p-16 w-full text-white">
           <div className="flex items-center space-x-3">
@@ -106,17 +105,17 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
           <form onSubmit={handleSubmit} className="space-y-5">
             
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Email Address</label>
+              <label className="text-sm font-medium text-slate-700">Username or Employee ID</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-400" />
+                  <User className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
-                  type="email"
+                  type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  placeholder="name@company.com"
+                  placeholder="e.g. sconnor or EMP-1001"
                   className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 text-sm placeholder:text-slate-400 text-slate-800 transition-all font-medium shadow-sm"
                 />
               </div>
@@ -129,38 +128,23 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   <Lock className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 text-sm placeholder:text-slate-400 text-slate-800 transition-all font-medium shadow-sm"
+                  className="w-full pl-11 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 text-sm placeholder:text-slate-400 text-slate-800 transition-all font-medium shadow-sm"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-blue-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <label className="flex items-center space-x-2 text-slate-600 cursor-pointer text-sm">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="peer h-4 w-4 border-slate-300 rounded text-blue-600 focus:ring-blue-500 transition cursor-pointer appearance-none checked:bg-blue-600 checked:border-blue-600 border"
-                  />
-                  <svg className="absolute w-3 h-3 left-0.5 top-0.5 pointer-events-none opacity-0 peer-checked:opacity-100 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="font-medium">Remember me</span>
-              </label>
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:text-blue-700 font-semibold transition"
-              >
-                Forgot password?
-              </button>
-            </div>
 
             <button
               type="submit"

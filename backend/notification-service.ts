@@ -184,8 +184,13 @@ export async function triggerNotificationFlow(
                 }
               }
             }
-            if (nextApprover && nextApprover.includes("@")) {
-              nextEmails.push(nextApprover);
+            if (nextApprover) {
+              if (nextApprover.includes("@")) {
+                nextEmails.push(nextApprover);
+              } else {
+                const u = await prisma.user.findFirst({ where: { username: nextApprover } });
+                if (u && u.email) nextEmails.push(u.email);
+              }
             }
           }
         }

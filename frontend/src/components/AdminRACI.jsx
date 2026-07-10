@@ -13,8 +13,11 @@ export default function AdminRACI() {
   // State for the grid for the current workflow
   const [grid, setGrid] = useState({});
 
+  const [providerConfig, setProviderConfig] = useState({ smtp_server: '', port: 587, username: '', encrypted_password: '', sender_email: '', sender_name: '' });
+
   useEffect(() => {
     fetchMatrices();
+    fetchProviderConfig();
   }, []);
 
   useEffect(() => {
@@ -60,6 +63,16 @@ export default function AdminRACI() {
     setLoading(false);
   };
 
+  const fetchProviderConfig = async () => {
+    try {
+      const res = await fetch('/api/admin/notifications/provider', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data) setProviderConfig(data);
+      }
+    } catch(e) {}
+  };
+
   const saveRACI = async () => {
     setLoading(true);
     const activeWorkflow = customWorkflow || workflowProfile;
@@ -88,6 +101,15 @@ export default function AdminRACI() {
     } catch (e) {
       alert('Error saving RACI Matrix: ' + e.message);
     }
+    setLoading(false);
+  };
+
+  const saveProviderConfig = async () => {
+    setLoading(true);
+    try {
+      await fetch('/api/admin/notifications/provider', { method: 'POST', headers, body: JSON.stringify(providerConfig) });
+      alert('SMTP settings saved!');
+    } catch(e) { alert(e.message); }
     setLoading(false);
   };
 
@@ -134,6 +156,21 @@ export default function AdminRACI() {
           {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save Matrix
         </button>
+      </div>
+
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <label className="block text-sm font-bold text-slate-700">SMTP Email Server Configuration</label>
+          <button onClick={saveProviderConfig} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-bold transition-colors flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">SMTP Server</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="e.g. smtp.office365.com"/></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Port</label><input type="number" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.port || ''} onChange={e => setProviderConfig({...providerConfig, port: parseInt(e.target.value)})} placeholder="587"/></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sender Email</label><input type="email" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.sender_email || ''} onChange={e => setProviderConfig({...providerConfig, sender_email: e.target.value})} placeholder="noreply@company.com"/></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.username || ''} onChange={e => setProviderConfig({...providerConfig, username: e.target.value})} placeholder="SMTP Username"/></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Password</label><input type="password" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.encrypted_password || ''} onChange={e => setProviderConfig({...providerConfig, encrypted_password: e.target.value})} placeholder="SMTP Password"/></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sender Name</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.sender_name || ''} onChange={e => setProviderConfig({...providerConfig, sender_name: e.target.value})} placeholder="e.g. DocuFlow System"/></div>
+        </div>
       </div>
 
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-6">

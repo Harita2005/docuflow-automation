@@ -8,7 +8,7 @@ import DocumentDetails from "./components/DocumentDetails.tsx";
 import GoodsReceiptPage from "./components/GoodsReceiptPage.tsx";
 import DataVerificationPage from "./components/DataVerificationPage.tsx";
 
-import ApprovalQueuePage from "./components/ApprovalQueuePage.tsx";
+
 import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
@@ -36,6 +36,7 @@ export default function App() {
   // Default Actor settings
   const [currentUserRole, setCurrentUserRole] = useState<string>(() => localStorage.getItem("currentUserRole") || "");
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => localStorage.getItem("currentUserEmail") || "");
+  const [currentUserUsername, setCurrentUserUsername] = useState<string>(() => localStorage.getItem("currentUserUsername") || "");
 
   // Registry states
   const [documents, setDocuments] = useState<DbInvoice[]>([]);
@@ -98,11 +99,16 @@ export default function App() {
     // Aggressive Polling for Real-Time Dashboard Metrics
     const docInterval = setInterval(() => {
       fetchDocuments(true);
+    }, 3000);
+    const statsInterval = setInterval(() => {
       fetchStats(true);
-    }, 2000);
+    }, 5000);
 
-    return () => clearInterval(docInterval);
-  }, []);
+    return () => {
+      clearInterval(docInterval);
+      clearInterval(statsInterval);
+    };
+  }, [isLoggedIn]);
 
   // WebSockets Connection
   useEffect(() => {
@@ -139,6 +145,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("isLoggedIn", String(isLoggedIn));
   }, [isLoggedIn]);
+
+  const handleLoginSuccess = (userId: string, role: string, email: string) => {
+    localStorage.setItem("isLoggedIn", "true");
+    localStorage.setItem("currentUserRole", role);
+    localStorage.setItem("currentUserEmail", email);
+    setCurrentUserRole(role);
+    setCurrentUserEmail(email);
+    setCurrentUserUsername(localStorage.getItem("currentUserUsername") || "");
+    setIsLoggedIn(true);
+  };
 
   useEffect(() => {
     localStorage.setItem("currentView", currentView);
@@ -179,11 +195,10 @@ export default function App() {
     }
   }, [currentView, currentUserRole, isLoggedIn]);
 
-  // Sync fully when any state changes
-  const handleFullRefresh = () => {
+  function handleForceSync() {
     fetchDocuments();
     fetchStats();
-  };
+  }
 
   // Handles switching directly to inspect a document details panel
   const handleViewDocument = (docId: string) => {
@@ -198,11 +213,10 @@ export default function App() {
     fetchStats();
   };
 
-  // Logout session
-  const handleLogout = () => {
+  function handleLogout() {
     localStorage.removeItem("authToken");
     setIsLoggedIn(false);
-  };
+  }
 
   // Get active selected doc object
   const activeDocument = documents.find((d) => d.id === selectedDocId) || null;
@@ -211,12 +225,18 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <LoginPage
-        onLoginSuccess={(userId, role, email) => {
+        onLoginSuccess={(userId, role, email, username) => {
           setCurrentUserRole(role);
           setCurrentUserEmail(email);
+          setCurrentUserUsername(username);
           setIsLoggedIn(true);
-          // Only switch to dashboard if we are not currently pointing to a specific review page
-          setCurrentView((prev) => (prev === "details" && selectedDocId ? "details" : "dashboard"));
+          // Smart Routing based on role
+          setCurrentView((prev) => {
+            if (prev === "details" && selectedDocId) return "details";
+            // If they are an approver or employee, send them straight to the queue!
+            if (role === "manager" || role === "executive" || role === "employee") return "approval-queue";
+            return "dashboard";
+          });
         }}
       />
     );
@@ -308,13 +328,6 @@ export default function App() {
                 onViewDocument={handleViewDocument}
               />
             )}
-            {currentView === "approval-queue" && (
-              <ApprovalQueuePage
-                currentUserRole={currentUserRole}
-                currentUserEmail={currentUserEmail}
-                onRefreshDataSignal={handleFullRefresh}
-              />
-            )}
 
             {currentView === "payment-readiness" && (
               <PaymentReadinessPage
@@ -337,6 +350,7 @@ export default function App() {
                   document={activeDocument}
                   currentUserRole={currentUserRole}
                   currentUserEmail={currentUserEmail}
+                  currentUserUsername={currentUserUsername}
                   onRefreshDocument={handleFullRefresh}
                   onGoBack={() => {
                     setCurrentView("dashboard");

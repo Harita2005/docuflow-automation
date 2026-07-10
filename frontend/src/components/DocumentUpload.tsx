@@ -24,6 +24,14 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   const [progressMsgIndex, setProgressMsgIndex] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadedDoc, setUploadedDoc] = useState<any>(null);
+  const [useAIExtraction, setUseAIExtraction] = useState(true);
+  const [manualData, setManualData] = useState({
+    vendorName: "",
+    invoiceNumber: "",
+    amount: "",
+    poNumber: "",
+    invoiceDate: new Date().toISOString().split("T")[0]
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Rotate reassurance loading messages to keep user engaged
@@ -88,6 +96,15 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
     try {
       const formData = new FormData();
       formData.append("file", file);
+      
+      if (!useAIExtraction) {
+        formData.append("skip_ocr", "true");
+        formData.append("vendor_name", manualData.vendorName);
+        formData.append("invoice_number", manualData.invoiceNumber);
+        formData.append("amount", manualData.amount);
+        formData.append("po_number", manualData.poNumber);
+        formData.append("invoice_date", manualData.invoiceDate);
+      }
 
       const token = localStorage.getItem("authToken");
       const response = await fetch("/api/documents/upload", {
@@ -106,20 +123,22 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
 
       const initialDoc = await response.json();
       
-      // Polling Loop for Async Queue
+      // Polling Loop for Async Queue (only if using AI)
       let currentDoc = initialDoc;
       let attempts = 0;
-      while ((currentDoc.status === "Received" || currentDoc.status === "AI Processed") && attempts < 60) {
-         await new Promise(r => setTimeout(r, 2000));
-         try {
-           const checkRes = await fetch(`/api/invoices/${currentDoc.id}`, {
-             headers: token ? { "Authorization": `Bearer ${token}` } : {}
-           });
-           if (checkRes.ok) {
-             currentDoc = await checkRes.json();
-           }
-         } catch(e) {}
-         attempts++;
+      if (useAIExtraction) {
+        while ((currentDoc.status === "Received" || currentDoc.status === "AI Processed") && attempts < 60) {
+           await new Promise(r => setTimeout(r, 2000));
+           try {
+             const checkRes = await fetch(`/api/invoices/${currentDoc.id}`, {
+               headers: token ? { "Authorization": `Bearer ${token}` } : {}
+             });
+             if (checkRes.ok) {
+               currentDoc = await checkRes.json();
+             }
+           } catch(e) {}
+           attempts++;
+        }
       }
       
       if (currentDoc.status === "Received" || currentDoc.status === "AI Processed") {
@@ -215,7 +234,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
             >
               <span>Verify extracted data</span>
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </button>                        
           </div>
         </div>
       ) : (
@@ -262,10 +281,59 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
             onChange={handleFileChange}
           />
         </div>
-      )}      {errorMsg && (
+      )}
+
+      {/* Manual Override Toggle & Form */}
+      {!uploadedDoc && !loading && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-blue-600" /> Use AI Auto-Extraction
+              </h3>
+              <p className="text-[11px] text-slate-500">Automatically extract data using local LLM.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only peer" checked={useAIExtraction} onChange={(e) => setUseAIExtraction(e.target.checked)} />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {!useAIExtraction && (
+            <div className="pt-4 border-t border-slate-100 space-y-3 animate-fadeIn">
+              <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 font-medium">
+                AI extraction disabled. Please manually enter the primary invoice details below before dropping the file. It will be instantly routed.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Vendor Name</label>
+                  <input type="text" value={manualData.vendorName} onChange={e => setManualData({...manualData, vendorName: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g. Acme Corp" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Total Amount</label>
+                  <input type="number" value={manualData.amount} onChange={e => setManualData({...manualData, amount: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="0.00" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Invoice Number</label>
+                  <input type="text" value={manualData.invoiceNumber} onChange={e => setManualData({...manualData, invoiceNumber: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="INV-001" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">PO Number (Optional)</label>
+                  <input type="text" value={manualData.poNumber} onChange={e => setManualData({...manualData, poNumber: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="PO-100" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Invoice Date</label>
+                  <input type="date" value={manualData.invoiceDate} onChange={e => setManualData({...manualData, invoiceDate: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {errorMsg && (
         <div className="bg-red-50 border border-red-200 p-4.5 rounded-2xl flex items-start space-x-3 text-red-800 text-xs shadow-sm">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-650" />
-          <div className="space-y-1">
+          <div className="space-y-1"> 
             <span className="font-extrabold uppercase text-[10px] tracking-wide block">Extraction sequence interrupted</span>
             <span>{errorMsg}</span>
           </div>

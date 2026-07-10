@@ -68,7 +68,17 @@ export async function dispatchConfigurableEmail(invoice: any, action: string, pe
       for (const rec of rule.recipients) {
         let emails: string[] = [];
         if (rec.recipient_source === "Custom") {
-          emails = parseEmails(rec.value);
+          const rawValues = parseEmails(rec.value);
+          for (const val of rawValues) {
+            if (val.includes("@")) {
+              emails.push(val);
+            } else {
+              const user = await prisma.user.findFirst({
+                where: { OR: [{ employee_id: val }, { username: val }] }
+              });
+              if (user && user.email) emails.push(user.email);
+            }
+          }
         } else if (rec.recipient_source === "Dynamic") {
           if (rec.value === "Invoice Creator" && invoice.uploaded_by?.email) {
             emails.push(invoice.uploaded_by.email);

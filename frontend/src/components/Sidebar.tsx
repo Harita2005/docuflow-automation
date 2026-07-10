@@ -18,6 +18,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 
 interface SidebarProps {
+  
   currentView: string;
   setCurrentView: (view: string) => void;
   currentUserRole: string;

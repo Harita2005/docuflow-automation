@@ -30,6 +30,8 @@ async function seed() {
     const passwordHash = await bcrypt.hash(userData.password || 'password123', 10);
     await prisma.user.create({
       data: {
+        username: userData.username,
+        employee_id: userData.employee_id,
         email: userData.email,
         password_hash: passwordHash,
         role: userData.role,

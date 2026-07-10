@@ -1,0 +1,68 @@
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docuflow-backend
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - LOCAL_LLM_URL=http://ollama:11434/api/generate
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
+      # Connect to the SQL server running natively on your Linux host via host.docker.internal
+      - DATABASE_URL=sqlserver://host.docker.internal:1433;database=DocuFlowDB;user=sa;password=DocuFlowStrongPass123!;trustServerCertificate=true;
+    depends_on:
+      - ollama
+      - n8n
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docuflow-frontend
+    ports:
+      # Map to 8085 to avoid conflicts on the Linux host
+      - "8085:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: docuflow-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    expose:
+      - "11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: docuflow-n8n
+    ports:
+      # Map to a non-standard port on host to prevent conflicts
+      - "5679:5678"
+    environment:
+      - N8N_HOST=n8n
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  n8n_data:

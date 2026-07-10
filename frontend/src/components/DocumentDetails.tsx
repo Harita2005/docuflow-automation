@@ -37,6 +37,7 @@ interface DocumentDetailsProps {
   document: DbInvoice | null;
   currentUserRole: string;
   currentUserEmail: string;
+  currentUserUsername: string;
   onRefreshDocument: () => void;
   onGoBack: () => void;
 }
@@ -54,6 +55,7 @@ export default function DocumentDetails({
   document,
   currentUserRole,
   currentUserEmail,
+  currentUserUsername,
   onRefreshDocument,
   onGoBack,
 }: DocumentDetailsProps) {
@@ -428,9 +430,17 @@ export default function DocumentDetails({
     }
   };
   const isPending =
-    document.status === "In Approval" ||
-    document.status === "Ready for Approval" ||
+    document.status.includes("Approval") ||
     document.status === "Received";
+
+  let isCurrentUserApprover = !!document.is_current_approver;
+  if (!isCurrentUserApprover && activeApprovalLog && workflowStepDefinitions && currentUserUsername) {
+    const currentStep = workflowStepDefinitions.find((s: any) => s.stage_number === activeApprovalLog.current_stage_number);
+    if (currentStep) {
+      isCurrentUserApprover = currentStep.approver_target === currentUserUsername;
+    }
+  }
+
   const dummyLayout = [
     {
       text: "INVOICE DISPATCH VENDOR SHEET",
@@ -460,8 +470,14 @@ export default function DocumentDetails({
     { text: `Date: ${invoiceDate}`, conf: 96, bbox: [20, 220, 150, 25] },
   ];
   return (
-    <div className="space-y-4 animate-fadeIn pb-2 -mt-2">
+    <div className="space-y-4 animate-fadeIn pb-2">
       {/* Premium Header */}
+      {actionError && (
+        <div className="w-full mb-3 flex items-center px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm">
+          <AlertCircle className="h-4 w-4 mr-2 text-red-600" />
+          <span>{actionError}</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
         <div className="flex items-center space-x-3">
           <button
@@ -472,14 +488,9 @@ export default function DocumentDetails({
           </button>
         </div>
 
-        <div className="flex items-center space-x-2 text-[10px]">
-          {isPending && (
+        <div className="flex flex-wrap items-center justify-end gap-2 text-[10px]">
+          {isPending && isCurrentUserApprover && (
             <>
-              {actionError && (
-                <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 font-bold text-[10px] uppercase tracking-wider rounded-xl mr-2">
-                  <span>{actionError}</span>
-                </div>
-              )}
               <button
                 onClick={() => handleStepAction("Request Clarification")}
                 disabled={actionLoading}
@@ -547,7 +558,7 @@ export default function DocumentDetails({
             </button>
           )}
 
-          {!isPending && document.status && (
+          {!isPending && document.status && document.status !== 'Exception' && document.status !== 'Failed' && (
             <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded-xl mr-2">
               <CheckCircle2 className="h-4 w-4" />
               <span className="uppercase tracking-wider text-[10px]">
@@ -569,25 +580,11 @@ export default function DocumentDetails({
         </div>
       </div>
 
-      {/* Exception Warning Banner */}
-      {(document.is_exception || document.status === "Exception" || document.status === "Failed") && (
-        <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-4 flex items-start space-x-3 text-amber-900 shadow-sm animate-fadeIn">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h4 className="font-bold text-[11px] uppercase tracking-wider text-amber-850">
-              Manual Verification Required: Document Exception State
-            </h4>
-            <p className="text-[10px] text-amber-700 mt-1 leading-relaxed">
-              This document has been flagged by the automated routing engine. 
-              <strong> Reason:</strong> {document.exception_reason || "Unspecified parsing or database verification exception"}. 
-              Please correct the fields below in the adjustment console and commit changes to re-route.
-            </p>
-          </div>
-        </div>
-      )}
 
+
+      
       {/* TWO-PANEL TOP + FULL WIDTH BOTTOM LAYOUT */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* PANEL A: DOCUMENT VIEWER & APPROVAL BOX (6 cols) */}
         <div className="lg:col-span-6 space-y-4">
           <div className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col min-h-[400px] shadow-sm overflow-hidden">
@@ -744,85 +741,6 @@ export default function DocumentDetails({
             </div>
             {/* Removed OCR and AI parsed badges here per user request */}
           </div>
-
-                {/* Workflow Tracking Segment */}
-                {activeApprovalLog && (
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-                    <div className="mb-2">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold block">
-                        Live Approval Chain ({activeApprovalLog.workflow_profile})
-                      </span>
-                    </div>
-                    {workflowStepDefinitions.length === 0 ? (
-                      <div className="text-[10px] text-slate-500 font-bold p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center space-x-2">
-                        <AlertCircle className="h-4 w-4 text-slate-400" />
-                        <span>No approval stages are configured for this routing profile.</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 pt-1">
-                        {workflowStepDefinitions.map((step, idx) => {
-                          const isPast = step.stage_number < activeApprovalLog.current_stage_number || activeApprovalLog.status === "Approved";
-                          const isCurrent = step.stage_number === activeApprovalLog.current_stage_number && activeApprovalLog.status === "Pending";
-                          const isRejected = step.stage_number === activeApprovalLog.current_stage_number && activeApprovalLog.status === "Rejected";
-
-                          let iconBg = "bg-slate-200";
-                          let ringColor = "ring-slate-50";
-                          let badgeColor = "bg-slate-100 text-slate-500 border border-slate-200";
-                          let statusText = "Waiting";
-
-                          if (isPast) {
-                            iconBg = "bg-emerald-500";
-                            ringColor = "ring-emerald-50";
-                            badgeColor = "bg-emerald-50 text-emerald-700 border border-emerald-200";
-                            statusText = "Approved";
-                          } else if (isCurrent) {
-                            iconBg = "bg-blue-500";
-                            ringColor = "ring-blue-50";
-                            badgeColor = "bg-blue-50 text-blue-700 border border-blue-200 ring-1 ring-blue-100 shadow-sm";
-                            statusText = "Pending";
-                          } else if (isRejected) {
-                            iconBg = "bg-red-500";
-                            ringColor = "ring-red-50";
-                            badgeColor = "bg-red-50 text-red-700 border border-red-200";
-                            statusText = "Rejected";
-                          }
-
-                          return (
-                            <div key={idx} className="flex relative">
-                              {idx !== workflowStepDefinitions.length - 1 && (
-                                <div className="absolute top-6 left-[7px] w-0.5 h-full bg-slate-200 -z-0" />
-                              )}
-                              
-                              <div className="relative z-10 pt-2 shrink-0">
-                                <div className={`h-4 w-4 rounded-full flex items-center justify-center ring-4 ${ringColor} ${iconBg}`}>
-                                  {isPast ? (
-                                    <Check className="h-2.5 w-2.5 text-white" />
-                                  ) : isRejected ? (
-                                    <X className="h-2.5 w-2.5 text-white" />
-                                  ) : isCurrent ? (
-                                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                                  ) : (
-                                    <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                                  )}
-                                </div>
-                              </div>
-                              
-                              <div className="ml-4 flex-1 bg-white border border-slate-200 rounded-lg p-2.5 shadow-sm flex items-center justify-between hover:border-slate-300 hover:shadow transition-all relative z-10">
-                                <div>
-                                  <div className="font-bold text-[9px] uppercase tracking-wider text-slate-400 mb-0.5">Stage {step.stage_number}</div>
-                                  <div className="text-[10px] font-bold text-slate-700">{step.approver_target}</div>
-                                </div>
-                                <div className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${badgeColor}`}>
-                                  {statusText}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
         </div>
         {/* PANEL B: METADATA & CUSTOM FIELDS (6 cols) */}
         <div className="lg:col-span-6 space-y-2">
@@ -1166,59 +1084,7 @@ export default function DocumentDetails({
               </div>{" "}
               {/* End Core Details Card */}
 
-              {/* ERP Database Comparison Card */}
-              {poNumber && poNumber !== "Not Found" && poNumber !== "Extracting..." && (
-                <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center space-x-2 text-[10px] uppercase font-bold tracking-wider text-blue-600">
-                      <Database className="h-4 w-4 animate-pulse" />
-                      <span>ERP Purchase Order Matching</span>
-                    </div>
-                    {erpLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
-                    ) : erpData ? (
-                      <span className="text-[8.5px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
-                        Matched in ERP
-                      </span>
-                    ) : (
-                      <span className="text-[8.5px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200">
-                        Unmatched PO
-                      </span>
-                    )}
-                  </div>
-                  
-                  {erpData ? (
-                    <div className="grid grid-cols-2 gap-2 text-[10px]">
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 text-[8px] uppercase tracking-wider block font-bold">Vendor Record</span>
-                        <span className="font-bold text-slate-800 mt-0.5 block">{erpData.vendor || "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 text-[8px] uppercase tracking-wider block font-bold">Division</span>
-                        <span className="font-bold text-slate-800 mt-0.5 block">{erpData.division || "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 text-[8px] uppercase tracking-wider block font-bold">Department</span>
-                        <span className="font-bold text-slate-800 mt-0.5 block">{erpData.department || "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 text-[8px] uppercase tracking-wider block font-bold">PO Category</span>
-                        <span className="font-bold text-slate-800 mt-0.5 block">{erpData.category || "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 col-span-2">
-                        <span className="text-slate-400 text-[8px] uppercase tracking-wider block font-bold">Requestor Email</span>
-                        <span className="font-bold text-slate-800 mt-0.5 block">{erpData.requestor_email || "N/A"}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-rose-50/50 p-3 rounded-lg border border-rose-100 text-center text-slate-650 text-[10px] leading-relaxed">
-                      <AlertCircle className="h-5 w-5 text-rose-500 mx-auto mb-1" />
-                      Warning: PO <span className="font-mono text-rose-700 font-bold">{poNumber}</span> could not be verified in the enterprise records. 
-                      Proceeding will flag this transaction in the ledger audits.
-                    </div>
-                  )}
-                </div>
-              )}
+
 
               {/* BLOCK C1: TAXES & LEDGER */}
               <div className="bg-white border border-slate-200 p-2 rounded-xl space-y-1.5 shadow-sm">
@@ -1630,7 +1496,7 @@ export default function DocumentDetails({
                       Activity & Comments Thread
                     </span>
                   </div>
-                  <div className="space-y-3 mb-3 max-h-[300px] overflow-y-auto pr-2">
+                  <div className="space-y-3 mb-3 max-h-[300px] flex-1 overflow-y-auto pr-2">
                     {commentsList.map((c, i) => (
                       <div key={i} className="flex gap-2 animate-fadeIn">
                         <div className="h-6 w-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
@@ -1673,7 +1539,91 @@ export default function DocumentDetails({
         )}
       </div>
       </div>
-    </div>
+    
+      {/* Workflow Tracking Segment (Horizontal, Bottom) */}
+      <div className="mt-4 w-full">
+        {/* Workflow Tracking Segment (Horizontal) */}
+      {activeApprovalLog && (
+        <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm mb-4">
+          <div className="mb-2">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">
+              Live Approval Chain <span className="text-blue-600">({activeApprovalLog.workflow_profile})</span>
+            </span>
+          </div>
+          {workflowStepDefinitions.length === 0 ? (
+            <div className="text-[9px] text-slate-500 font-bold p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center space-x-2">
+              <AlertCircle className="h-4 w-4 text-slate-400" />
+              <span>No approval stages are configured for this routing profile.</span>
+            </div>
+          ) : (
+            <div className="flex flex-row items-start overflow-x-auto pb-2 w-full pt-1">
+              {workflowStepDefinitions.map((step, idx) => {
+                const isPast = step.stage_number < activeApprovalLog.current_stage_number || activeApprovalLog.status === "Approved";
+                const isCurrent = step.stage_number === activeApprovalLog.current_stage_number && activeApprovalLog.status === "Pending";
+                const isRejected = step.stage_number === activeApprovalLog.current_stage_number && activeApprovalLog.status === "Rejected";
+
+                let iconBg = "bg-slate-200";
+                let ringColor = "ring-slate-50";
+                let badgeColor = "bg-slate-100 text-slate-500 border border-slate-200";
+                let statusText = "Waiting";
+
+                if (isPast) {
+                  iconBg = "bg-emerald-500";
+                  ringColor = "ring-emerald-50";
+                  badgeColor = "bg-emerald-50 text-emerald-700 border border-emerald-200";
+                  statusText = "Approved";
+                } else if (isCurrent) {
+                  iconBg = "bg-blue-500";
+                  ringColor = "ring-blue-50";
+                  badgeColor = "bg-blue-50 text-blue-700 border border-blue-200 ring-1 ring-blue-100 shadow-sm";
+                  statusText = "Pending";
+                } else if (isRejected) {
+                  iconBg = "bg-red-500";
+                  ringColor = "ring-red-50";
+                  badgeColor = "bg-red-50 text-red-700 border border-red-200";
+                  statusText = "Rejected";
+                }
+
+                return (
+                  <div key={idx} className="flex flex-col relative shrink-0 flex-1 min-w-[120px] items-center">
+                    <div className="w-full relative flex items-center justify-center h-4">
+                      {/* The Line */}
+                      {idx !== workflowStepDefinitions.length - 1 && (
+                        <div className={`absolute left-1/2 w-full h-1 ${isPast ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                      )}
+                      
+                      {/* The Dot */}
+                      <div className={`relative z-10 shrink-0 h-4 w-4 rounded-full flex items-center justify-center ring-4 ${ringColor} ${iconBg}`}>
+                        {isPast ? (
+                          <Check className="h-2.5 w-2.5 text-white" />
+                        ) : isRejected ? (
+                          <X className="h-2.5 w-2.5 text-white" />
+                        ) : isCurrent ? (
+                          <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                        ) : (
+                          <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* The Label */}
+                    <div className="mt-2 bg-white border border-slate-200 rounded-lg p-1.5 shadow-sm flex flex-col w-[110px] items-center text-center hover:border-slate-300 hover:shadow transition-all">
+                      <div className="font-bold text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Stage {step.stage_number}</div>
+                      <div className="text-[9px] font-bold text-slate-700 truncate" title={step.approver_target}>{step.approver_target}</div>
+                      <div className={`mt-1 text-[9px] uppercase font-bold tracking-wider px-2 py-1 rounded text-center ${badgeColor}`}>
+                        {statusText}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      
+      </div>
+</div>
   );
 }
     

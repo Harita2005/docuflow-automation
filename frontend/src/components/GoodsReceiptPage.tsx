@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   CheckCircle, 
   Search,
@@ -211,6 +212,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">GRN Number</th>
                 <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Purchase Invoice No</th>
+                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">PO Number</th>
                 <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Supplier Name</th>
                 <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">GRN Status</th>
                 <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Invoice Status</th>
@@ -220,7 +222,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10">
+                  <td colSpan={7} className="text-center py-10">
                     <div className="flex flex-col items-center justify-center">
                       <RefreshCw className="h-6 w-6 animate-spin text-blue-500 mb-2" />
                       <span className="text-xs text-slate-500 font-medium">Loading records...</span>
@@ -229,7 +231,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                 </tr>
               ) : paginatedInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center">
+                  <td colSpan={7} className="px-4 py-8 text-center">
                     <div className="bg-slate-50 text-slate-400 h-10 w-10 rounded-lg flex items-center justify-center mx-auto mb-2 border border-slate-100">
                       <Search className="h-5 w-5" />
                     </div>
@@ -246,6 +248,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-800 text-[11px] font-semibold">{inv.invoice_number}</td>
+                    <td className="px-4 py-2 text-slate-800 text-[11px] font-semibold">{inv.po_number || "-"}</td>
                     <td className="px-4 py-2 text-slate-800 text-[11px] font-medium">{inv.vendor_name}</td>
                     <td className="px-4 py-2 text-center">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
@@ -313,7 +316,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
       </div>
 
       {/* Modal Overlay for Receipt Confirmation */}
-      {selectedInvoiceId && activeInvoice && (
+      {selectedInvoiceId && activeInvoice && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200/80">
             {/* Modal Header */}
@@ -460,7 +463,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

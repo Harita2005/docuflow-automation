@@ -56,6 +56,7 @@ export interface DbInvoice {
     status: string;
     last_updated: string;
   };
+  is_current_approver?: boolean;
 }
 
 export interface DbGoodsReceipt {

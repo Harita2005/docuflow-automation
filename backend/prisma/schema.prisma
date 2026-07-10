@@ -3,12 +3,14 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlserver"
   url      = env("DATABASE_URL")
 }
 
 model User {
   id            String    @id @default(uuid())
+  username      String?   @unique
+  employee_id   String?   @unique
   email         String    @unique
   password_hash String
   role          String
@@ -46,18 +48,18 @@ model Invoice {
   file_size       Int
   mime_type       String
   file_path       String
-  file_hash       String?  @db.VarChar(255)
+  file_hash       String?  
   ocr_confidence  Float
-  ocr_text        String   @db.Text
-  tax_details     String   @db.Text
-  ocr_layout      Json?
-  custom_data     Json?
+  ocr_text        String   @db.NVarChar(Max)
+  tax_details     String   @db.NVarChar(Max)
+  ocr_layout      String?  @db.NVarChar(Max)
+  custom_data     String?  @db.NVarChar(Max)
 
   // Extended structured fields
   cgst            Float?
   sgst            Float?
   igst            Float?
-  items           Json?
+  items           String?  @db.NVarChar(Max)
 
   // Relations
   goodsReceipt    GoodsReceipt?
@@ -81,20 +83,20 @@ model GoodsReceipt {
   status       String
   confirmed_by String
   confirmed_at DateTime?
-  remarks      String    @db.Text
+  remarks      String    
 }
 
 model Workflow {
   id            String   @id @default(uuid())
   workflow_name String
-  workflow_json String   @db.Text
+  workflow_json String   
 }
 
 model DocumentTemplate {
   id          String   @id @default(uuid())
   name        String   @unique
   description String
-  fields_json String   @db.Text
+  fields_json String   
   created_at  DateTime @default(now())
 }
 
@@ -102,7 +104,7 @@ model BusinessRule {
   id                 String   @id @default(uuid())
   rule_name          String
   priority           Int
-  conditions_json    String   @db.Text
+  conditions_json    String   
   target_workflow_id String
   document_type      String   @default("Invoice")
   created_at         DateTime @default(now())
@@ -115,7 +117,7 @@ model WorkflowInstance {
   workflow_id   String?
   current_stage String
   status        String
-  state_json    Json?
+  state_json    String? 
   approvals     Approval[]
 }
 
@@ -125,7 +127,7 @@ model Approval {
   workflowInstance     WorkflowInstance @relation(fields: [workflow_instance_id], references: [id])
   approver             String
   action               String
-  comments             String           @db.Text
+  comments             String           
   timestamp            DateTime         @default(now())
 }
 
@@ -136,7 +138,7 @@ model SystemLog {
   timestamp  DateTime @default(now())
   action     String
   user       String
-  details    String   @db.Text
+  details    String   @db.NVarChar(Max)
 
   @@index([timestamp])
   @@index([invoice_id])
@@ -145,13 +147,34 @@ model SystemLog {
 // Deprecated: Replaced by BusinessRule
 // model KeywordRoutingMatrix {
 
+model WorkflowProfile {
+  profile_name            String                   @id
+  workflow_code           String?
+  workflow_type           String?
+  description             String?
+  status                  String                   @default("Active")
+  approval_threshold      Int                      @default(100)
+  rejection_handling      String                   @default("Return to Previous Step")
+  reminder_interval_hours Int                      @default(24)
+  escalation_after_hours  Int                      @default(72)
+  auto_escalation         Boolean                  @default(true)
+  steps                   WorkflowStepDefinition[]
+}
+
 model WorkflowStepDefinition {
   id              String   @id @default(uuid())
   profile_name    String
   stage_number    Int
   approver_target String
   action_required String   @default("Approve")
+  permissions     String   @default("Approve Only")
   document_type   String   @default("Invoice")
+  
+  step_name       String?
+  role            String?
+  approver_type   String?
+  
+  workflowProfile WorkflowProfile? @relation(fields: [profile_name], references: [profile_name], onDelete: Cascade)
 }
 
 model ActiveApprovalLog {
@@ -196,7 +219,7 @@ model DocumentComment {
   invoice     Invoice  @relation(fields: [invoice_id], references: [id])
   user_email  String
   user_name   String?
-  text        String   @db.Text
+  text        String   
   created_at  DateTime @default(now())
 }
 
@@ -207,13 +230,13 @@ model Notification {
   recipient_email   String
   notification_type String    // e.g. PENDING_APPROVAL, ASSIGNED, REJECTED, SENT_BACK, COMPLETED, CLARIFICATION
   title             String
-  message           String    @db.Text
+  message           String    
   status            String    @default("Pending") // Pending, Sent, Failed
   is_read           Boolean   @default(false)
   sent_at           DateTime?
   created_at        DateTime  @default(now())
   retry_count       Int       @default(0)
-  external_response String?   @db.Text
+  external_response String?   
 
   invoice           Invoice   @relation(fields: [document_id], references: [id], onDelete: Cascade)
 }
@@ -268,8 +291,8 @@ model NotificationRecipient {
 model EmailTemplate {
   id            String   @id @default(uuid())
   template_name String
-  html_body     String   @db.Text
-  text_body     String   @db.Text
+  html_body     String   
+  text_body     String   
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -281,12 +304,12 @@ model EmailLog {
   notification_rule_id String?
   event                String
   sender               String
-  recipients           String   @db.Text
-  cc                   String?  @db.Text
-  bcc                  String?  @db.Text
+  recipients           String   
+  cc                   String?  
+  bcc                  String?  
   subject              String
   status               String
-  error_message        String?  @db.Text
+  error_message        String?  
   sent_at              DateTime?
   created_at           DateTime @default(now())
 }
@@ -295,8 +318,8 @@ model CorrectionLog {
   id                     String   @id @default(uuid())
   invoice_id             String
   vendor_name            String
-  original_ai_prediction String   @db.Text
-  human_corrected_data   String   @db.Text
+  original_ai_prediction String   
+  human_corrected_data   String   
   created_at             DateTime @default(now())
 
   invoice                Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
@@ -305,7 +328,7 @@ model CorrectionLog {
 model SystemConfig {
   id          String   @id @default(uuid())
   key         String   @unique
-  value       String   @db.Text
+  value       String   
   description String?
   updated_at  DateTime @default(now()) @updatedAt
 }
@@ -316,7 +339,7 @@ model InAppNotificationConfig {
   trigger_event    String   @unique
   enabled          Boolean  @default(true)
   title_template   String
-  message_template String   @db.Text
+  message_template String   
   updated_at       DateTime @updatedAt
 }
 
@@ -338,12 +361,12 @@ model RACIMatrix {
   id                 String   @id @default(uuid())
   workflow_profile   String
   event_name         String
-  responsible_emails String   @db.Text
-  accountable_emails String   @db.Text
-  consulted_emails   String   @db.Text
-  informed_emails    String   @db.Text
-  title_template     String?  @db.Text
-  message_template   String?  @db.Text
+  responsible_emails String   
+  accountable_emails String   
+  consulted_emails   String   
+  informed_emails    String   
+  title_template     String?  
+  message_template   String?  
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 

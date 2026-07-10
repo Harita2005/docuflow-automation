@@ -1,4 +1,4 @@
-import { RefreshCw, LogOut, ShieldAlert, Sparkles, User, HelpCircle, Bell } from "lucide-react";
+import { RefreshCw, LogOut, ShieldAlert, Sparkles, User, HelpCircle, Bell, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface HeaderProps {
@@ -148,6 +148,15 @@ export default function Header({
           <RefreshCw className={`h-4 w-4 ${spinning ? "animate-spin text-blue-600" : ""}`} />
         </button>
 
+        {/* System Settings (Temporarily visible for testing) */}
+        <button
+          onClick={() => setCurrentView('admin')}
+          title="System Settings"
+          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-all duration-200"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
+
         {/* Notification Bell Icon */}
         <div className="relative">
           <button
@@ -270,25 +279,7 @@ export default function Header({
             </span>
           </div>
 
-          <div className="bg-white rounded-lg p-0.5 text-slate-800 border border-slate-200 shadow-sm hover:border-blue-300 transition-colors flex items-center">
-            <select
-              value={currentUserRole}
-              onChange={(e) => {
-                const r = roles.find((x) => x.id === e.target.value);
-                if (r) {
-                  setCurrentUserRole(r.id);
-                  setCurrentUserEmail(r.email);
-                }
-              }}
-              className="bg-transparent border-none focus:ring-0 text-xs font-bold py-1.5 pl-3 pr-2 cursor-pointer outline-none"
-            >
-              {roles.map((r) => (
-                <option key={r.id} value={r.id} className="bg-white text-slate-700">
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
+
         </div>
 
         {/* Sign out */}

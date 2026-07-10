@@ -1,64 +1,207 @@
 {
   "users": [
     {
+      "username": "karthik",
+      "employee_id": "EMP-1001",
       "email": "manager@initech.com",
       "password": "password123",
       "role": "manager",
-      "name": "Sarah Connor"
+      "name": "Karthik Natarajan"
     },
     {
+      "username": "surya",
+      "employee_id": "EMP-1002",
       "email": "executive@initech.com",
       "password": "password123",
       "role": "executive",
-      "name": "Bill Lumbergh"
+      "name": "Surya Prakash"
     },
     {
+      "username": "vijay",
+      "employee_id": "EMP-1003",
       "email": "employee@initech.com",
       "password": "password123",
       "role": "employee",
-      "name": "Peter Gibbons"
+      "name": "Vijay Kumar"
     },
     {
+      "username": "anbu",
+      "employee_id": "EMP-9999",
       "email": "admin@initech.com",
       "password": "password123",
       "role": "admin",
-      "name": "Admin User"
+      "name": "Anbu Selvan"
     }
   ],
   "businessRules": [
     {
       "rule_name": "High Value PO",
       "priority": 10,
-      "conditions": [{"field": "amount", "operator": ">", "value": "10000"}],
+      "conditions": [
+        {
+          "field": "amount",
+          "operator": ">",
+          "value": "10000"
+        }
+      ],
       "target_workflow_name": "Manager Approval"
     },
     {
       "rule_name": "IT Department Routing",
       "priority": 20,
-      "conditions": [{"field": "department", "operator": "==", "value": "IT"}],
+      "conditions": [
+        {
+          "field": "department",
+          "operator": "==",
+          "value": "IT"
+        }
+      ],
       "target_workflow_name": "IT Review"
     }
   ],
   "documentTemplates": [
     {
-      "name": "Standard Invoice",
-      "description": "Default required fields for processing standard corporate AP invoices",
+      "name": "AP Invoice",
+      "description": "Template for AP Invoice",
       "fields": [
-        {"name": "vendor_name", "type": "string", "required": true},
-        {"name": "invoice_number", "type": "string", "required": true},
-        {"name": "invoice_date", "type": "date", "required": true},
-        {"name": "amount", "type": "number", "required": true},
-        {"name": "po_number", "type": "string", "required": false}
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
       ]
     },
     {
-      "name": "Expense Receipt",
-      "description": "Short-form receipt extraction",
+      "name": "AP Debit Note",
+      "description": "Template for AP Debit Note",
       "fields": [
-        {"name": "merchant", "type": "string", "required": true},
-        {"name": "date", "type": "date", "required": true},
-        {"name": "total", "type": "number", "required": true},
-        {"name": "category", "type": "string", "required": false}
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "AR CREDITNOTE",
+      "description": "Template for AR CREDITNOTE",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "VCC PURCHASE INVOICE",
+      "description": "Template for VCC PURCHASE INVOICE",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "JOURNAL ENTRY",
+      "description": "Template for JOURNAL ENTRY",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "OCR AND INHOUSE OCR",
+      "description": "Template for OCR AND INHOUSE OCR",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "PROJECT BUDGET",
+      "description": "Template for PROJECT BUDGET",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "NON - RETURNABLE",
+      "description": "Template for NON - RETURNABLE",
+      "fields": [
+        {
+          "name": "invoice_number",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "number"
+        },
+        {
+          "name": "vendor_name",
+          "type": "string"
+        }
       ]
     }
   ]

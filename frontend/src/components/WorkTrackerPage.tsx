@@ -78,7 +78,8 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     }
   };
 
-  const TABS = ["All", "Invoice", "Purchase Order", "Debit Note", "Credit Note"];
+  const dynamicTypes = Array.from(new Set(documents.map(d => d.document_type).filter(Boolean)));
+  const TABS = ["All", ...dynamicTypes];
 
   // --- Executive KPI Calculations ---
   const kpis = useMemo(() => {
@@ -99,7 +100,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
       }
 
       // Check for aging (stuck for > slaHours)
-      if (doc.status === "In Approval" || doc.status === "Ready for Approval") {
+      if (doc.status.includes("Approval")) {
         const created = new Date(doc.created_at || new Date()).getTime();
         const diffHours = (now - created) / (1000 * 60 * 60);
         if (diffHours > slaHours) {
@@ -121,19 +122,20 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     const status = doc.status;
     const log = doc.activeApprovalLog;
 
+    if (status.includes("Approval")) {
+      if (log) {
+        if (log.status === "Approved") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm">Approved (Stage {log.current_stage_number})</span>;
+        if (log.status === "Rejected") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Rejected at Stage {log.current_stage_number}</span>;
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm border border-blue-200">Pending Stage {log.current_stage_number}</span>;
+      }
+      return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm">In progress</span>;
+    }
+
     switch (status) {
       case "Received":
         return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-50 shadow-sm">New</span>;
       case "Waiting for GRN":
         return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-teal-800 text-teal-50 shadow-sm border border-teal-900/20">Waiting for GRN</span>;
-      case "In Approval":
-      case "Ready for Approval":
-        if (log) {
-          if (log.status === "Approved") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm">Approved (Stage {log.current_stage_number})</span>;
-          if (log.status === "Rejected") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Rejected at Stage {log.current_stage_number}</span>;
-          return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm border border-blue-200">Pending Stage {log.current_stage_number}</span>;
-        }
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm">In progress</span>;
       case "Approved":
       case "Paid":
       case "Ready for Payment":
@@ -153,17 +155,14 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     const docType = (doc.document_type || "Invoice").toLowerCase();
 
     // Tab filtering
-    if (activeTab === "Invoice" && docType !== "invoice") return false;
-    if (activeTab === "Purchase Order" && docType !== "purchase order" && docType !== "po") return false;
-    if (activeTab === "Debit Note" && docType !== "debit note") return false;
-    if (activeTab === "Credit Note" && docType !== "credit note") return false;
+    if (activeTab !== "All" && doc.document_type !== activeTab) return false;
 
     // KPI filtering
     if (kpiFilter === "grn" && doc.status !== "Waiting for GRN") return false;
     if (kpiFilter === "aging") {
       const created = new Date(doc.created_at || new Date()).getTime();
       const diffHours = (new Date().getTime() - created) / (1000 * 60 * 60);
-      const isAging = (doc.status === "In Approval" || doc.status === "Ready for Approval") && diffHours > slaHours;
+      const isAging = doc.status.includes("Approval") && diffHours > slaHours;
       if (!isAging) return false;
     }
 
@@ -430,7 +429,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
                       {getStatusPill(doc)}
                     </td>
                     <td className="py-2.5 px-2 text-[10px] font-bold text-slate-600 whitespace-nowrap">
-                      {doc.workflowInst?.approvals?.find((a: any) => a.status === 'Pending')?.assigned_to || "-"}
+                      {(doc as any).assigned_to || "-"}
                     </td>
                   </tr>
                 );

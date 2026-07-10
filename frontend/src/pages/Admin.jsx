@@ -5,7 +5,8 @@ import AdminMasterData from '../components/AdminMasterData.jsx';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
-
+import ConditionBuilder from '../components/ConditionBuilder.jsx';
+import FlowBuilder from '../components/FlowBuilder.jsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -16,13 +17,13 @@ export default function Admin() {
   const [deletedRuleIds, setDeletedRuleIds] = useState([]);
   const [deletedStepIds, setDeletedStepIds] = useState([]);
   const [deletedTemplateIds, setDeletedTemplateIds] = useState([]);
-  const [selectedDocType, setSelectedDocType] = useState("Invoice");
 
   const [hasChanges, setHasChanges] = useState(false);
 
   const [editingRule, setEditingRule] = useState(null);
   const [ruleConditions, setRuleConditions] = useState([]);
-  const [editingStep, setEditingStep] = useState(null);
+  const [editingFlow, setEditingFlow] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [templateFields, setTemplateFields] = useState([]);
   const [templateInstructions, setTemplateInstructions] = useState("");
@@ -41,6 +42,9 @@ export default function Admin() {
   
   // New States for Search and Diagnostics
   const [logSearchQuery, setLogSearchQuery] = useState("");
+  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
+  const [publishConfirm, setPublishConfirm] = useState(false);
 
   // Sandbox State
   const [sandboxResult, setSandboxResult] = useState(null);
@@ -65,17 +69,20 @@ export default function Admin() {
     try {
       const token = localStorage.getItem("authToken");
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-      const [rulesRes, stepsRes, templatesRes] = await Promise.all([
+      const [rulesRes, stepsRes, templatesRes, usersRes] = await Promise.all([
         fetch('/api/admin/routing-rules', { headers }),
         fetch('/api/admin/workflow-steps', { headers }),
-        fetch('/api/templates', { headers })
+        fetch('/api/templates', { headers }),
+        fetch('/api/admin/users', { headers })
       ]);
       const rulesData = rulesRes.ok ? await rulesRes.json() : [];
       const stepsData = stepsRes.ok ? await stepsRes.json() : [];
       const templatesData = templatesRes.ok ? await templatesRes.json() : [];
+      const usersData = usersRes.ok ? await usersRes.json() : [];
       setRules(Array.isArray(rulesData) ? rulesData : []);
       setSteps(Array.isArray(stepsData) ? stepsData : []);
       setTemplates(Array.isArray(templatesData) ? templatesData : []);
+      setAllUsers(Array.isArray(usersData) ? usersData : []);
       setDeletedRuleIds([]);
       setDeletedStepIds([]);
       setDeletedTemplateIds([]);
@@ -101,10 +108,17 @@ export default function Admin() {
             else if (opLabel === 'contains') opLabel = '⊇';
 
             return (
-              <div key={i} className="flex items-center text-[9px] font-bold tracking-wide rounded-full overflow-hidden shadow-sm border border-slate-200/60">
-                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 border-r border-slate-200/60 uppercase">{c.field}</span>
-                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 border-r border-slate-200/60 font-mono">{opLabel}</span>
-                <span className="bg-white text-slate-700 px-2 py-0.5">{c.value}</span>
+              <div key={i} className="flex items-center gap-1.5">
+                {i > 0 && (
+                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${c.logicalOperator === 'OR' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>
+                    {c.logicalOperator || 'AND'}
+                  </span>
+                )}
+                <div className="flex items-center text-[9px] font-bold tracking-wide rounded-full overflow-hidden shadow-sm border border-slate-200/60">
+                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 border-r border-slate-200/60 uppercase">{c.field}</span>
+                  <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 border-r border-slate-200/60 font-mono">{opLabel}</span>
+                  <span className="bg-white text-slate-700 px-2 py-0.5">{c.value}</span>
+                </div>
               </div>
             );
           })}
@@ -125,7 +139,7 @@ export default function Admin() {
       rule_name: fd.get('rule_name') || "New Rule",
       conditions_json: JSON.stringify(ruleConditions),
       target_workflow_id: fd.get('target_workflow_id'),
-      document_type: editingRule.document_type || selectedDocType
+      document_type: editingRule.document_type || 'Any'
     };
     if (editingRule.id) {
       setRules(rules.map(r => r.id === rule.id ? rule : r));
@@ -142,30 +156,45 @@ export default function Admin() {
     setHasChanges(true);
   };
 
-  const handleSaveStepLocal = (e) => {
+  const handleSaveFlowLocal = (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const step = {
-      id: editingStep.id || `tmp-${Date.now()}`,
-      profile_name: fd.get('profile_name'),
-      stage_number: parseInt(fd.get('stage_number') || '1'),
-      approver_target: fd.get('approver_target'),
-      document_type: editingStep.document_type || selectedDocType
-    };
-
-    if (editingStep.id) {
-      setSteps(steps.map(s => s.id === step.id ? step : s));
-    } else {
-      setSteps([...steps, step]);
+    if (!editingFlow || !editingFlow.profile_name) return;
+    
+    const existingStages = steps.filter(s => s.profile_name === (editingFlow.original_profile_name || editingFlow.profile_name));
+    const newStagesIds = editingFlow.stages.map(s => s.id).filter(id => id && !id.startsWith('tmp-'));
+    const deletedIds = existingStages.map(s => s.id).filter(id => !newStagesIds.includes(id));
+    
+    if (deletedIds.length > 0) {
+       setDeletedStepIds([...deletedStepIds, ...deletedIds.filter(id => !id.startsWith('tmp-'))]);
     }
-    setEditingStep(null);
+    
+    const flowSteps = editingFlow.stages.map((stg, idx) => ({
+      id: stg.id || `tmp-${Date.now()}-${idx}`,
+      profile_name: editingFlow.profile_name,
+      stage_number: idx + 1,
+      approver_target: stg.approver_target,
+      action_required: stg.action_required || 'Approve',
+      permissions: stg.permissions || 'Approve Only',
+      document_type: 'Any'
+    }));
+    
+    const remainingSteps = steps.filter(s => s.profile_name !== (editingFlow.original_profile_name || editingFlow.profile_name));
+    
+    setSteps([...remainingSteps, ...flowSteps]);
+    setEditingFlow(null);
     setHasChanges(true);
   };
 
-  const handleDeleteStepLocal = (id) => {
-    if (!id.startsWith('tmp-')) setDeletedStepIds([...deletedStepIds, id]);
-    setSteps(steps.filter(s => s.id !== id));
-    setHasChanges(true);
+  const handleDeleteFlowLocal = (profile_name) => {
+    if (window.confirm(`Are you sure you want to delete the entire flow "${profile_name}"?`)) {
+      const idsToDelete = steps.filter(s => s.profile_name === profile_name).map(s => s.id);
+      const nonTmpIds = idsToDelete.filter(id => !id.startsWith('tmp-'));
+      if (nonTmpIds.length > 0) {
+        setDeletedStepIds([...deletedStepIds, ...nonTmpIds]);
+      }
+      setSteps(steps.filter(s => s.profile_name !== profile_name));
+      setHasChanges(true);
+    }
   };
 
   const openEditTemplate = (t) => {
@@ -221,13 +250,24 @@ export default function Admin() {
   };
 
   const handleDeleteTemplateLocal = (id) => {
+    setTemplateDeleteConfirmTarget(id);
+  };
+
+  const confirmDeleteTemplate = () => {
+    if (!templateDeleteConfirmTarget) return;
+    const id = templateDeleteConfirmTarget;
     if (!id.startsWith('tmp-')) setDeletedTemplateIds([...deletedTemplateIds, id]);
     setTemplates(templates.filter(t => t.id !== id));
     setHasChanges(true);
+    setTemplateDeleteConfirmTarget(null);
   };
 
-  const publishChanges = async () => {
-    if (!window.confirm("You are about to publish configuration changes to the live system. Continue?")) return;
+  const publishChanges = () => {
+    setPublishConfirm(true);
+  };
+
+  const confirmPublish = async () => {
+    setPublishConfirm(false);
     
     setPublishing(true);
     try {
@@ -297,20 +337,9 @@ export default function Admin() {
     );
   }
 
-  const documentTypes = Array.from(new Set([
-    "Invoice",
-    "Purchase Order",
-    "Credit Note",
-    "Debit Note",
-    ...templates.map(t => t.name)
-  ]));
-
-  const filteredRules = rules.filter(r => (r.document_type || "Invoice") === selectedDocType);
-  const filteredSteps = steps.filter(s => (s.document_type || "Invoice") === selectedDocType);
-
-  const groupedSteps = Array.from(new Set(filteredSteps.map(s => s.profile_name))).map(profile => ({
-    profile,
-    stages: filteredSteps.filter(s => s.profile_name === profile).sort((a, b) => a.stage_number - b.stage_number)
+  const groupedSteps = Array.from(new Set(steps.map(s => s.profile_name))).map(profile => ({
+    profile_name: profile,
+    stages: steps.filter(s => s.profile_name === profile).sort((a, b) => a.stage_number - b.stage_number)
   }));
 
   return (
@@ -331,7 +360,13 @@ export default function Admin() {
               onClick={() => setActiveTab("routing")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "routing" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
-              Routing & Policies
+              Flow Builder
+            </button>
+            <button
+              onClick={() => setActiveTab("matrix")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Condition Builder
             </button>
             <button
               onClick={() => setActiveTab("templates")}
@@ -350,23 +385,11 @@ export default function Admin() {
             >
               IAM & Users
             </button>
-            <button
-              onClick={() => setActiveTab("masterdata")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "masterdata" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              ERP Master
-            </button>
           </div>
 
           {/* SYSTEM ADMINISTRATION */}
           <div className="space-y-0.5">
             <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">System Administration</h3>
-            <button
-              onClick={() => setActiveTab("system")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              System Core & Health
-            </button>
             <button
               onClick={() => setActiveTab("raci")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "raci" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
@@ -385,6 +408,12 @@ export default function Admin() {
             >
               Audit Logs
             </button>
+            <button
+              onClick={() => setActiveTab("system")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              System Core & Health
+            </button>
           </div>
         </div>
       </div>
@@ -400,7 +429,8 @@ export default function Admin() {
             </div>
             <div>
               <h1 className="text-xs font-display font-bold text-slate-900 tracking-tight leading-none">
-                {activeTab === 'routing' && 'Routing & Policies'}
+                {activeTab === 'matrix' && 'Condition Policy Matrix'}
+                {activeTab === 'routing' && 'Flow Builder'}
                 {activeTab === 'templates' && 'AI Templates'}
                 {activeTab === 'users' && 'IAM & Users'}
                 {activeTab === 'masterdata' && 'ERP Master'}
@@ -449,273 +479,20 @@ export default function Admin() {
           </div>
         )}
 
+        {/* --- POLICY MATRIX TAB CONTENT --- */}
+        {activeTab === "matrix" && (
+          <ConditionBuilder 
+            rules={rules} 
+            setRules={setRules} 
+            setHasChanges={setHasChanges} 
+            handleDeleteRuleLocal={handleDeleteRuleLocal}
+          />
+        )}
+
         {/* --- ROUTING TAB CONTENT --- */}
         {activeTab === "routing" && (
-          <>
-            {/* Document Type Selector Bar */}
-            <div className="bg-white border border-slate-200 rounded-lg p-2 shadow-sm flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400">Configure Workflow Scope</span>
-                <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full border border-blue-100 animate-pulse">
-                  Scope: {selectedDocType}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {documentTypes.map(docType => {
-                  const isActive = selectedDocType === docType;
-                  return (
-                    <button
-                      key={docType}
-                      onClick={() => setSelectedDocType(docType)}
-                      className={`px-3 py-1.5 text-[10px] font-bold rounded-md border transition-all duration-300 transform active:scale-95 flex items-center gap-1 ${
-                        isActive
-                          ? "bg-slate-800 text-white border-slate-800 shadow-md translate-y-[-1px]"
-                          : "bg-white text-slate-600 border-slate-200/80 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
-                    >
-                      <div className={`h-1 w-1 rounded-full ${isActive ? 'bg-white' : 'bg-slate-300'}`}></div>
-                      {docType}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* PANEL A: ROUTING MATRIX (Full Width) */}
-            <div className="w-full bg-white border border-slate-200 rounded-xl shadow-md overflow-hidden flex flex-col transition-all">
-              <div className="border-b border-slate-100/80 bg-slate-50/50 p-2.5 px-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wider">
-                <GitMerge className="h-4 w-4 text-slate-500" />
-                Condition-Based Policy Matrix
-              </h2>
-            </div>
-            <button
-              onClick={() => openRuleEditor({ rule_name: '', conditions_json: '[]', priority: 10, target_workflow_id: '' })}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Condition
-            </button>
-          </div>
-
-          <div className="p-0 flex-1">
-            {editingRule && (
-              <div className="bg-slate-50/50 p-4 border-b border-slate-200">
-                <form onSubmit={handleSaveRuleLocal} className="bg-white border border-slate-300 rounded-lg p-4 shadow-sm relative">
-                  <button type="button" onClick={() => openRuleEditor(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                  <h3 className="text-xs font-bold text-slate-800 mb-4 uppercase tracking-wider">{editingRule.id ? 'Edit Policy Condition' : 'Define Policy Condition'}</h3>
-                  
-                  <div className="grid grid-cols-12 gap-3">
-                    <div className="col-span-12 sm:col-span-4">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Rule Name</label>
-                      <input name="rule_name" defaultValue={editingRule.rule_name} required className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none transition-colors" placeholder="e.g. High Value Purchase" />
-                    </div>
-                    <div className="col-span-12 sm:col-span-4">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Workflow Profile</label>
-                      <input name="target_workflow_id" defaultValue={editingRule.target_workflow_id} required className="w-full text-xs font-bold text-blue-800 p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none transition-colors" placeholder="e.g. Purchase Level 1" />
-                    </div>
-                    <div className="col-span-12 sm:col-span-4">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Priority</label>
-                      <input name="priority" type="number" defaultValue={editingRule.priority} required className="w-full text-xs font-mono p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none transition-colors" />
-                    </div>
-                    
-                    <div className="col-span-12">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 mt-1">Visual Rule Conditions</label>
-                      <div className="space-y-2 bg-slate-50 p-2 rounded border border-slate-200">
-                        {ruleConditions.map((cond, idx) => (
-                          <div key={idx} className="flex flex-col gap-1">
-                            {idx > 0 && <div className="text-[9px] font-black text-slate-400 pl-4">AND</div>}
-                            <div className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 shadow-sm">
-                              <select value={cond.field} onChange={(e) => { const nc=[...ruleConditions]; nc[idx].field=e.target.value; setRuleConditions(nc); }} className="p-1 border border-slate-200 rounded text-xs w-1/3 outline-none">
-                                <option value="division">Division</option>
-                                <option value="department">Department</option>
-                                <option value="category">Category</option>
-                                <option value="amount">Amount</option>
-                                <option value="cost_center">Cost Center</option>
-                                <option value="document_type">Document Type</option>
-                              </select>
-                              <select value={cond.operator} onChange={(e) => { const nc=[...ruleConditions]; nc[idx].operator=e.target.value; setRuleConditions(nc); }} className="p-1 border border-slate-200 rounded text-xs w-1/4 outline-none font-mono">
-                                <option value="==">== (Equals)</option>
-                                <option value="!=">!= (Not Equal)</option>
-                                <option value=">">&gt; (Greater Than)</option>
-                                <option value="<">&lt; (Less Than)</option>
-                                <option value="contains">Contains</option>
-                              </select>
-                              <input 
-                                type={cond.field === 'amount' ? 'number' : 'text'} 
-                                value={cond.value} 
-                                onChange={(e) => { const nc=[...ruleConditions]; nc[idx].value=e.target.value; setRuleConditions(nc); }} 
-                                className="p-1 border border-slate-200 rounded text-xs w-1/3 outline-none" 
-                                placeholder={cond.field === 'amount' ? "e.g. 5000" : "Value..."} 
-                              />
-                              <button type="button" onClick={() => { const nc=[...ruleConditions]; nc.splice(idx, 1); setRuleConditions(nc); }} className="text-red-500 hover:text-red-700 ml-auto p-1"><X className="h-3 w-3" /></button>
-                            </div>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => setRuleConditions([...ruleConditions, { field: 'division', operator: '==', value: '' }])} className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded w-full border border-blue-200 border-dashed transition-colors mt-2">+ Add Condition</button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 flex justify-end">
-                    <button type="submit" className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-4 py-1.5 rounded text-xs font-bold transition-colors shadow-sm">
-                      <Save className="h-3.5 w-3.5" /> Save to Drafts
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200/80">
-                    <th className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest w-12">Prio</th>
-                    <th className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest w-32">Rule Name</th>
-                    <th className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest w-64">Condition Chips</th>
-                    <th className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest w-48">Target Workflow</th>
-                    <th className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest text-right w-20">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100/60">
-                  {filteredRules.length === 0 ? (
-                    <tr><td colSpan="5" className="p-4 text-center text-[10px] text-slate-400 italic font-medium">No routing policies defined.</td></tr>
-                    ) : [...filteredRules].sort((a,b)=>a.priority - b.priority).map((rule) => {
-                    const isDraft = rule.id.startsWith('tmp-');
-                    return (
-                      <tr key={rule.id} className={`hover:bg-slate-50/50 transition-colors group ${isDraft ? 'bg-amber-50/30' : ''}`}>
-                        <td className="px-3 py-3 align-middle">
-                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-white border border-slate-200/80 text-[10px] font-mono font-bold text-slate-700 shadow-sm group-hover:bg-blue-50 group-hover:border-blue-200 group-hover:text-blue-700 transition-colors">
-                            {rule.priority}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[11px] text-slate-800 tracking-wide">
-                              {rule.rule_name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          {renderConditionChips(rule.conditions_json)}
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <span className="inline-flex items-center gap-1.5 font-bold text-[10px] text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-200/50">
-                            <Network className="h-3 w-3 text-indigo-500" />
-                            {rule.target_workflow_id}
-                          </span>
-                          {isDraft && <span className="ml-2 text-[8px] uppercase tracking-wider font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded shadow-sm">Draft</span>}
-                        </td>
-                        <td className="px-3 py-3 align-middle text-right">
-                          <div className="flex justify-end gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => openRuleEditor(rule)} className="p-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 text-slate-400 rounded transition-all shadow-sm"><Edit2 className="h-3 w-3" /></button>
-                            <button onClick={() => handleDeleteRuleLocal(rule.id)} className="p-1 bg-white border border-slate-200 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 text-slate-400 rounded transition-all shadow-sm"><Trash2 className="h-3 w-3" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* PANEL B: WORKFLOW STAGES (Full Width) */}
-        <div className="w-full bg-white border border-slate-200 rounded-xl shadow-md overflow-hidden flex flex-col transition-all">
-          <div className="border-b border-slate-100/80 bg-slate-50/50 p-2.5 px-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wider">
-                <Network className="h-4 w-4 text-slate-500" />
-                Approval Hierarchies
-              </h2>
-            </div>
-            <button
-              onClick={() => setEditingStep({ profile_name: '', stage_number: 1, approver_target: '' })}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Stage
-            </button>
-          </div>
-          
-          <div className="p-0 flex-1">
-            {editingStep && (
-              <div className="bg-slate-50 p-4 border-b border-slate-200">
-                <form onSubmit={handleSaveStepLocal} className="bg-white border border-slate-300 rounded-lg p-4 shadow-sm relative">
-                  <button type="button" onClick={() => setEditingStep(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                  <h3 className="text-xs font-bold text-slate-800 mb-4 uppercase tracking-wider">{editingStep.id ? 'Edit Stage' : 'Define Stage'}</h3>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Profile Name (Groups stages together)</label>
-                      <input name="profile_name" defaultValue={editingStep.profile_name} required className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none" placeholder="e.g. Standard PO Flow" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Stage Number</label>
-                        <input name="stage_number" type="number" defaultValue={editingStep.stage_number} required className="w-full text-xs font-mono p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Approver</label>
-                        <input name="approver_target" defaultValue={editingStep.approver_target} required className="w-full text-xs font-semibold p-2 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 focus:bg-white outline-none" placeholder="e.g. [DEPT_HEAD] or vp@company.com" />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 flex justify-end">
-                    <button type="submit" className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-4 py-1.5 rounded text-xs font-bold transition-colors shadow-sm">
-                      <Save className="h-3.5 w-3.5" /> Save to Drafts
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            <div className="p-2 space-y-2">
-              {groupedSteps.length === 0 ? (
-                <div className="text-center text-[10px] text-slate-400 italic py-4">No hierarchies defined.</div>
-              ) : groupedSteps.map((group, gIdx) => (
-                <div key={gIdx} className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden">
-                  <div className="bg-slate-50/50 px-3 py-2 border-b border-slate-100/80 font-bold text-[10px] text-slate-800 uppercase tracking-wider flex items-center justify-between">
-                    <span>{group.profile}</span>
-                    <span className="bg-slate-200/60 text-slate-600 px-1.5 py-0.5 rounded text-[9px] shadow-sm">{group.stages.length} Stages</span>
-                  </div>
-                  <div className="divide-y divide-slate-100/60">
-                    {group.stages.map((stg) => {
-                      const isDraft = stg.id.startsWith('tmp-');
-                      return (
-                        <div key={stg.id} className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 hover:bg-slate-50/50 transition-colors group ${isDraft ? 'bg-amber-50/30' : ''}`}>
-                          <div className="flex items-center gap-3">
-                            <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-50/80 border border-blue-100 shadow-sm text-blue-700 font-black text-[10px] font-mono">
-                              {stg.stage_number}
-                            </span>
-                            <div className="flex flex-col">
-                              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                                {stg.approver_target}
-                                {isDraft && <span className="ml-1 text-[8px] uppercase tracking-wider font-bold text-amber-600 bg-amber-100 px-1 py-0.5 rounded-sm">Draft</span>}
-                              </span>
-                              <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400">Action: Approve</span>
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-1.5 mt-2 sm:mt-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setEditingStep(stg)} className="p-1 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition-colors"><Edit2 className="h-3 w-3" /></button>
-                            <button onClick={() => handleDeleteStepLocal(stg.id)} className="p-1 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition-colors"><Trash2 className="h-3 w-3" /></button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </>
-    )}
+          <FlowBuilder users={allUsers} />
+        )}
 
     {/* --- TEMPLATES TAB CONTENT --- */}
     {activeTab === "templates" && (
@@ -727,10 +504,7 @@ export default function Admin() {
               Dynamic Data Extraction Templates
             </h2>
           </div>
-          <button
-            onClick={() => openEditTemplate(null)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
-          >
+          <button onClick={() => openEditTemplate(null)} className="flex items-center gap-1.5 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs uppercase tracking-wide rounded-md transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
             <Plus className="h-3.5 w-3.5" /> New Template
           </button>
         </div>
@@ -739,21 +513,21 @@ export default function Admin() {
           {editingTemplate && (
             <div className="bg-purple-50/30 p-3 border-b border-purple-100/50">
               <form onSubmit={handleSaveTemplateLocal} className="space-y-4 relative">
-                <button type="button" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="absolute -top-1 -right-1 text-slate-400 hover:text-slate-600">
+                <button type="button" aria-label="Close" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="absolute -top-1 -right-1 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded p-1">
                   <X className="h-4 w-4" />
                 </button>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Template Name (e.g., Contract)</label>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Template Name (e.g., Contract)</label>
                     <input type="text" name="name" defaultValue={editingTemplate.name} required className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner" />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Description</label>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Description</label>
                     <input type="text" name="description" defaultValue={editingTemplate.description} className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner" />
                   </div>
                 </div>
                 <div className="pt-2 border-t border-purple-100">
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Global AI Instructions</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Global AI Instructions</label>
                   <textarea 
                     name="instructions" 
                     value={templateInstructions} 
@@ -765,8 +539,8 @@ export default function Admin() {
                 </div>
                 <div className="pt-2 border-t border-purple-100">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Document Fields</label>
-                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1 text-[9px] font-bold text-purple-600 hover:text-purple-800 bg-purple-100/50 hover:bg-purple-100 px-2 py-1 rounded">
+                    <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">Document Fields</label>
+                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1.5 text-xs font-bold text-purple-700 hover:text-purple-800 bg-purple-100 hover:bg-purple-200 px-3 py-1.5 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
                       <Plus className="h-3 w-3" /> Add Field
                     </button>
                   </div>
@@ -799,7 +573,7 @@ export default function Admin() {
                           <option value="boolean">Boolean</option>
                           <option value="date">Date</option>
                         </select>
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1.5 rounded" title="Mark as Required Field">
+                        <label className="flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 rounded cursor-pointer transition-colors" title="Mark as Required Field">
                           <input 
                             type="checkbox" 
                             checked={field.required || false}
@@ -808,10 +582,9 @@ export default function Admin() {
                               newFields[idx].required = e.target.checked;
                               setTemplateFields(newFields);
                             }}
-                            className="cursor-pointer"
-                          />
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer">Req</label>
-                        </div>
+                            className="cursor-pointer focus-visible:ring-2 focus-visible:ring-purple-500" />
+<span className="text-xs font-bold text-slate-600 uppercase tracking-wide ml-1">Req</span>
+</label>
                         <input
                           type="text"
                           placeholder="Description / Hint"
@@ -823,7 +596,7 @@ export default function Admin() {
                           }}
                           className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-purple-400 focus:outline-none"
                         />
-                        <button type="button" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-rose-500 transition-colors">
+                        <button type="button" aria-label="Remove Field" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -834,7 +607,7 @@ export default function Admin() {
                   </div>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold rounded shadow transition-colors uppercase tracking-wider">
+                  <button type="submit" className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-md shadow-sm transition-colors uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
                     <Save className="h-3 w-3" /> Save Draft
                   </button>
                 </div>
@@ -843,20 +616,43 @@ export default function Admin() {
           )}
 
           <div className="divide-y divide-slate-100/80">
-            {templates.length === 0 ? (
-               <div className="p-8 text-center text-slate-400 text-xs font-bold">No templates configured yet.</div>
+            {templates.filter(t => t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) || (t.description||'').toLowerCase().includes(templateSearchQuery.toLowerCase())).length === 0 ? (
+               <div className="py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed m-4">
+                 <Network className="h-10 w-10 text-slate-300 mb-4" />
+                 <h3 className="text-sm font-bold text-slate-700">No templates found</h3>
+                 <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new AI Extraction Template.</p>
+                 <button onClick={() => openEditTemplate(null)} className="mt-5 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">Create Template</button>
+               </div>
             ) : (
-               templates.map(t => {
+               templates.filter(t => t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) || (t.description||'').toLowerCase().includes(templateSearchQuery.toLowerCase())).map(t => {
                  const isDraft = t.id && String(t.id).startsWith('tmp-');
                  return (
                    <div key={t.id} className={`p-3 flex items-start justify-between group hover:bg-slate-50/50 transition-colors ${isDraft ? 'bg-amber-50/20' : ''}`}>
                      <div>
                        <div className="flex items-center gap-2 mb-1">
-                         <h3 className="font-bold text-slate-800 text-xs">{t.name}</h3>
+                         <h3 className="font-bold text-slate-800 text-sm">{t.name}</h3>
                          {isDraft && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-bold uppercase tracking-wider">Draft</span>}
                        </div>
-                       <p className="text-[10px] text-slate-500 mb-2">{t.description}</p>
-                       <pre className="text-[9px] text-slate-600 bg-slate-50 border border-slate-100 p-2 rounded-lg font-mono overflow-auto max-h-32 max-w-2xl whitespace-pre-wrap">{t.fields_json}</pre>
+                       <p className="text-sm text-slate-600 mb-2">{t.description}</p>
+                       <div className="flex flex-wrap gap-2 mt-3">
+                         {(() => {
+                           try {
+                             const parsedFields = JSON.parse(t.fields_json || '[]');
+                             if (!Array.isArray(parsedFields) || parsedFields.length === 0) {
+                               return <span className="text-xs text-slate-400 italic">No fields defined</span>;
+                             }
+                             return parsedFields.map((f, i) => (
+                               <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                                 <span className="text-xs font-bold text-slate-700">{f.name}</span>
+                                 <span className="text-[10px] uppercase font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded tracking-wider border border-purple-200">{f.type}</span>
+                                 {f.required && <span className="text-[10px] uppercase font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded tracking-wider border border-rose-200">Required</span>}
+                               </div>
+                             ));
+                           } catch(e) {
+                             return <span className="text-xs text-rose-500 font-medium">Invalid Schema JSON</span>;
+                           }
+                         })()}
+                       </div>
                      </div>
                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => {
@@ -886,9 +682,9 @@ export default function Admin() {
                              }
                           };
                           fileInput.click();
-                        }} className="px-2 py-1 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 text-[9px] font-bold rounded shadow-sm flex items-center gap-1"><Activity className="h-3 w-3" /> Test Sandbox</button>
-                        <button onClick={() => openEditTemplate(t)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded"><Edit2 className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => handleDeleteTemplateLocal(t.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="h-3.5 w-3.5" /></button>
+                        }} className="px-3 py-1.5 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold rounded-md shadow-sm flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"><Activity className="h-3 w-3" /> Test Sandbox</button>
+                        <button aria-label="Edit Template" onClick={() => openEditTemplate(t)} className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"><Edit2 className="h-3.5 w-3.5" /></button>
+                        <button aria-label="Delete Template" onClick={() => handleDeleteTemplateLocal(t.id)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
                      </div>
                    </div>
                  );
@@ -1044,6 +840,59 @@ export default function Admin() {
         <AdminSystem />
       </div>
     )}
+
+    {/* Publish Confirm Modal */}
+    {publishConfirm && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full animate-slideUp">
+          <h3 className="text-lg font-bold text-slate-900 mb-2">Publish Configuration</h3>
+          <p className="text-sm text-slate-600 mb-6">
+            Are you sure you want to publish all draft modifications? This action will overwrite the live system configuration.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setPublishConfirm(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmPublish}
+              className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition"
+            >
+              Publish Now
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Template Delete Confirm Modal */}
+    {templateDeleteConfirmTarget && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full animate-slideUp">
+          <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Template</h3>
+          <p className="text-sm text-slate-600 mb-6">
+            Are you sure you want to delete this AI extraction template? This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setTemplateDeleteConfirmTarget(null)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteTemplate}
+              className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md transition"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
   </div>
   </div>
 </div>
