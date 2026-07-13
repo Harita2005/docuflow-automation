@@ -47,7 +47,7 @@ export default function Dashboard({
   const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
   const [currentPage, setCurrentPage] = useState(1);
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month'>('all');
-  const itemsPerPage = 10;
+  const itemsPerPage = 8;
 
   if (loading || !stats) {
 

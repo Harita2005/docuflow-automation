@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Save, RefreshCw, Mail, Users, Info, Plus, X } from 'lucide-react';
 
-const EVENTS = ["Approve", "Reject", "Request Clarification", "Send Back"];
-const DEFAULT_WORKFLOWS = ["Standard Linear Workflow", "IT Hardware Approval", "Legal Contract Review"];
+const EVENTS = ["Approve", "Reject", "Request Clarification", "Send Back", "Escalate"];
 
 export default function AdminRACI() {
   const [loading, setLoading] = useState(false);
   const [matrices, setMatrices] = useState([]);
-  const [workflowProfile, setWorkflowProfile] = useState("Standard Linear Workflow");
+  const [workflows, setWorkflows] = useState([]);
+  const [workflowProfile, setWorkflowProfile] = useState("");
   const [customWorkflow, setCustomWorkflow] = useState("");
   
   // State for the grid for the current workflow
@@ -18,6 +18,7 @@ export default function AdminRACI() {
   useEffect(() => {
     fetchMatrices();
     fetchProviderConfig();
+    fetchWorkflows();
   }, []);
 
   useEffect(() => {
@@ -71,6 +72,21 @@ export default function AdminRACI() {
         if (data) setProviderConfig(data);
       }
     } catch(e) {}
+  };
+
+  const fetchWorkflows = async () => {
+    try {
+      const res = await fetch('/api/admin/workflows', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setWorkflows(data);
+        if (data.length > 0 && !workflowProfile) {
+          setWorkflowProfile(data[0].profile_name);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const saveRACI = async () => {
@@ -184,7 +200,20 @@ export default function AdminRACI() {
               setCustomWorkflow("");
             }}
           >
-            {DEFAULT_WORKFLOWS.map(w => <option key={w} value={w}>{w}</option>)}
+            {Object.entries(
+              workflows.reduce((acc, wf) => {
+                const category = wf.workflow_type || 'General';
+                const subCategory = wf.profile_name.includes(' - ') ? wf.profile_name.split(' - ')[0] : 'Other Workflows';
+                const groupName = `${category} > ${subCategory}`;
+                if (!acc[groupName]) acc[groupName] = [];
+                acc[groupName].push(wf.profile_name);
+                return acc;
+              }, {})
+            ).map(([groupName, wfs]) => (
+              <optgroup key={groupName} label={groupName}>
+                {wfs.map(w => <option key={w} value={w}>{w}</option>)}
+              </optgroup>
+            ))}
             <option value="custom">-- Custom Workflow --</option>
           </select>
 

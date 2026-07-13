@@ -123,6 +123,92 @@ export async function triggerNotificationFlow(
       const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has been SENT BACK by ${performedBy}. Comments: "${comments || "No comments provided."}"`;
 
       recipients.push({ email: ownerEmail, name: ownerName, type: "SENT_BACK", title, message });
+    } else if (action === "Escalate") {
+      const title = "Document Escalated - SLA Breached";
+      const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has exceeded its SLA threshold and requires your immediate attention.`;
+
+      const currentEmails: string[] = [];
+
+      // Scenario A: ActiveApprovalLog system
+      if (invoice.activeApprovalLog) {
+        const currentStageDef = await prisma.workflowStepDefinition.findFirst({
+          where: {
+            profile_name: invoice.activeApprovalLog.workflow_profile,
+            stage_number: invoice.activeApprovalLog.current_stage_number,
+            document_type: invoice.document_type
+          }
+        });
+
+        if (currentStageDef) {
+          let currentApprover = currentStageDef.approver_target;
+          if (currentApprover === '[PO_OWNER]' || currentApprover === '[DEPT_HEAD]') {
+            if (invoice.po_number && invoice.po_number !== "Not Found") {
+              const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
+              if (corpMock) {
+                currentApprover = currentApprover === '[PO_OWNER]' ? (corpMock.po_owner_email || currentApprover) : (corpMock.dept_head_email || currentApprover);
+              }
+            }
+          }
+          if (currentApprover) {
+            if (currentApprover.includes("@")) {
+              currentEmails.push(currentApprover);
+            } else {
+              const u = await prisma.user.findFirst({ where: { username: currentApprover } });
+              if (u && u.email) currentEmails.push(u.email);
+            }
+          }
+        }
+      }
+      // Scenario B: WorkflowInstance Graph/Linear system
+      else if (invoice.workflowInst) {
+        const currentStage = invoice.workflowInst.current_stage;
+        const wf = await prisma.workflow.findUnique({
+          where: { id: invoice.workflowInst.workflow_id || "" }
+        }).catch(() => null) || await prisma.workflow.findFirst().catch(() => null);
+
+        if (wf && wf.workflow_json) {
+          try {
+            const parsed = JSON.parse(wf.workflow_json);
+            
+            if (parsed.nodes && parsed.edges) {
+              const state = invoice.workflowInst.state_json ? (typeof invoice.workflowInst.state_json === 'string' ? JSON.parse(invoice.workflowInst.state_json) : invoice.workflowInst.state_json) : {};
+              const activeNodeIds = state.activeNodes || [];
+              for (const nodeId of activeNodeIds) {
+                const node = parsed.nodes.find((n: any) => n.id === nodeId);
+                if (node && node.data && node.data.approvers) {
+                  const approversList = Array.isArray(node.data.approvers) ? node.data.approvers : [node.data.approvers];
+                  for (const app of approversList) {
+                    if (app && app.includes("@")) currentEmails.push(app);
+                  }
+                }
+              }
+            } else if (parsed.steps) {
+              const currentIdx = parsed.steps.findIndex((s: any) => s.label === currentStage);
+              if (currentIdx !== -1) {
+                const approver = parsed.steps[currentIdx].approver;
+                if (approver && approver.includes("@")) {
+                  currentEmails.push(approver);
+                }
+              }
+            }
+          } catch (e) {
+            console.error("[Notification Service] Error parsing workflow JSON", e);
+          }
+        }
+      }
+
+      if (currentEmails.length > 0) {
+        for (const email of currentEmails) {
+          const name = await getUserName(email);
+          recipients.push({ email, name, type: "ESCALATION", title, message });
+        }
+      } else {
+        // Fallback to admin if we can't resolve the approver
+        for (const adminEmail of adminEmails) {
+          const adminName = await getUserName(adminEmail);
+          recipients.push({ email: adminEmail, name: adminName, type: "ESCALATION", title, message });
+        }
+      }
     } else if (action === "Approve") {
       // Check if it is final approval
       let isFinal = false;

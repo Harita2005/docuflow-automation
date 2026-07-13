@@ -256,16 +256,13 @@ export default function DocumentDetails({
     }
   }, [document, isEditing]);
 
-  if (!document) {
-    return (
-      <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto">
-        <HelpCircle className="h-8 w-8 text-slate-400 mx-auto mb-2 animate-bounce" />
-        <p className="text-slate-550 font-semibold text-[10px] uppercase tracking-wider">
-          Please select an invoice to open detail inspectors.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!document) {
+      onGoBack();
+    }
+  }, [document, onGoBack]);
+
+  if (!document) return null;
   const handleSaveMetadata = async () => {
     setSaveLoading(true);
     try {

@@ -18,6 +18,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { triggerNotificationFlow } from "./notification-service";
 import { registerNotificationAdminRoutes } from "./notification-admin";
 import { runSLAEngine } from "./sla-engine";
+import { archiveApprovedDocument } from "./archive-service";
 
 dotenv.config();
 
@@ -78,6 +79,48 @@ const authenticateToken = (req: any, res: any, next: any) => {
     next();
   });
 };
+
+// Hierarchical Sequence Generator
+async function getNextHierarchicalId(type: 'AP Invoice' | 'Credit Note' | 'Debit Note' | 'Purchase Order' | 'Vendor Payment' | 'Workflow' | 'Goods Receipt' | string): Promise<string> {
+  let code = "";
+  let prefix = "";
+  if (type === "AP Invoice") {
+    prefix = "INV";
+    code = "11";
+  } else if (type === "Credit Note") {
+    prefix = "CN";
+    code = "12";
+  } else if (type === "Debit Note") {
+    prefix = "DN";
+    code = "13";
+  } else if (type === "Vendor Payment") {
+    prefix = "VP";
+    code = "1";
+  } else if (type === "Purchase Order") {
+    prefix = "PO";
+    code = "14";
+  } else if (type === "Workflow") {
+    prefix = "WF";
+    code = "26"; // E.g., year 2026
+  } else if (type === "Goods Receipt") {
+    prefix = "GRN";
+    code = "26";
+  } else {
+    prefix = "DOC";
+    code = "99";
+  }
+  
+  const fullPrefix = `${prefix}-${code}`;
+  
+  const seq = await prisma.sequence.upsert({
+    where: { code: fullPrefix },
+    update: { current: { increment: 1 } },
+    create: { code: fullPrefix, current: 1 }
+  });
+  
+  const numberStr = seq.current.toString().padStart(3, '0');
+  return `${fullPrefix}${numberStr}`;
+}
 
 // Auth Endpoint
 app.post("/api/auth/login", async (req, res) => {
@@ -815,13 +858,13 @@ app.get("/api/templates", authenticateToken, async (req, res) => {
 
 app.post("/api/templates", authenticateToken, async (req, res) => {
   try {
-    const { name, description, fields_json } = req.body;
+    const { name, description, fields_json, category, document_type } = req.body;
     if (!name || !fields_json) return res.status(400).json({ error: "Name and fields_json are required." });
 
     const newTemplate = await prisma.documentTemplate.upsert({
       where: { name },
-      update: { description, fields_json },
-      create: { name, description, fields_json }
+      update: { description, fields_json, category, document_type },
+      create: { name, description, fields_json, category, document_type }
     });
     res.json(newTemplate);
   } catch (error: any) {
@@ -959,10 +1002,12 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
       return res.status(400).json({ error: "Duplicate document detected based on file signature. This exact file has already been uploaded." });
     }
 
-    const invoiceId = "DOC-" + Math.floor(10000000 + Math.random() * 90000000);
+    const skip_ocr = req.body.skip_ocr === "true";
+    const initialDocType = skip_ocr ? "AP Invoice" : "Unknown";
+    const invoiceId = await getNextHierarchicalId(initialDocType);
     const uploadedPath = `/uploads/${filename}`;
 
-    const skip_ocr = req.body.skip_ocr === "true";
+
     let invoiceStatus = "Received";
     if (skip_ocr) {
       invoiceStatus = "Manual Entry"; // Initial state before matching
@@ -996,7 +1041,7 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
     if (!skip_ocr) {
       await prisma.goodsReceipt.create({
         data: {
-          id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+          id: await getNextHierarchicalId("Goods Receipt"),
           invoice_id: invoiceId,
           status: "Waiting",
           confirmed_by: "",
@@ -1235,7 +1280,7 @@ app.post("/api/invoices/:id/auto-route", authenticateToken, async (req, res) => 
       // 3. Create new workflow instance
       const newInstance = await prisma.workflowInstance.create({
         data: {
-          id: "WF-" + Math.floor(10000000 + Math.random() * 90000000),
+          id: await getNextHierarchicalId("Workflow"),
           invoice_id: invoice.id,
           workflow_id: assignedWorkflowId,
           current_stage: firstStage,
@@ -1321,7 +1366,7 @@ app.post("/api/invoices/:id/apply-workflow", async (req, res) => {
     // Create new workflow instance
     const newInstance = await prisma.workflowInstance.create({
       data: {
-        id: "WF-" + Math.floor(10000000 + Math.random() * 90000000),
+        id: await getNextHierarchicalId("Workflow"),
         invoice_id: invoice.id,
         workflow_id: targetWorkflowId,
         current_stage: firstStage,
@@ -1523,6 +1568,8 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
                 await prisma.systemLog.create({
                   data: { invoice_id: invoice.id, action: "Workflow Approved", user: approver, details: `Graph execution completed successfully.` }
                 });
+                // Archive Document
+                await archiveApprovedDocument(invoice.id, approver);
              }
           }
           
@@ -1583,6 +1630,8 @@ app.post("/api/invoices/:id/step-action", async (req, res) => {
           await prisma.systemLog.create({
             data: { invoice_id: invoice.id, action: "Workflow Approved", user: approver, details: `Final checkpoint passed.` }
           });
+          // Archive Document
+          await archiveApprovedDocument(invoice.id, approver);
         }
       } else if (action === "Reject") {
         workflowInstance = await prisma.workflowInstance.update({
@@ -1742,7 +1791,7 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
               where: { invoice_id: req.params.id },
               update: { status: "Pending", confirmed_by: "Pending", remarks: "Awaiting physical receipt of goods." },
               create: {
-                id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+                id: await getNextHierarchicalId("Goods Receipt"),
                 invoice_id: req.params.id,
                 status: "Pending",
                 confirmed_by: "Pending",
@@ -1807,7 +1856,7 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
           where: { invoice_id: invoice.id },
           update: { current_stage: firstStage, status: "In Progress" },
           create: {
-            id: "WF-" + Math.floor(10000000 + Math.random() * 90000000),
+            id: await getNextHierarchicalId("Workflow"),
             invoice_id: invoice.id,
             current_stage: firstStage,
             status: "In Progress"
@@ -1879,6 +1928,8 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
         data: { invoice_id: invoiceId, action: "Workflow Completed", user: user.email, details: `No remaining stages defined for ${activeLog.workflow_profile}. Document fully approved. Comments: ${comments || 'None'}` }
       });
       await triggerNotificationFlow(invoiceId, "Approve", comments, user.email);
+      // Archive Document
+      await archiveApprovedDocument(invoiceId, user.email);
       io.emit("workflow_updated", { invoiceId, action: "Approved" });
       return res.json({ success: true, message: "Auto-approved due to missing or empty workflow definition." });
     }
@@ -1933,6 +1984,8 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
       await prisma.systemLog.create({
         data: { invoice_id: invoiceId, action: "Workflow Completed", user: user.email, details: `Final stage approved as ${resolvedApprover}. Document fully approved. Comments: ${comments || 'None'}` }
       });
+      // Archive Document
+      await archiveApprovedDocument(invoiceId, user.email);
     }
     await triggerNotificationFlow(invoiceId, "Approve", comments, user.email);
     io.emit("workflow_updated", { invoiceId, action: "Approved" });
@@ -2184,7 +2237,7 @@ app.post("/api/webhooks/n8n/ingest", uploadWebhook.any(), async (req, res) => {
     
     const file = files[0];
 
-    const invoiceId = "WF-" + Math.floor(10000000 + Math.random() * 90000000);
+    const invoiceId = await getNextHierarchicalId("Unknown");
     const invoice = await prisma.invoice.create({
       data: {
         id: invoiceId,
@@ -2208,7 +2261,7 @@ app.post("/api/webhooks/n8n/ingest", uploadWebhook.any(), async (req, res) => {
     
     await prisma.goodsReceipt.create({
       data: {
-        id: "GRN-" + Math.floor(10000000 + Math.random() * 90000000),
+        id: await getNextHierarchicalId("Goods Receipt"),
         invoice_id: invoiceId,
         status: "Waiting",
         confirmed_by: "",
@@ -2756,26 +2809,26 @@ ${fewShotExample}
           return d.toISOString().split("T")[0];
         };
 
-        const docType = String(extracted.documentType || "Invoice").toLowerCase();
-        let prefix = "INV-";
+        const parsedDocType = extracted.documentType || "Invoice";
+        const docType = String(parsedDocType).toLowerCase();
+        
+        const trackingId = await getNextHierarchicalId(parsedDocType);
+        
         let parsedInvNum = "";
         let parsedPoNum = getVal(extracted, "ponumber", "po_number", "purchaseorder");
         
         if (docType.includes("purchase order") || docType.includes("po") || docType === "po") {
-          prefix = "PO-";
-          parsedInvNum = String(getVal(extracted, "ponumber", "po_number", "purchaseorder") || prefix + Math.floor(10000000 + Math.random() * 90000000));
+          parsedInvNum = String(getVal(extracted, "ponumber", "po_number", "purchaseorder") || trackingId);
           parsedPoNum = parsedInvNum;
         } else if (docType.includes("credit") && !docType.includes("invoice")) {
-          prefix = "CN-";
-          parsedInvNum = String(getVal(extracted, "creditnotenumber", "creditnote") || prefix + Math.floor(10000000 + Math.random() * 90000000));
+          parsedInvNum = String(getVal(extracted, "creditnotenumber", "creditnote") || trackingId);
           if (!parsedPoNum) parsedPoNum = "Not Found";
         } else if (docType.includes("debit") && !docType.includes("invoice")) {
-          prefix = "DN-";
-          parsedInvNum = String(getVal(extracted, "debitnotenumber", "debitnote") || prefix + Math.floor(10000000 + Math.random() * 90000000));
+          parsedInvNum = String(getVal(extracted, "debitnotenumber", "debitnote") || trackingId);
           if (!parsedPoNum) parsedPoNum = "Not Found";
         } else {
           // Default to invoice logic, but check specific note types first
-          parsedInvNum = String(getVal(extracted, "invoicenumber", "invoicenum", "invoiceno", "invoiceid", "receiptnumber", "debitnotenumber", "creditnotenumber") || prefix + Math.floor(10000000 + Math.random() * 90000000));
+          parsedInvNum = String(getVal(extracted, "invoicenumber", "invoicenum", "invoiceno", "invoiceid", "receiptnumber", "debitnotenumber", "creditnotenumber") || trackingId);
           if (!parsedPoNum) parsedPoNum = "Not Found";
         }
 
@@ -2823,36 +2876,8 @@ ${fewShotExample}
             }
           }
         }
-
-        const parsedDocType = extracted.documentType || "Invoice";
+        
         const isInvoice = parsedDocType.toLowerCase().includes("invoice");
-        
-        let trackingPrefix = "DOC";
-        const dtLower = parsedDocType.toLowerCase();
-        if (dtLower.includes("invoice")) trackingPrefix = "INV";
-        else if (dtLower.includes("purchase order") || dtLower.includes("po")) trackingPrefix = "PO";
-        else if (dtLower.includes("debit note")) trackingPrefix = "DN";
-        else if (dtLower.includes("credit note")) trackingPrefix = "CN";
-        else if (dtLower.includes("receipt")) trackingPrefix = "RCT";
-        
-          const dateObj = new Date();
-          const yyyymm = dateObj.getFullYear().toString() + (dateObj.getMonth() + 1).toString().padStart(2, '0');
-          
-          const prefixMonth = `${trackingPrefix}-${yyyymm}-`;
-          const lastInvoice = await prisma.invoice.findFirst({
-            where: { tracking_id: { startsWith: prefixMonth } },
-            orderBy: { tracking_id: 'desc' }
-          });
-          
-          let sequence = 1;
-          if (lastInvoice && lastInvoice.tracking_id) {
-            const lastSeqStr = lastInvoice.tracking_id.split('-').pop();
-            if (lastSeqStr) {
-              const lastSeq = parseInt(lastSeqStr, 10);
-              if (!isNaN(lastSeq)) sequence = lastSeq + 1;
-            }
-          }
-          const trackingId = `${prefixMonth}${sequence.toString().padStart(4, '0')}`;
 
         let finalStatus = "Data Verification Pending";
         let isException = false;
@@ -3787,6 +3812,10 @@ async function runBackgroundWorker() {
           details: `Invoice pending approval for > ${slaHours} hours. Auto-escalated.`
         }
       });
+      
+      // Trigger notification flow for the escalation
+      await triggerNotificationFlow(overdue.invoice_id, "Escalate", `Invoice pending approval for > ${slaHours} hours. Auto-escalated.`, "SYSTEM");
+      
       console.log(`[BACKGROUND WORKER] Escalated invoice ${overdue.invoice_id} due to SLA breach.`);
     }
 
@@ -3877,6 +3906,16 @@ app.post("/api/admin/trigger-sla-check", authenticateToken, async (req: any, res
 // 60 * 60 * 1000 = 3600000 ms
 setInterval(runBackgroundWorker, 3600000);
 console.log("[BACKGROUND WORKER] Initialized for SLA and Data Retention processing.");
+
+// Serve frontend static files in production
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(frontendDistPath));
+app.get('*', (req: any, res: any, next: any) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+    return next();
+  }
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 // Start the server
 async function startServer() {

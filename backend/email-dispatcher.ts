@@ -87,6 +87,8 @@ export async function dispatchConfigurableEmail(invoice: any, action: string, pe
             emails = fallbackRecipients.filter(r => r.type === "PENDING_APPROVAL").map(r => r.email);
           } else if (rec.value === "Previous Approver") {
             emails.push(performedBy);
+          } else if (rec.value === "RACI Members") {
+            emails = fallbackRecipients.filter(r => r.type === "RACI_NOTIFICATION").map(r => r.email);
           } else if (rec.value === "Department Head" || rec.value === "PO Owner") {
              if (invoice.po_number) {
                const mock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });

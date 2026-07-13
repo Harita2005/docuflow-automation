@@ -3,28 +3,30 @@ import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCi
 
 export default function ConditionBuilder({ rules, setRules, setHasChanges, handleDeleteRuleLocal }) {
   const [editingRule, setEditingRule] = useState(null);
-  const [selectedDocType, setSelectedDocType] = useState(null);
-  const [addedDocTypes, setAddedDocTypes] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(null);
+  const [addedCategories, setAddedCategories] = useState([]);
   const [workflows, setWorkflows] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newTypeName, setNewTypeName] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
 
-  const handleAddDocType = () => {
+  const handleAddCategory = () => {
     setShowAddModal(true);
   };
 
-  const confirmAddDocType = (e) => {
+  const confirmAddCategory = (e) => {
     e.preventDefault();
-    if (newTypeName && newTypeName.trim()) {
-      const typeName = newTypeName.trim();
-      if (!addedDocTypes.includes(typeName)) {
-        setAddedDocTypes([...addedDocTypes, typeName]);
+    if (newCategoryName && newCategoryName.trim()) {
+      const catName = newCategoryName.trim();
+      if (!addedCategories.includes(catName)) {
+        setAddedCategories([...addedCategories, catName]);
       }
-      setSelectedDocType(typeName);
+      setSelectedCategory(catName);
+      setSelectedSubCategory(null);
       setShowAddModal(false);
-      setNewTypeName("");
+      setNewCategoryName("");
     }
   };
 
@@ -43,7 +45,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
     fetchWf();
   }, []);
 
-  const openEditor = (r = null, docType = null) => {
+  const openEditor = (r = null, defaultDocType = null) => {
     if (r) {
       setEditingRule(JSON.parse(JSON.stringify(r)));
     } else {
@@ -63,7 +65,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
           }
         }),
         target_workflow_id: workflows.length > 0 ? workflows[0].profile_name : '',
-        document_type: docType || 'Invoice'
+        document_type: defaultDocType || 'Invoice'
       });
     }
   };
@@ -94,38 +96,41 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
     setEditingRule(null);
   };
 
-  // Group rules by document_type
+  // Group rules by workflow_type (Category)
   const groupedRules = rules.reduce((acc, r) => {
-    const type = r.document_type || 'Invoice';
-    if (!acc[type]) acc[type] = [];
-    acc[type].push(r);
+    const wf = workflows.find(w => w.profile_name === r.target_workflow_id);
+    const category = wf?.workflow_type || 'Vendor Payment';
+    
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(r);
     return acc;
   }, {});
 
   if (!editingRule) {
-    if (!selectedDocType) {
+    // LEVEL 1: Render Categories
+    if (!selectedCategory) {
       return (
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">Routing Conditions</h2>
-              <p className="text-sm font-bold text-slate-500 mt-1">Select a document type to manage its routing rules.</p>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">Routing Categories</h2>
+              <p className="text-sm font-bold text-slate-500 mt-1">Select a category to manage its routing rules.</p>
             </div>
-            <button onClick={handleAddDocType} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-xs uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-              <Plus className="h-4 w-4" /> Add Doc Type
+            <button onClick={handleAddCategory} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-xs uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              <Plus className="h-4 w-4" /> Add Category
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...new Set(['AP Debit Note', ...Object.keys(groupedRules), ...addedDocTypes])].map(type => {
-              const ruleCount = groupedRules[type] ? groupedRules[type].length : 0;
+            {[...new Set(['Vendor Payment', ...Object.keys(groupedRules), ...addedCategories])].map(category => {
+              const ruleCount = groupedRules[category] ? groupedRules[category].length : 0;
               return (
-                <button key={type} onClick={() => setSelectedDocType(type)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                <button key={category} onClick={() => setSelectedCategory(category)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
                       <Settings2 className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">{type}</h3>
+                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">{category}</h3>
                       <p className="text-sm font-bold text-slate-500 mt-0.5">{ruleCount} Conditions</p>
                     </div>
                   </div>
@@ -135,30 +140,30 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             })}
           </div>
 
-          {/* ADD DOC TYPE MODAL */}
+          {/* ADD CATEGORY MODAL */}
           {showAddModal && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                  <h3 className="font-black text-slate-800 text-sm tracking-wide">Add New Document Type</h3>
+                  <h3 className="font-black text-slate-800 text-sm tracking-wide">Add New Category</h3>
                   <button aria-label="Close" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <form onSubmit={confirmAddDocType} className="p-6">
-                  <label htmlFor="docTypeName" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Document Type Name</label>
+                <form onSubmit={confirmAddCategory} className="p-6">
+                  <label htmlFor="categoryName" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Category Name</label>
                   <input 
-                    id="docTypeName"
+                    id="categoryName"
                     type="text"
-                    value={newTypeName}
-                    onChange={(e) => setNewTypeName(e.target.value)}
-                    placeholder="e.g. Expense Report"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="e.g. Payroll"
                     autoFocus
                     className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 outline-none mb-6"
                   />
                   <div className="flex justify-end gap-3">
                     <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-md transition-colors">Cancel</button>
-                    <button type="submit" disabled={!newTypeName.trim()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-sm transition-colors disabled:opacity-50">Add Document Type</button>
+                    <button type="submit" disabled={!newCategoryName.trim()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-sm transition-colors disabled:opacity-50">Add Category</button>
                   </div>
                 </form>
               </div>
@@ -172,12 +177,16 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-4">
-            <button aria-label="Back to Doc Types" onClick={() => setSelectedDocType(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+            <button aria-label="Back" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
               <ArrowRight className="h-4 w-4 rotate-180" />
             </button>
             <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">{selectedDocType} Conditions</h2>
-              <p className="text-sm font-bold text-slate-500 mt-1">Manage routing logic for {selectedDocType}s.</p>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                {selectedCategory} {selectedSubCategory ? `> ${selectedSubCategory}` : '> Doc Types'}
+              </h2>
+              <p className="text-sm font-bold text-slate-500 mt-1">
+                {selectedSubCategory ? `Manage routing logic for ${selectedSubCategory}` : `Select a document type to view its conditions.`}
+              </p>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
@@ -191,53 +200,98 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                 className="w-full text-xs pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all font-medium"
               />
             </div>
-            <button onClick={() => openEditor(null, selectedDocType)} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wide rounded-md transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0">
+            <button onClick={() => openEditor(null, selectedSubCategory || 'Invoice')} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wide rounded-md transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0">
               <Plus className="h-4 w-4" /> Create Condition
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          {(groupedRules[selectedDocType] || [])
-            .filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-            .sort((a,b)=>a.priority-b.priority).map((r) => {
-            let parsed = { conditions: [] };
-            try { parsed = JSON.parse(r.conditions_json); } catch(e) {}
-            // handle legacy conditions which might just be an array
-            if (Array.isArray(parsed)) parsed = { conditions: parsed };
-
-            return (
-              <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-300 transition-colors group flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center h-8 w-8 rounded bg-slate-100 text-slate-600 font-black text-xs">
-                    #{r.priority}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm">{r.rule_name || 'Unnamed Rule'}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm font-bold text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded">
-                        IF {parsed.conditions?.length || 0} Conditions Met
-                      </span>
-                      <ArrowRight className="h-3 w-3 text-slate-400" />
-                      <span className="text-sm font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
-                        TRIGGER: {r.target_workflow_id || 'None'}
-                      </span>
+        <div className="flex flex-col gap-8">
+          {!selectedSubCategory ? (
+            // LEVEL 2: Render SubCategories (Document Types)
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries((groupedRules[selectedCategory] || [])
+                .reduce((acc, r) => {
+                  const subCat = r.target_workflow_id?.includes(' - ') ? r.target_workflow_id.split(' - ')[0] : (r.document_type || 'Other Conditions');
+                  if (!acc[subCat]) acc[subCat] = [];
+                  acc[subCat].push(r);
+                  return acc;
+                }, {}))
+                .filter(([subCategoryName]) => subCategoryName.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map(([subCategoryName, subCategoryRules]) => (
+                  <div key={subCategoryName} onClick={() => { setSelectedSubCategory(subCategoryName); setSearchQuery(''); }} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Settings2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-sm tracking-wide">{subCategoryName}</h3>
+                        <p className="text-sm font-bold text-slate-500 mt-0.5">{subCategoryRules.length} Conditions</p>
+                      </div>
                     </div>
+                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
                   </div>
-                </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button type="button" aria-label="Edit Condition" onClick={() => openEditor(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 className="h-4 w-4" /></button>
-                  <button type="button" aria-label="Delete Condition" onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-4 w-4" /></button>
-                </div>
-              </div>
-            );
-          })}
-          {((groupedRules[selectedDocType] || []).filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))).length === 0 && (
-            <div className="py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
-               <Settings2 className="h-10 w-10 text-slate-300 mb-4" />
-               <h3 className="text-sm font-bold text-slate-700">No conditions found</h3>
-               <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new routing condition for {selectedDocType}.</p>
-               <button onClick={() => openEditor(null, selectedDocType)} className="mt-5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">Create Condition</button>
+                ))}
+                {Object.keys(groupedRules[selectedCategory] || []).length === 0 && (
+                  <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
+                    <Settings2 className="h-10 w-10 text-slate-300 mb-4" />
+                    <h3 className="text-sm font-bold text-slate-700">No conditions found</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new routing condition for {selectedCategory}.</p>
+                    <button onClick={() => openEditor(null, 'Invoice')} className="mt-5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors">Create Condition</button>
+                  </div>
+                )}
+            </div>
+          ) : (
+            // LEVEL 3: Render Conditions
+            <div className="grid grid-cols-1 gap-3">
+              {(groupedRules[selectedCategory] || [])
+                .filter(r => {
+                  const subCat = r.target_workflow_id?.includes(' - ') ? r.target_workflow_id.split(' - ')[0] : (r.document_type || 'Other Conditions');
+                  return subCat === selectedSubCategory;
+                })
+                .filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                .sort((a,b)=>a.priority-b.priority).map((r) => {
+                  let parsed = { conditions: [] };
+                  try { parsed = JSON.parse(r.conditions_json); } catch(e) {}
+                  if (Array.isArray(parsed)) parsed = { conditions: parsed };
+
+                  return (
+                    <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-300 transition-colors group flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-center h-8 w-8 rounded bg-slate-100 text-slate-600 font-black text-xs">
+                          #{r.priority}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800 text-sm">{r.rule_name || 'Unnamed Rule'}</h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm font-bold text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded">
+                              IF {parsed.conditions?.length || 0} Conditions Met
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-slate-400" />
+                            <span className="text-sm font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
+                              TRIGGER: {r.target_workflow_id || 'None'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" aria-label="Edit Condition" onClick={() => openEditor(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 className="h-4 w-4" /></button>
+                        <button type="button" aria-label="Delete Condition" onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {((groupedRules[selectedCategory] || []).filter(r => {
+                  const subCat = r.target_workflow_id?.includes(' - ') ? r.target_workflow_id.split(' - ')[0] : (r.document_type || 'Other Conditions');
+                  return subCat === selectedSubCategory;
+                }).filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))).length === 0 && (
+                  <div className="py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
+                    <Settings2 className="h-10 w-10 text-slate-300 mb-4" />
+                    <h3 className="text-sm font-bold text-slate-700">No conditions found</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new routing condition for {selectedSubCategory}.</p>
+                    <button onClick={() => openEditor(null, selectedSubCategory)} className="mt-5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">Create Condition</button>
+                  </div>
+                )}
             </div>
           )}
         </div>

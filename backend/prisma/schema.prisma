@@ -93,11 +93,13 @@ model Workflow {
 }
 
 model DocumentTemplate {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String
-  fields_json String   
-  created_at  DateTime @default(now())
+  id            String   @id @default(uuid())
+  name          String   @unique
+  description   String
+  fields_json   String   
+  category      String   @default("Vendor Payment Workflows")
+  document_type String   @default("AP Invoice")
+  created_at    DateTime @default(now())
 }
 
 model BusinessRule {
@@ -373,3 +375,8 @@ model RACIMatrix {
   @@unique([workflow_profile, event_name])
 }
 
+model Sequence {
+  id      String @id @default(uuid())
+  code    String @unique
+  current Int    @default(0)
+}

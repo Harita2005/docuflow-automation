@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "start": "tsx server.ts",
+    "deploy": "npx prisma db push --accept-data-loss && tsx server.ts",
+    "setup:db": "npx prisma db push",
     "test": "vitest run",
     "seed:users": "node seed_users.cjs"
   },

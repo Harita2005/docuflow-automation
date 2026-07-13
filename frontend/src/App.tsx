@@ -195,7 +195,7 @@ export default function App() {
     }
   }, [currentView, currentUserRole, isLoggedIn]);
 
-  function handleForceSync() {
+  function handleFullRefresh() {
     fetchDocuments();
     fetchStats();
   }
@@ -340,7 +340,7 @@ export default function App() {
             )}
 
             {currentView === "details" && (
-              loadingDocs && !activeDocument ? (
+              !activeDocument ? (
                 <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center animate-pulse">
                   <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4" />
                   <p className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">Loading Document Details...</p>
