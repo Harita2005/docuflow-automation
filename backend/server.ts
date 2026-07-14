@@ -51,15 +51,8 @@ registerNotificationAdminRoutes(app);
 
 // Security Middlewares (VAPT Requirements)
 app.use(helmet());
-const allowedOrigins = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"];
 app.use(cors({ 
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }, 
+  origin: true,
   credentials: true 
 }));
 
@@ -205,6 +198,7 @@ const upload = multer({ storage: storage, fileFilter: fileFilter });
 
 const LOCAL_LLM_URL = process.env.LOCAL_LLM_URL || "http://localhost:11434/api/generate";
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || "llama3.1:8b";
+const OLLAMA_BASE_URL = LOCAL_LLM_URL.replace("/api/generate", "");
 
 function evaluateRuleConditions(conditions: any[], invoice: any, erpData?: any): boolean {
   if (!conditions || conditions.length === 0) return true;
@@ -2602,7 +2596,7 @@ ${fewShotExample}
           let availableModels: string[] = [];
           let modelToUse = "llama3.2";
           try {
-            const tagsRes = await fetch("http://localhost:11434/api/tags");
+            const tagsRes = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
             if (tagsRes.ok) {
               const tagsData = await tagsRes.json();
               availableModels = tagsData.models.map((m: any) => m.name);
@@ -3188,7 +3182,7 @@ app.get("/api/admin/health", authenticateToken, async (req: any, res: any) => {
     try {
         const t2 = Date.now();
         // Just pinging the root of Ollama which returns 'Ollama is running'
-        const aiRes = await fetch("http://localhost:11434/", { signal: AbortSignal.timeout(3000) });
+        const aiRes = await fetch(`${OLLAMA_BASE_URL}/`, { signal: AbortSignal.timeout(3000) });
         if (aiRes.ok) {
             aiLatency = Date.now() - t2;
             aiEngine = "Online";
@@ -3929,6 +3923,17 @@ app.get('*', (req: any, res: any, next: any) => {
     return next();
   }
   res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
+
+// Fallback for unhandled API routes (404)
+app.use('/api', (req: any, res: any) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
+});
+
+// Global API error handler (500)
+app.use('/api', (err: any, req: any, res: any, next: any) => {
+  console.error('[Global API Error]', err);
+  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
 });
 
 // Start the server
