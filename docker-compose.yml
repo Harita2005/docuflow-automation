@@ -12,13 +12,19 @@ services:
       - LOCAL_LLM_URL=http://ollama:11434/api/generate
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
       # Connect to the SQL server via the DATABASE_URL defined in your .env file
-      - DATABASE_URL=- DATABASE_URL=sqlserver://YOUR_SQL_SERVER_IP:1433;database=YOUR_DATABASE_NAME;user=YOUR_USERNAME;password=YOUR_PASSWORD;trustServerCertificate=true;
+      - DATABASE_URL=sqlserver://YOUR_SQL_SERVER_IP:1433;database=YOUR_DATABASE_NAME;user=YOUR_USERNAME;password=YOUR_PASSWORD;trustServerCertificate=true;
     depends_on:
       - ollama
       - n8n
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').request('http://localhost:3000/', (res) => process.exit(0)).on('error', () => process.exit(1)).end()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
@@ -31,6 +37,12 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   ollama:
     image: ollama/ollama:latest

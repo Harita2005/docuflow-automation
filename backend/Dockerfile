@@ -37,5 +37,5 @@ COPY . .
 # Expose backend port
 EXPOSE 3000
 
-# Start command: Auto-create tables in SQL Server, then launch Node
-CMD ["sh", "-c", "npx prisma db push && npm run start"]
+# Start command: Auto-create tables in SQL Server, seed data, then launch Node
+CMD ["sh", "-c", "npx prisma db push && node load_seed.cjs && npm run start"]

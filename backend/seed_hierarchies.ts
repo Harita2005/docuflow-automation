@@ -2,13 +2,21 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const workflowsData = [
-  // AP INVOICE AND AP DEBIT NOTE
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
+  // AP INVOICE
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
+
+  // AP DEBIT NOTE
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
   
   // AR CREDITNOTE
   { docType: "AR CREDITNOTE", name: "AR CreditNote - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
@@ -43,9 +51,17 @@ const workflowsData = [
 async function main() {
   console.log("Deleting existing WorkflowStepDefinitions...");
   await prisma.workflowStepDefinition.deleteMany({});
+  await prisma.workflowProfile.deleteMany({});
 
   console.log("Seeding WorkflowStepDefinitions for Approval Hierarchies...");
   for (const wf of workflowsData) {
+    // Create the WorkflowProfile first to satisfy the foreign key constraint
+    await prisma.workflowProfile.upsert({
+      where: { profile_name: wf.name },
+      update: { workflow_type: wf.docType },
+      create: { profile_name: wf.name, workflow_type: wf.docType }
+    });
+
     for (let i = 0; i < wf.steps.length; i++) {
       const stepName = wf.steps[i];
       

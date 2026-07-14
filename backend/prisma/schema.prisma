@@ -15,6 +15,8 @@ model User {
   password_hash String
   role          String
   name          String
+  division      String?
+  department    String?
   permissions   String?   @default("[]")
   created_at    DateTime  @default(now())
 
@@ -164,17 +166,21 @@ model WorkflowProfile {
 }
 
 model WorkflowStepDefinition {
-  id              String   @id @default(uuid())
-  profile_name    String
-  stage_number    Int
-  approver_target String
-  action_required String   @default("Approve")
-  permissions     String   @default("Approve Only")
-  document_type   String   @default("Invoice")
+  id                String   @id @default(uuid())
+  profile_name      String
+  stage_number      Int
+  approver_target   String
+  action_required   String   @default("Approve")
+  permissions       String   @default("Approve Only")
+  document_type     String   @default("Invoice")
   
-  step_name       String?
-  role            String?
-  approver_type   String?
+  step_name         String?
+  role              String?
+  approver_type     String?
+  delegate_approver String?
+  escalation_rule   String?
+  target_division   String?
+  target_department String?
   
   workflowProfile WorkflowProfile? @relation(fields: [profile_name], references: [profile_name], onDelete: Cascade)
 }

@@ -146,7 +146,7 @@ export default function Dashboard({
       {currentUserRole === "admin" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3">
           <div 
-            onClick={() => { setListFilter('all'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('all'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/0 to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -165,7 +165,7 @@ export default function Dashboard({
           </div>
 
           <div 
-            onClick={() => { setListFilter('grn'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('grn'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -184,7 +184,7 @@ export default function Dashboard({
           </div>
 
           <div 
-            onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -203,7 +203,7 @@ export default function Dashboard({
           </div>
 
           <div 
-            onClick={() => { setListFilter('review'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('review'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-50/0 to-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -240,7 +240,7 @@ export default function Dashboard({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mt-3">
           <div 
-            onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -259,7 +259,7 @@ export default function Dashboard({
           </div>
 
           <div 
-            onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); }}
+          onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -381,7 +381,7 @@ export default function Dashboard({
                           </span>
                           <div className="flex items-center space-x-1.5 mt-0.5 text-[9px] font-medium text-slate-500 font-sans">
                             <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-bold uppercase tracking-widest border border-slate-200/50 shadow-sm">{doc.document_type || "Invoice"}</span>
-                            <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.tracking_id ? `${doc.tracking_id} | ${doc.invoice_number}` : (doc.invoice_number || "Checking...")}</span>
+                            <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""}</span>
                             <span className="text-slate-300">•</span>
                             <span className={`font-bold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-sm ${doc.status.includes('Approval') ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
                               {doc.status.includes("Approval") && doc.workflowInst?.current_stage_index 

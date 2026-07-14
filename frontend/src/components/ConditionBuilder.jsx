@@ -97,9 +97,19 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   };
 
   // Group rules by workflow_type (Category)
+  const DOC_TYPE_ORDER = [
+    "AP INVOICE",
+    "AP DEBIT NOTE",
+    "AR CREDITNOTE",
+    "VCC PURCHASE INVOICE",
+    "JOURNAL ENTRY",
+    "OCR AND INHOUSE OCR",
+    "PROJECT BUDGET",
+    "NON - RETURNABLE"
+  ];
+
   const groupedRules = rules.reduce((acc, r) => {
-    const wf = workflows.find(w => w.profile_name === r.target_workflow_id);
-    const category = wf?.workflow_type || 'Vendor Payment';
+    const category = 'Vendor Payment Workflows';
     
     if (!acc[category]) acc[category] = [];
     acc[category].push(r);
@@ -121,7 +131,8 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...new Set(['Vendor Payment', ...Object.keys(groupedRules), ...addedCategories])].map(category => {
+            {['Vendor Payment Workflows', ...addedCategories]
+              .map(category => {
               const ruleCount = groupedRules[category] ? groupedRules[category].length : 0;
               return (
                 <button key={category} onClick={() => setSelectedCategory(category)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
@@ -212,11 +223,19 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries((groupedRules[selectedCategory] || [])
                 .reduce((acc, r) => {
-                  const subCat = r.target_workflow_id?.includes(' - ') ? r.target_workflow_id.split(' - ')[0] : (r.document_type || 'Other Conditions');
+                  const subCat = r.document_type || 'Other Conditions';
                   if (!acc[subCat]) acc[subCat] = [];
                   acc[subCat].push(r);
                   return acc;
                 }, {}))
+                .sort(([subCatA], [subCatB]) => {
+                  let idxA = DOC_TYPE_ORDER.indexOf(subCatA.toUpperCase());
+                  let idxB = DOC_TYPE_ORDER.indexOf(subCatB.toUpperCase());
+                  if (idxA === -1) idxA = 999;
+                  if (idxB === -1) idxB = 999;
+                  if (idxA === idxB) return subCatA.localeCompare(subCatB);
+                  return idxA - idxB;
+                })
                 .filter(([subCategoryName]) => subCategoryName.toLowerCase().includes(searchQuery.toLowerCase()))
                 .map(([subCategoryName, subCategoryRules]) => (
                   <div key={subCategoryName} onClick={() => { setSelectedSubCategory(subCategoryName); setSearchQuery(''); }} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full">
@@ -246,37 +265,55 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             <div className="grid grid-cols-1 gap-3">
               {(groupedRules[selectedCategory] || [])
                 .filter(r => {
-                  const subCat = r.target_workflow_id?.includes(' - ') ? r.target_workflow_id.split(' - ')[0] : (r.document_type || 'Other Conditions');
+                  const subCat = r.document_type || 'Other Conditions';
                   return subCat === selectedSubCategory;
                 })
                 .filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-                .sort((a,b)=>a.priority-b.priority).map((r) => {
+                .sort((a,b)=> {
+                   if (a.priority !== b.priority) return a.priority - b.priority;
+                   const wfA = workflows.find(w => w.id === a.target_workflow_id || w.profile_name === a.target_workflow_id);
+                   const wfB = workflows.find(w => w.id === b.target_workflow_id || w.profile_name === b.target_workflow_id);
+                   const targetA = wfA?.profile_name || a.target_workflow_id || '';
+                   const targetB = wfB?.profile_name || b.target_workflow_id || '';
+                   return targetA.localeCompare(targetB, undefined, { numeric: true });
+                }).map((r, index) => {
                   let parsed = { conditions: [] };
                   try { parsed = JSON.parse(r.conditions_json); } catch(e) {}
                   if (Array.isArray(parsed)) parsed = { conditions: parsed };
 
+                  const targetWf = workflows.find(w => w.id === r.target_workflow_id || w.profile_name === r.target_workflow_id);
+                  const targetName = targetWf ? targetWf.profile_name : (r.target_workflow_id || 'None');
+
                   return (
-                    <div key={r.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-300 transition-colors group flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center justify-center h-8 w-8 rounded bg-slate-100 text-slate-600 font-black text-xs">
-                          #{r.priority}
+                    <div key={r.id} className="bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-300 hover:shadow transition-all group flex flex-col sm:flex-row sm:items-center gap-4">
+                      {/* Priority and Name */}
+                      <div className="flex items-center gap-3 w-full sm:w-1/3">
+                        <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50 text-indigo-700 font-black text-xs border border-indigo-100">
+                          {index + 1}
                         </div>
-                        <div>
-                          <h3 className="font-bold text-slate-800 text-sm">{r.rule_name || 'Unnamed Rule'}</h3>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-sm font-bold text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded">
-                              IF {parsed.conditions?.length || 0} Conditions Met
-                            </span>
-                            <ArrowRight className="h-3 w-3 text-slate-400" />
-                            <span className="text-sm font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
-                              TRIGGER: {r.target_workflow_id || 'None'}
-                            </span>
-                          </div>
-                        </div>
+                        <h3 className="font-bold text-slate-800 text-sm truncate" title={r.rule_name || 'Unnamed Rule'}>{r.rule_name || 'Unnamed Rule'}</h3>
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button type="button" aria-label="Edit Condition" onClick={() => openEditor(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 className="h-4 w-4" /></button>
-                        <button type="button" aria-label="Delete Condition" onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-4 w-4" /></button>
+                      
+                      {/* Conditions Met */}
+                      <div className="flex items-center gap-2 w-full sm:w-1/4">
+                         <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
+                           IF {parsed.conditions?.length || 0} Conditions
+                         </span>
+                      </div>
+                      
+                      {/* Target Workflow */}
+                      <div className="flex items-center gap-2 w-full sm:w-1/3">
+                        <ArrowRight className="hidden sm:block h-4 w-4 text-slate-300 flex-shrink-0" />
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md flex items-center gap-1.5 truncate" title={targetName}>
+                          <Network className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="truncate">{targetName}</span>
+                        </span>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-1 sm:ml-auto opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity justify-end w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-0 border-slate-100">
+                        <button type="button" aria-label="Edit Condition" onClick={() => openEditor(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit2 className="h-4 w-4" /></button>
+                        <button type="button" aria-label="Delete Condition" onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   );
@@ -336,7 +373,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-black text-slate-800 tracking-tight">Configure Condition</h2>
-          <p className="text-xs font-medium text-slate-500 mt-1">Define conditions to determine workflow path based on {selectedDocType?.toLowerCase() || 'document'} data.</p>
+          <p className="text-xs font-medium text-slate-500 mt-1">Define conditions to determine workflow path based on {selectedSubCategory?.toLowerCase() || 'document'} data.</p>
         </div>
         <div className="flex gap-3">
           <button type="button" onClick={() => setEditingRule(null)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-md hover:bg-slate-50 transition-colors shadow-sm">

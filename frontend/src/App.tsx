@@ -93,6 +93,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!isLoggedIn) return;
+
     fetchDocuments();
     fetchStats();
 

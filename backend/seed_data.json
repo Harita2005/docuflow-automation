@@ -1,0 +1,486 @@
+{
+  "templates": [
+    {
+      "id": "06e8068d-95b3-4d3a-b46f-372f6178d298",
+      "name": "NON - RETURNABLE",
+      "description": "Template for NON - RETURNABLE",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.765Z"
+    },
+    {
+      "id": "0e442b02-f5ad-43a1-8662-2fef8aa136ef",
+      "name": "JOURNAL ENTRY",
+      "description": "Template for JOURNAL ENTRY",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.707Z"
+    },
+    {
+      "id": "193cffb7-dd60-4f3d-bbdd-531504876ab9",
+      "name": "VCC PURCHASE INVOICE",
+      "description": "Template for VCC PURCHASE INVOICE",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.687Z"
+    },
+    {
+      "id": "30530297-0808-4b3a-a380-fe74f3d3c356",
+      "name": "AR CREDITNOTE",
+      "description": "Template for AR CREDITNOTE",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.675Z"
+    },
+    {
+      "id": "80dfe9f2-1ab0-4dfb-8a94-a4c7e6943daf",
+      "name": "PROJECT BUDGET",
+      "description": "Template for PROJECT BUDGET",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.750Z"
+    },
+    {
+      "id": "adcf1a14-99fe-43d5-a059-aaedc59ebd74",
+      "name": "AP DEBIT NOTE",
+      "description": "Template for AP DEBIT NOTE",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.662Z"
+    },
+    {
+      "id": "b22dac23-b440-4daf-8332-a70f0e7c1192",
+      "name": "AP INVOICE",
+      "description": "Template for AP INVOICE",
+      "fields_json": "{\n  \"fields\": [\n    {\n      \"name\": \"invoice_number\",\n      \"type\": \"string\",\n      \"required\": true\n    },\n    {\n      \"name\": \"amount\",\n      \"type\": \"number\",\n      \"required\": true\n    },\n    {\n      \"name\": \"vendor_name\",\n      \"type\": \"string\",\n      \"required\": true\n    },\n    {\n      \"name\": \"PO number\",\n      \"type\": \"string\",\n      \"description\": \"\",\n      \"required\": true\n    },\n    {\n      \"name\": \"Date\",\n      \"type\": \"date\",\n      \"description\": \"\",\n      \"required\": false\n    },\n    {\n      \"name\": \"Sgst\",\n      \"type\": \"number\",\n      \"description\": \"\"\n    },\n    {\n      \"name\": \"Cgst\",\n      \"type\": \"string\",\n      \"description\": \"\"\n    },\n    {\n      \"name\": \"Total Amount\",\n      \"type\": \"string\",\n      \"description\": \"\"\n    }\n  ],\n  \"instructions\": \"\"\n}",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.620Z"
+    },
+    {
+      "id": "fc9c75bb-2d64-4342-b8bc-d56ff6b31d4d",
+      "name": "OCR AND INHOUSE OCR",
+      "description": "Template for OCR AND INHOUSE OCR",
+      "fields_json": "[{\"name\":\"invoice_number\",\"type\":\"string\",\"required\":false},{\"name\":\"amount\",\"type\":\"number\",\"required\":false},{\"name\":\"vendor_name\",\"type\":\"string\",\"required\":false}]",
+      "category": "Vendor Payment Workflows",
+      "document_type": "AP Invoice",
+      "created_at": "2026-07-14T03:44:22.727Z"
+    }
+  ],
+  "rules": [
+    {
+      "id": "01f840aa-fc5b-4a8c-b4ca-fbba26771f48",
+      "rule_name": "Default Rule for AP Invoice - Workflow 5",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Invoice - Workflow 5",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T03:44:22.875Z"
+    },
+    {
+      "id": "14b8402e-8d44-47ac-a9f7-57539f005a0d",
+      "rule_name": "Default Rule for AP Invoice - Workflow 6",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Invoice - Workflow 6",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T03:44:22.889Z"
+    },
+    {
+      "id": "1a4f3b0c-cb38-47ef-9fb2-a81cf1d38482",
+      "rule_name": "Default Rule for OCR - Workflow 4",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 4",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.178Z"
+    },
+    {
+      "id": "31476dab-3091-4b03-ae3d-9bb66840fb4a",
+      "rule_name": "Default Rule for AP Invoice - Workflow 4",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Invoice - Workflow 4",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T03:44:22.862Z"
+    },
+    {
+      "id": "324b9218-a655-4e66-9f3a-e81b7bd7b6b7",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 5",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 5",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.977Z"
+    },
+    {
+      "id": "4157e1e5-c1ce-42e4-97f5-ee498a6b0c6d",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 1",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.902Z"
+    },
+    {
+      "id": "45df80d9-f2db-4890-9b4e-325ec1cab893",
+      "rule_name": "Default Rule for OCR - Workflow 6",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 6",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.214Z"
+    },
+    {
+      "id": "4604a171-cb26-4be7-80e2-077ae779f450",
+      "rule_name": "Default Rule for OCR - Workflow 2",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 2",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.144Z"
+    },
+    {
+      "id": "4c239c0f-c812-4d4b-acbc-ea2ba72de0a4",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 2",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 2",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.922Z"
+    },
+    {
+      "id": "665f978d-01c1-412a-8048-d9fdb3e68050",
+      "rule_name": "Default Rule for Non-Returnable - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "Non - Returnable - Workflow 1",
+      "document_type": "NON - RETURNABLE",
+      "created_at": "2026-07-14T03:44:23.263Z"
+    },
+    {
+      "id": "7ed37668-d242-49a2-af77-fd369f0bb0f0",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 3",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 3",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.941Z"
+    },
+    {
+      "id": "812e7c38-71c4-4831-9d89-0d90cfe341b8",
+      "rule_name": "Default Rule for VCC Purchase Invoice - Workflow 3",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "VCC Purchase Invoice - Workflow 3",
+      "document_type": "VCC PURCHASE INVOICE",
+      "created_at": "2026-07-14T03:44:23.088Z"
+    },
+    {
+      "id": "84aa254c-72db-40b3-a6bc-19965159516f",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 6",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 6",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.996Z"
+    },
+    {
+      "id": "875bb57f-16db-4849-8435-4206a022887b",
+      "rule_name": "Default Rule for AP Invoice - Workflow 1",
+      "priority": 100,
+      "conditions_json": "{\"condition_type\":\"Single Condition\",\"evaluate_on\":\"Invoice Amount\",\"conditions\":[{\"field\":\"Invoice Amount (Total)\",\"operator\":\"Greater Than\",\"value\":\"0\",\"logicalOperator\":\"AND\"}],\"settings\":{\"case_sensitive\":false,\"null_handling\":\"Consider as False\",\"date_format\":\"dd/mm/yyyy\"}}",
+      "target_workflow_id": "AP Invoice - Workflow 1",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T04:20:46.140Z"
+    },
+    {
+      "id": "8fd4fab5-7414-44ca-ac5c-fb9956754145",
+      "rule_name": "Default Rule for AP Invoice - Workflow 2",
+      "priority": 100,
+      "conditions_json": "{\"condition_type\":\"Single Condition\",\"evaluate_on\":\"Invoice Amount\",\"conditions\":[{\"field\":\"Invoice Amount (Total)\",\"operator\":\"Greater Than\",\"value\":\"0\",\"logicalOperator\":\"AND\"}],\"settings\":{\"case_sensitive\":false,\"null_handling\":\"Consider as False\",\"date_format\":\"dd/mm/yyyy\"}}",
+      "target_workflow_id": "AP Invoice - Workflow 2",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T04:20:46.189Z"
+    },
+    {
+      "id": "956e2bd4-ba4d-4577-92a8-9f4f9ba5d4d7",
+      "rule_name": "Default Rule for VCC Purchase Invoice - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "VCC Purchase Invoice - Workflow 1",
+      "document_type": "VCC PURCHASE INVOICE",
+      "created_at": "2026-07-14T03:44:23.060Z"
+    },
+    {
+      "id": "9c5aecf7-577d-490d-82f9-a1b2a4434ca7",
+      "rule_name": "Default Rule for OCR - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 1",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.127Z"
+    },
+    {
+      "id": "a96b751b-362b-45f7-8f0a-639e1f80acc6",
+      "rule_name": "Default Rule for AP Debit Note - Workflow 4",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Debit Note - Workflow 4",
+      "document_type": "AP DEBIT NOTE",
+      "created_at": "2026-07-14T03:44:22.958Z"
+    },
+    {
+      "id": "b6b6daf7-d56c-4195-8bee-7c937d2a0123",
+      "rule_name": "Default Rule for Journal Entry - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "Journal Entry - Workflow 1",
+      "document_type": "JOURNAL ENTRY",
+      "created_at": "2026-07-14T03:44:23.113Z"
+    },
+    {
+      "id": "bdf241f0-d979-4ab5-b5a2-351c8fd83d6f",
+      "rule_name": "Default Rule for VCC Purchase Invoice - Workflow 2",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "VCC Purchase Invoice - Workflow 2",
+      "document_type": "VCC PURCHASE INVOICE",
+      "created_at": "2026-07-14T03:44:23.075Z"
+    },
+    {
+      "id": "c06e8276-a900-4840-a490-b1aa386639ae",
+      "rule_name": "Default Rule for OCR - Workflow 3",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 3",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.160Z"
+    },
+    {
+      "id": "c5c7586b-c8cb-44ac-8572-542c66c2994e",
+      "rule_name": "Default Rule for AR CreditNote - Workflow 2",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AR CreditNote - Workflow 2",
+      "document_type": "AR CREDITNOTE",
+      "created_at": "2026-07-14T03:44:23.030Z"
+    },
+    {
+      "id": "d19eb2b9-ff7e-433a-b150-2cae10df8981",
+      "rule_name": "Default Rule for Project Budget - Workflow 2",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "Project Budget - Workflow 2",
+      "document_type": "PROJECT BUDGET",
+      "created_at": "2026-07-14T03:44:23.246Z"
+    },
+    {
+      "id": "df142dd0-cd1c-4274-b590-6a8d9305c9e2",
+      "rule_name": "Default Rule for AR CreditNote - Workflow 3",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AR CreditNote - Workflow 3",
+      "document_type": "AR CREDITNOTE",
+      "created_at": "2026-07-14T03:44:23.045Z"
+    },
+    {
+      "id": "e42a7554-9758-49bf-876a-da30c313d70a",
+      "rule_name": "Default Rule for Project Budget - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "Project Budget - Workflow 1",
+      "document_type": "PROJECT BUDGET",
+      "created_at": "2026-07-14T03:44:23.230Z"
+    },
+    {
+      "id": "e84179de-c401-4ad9-9823-4aecd9eda962",
+      "rule_name": "Default Rule for AR CreditNote - Workflow 1",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AR CreditNote - Workflow 1",
+      "document_type": "AR CREDITNOTE",
+      "created_at": "2026-07-14T03:44:23.014Z"
+    },
+    {
+      "id": "ed0cbef2-e4c1-4308-9474-1a4f05d94ede",
+      "rule_name": "Default Rule for OCR - Workflow 5",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "OCR - Workflow 5",
+      "document_type": "OCR AND INHOUSE OCR",
+      "created_at": "2026-07-14T03:44:23.195Z"
+    },
+    {
+      "id": "f3de1b3b-8fa7-4550-835a-405a802930cd",
+      "rule_name": "Default Rule for VCC Purchase Invoice - Workflow 4",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "VCC Purchase Invoice - Workflow 4",
+      "document_type": "VCC PURCHASE INVOICE",
+      "created_at": "2026-07-14T03:44:23.101Z"
+    },
+    {
+      "id": "f5633324-72f9-4e75-82f0-30d8d9145360",
+      "rule_name": "Default Rule for AP Invoice - Workflow 3",
+      "priority": 100,
+      "conditions_json": "[]",
+      "target_workflow_id": "AP Invoice - Workflow 3",
+      "document_type": "AP INVOICE",
+      "created_at": "2026-07-14T03:44:22.848Z"
+    }
+  ],
+  "workflows": [
+    {
+      "id": "12142587-bd6a-4920-b32c-bc25f9f064f8",
+      "workflow_name": "AP Debit Note - Workflow 3",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "20361ad0-5d2c-473c-964b-3328636b91b7",
+      "workflow_name": "AP Invoice - Workflow 5",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "2053867a-755d-4b32-9c30-eeffec592552",
+      "workflow_name": "AR CreditNote - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "25f4514b-924e-424b-b325-f190cd5e1755",
+      "workflow_name": "OCR - Workflow 3",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "29b14636-55be-4263-93a8-ebd7e0df6803",
+      "workflow_name": "VCC Purchase Invoice - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "41b71652-3025-4434-87a3-f1db1ae30a5d",
+      "workflow_name": "Journal Entry - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "462224aa-1b33-4a8e-90f9-a85ba8c1d3ce",
+      "workflow_name": "VCC Purchase Invoice - Workflow 4",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"}]}"
+    },
+    {
+      "id": "52958125-2cf1-4936-b5e4-fda32f887359",
+      "workflow_name": "OCR - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "58c5d195-6283-43a3-8a00-c268f586bb07",
+      "workflow_name": "OCR - Workflow 6",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"DEPARTMENT APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-5\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"},{\"source\":\"step-4\",\"target\":\"step-5\"}]}"
+    },
+    {
+      "id": "5bd1c437-f5bf-4dc6-aa8e-9b05f6346b34",
+      "workflow_name": "VCC Purchase Invoice - Workflow 3",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "727c4189-2069-470a-baab-d65a672777fa",
+      "workflow_name": "OCR - Workflow 4",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "7296975d-0173-4a07-951e-680f7d85bd91",
+      "workflow_name": "AR CreditNote - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "7703204d-c652-437c-b0e8-64b613a49641",
+      "workflow_name": "AP Invoice - Workflow 6",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-5\",\"type\":\"approval\",\"label\":\"3RD APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-6\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"},{\"source\":\"step-4\",\"target\":\"step-5\"},{\"source\":\"step-5\",\"target\":\"step-6\"}]}"
+    },
+    {
+      "id": "776277e2-f5d3-4733-8d50-b1bd65ec8d8b",
+      "workflow_name": "AR CreditNote - Workflow 3",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"}]}"
+    },
+    {
+      "id": "7d9547a3-78e9-45d3-87e7-2d14b4571c00",
+      "workflow_name": "AP Debit Note - Workflow 6",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-5\",\"type\":\"approval\",\"label\":\"3RD APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-6\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"},{\"source\":\"step-4\",\"target\":\"step-5\"},{\"source\":\"step-5\",\"target\":\"step-6\"}]}"
+    },
+    {
+      "id": "88fbd889-6942-45ea-b37e-2af61a2f0fd6",
+      "workflow_name": "AP Debit Note - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-5\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"},{\"source\":\"step-4\",\"target\":\"step-5\"}]}"
+    },
+    {
+      "id": "9ca9341c-4fcf-42f3-bd03-b4a2c0131120",
+      "workflow_name": "AP Invoice - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "a16d094b-339b-40b4-98f1-19041e49968b",
+      "workflow_name": "AP Debit Note - Workflow 4",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"}]}"
+    },
+    {
+      "id": "ae48847d-23c4-405e-8dc5-c65c48fc2103",
+      "workflow_name": "AP Debit Note - Workflow 5",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "b2c758df-6587-4066-882f-d33f2cec1c31",
+      "workflow_name": "OCR - Workflow 5",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"DEPARTMENT APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "b7d2a105-a746-4230-8f45-366c4535053d",
+      "workflow_name": "AP Invoice - Workflow 4",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"}]}"
+    },
+    {
+      "id": "b857ed89-55fb-4322-a137-11a15d72bd19",
+      "workflow_name": "Project Budget - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"}]}"
+    },
+    {
+      "id": "bbd67935-d4e0-4f2c-ba93-59c45c54df41",
+      "workflow_name": "Project Budget - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "bdf1c381-17c8-4655-a879-14be5b958f9f",
+      "workflow_name": "AP Debit Note - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "cf7eb1a5-72fa-4add-83ac-2020521b1bc6",
+      "workflow_name": "AP Invoice - Workflow 3",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "e8a3d664-5117-40c2-baae-f1a596ccf3e9",
+      "workflow_name": "Non-Returnable - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    },
+    {
+      "id": "ed9a148c-db5f-4725-a981-b38ea15e1f66",
+      "workflow_name": "AP Invoice - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-5\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"},{\"source\":\"step-4\",\"target\":\"step-5\"}]}"
+    },
+    {
+      "id": "f752c28a-d3c4-450b-8879-ef614c69496b",
+      "workflow_name": "OCR - Workflow 1",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"FIRST APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"SECOND APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-4\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"},{\"source\":\"step-3\",\"target\":\"step-4\"}]}"
+    },
+    {
+      "id": "fdf0fc12-7083-4111-a748-1259d0c49ab3",
+      "workflow_name": "VCC Purchase Invoice - Workflow 2",
+      "workflow_json": "{\"nodes\":[{\"id\":\"step-1\",\"type\":\"approval\",\"label\":\"ATTACHMENT STATUS\",\"approver\":\"TBD\"},{\"id\":\"step-2\",\"type\":\"approval\",\"label\":\"IA APPROVAL\",\"approver\":\"TBD\"},{\"id\":\"step-3\",\"type\":\"approval\",\"label\":\"FINAL APPROVAL\",\"approver\":\"TBD\"}],\"edges\":[{\"source\":\"step-1\",\"target\":\"step-2\"},{\"source\":\"step-2\",\"target\":\"step-3\"}]}"
+    }
+  ]
+}

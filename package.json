@@ -21,5 +21,9 @@
     "frontend/**/*.{js,jsx,ts,tsx}": [
       "npm run lint -w frontend"
     ]
+  },
+  "dependencies": {
+    "playwright": "^1.61.1",
+    "puppeteer": "^25.3.0"
   }
 }

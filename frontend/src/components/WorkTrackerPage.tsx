@@ -408,7 +408,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
                   <tr key={doc.id} className="hover:bg-slate-50/80 group transition-all cursor-pointer relative" onClick={() => onViewDocument(doc.id)}>
                     <td className="py-2.5 px-4 text-[10px] font-black text-slate-800 whitespace-nowrap">
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      {doc.tracking_id || doc.id.split('-')[1] || idx + 1}
+                      {doc.id}
                     </td>
                     <td className="py-2.5 px-2">
                       <div className="flex flex-col">

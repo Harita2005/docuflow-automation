@@ -2,7 +2,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const documentTypes = [
-  "AP INVOICE AND AP DEBIT NOTE",
+  "AP INVOICE",
+  "AP DEBIT NOTE",
   "AR CREDITNOTE",
   "VCC PURCHASE INVOICE",
   "JOURNAL ENTRY",
@@ -12,13 +13,21 @@ const documentTypes = [
 ];
 
 const workflowsData = [
-  // AP INVOICE AND AP DEBIT NOTE
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
-  { docType: "AP INVOICE AND AP DEBIT NOTE", name: "AP Invoice - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
+  // AP INVOICE
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
+  { docType: "AP INVOICE", name: "AP Invoice - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
+
+  // AP DEBIT NOTE
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 2", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 3", steps: ["ATTACHMENT STATUS", "IA APPROVAL", "FINAL APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 4", steps: ["ATTACHMENT STATUS", "IA APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 5", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL"] },
+  { docType: "AP DEBIT NOTE", name: "AP Debit Note - Workflow 6", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "SECOND APPROVAL", "IA APPROVAL", "3RD APPROVAL", "FINAL APPROVAL"] },
   
   // AR CREDITNOTE
   { docType: "AR CREDITNOTE", name: "AR CreditNote - Workflow 1", steps: ["ATTACHMENT STATUS", "FIRST APPROVAL", "IA APPROVAL", "FINAL APPROVAL"] },

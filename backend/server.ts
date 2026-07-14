@@ -11,7 +11,12 @@ import bcrypt from "bcrypt";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
+import { fileURLToPath } from "url";
+
 const execAsync = util.promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import { prisma } from "./server-db";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
@@ -71,10 +76,12 @@ const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_dev_only";
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: "Access denied. No token provided." });
+  if (!token) return res.sendStatus(401);
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) return res.status(403).json({ error: "Invalid token." });
+  jwt.verify(token, JWT_SECRET, async (err: any, decoded: any) => {
+    if (err) return res.sendStatus(403);
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user) return res.sendStatus(403); // Token is mathematically valid but user was deleted
     req.user = user;
     next();
   });
@@ -2183,7 +2190,11 @@ app.post("/api/admin/workflows", authenticateToken, async (req, res) => {
             approver_target: step.approver_target || '',
             permissions: step.permissions || 'Approve Only',
             action_required: step.action_required || 'Approve',
-            document_type: step.document_type || 'Any'
+            document_type: step.document_type || 'Any',
+            delegate_approver: step.delegate_approver || null,
+            escalation_rule: step.escalation_rule || null,
+            target_division: step.target_division || null,
+            target_department: step.target_department || null
           }
         });
       }
@@ -3906,6 +3917,9 @@ app.post("/api/admin/trigger-sla-check", authenticateToken, async (req: any, res
 // 60 * 60 * 1000 = 3600000 ms
 setInterval(runBackgroundWorker, 3600000);
 console.log("[BACKGROUND WORKER] Initialized for SLA and Data Retention processing.");
+
+// Serve uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve frontend static files in production
 const frontendDistPath = path.join(__dirname, '../frontend/dist');

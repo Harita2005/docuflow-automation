@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2 } from 'lucide-react';
 import AdminUsers from '../components/AdminUsers.jsx';
 import AdminMasterData from '../components/AdminMasterData.jsx';
 import AdminSystem from '../components/AdminSystem.jsx';
@@ -38,6 +38,7 @@ export default function Admin() {
   };
 
   const [activeTab, setActiveTab] = useState("routing");
+  const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   
   // New States for Search and Diagnostics
@@ -498,95 +499,39 @@ export default function Admin() {
     {activeTab === "templates" && (
       <div className="w-full bg-white/60 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden flex flex-col transition-all">
         <div className="border-b border-slate-100/80 bg-slate-50/50 p-2.5 px-3 flex items-center justify-between">
-          <h2 className="text-[10px] font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-widest">
-            <LayoutTemplate className="h-4 w-4 text-indigo-600" />
-            AI Document Templates
-          </h2>
-          <div className="relative w-full sm:w-64">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search templates..."
-              value={templateSearchQuery}
-              onChange={(e) => setTemplateSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-[10px] font-medium bg-white border border-slate-200 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700"
-            />
+          <div>
+            <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wider">
+              <Network className="h-4 w-4 text-purple-600" />
+              Dynamic Data Extraction Templates
+            </h2>
           </div>
+          <button
+            onClick={() => openEditTemplate(null)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Template
+          </button>
         </div>
-        <div className="flex flex-col lg:flex-row h-full min-h-[600px]">
-          {/* Left Sidebar */}
-          <div className="w-full lg:w-72 bg-white border-r border-slate-200/80 flex flex-col p-3 gap-2 overflow-y-auto">
-            {Object.keys(groupedTemplates).length === 0 && (
-               <div className="p-3 text-center text-slate-500 text-xs">No categories found. Create a template to start.</div>
-            )}
-            {Object.keys(groupedTemplates).map(cat => (
-              <div key={cat} className="mb-2">
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 rounded text-xs font-bold text-slate-700 uppercase tracking-wide border border-slate-100">
-                   <Network className="h-3 w-3 text-slate-400" /> {cat}
-                </div>
-                <div className="pl-4 mt-1 space-y-1">
-                  {Object.keys(groupedTemplates[cat]).map(subCat => (
-                    <button 
-                      key={subCat}
-                      onClick={() => {
-                        setSelectedTemplateCategory(cat);
-                        setSelectedTemplateSubCategory(subCat);
-                        setEditingTemplate(null);
-                      }}
-                      className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-md transition-colors text-xs ${selectedTemplateCategory === cat && selectedTemplateSubCategory === subCat ? 'bg-purple-100 text-purple-700 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                      {subCat}
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${selectedTemplateCategory === cat && selectedTemplateSubCategory === subCat ? 'bg-purple-200 text-purple-800' : 'bg-slate-200 text-slate-500'}`}>
-                        {groupedTemplates[cat][subCat].length}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <button onClick={() => {
-              const newCat = prompt("Enter new Category name (e.g. HR Documents):");
-              if (!newCat) return;
-              const newSub = prompt("Enter new Document Type (e.g. Offer Letter):");
-              if (!newSub) return;
-              setSelectedTemplateCategory(newCat);
-              setSelectedTemplateSubCategory(newSub);
-            }} className="mt-4 flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-bold text-xs rounded-md transition-colors w-full justify-center">
-              <Plus className="h-3 w-3" /> Add Folder
-            </button>
-          </div>
 
-          {/* Right Pane */}
-          <div className="p-0 flex-1 overflow-y-auto relative bg-slate-50/50">
-
+        <div className="p-0 flex-1">
           {editingTemplate && (
             <div className="bg-purple-50/30 p-3 border-b border-purple-100/50">
               <form onSubmit={handleSaveTemplateLocal} className="space-y-4 relative">
-                <button type="button" aria-label="Close" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="absolute -top-1 -right-1 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded p-1">
+                <button type="button" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="absolute -top-1 -right-1 text-slate-400 hover:text-slate-600">
                   <X className="h-4 w-4" />
                 </button>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Category</label>
-                    <input type="text" name="category" defaultValue={editingTemplate.category} required className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner bg-white" />
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Template Name (e.g., Contract)</label>
+                    <input type="text" name="name" defaultValue={editingTemplate.name} required className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Document Type</label>
-                    <input type="text" name="document_type" defaultValue={editingTemplate.document_type} required className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Template Name (e.g., Contract)</label>
-                    <input type="text" name="name" defaultValue={editingTemplate.name} required className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Description</label>
-                    <input type="text" name="description" defaultValue={editingTemplate.description} className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner bg-white" />
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Description</label>
+                    <input type="text" name="description" defaultValue={editingTemplate.description} className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner" />
                   </div>
                 </div>
                 <div className="pt-2 border-t border-purple-100">
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Global AI Instructions</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Global AI Instructions</label>
                   <textarea 
                     name="instructions" 
                     value={templateInstructions} 
@@ -598,8 +543,8 @@ export default function Admin() {
                 </div>
                 <div className="pt-2 border-t border-purple-100">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">Document Fields</label>
-                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1.5 text-xs font-bold text-purple-700 hover:text-purple-800 bg-purple-100 hover:bg-purple-200 px-3 py-1.5 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Document Fields</label>
+                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1 text-[9px] font-bold text-purple-600 hover:text-purple-800 bg-purple-100/50 hover:bg-purple-100 px-2 py-1 rounded">
                       <Plus className="h-3 w-3" /> Add Field
                     </button>
                   </div>
@@ -632,7 +577,7 @@ export default function Admin() {
                           <option value="boolean">Boolean</option>
                           <option value="date">Date</option>
                         </select>
-                        <label className="flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 rounded cursor-pointer transition-colors" title="Mark as Required Field">
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1.5 rounded" title="Mark as Required Field">
                           <input 
                             type="checkbox" 
                             checked={field.required || false}
@@ -641,9 +586,10 @@ export default function Admin() {
                               newFields[idx].required = e.target.checked;
                               setTemplateFields(newFields);
                             }}
-                            className="cursor-pointer focus-visible:ring-2 focus-visible:ring-purple-500" />
-                          <span className="text-xs font-bold text-slate-600 uppercase tracking-wide ml-1">Req</span>
-                        </label>
+                            className="cursor-pointer"
+                          />
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer">Req</label>
+                        </div>
                         <input
                           type="text"
                           placeholder="Description / Hint"
@@ -655,111 +601,176 @@ export default function Admin() {
                           }}
                           className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-purple-400 focus:outline-none"
                         />
-                        <button type="button" aria-label="Remove Field" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                        <button type="button" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-rose-500 transition-colors">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     ))}
                     {templateFields.length === 0 && (
-                      <div className="text-center p-3 border border-dashed border-slate-300 rounded text-slate-400 text-xs italic bg-slate-50/50">
-                        No fields defined. Add fields to extract specific data.
-                      </div>
+                      <div className="text-[10px] text-center p-4 border border-dashed border-slate-200 rounded text-slate-400">No fields added. Click "Add Field" to define extraction schema.</div>
                     )}
                   </div>
                 </div>
-                <div className="pt-3 border-t border-purple-100 flex justify-end gap-2">
-                  <button type="button" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                    Cancel
-                  </button>
-                  <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                    <Save className="h-3.5 w-3.5" /> Save Template
+                <div className="flex justify-end pt-2">
+                  <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold rounded shadow transition-colors uppercase tracking-wider">
+                    <Save className="h-3 w-3" /> Save Draft
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          <div className="p-3 pb-24 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(groupedTemplates[selectedTemplateCategory]?.[selectedTemplateSubCategory] || []).filter(t => t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) || (t.description||'').toLowerCase().includes(templateSearchQuery.toLowerCase())).length === 0 ? (
-               <div className="col-span-full p-8 text-center bg-white border border-dashed border-slate-200 rounded-xl shadow-sm text-slate-400 text-xs italic flex flex-col items-center gap-2">
-                 <LayoutTemplate className="h-6 w-6 text-slate-300" />
-                 No templates found in this folder.
-               </div>
-            ) : (
-              (groupedTemplates[selectedTemplateCategory]?.[selectedTemplateSubCategory] || []).filter(t => t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) || (t.description||'').toLowerCase().includes(templateSearchQuery.toLowerCase())).map(template => (
-                <div key={template.id} className="bg-white border border-slate-200/80 rounded-xl shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col relative">
-                  <div className="h-1 w-full bg-gradient-to-r from-indigo-400 to-purple-400 absolute top-0 left-0"></div>
-                  <div className="p-3 pb-2 flex-1">
-                    <div className="flex justify-between items-start mb-1.5">
-                      <h3 className="font-bold text-slate-700 text-xs truncate flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
-                        <span title={template.name}>{template.name}</span>
-                      </h3>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => handleEditTemplate(template)} className="p-1 rounded bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" title="Edit Template">
-                           <Edit3 className="h-3 w-3" />
-                         </button>
-                         <button onClick={() => handleDeleteTemplate(template.id)} className="p-1 rounded bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" title="Delete Template">
-                           <Trash2 className="h-3 w-3" />
-                         </button>
-                      </div>
+          {!selectedTemplateCategory ? (
+            <div className="p-4 bg-slate-50/30">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div onClick={() => setSelectedTemplateCategory('Vendor Payment Workflows')} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+                      <Network className="h-5 w-5" />
                     </div>
-                    {template.description && (
-                      <p className="text-[10px] text-slate-500 line-clamp-2 mb-2 leading-relaxed">{template.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-1 mt-auto">
-                       {JSON.parse(template.fields_json || "[]").slice(0,3).map(f => (
-                         <span key={f.name} className="px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 text-[8px] rounded-md font-mono truncate max-w-[80px]" title={f.name}>{f.name}</span>
-                       ))}
-                       {JSON.parse(template.fields_json || "[]").length > 3 && (
-                         <span className="px-1.5 py-0.5 bg-slate-50 text-slate-400 border border-slate-200 text-[8px] rounded-md">+{JSON.parse(template.fields_json).length - 3}</span>
-                       )}
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">Vendor Payment Workflows</h3>
+                      <p className="text-sm font-bold text-slate-500 mt-0.5">{templates.length} Templates</p>
                     </div>
                   </div>
-                  <div className="bg-slate-50/50 border-t border-slate-100 p-2 flex items-center justify-between">
-                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                       {JSON.parse(template.fields_json || "[]").length} fields
-                     </span>
-                     <button onClick={() => handleTestSandbox(template)} className="text-[9px] font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 px-2 py-1 bg-purple-50 hover:bg-purple-100 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                       <Play className="h-3 w-3" /> Test Sandbox
-                     </button>
+                  <ArrowRight className="h-5 w-5 text-slate-300 group-hover:text-purple-500 transition-colors" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-slate-50/30">
+              <div className="mb-4 flex flex-col md:flex-row justify-between md:items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div className="flex items-center gap-3">
+                  <button aria-label="Back" onClick={() => setSelectedTemplateCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+                    <ArrowRight className="h-4 w-4 rotate-180" />
+                  </button>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                      <Settings2 className="h-4 w-4 text-purple-600" /> Vendor Payment
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-500 mt-1">Extraction templates for vendor invoices, debit notes, and related documents.</p>
                   </div>
                 </div>
-              ))
-            )}
+              </div>
 
-            {sandboxResult && !testingSandbox && (
-               <div className="mt-4 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden relative animate-fadeIn col-span-full">
-                 <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-3 flex items-center justify-between">
-                   <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                     <Activity className="h-4 w-4" /> Live Extraction Results: {sandboxResult.templateName}
-                   </h3>
-                   <button onClick={() => setSandboxResult(null)} className="text-white/80 hover:text-white p-1 bg-white/10 hover:bg-white/20 rounded transition-colors"><X className="h-4 w-4" /></button>
-                 </div>
-                 <div className="p-4 grid grid-cols-2 gap-4">
-                   <div>
-                     <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">JSON Output</h4>
-                     <pre className="bg-slate-900 text-green-400 p-3 rounded-lg text-[10px] font-mono h-64 overflow-auto shadow-inner">
-                       {JSON.stringify(sandboxResult.extractedData, null, 2)}
-                     </pre>
-                   </div>
-                   <div>
-                     <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">OCR Text Detected</h4>
-                     <pre className="bg-slate-50 border border-slate-100 text-slate-600 p-3 rounded-lg text-[9px] font-mono h-64 overflow-auto shadow-inner whitespace-pre-wrap">
-                       {sandboxResult.rawOcr}
-                     </pre>
-                   </div>
-                 </div>
-                 {sandboxResult.error && (
-                    <div className="p-3 bg-red-50 border-t border-red-100 text-red-700 text-xs font-bold font-mono">Error: {sandboxResult.error}</div>
-                 )}
+              <div className="grid grid-cols-1 gap-4">
+                {templates.length === 0 ? (
+                   <div className="p-8 text-center text-slate-400 text-xs font-bold bg-white rounded-xl border border-slate-200">No templates configured yet.</div>
+                ) : (
+                 templates.map(t => {
+                   const isDraft = t.id && String(t.id).startsWith('tmp-');
+                   let parsedFields = [];
+                   try { 
+                     const p = JSON.parse(t.fields_json); 
+                     if (Array.isArray(p)) {
+                       parsedFields = p;
+                     } else if (p && Array.isArray(p.fields)) {
+                       parsedFields = p.fields;
+                     }
+                   } catch(e) {}
+                   
+                   return (
+                     <div key={t.id} className={`bg-white border border-slate-200 rounded-xl p-4 flex flex-col group hover:border-purple-300 hover:shadow-md transition-all ${isDraft ? 'bg-amber-50/20' : ''}`}>
+                       <div className="flex items-start justify-between">
+                         <div>
+                           <div className="flex items-center gap-2 mb-1">
+                             <h3 className="font-bold text-slate-800 text-sm">{t.name}</h3>
+                             {isDraft && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Draft</span>}
+                           </div>
+                           <p className="text-xs text-slate-500">{t.description}</p>
+                         </div>
+                         <div className="flex gap-1.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => {
+                              const fileInput = document.createElement('input');
+                              fileInput.type = 'file';
+                              fileInput.accept = 'application/pdf,image/*';
+                              fileInput.onchange = async (e) => {
+                                 const file = e.target.files[0];
+                                 if(!file) return;
+                                 setTestingSandbox(true);
+                                 const token = localStorage.getItem("authToken");
+                                 const formData = new FormData();
+                                 formData.append("file", file);
+                                 formData.append("template", JSON.stringify(t));
+                                 try {
+                                   const res = await fetch("/api/admin/test-template", {
+                                     method: "POST",
+                                     headers: token ? { "Authorization": `Bearer ${token}` } : {},
+                                     body: formData
+                                   });
+                                   const data = await res.json();
+                                   setSandboxResult({ ...data, templateName: t.name });
+                                 } catch (err) {
+                                   alert("Sandbox testing failed: " + err.message);
+                                 } finally {
+                                   setTestingSandbox(false);
+                                 }
+                              };
+                              fileInput.click();
+                            }} className="px-2.5 py-1.5 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 text-[10px] font-bold rounded-md shadow-sm flex items-center gap-1 transition-colors"><Activity className="h-3.5 w-3.5" /> Test Sandbox</button>
+                            <button onClick={() => openEditTemplate(t)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"><Edit2 className="h-4 w-4" /></button>
+                            <button onClick={() => handleDeleteTemplateLocal(t.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
+                         </div>
+                       </div>
+                       
+                       <div className="mt-4 pt-3 border-t border-slate-100">
+                          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Extraction Schema ({parsedFields.length} fields)</h4>
+                          <div className="flex flex-wrap gap-2">
+                             {parsedFields.length === 0 && <span className="text-xs text-slate-400 italic">No fields defined</span>}
+                             {parsedFields.map((f, i) => (
+                               <div key={i} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-md hover:bg-slate-100 transition-colors">
+                                 <span className="text-xs font-bold text-slate-700">{f.name}</span>
+                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-1 bg-white border border-slate-200 rounded">{f.type}</span>
+                                 {f.required && <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest ml-1" title="Required Field">REQ</span>}
+                               </div>
+                             ))}
+                          </div>
+                       </div>
+                     </div>
+                   );
+                 })
+              )}
+              </div>
+            </div>
+          )}
+
+          {testingSandbox && (
+             <div className="mt-4 p-6 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-col items-center justify-center animate-pulse">
+                <Loader2 className="h-6 w-6 text-indigo-500 animate-spin mb-2" />
+                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Running AI Extraction Sandbox...</span>
+             </div>
+          )}
+
+          {sandboxResult && !testingSandbox && (
+             <div className="mt-4 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden relative animate-fadeIn">
+               <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-3 flex items-center justify-between">
+                 <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                   <Activity className="h-4 w-4" /> Live Extraction Results: {sandboxResult.templateName}
+                 </h3>
+                 <button onClick={() => setSandboxResult(null)} className="text-white/80 hover:text-white p-1 bg-white/10 hover:bg-white/20 rounded transition-colors"><X className="h-4 w-4" /></button>
                </div>
-            )}
-          </div>
+               <div className="p-4 grid grid-cols-2 gap-4">
+                 <div>
+                   <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">JSON Output</h4>
+                   <pre className="bg-slate-900 text-green-400 p-3 rounded-lg text-[10px] font-mono h-64 overflow-auto shadow-inner">
+                     {JSON.stringify(sandboxResult.extractedData, null, 2)}
+                   </pre>
+                 </div>
+                 <div>
+                   <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">OCR Text Detected</h4>
+                   <pre className="bg-slate-50 border border-slate-100 text-slate-600 p-3 rounded-lg text-[9px] font-mono h-64 overflow-auto shadow-inner whitespace-pre-wrap">
+                     {sandboxResult.rawOcr}
+                   </pre>
+                 </div>
+               </div>
+               {sandboxResult.error && (
+                  <div className="p-3 bg-red-50 border-t border-red-100 text-red-700 text-xs font-bold font-mono">Error: {sandboxResult.error}</div>
+               )}
+             </div>
+          )}
         </div>
       </div>
-    </div>
-  )}
+    )}
 
   {/* --- AUDIT LOGS TAB CONTENT --- */}
     {activeTab === "audit" && (

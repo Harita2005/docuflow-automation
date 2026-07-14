@@ -8,8 +8,8 @@ const getPrefixCode = (category, subCat) => {
   
   if (cat.includes("VENDOR PAYMENT")) {
     if (sub.includes("AP INVOICE")) return "VP11";
-    if (sub.includes("CREDITNOTE")) return "VP12";
-    if (sub.includes("DEBITNOTE")) return "VP13";
+    if (sub.includes("CREDITNOTE") || sub.includes("CREDIT NOTE")) return "VP12";
+    if (sub.includes("DEBITNOTE") || sub.includes("DEBIT NOTE")) return "VP13";
     if (sub.includes("PURCHASE ORDER") || sub.includes("PURCHASE")) return "VP14";
     if (sub.includes("JOURNAL ENTRY") || sub.includes("JOURNAL")) return "VP15";
     return "VP99";
@@ -25,8 +25,8 @@ const getWorkflowPrefixCode = (category, subCat, index) => {
   
   if (cat.includes("VENDOR PAYMENT")) {
     if (sub.includes("AP INVOICE")) return `INV-11${num}`;
-    if (sub.includes("CREDITNOTE")) return `CN-12${num}`;
-    if (sub.includes("DEBITNOTE")) return `DN-13${num}`;
+    if (sub.includes("CREDITNOTE") || sub.includes("CREDIT NOTE")) return `CN-12${num}`;
+    if (sub.includes("DEBITNOTE") || sub.includes("DEBIT NOTE")) return `DN-13${num}`;
     if (sub.includes("PURCHASE ORDER") || sub.includes("PURCHASE")) return `PO-14${num}`;
     if (sub.includes("JOURNAL ENTRY") || sub.includes("JOURNAL")) return `JE-15${num}`;
     return `WF-99${num}`;
@@ -45,6 +45,7 @@ export default function FlowBuilder({ users = [] }) {
   const [draggedStepIdx, setDraggedStepIdx] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  const [configuringStepIndex, setConfiguringStepIndex] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -139,7 +140,11 @@ export default function FlowBuilder({ users = [] }) {
           approver_type: 'Specific Employee',
           approver_target: '',
           permissions: 'Approve Only',
-          action_required: 'Approve'
+          action_required: 'Approve',
+          delegate_approver: '',
+          escalation_rule: '',
+          target_division: '',
+          target_department: ''
         }]
       });
     }
@@ -204,7 +209,11 @@ export default function FlowBuilder({ users = [] }) {
       approver_type: 'Role Based',
       approver_target: '',
       permissions: 'Approve Only',
-      action_required: 'Approve'
+      action_required: 'Approve',
+      delegate_approver: '',
+      escalation_rule: '',
+      target_division: '',
+      target_department: ''
     }];
     setEditingWorkflow({ ...editingWorkflow, steps: newSteps });
   };
@@ -261,8 +270,19 @@ export default function FlowBuilder({ users = [] }) {
     return <div className="p-8 text-center text-slate-500 font-bold">Loading Workflows...</div>;
   }
 
+  const DOC_TYPE_ORDER = [
+    "AP INVOICE",
+    "AP DEBIT NOTE",
+    "AR CREDITNOTE",
+    "VCC PURCHASE INVOICE",
+    "JOURNAL ENTRY",
+    "OCR AND INHOUSE OCR",
+    "PROJECT BUDGET",
+    "NON - RETURNABLE"
+  ];
+
   const groupedWorkflows = workflows.reduce((acc, wf) => {
-    const category = wf.workflow_type || 'General';
+    const category = 'Vendor Payment Workflows';
     if (!acc[category]) acc[category] = [];
     acc[category].push(wf);
     return acc;
@@ -375,11 +395,19 @@ export default function FlowBuilder({ users = [] }) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries((groupedWorkflows[selectedCategory] || [])
                 .reduce((acc, wf) => {
-                  const subCategory = wf.profile_name.includes(' - ') ? wf.profile_name.split(' - ')[0] : 'Other Workflows';
+                  const subCategory = wf.workflow_type || 'Other Workflows';
                   if (!acc[subCategory]) acc[subCategory] = [];
                   acc[subCategory].push(wf);
                   return acc;
                 }, {}))
+                .sort(([subCatA], [subCatB]) => {
+                  let idxA = DOC_TYPE_ORDER.indexOf(subCatA.toUpperCase());
+                  let idxB = DOC_TYPE_ORDER.indexOf(subCatB.toUpperCase());
+                  if (idxA === -1) idxA = 999;
+                  if (idxB === -1) idxB = 999;
+                  if (idxA === idxB) return subCatA.localeCompare(subCatB);
+                  return idxA - idxB;
+                })
                 .filter(([subCat]) => subCat.toLowerCase().includes(searchQuery.toLowerCase()))
                 .map(([subCat, wfs]) => (
                   <button key={subCat} onClick={() => setSelectedSubCategory(subCat)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
@@ -405,7 +433,7 @@ export default function FlowBuilder({ users = [] }) {
               }
               {Object.keys((groupedWorkflows[selectedCategory] || [])
                 .reduce((acc, wf) => {
-                  const subCategory = wf.profile_name.includes(' - ') ? wf.profile_name.split(' - ')[0] : 'Other Workflows';
+                  const subCategory = wf.workflow_type || 'Other Workflows';
                   if (!acc[subCategory]) acc[subCategory] = [];
                   acc[subCategory].push(wf);
                   return acc;
@@ -421,8 +449,9 @@ export default function FlowBuilder({ users = [] }) {
             <div key={selectedSubCategory}>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {((groupedWorkflows[selectedCategory] || [])
-                  .filter(wf => (wf.profile_name.includes(' - ') ? wf.profile_name.split(' - ')[0] : 'Other Workflows') === selectedSubCategory)
+                  .filter(wf => (wf.workflow_type || 'Other Workflows') === selectedSubCategory)
                   .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                  .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }))
                 ).map((wf, index) => (
                   <div key={wf.profile_name} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 transition-colors group flex flex-col h-full">
                     <div className="flex justify-between items-start mb-2">
@@ -488,7 +517,8 @@ export default function FlowBuilder({ users = [] }) {
 
   // EDIT VIEW (The requested Redesign)
   return (
-    <form onSubmit={handleSave} className="flex flex-col gap-6 bg-slate-50 min-h-screen rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-8">
+    <>
+      <form onSubmit={handleSave} className="flex flex-col gap-6 bg-slate-50 min-h-screen rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-8">
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-600" onClick={() => setEditingWorkflow(null)}>
@@ -566,7 +596,6 @@ export default function FlowBuilder({ users = [] }) {
                   <tr className="border-b border-slate-100">
                     <th className="pb-3 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-12 text-center">Step</th>
                     <th className="pb-3 px-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-40">Stage Title</th>
-                    <th className="pb-3 px-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-32">Authorization Level</th>
                     <th className="pb-3 px-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Assignment Strategy & Target</th>
                     <th className="pb-3 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-16 text-right">Actions</th>
                   </tr>
@@ -592,46 +621,19 @@ export default function FlowBuilder({ users = [] }) {
                       <td className="py-3 px-2 align-top">
                         <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs p-2 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
                       </td>
-                      <td className="py-3 px-2 align-top">
-                        <select value={step.role || 'Employee'} onChange={e => updateStep(idx, 'role', e.target.value)} className="w-full text-xs p-2 pr-8 truncate bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium">
-                          <option value="Employee">Employee</option>
-                          <option value="Manager">Manager</option>
-                          <option value="Director">Director</option>
-                          <option value="VP">VP</option>
-                          <option value="CITO">CITO</option>
-                          <option value="GM">GM</option>
-                        </select>
-                      </td>
-                      <td className="py-3 px-2 align-top">
-                        <div className="flex gap-2">
-                          <select value={step.approver_type || 'Specific Employee'} onChange={e => {
-                            updateStep(idx, 'approver_type', e.target.value);
-                            updateStep(idx, 'approver_target', ''); // reset target on change
-                          }} className="w-1/3 text-xs p-2 pr-8 truncate bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium">
-                            <option value="Specific Employee">Specific Employee</option>
-                            <option value="Role Based">Role Based</option>
-                          </select>
-                          
-                          <div className="w-2/3">
-                            {step.approver_type === 'Specific Employee' ? (
-                              <select value={step.approver_target} onChange={e => updateStep(idx, 'approver_target', e.target.value)} className="w-full text-xs p-2 pr-8 truncate bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium">
-                                <option value="">-- Select Employee --</option>
-                                {users.map(u => <option key={u.id} value={u.username}>{u.name || (u.first_name + ' ' + u.last_name)} ({u.employee_id || u.emp_id})</option>)}
-                              </select>
-                            ) : (
-                              <select value={step.approver_target} onChange={e => updateStep(idx, 'approver_target', e.target.value)} className="w-full text-xs p-2 pr-8 truncate bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium">
-                                <option value="">-- Select Role Target --</option>
-                                <option value="Finance Manager">Finance Manager</option>
-                                <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
-                                <option value="General Manager">General Manager</option>
-                                <option value="Department Head">Department Head</option>
-                              </select>
-                            )}
-                          </div>
+                      <td className="py-3 px-2 align-middle">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
+                          <span className="text-xs text-slate-500 mt-0.5">
+                            {step.approver_target ? step.approver_target : 'Not configured'}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3 align-top text-right pr-2">
                         <div className="flex items-center justify-end gap-1">
+                          <button type="button" onClick={() => setConfiguringStepIndex(idx)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label="Configure Step">
+                            <Settings2 className="h-4 w-4" />
+                          </button>
                           <button type="button" onClick={() => moveStepUp(idx)} disabled={idx === 0} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label="Move Step Up">
                             <ArrowUp className="h-4 w-4" />
                           </button>
@@ -754,5 +756,111 @@ export default function FlowBuilder({ users = [] }) {
         </div>
       </div>
     </form>
+    
+    {configuringStepIndex !== null && editingWorkflow.steps[configuringStepIndex] && (
+      <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setConfiguringStepIndex(null)} />
+        <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div>
+              <h3 className="text-base font-black text-slate-800">Configure Step {configuringStepIndex + 1}</h3>
+              <p className="text-xs font-bold text-slate-500 mt-1">{editingWorkflow.steps[configuringStepIndex].step_name || 'Untitled Step'}</p>
+            </div>
+            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-2 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          
+          <div className="p-6 flex-1 overflow-y-auto">
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Assignment Strategy</label>
+                <select value={editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee'} onChange={e => {
+                  updateStep(configuringStepIndex, 'approver_type', e.target.value);
+                  updateStep(configuringStepIndex, 'approver_target', '');
+                }} className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg shadow-sm focus:border-blue-500 outline-none text-slate-800 font-bold">
+                  <option value="Specific Employee">Specific Employee (Direct Assignment)</option>
+                  <option value="Role Based">Role Based (Dynamic Routing)</option>
+                </select>
+              </div>
+              
+              <div className="pt-2">
+                {(editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee') === 'Specific Employee' ? (
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Primary Assignee</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- Select Target Employee --</option>
+                        {users.map(u => <option key={u.id} value={u.username}>{u.name || (u.first_name + ' ' + u.last_name)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Delegate / Backup</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].delegate_approver || ''} onChange={e => updateStep(configuringStepIndex, 'delegate_approver', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- No Backup Selected --</option>
+                        {users.map(u => <option key={u.id} value={u.username}>{u.name || (u.first_name + ' ' + u.last_name)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Escalation Rule</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].escalation_rule || ''} onChange={e => updateStep(configuringStepIndex, 'escalation_rule', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- No Escalation (Wait Indefinitely) --</option>
+                        <option value="Route to Direct Manager">Route to Direct Manager</option>
+                        <option value="Route to Delegate">Route to Delegate</option>
+                        <option value="Return to Submitter">Return to Submitter</option>
+                        <option value="Auto-Approve">Auto-Approve</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Target Role</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- Select Target Role --</option>
+                        <option value="Finance Manager">Finance Manager</option>
+                        <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
+                        <option value="General Manager">General Manager</option>
+                        <option value="Department Head">Department Head</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Division Filter</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].target_division || ''} onChange={e => updateStep(configuringStepIndex, 'target_division', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- Select Division Filter --</option>
+                        <option value="Match Document">Match Document's Division</option>
+                        <option value="Global">Global / Any Division</option>
+                        <option value="North America">North America</option>
+                        <option value="EMEA">EMEA</option>
+                        <option value="APAC">APAC</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Department Filter</label>
+                      <select value={editingWorkflow.steps[configuringStepIndex].target_department || ''} onChange={e => updateStep(configuringStepIndex, 'target_department', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <option value="">-- Select Department Filter --</option>
+                        <option value="Match Document">Match Document's Department</option>
+                        <option value="Cross-Department">Cross-Department / Any</option>
+                        <option value="Finance">Finance</option>
+                        <option value="IT">IT</option>
+                        <option value="HR">HR</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Sales">Sales</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="p-5 border-t border-slate-200 bg-slate-50 flex justify-end">
+            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
