@@ -10,6 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - LOCAL_LLM_URL=http://ollama:11434/api/generate
+      - LOCAL_LLM_MODEL=llama3:latest
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
       # Connect to the local SQL server container
       - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=YourStrong!Passw0rd;trustServerCertificate=true;
@@ -18,6 +19,8 @@ services:
       - ollama
       - n8n
     restart: unless-stopped
+    volumes:
+      - backend_uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -92,3 +95,4 @@ volumes:
   ollama_data:
   n8n_data:
   mssql_data:
+  backend_uploads:

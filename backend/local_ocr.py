@@ -80,4 +80,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No image path provided"}))
         sys.exit(1)        
-    extract_text(sys.argv[1])
+    
+    image_path = sys.argv[1]
+    # PaddleOCR's internal parser breaks on unknown arguments, so we strip sys.argv
+    sys.argv = [sys.argv[0]]
+    extract_text(image_path)
