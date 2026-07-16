@@ -11,9 +11,10 @@ services:
       - NODE_ENV=production
       - LOCAL_LLM_URL=http://ollama:11434/api/generate
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
-      # Connect to the SQL server via the DATABASE_URL defined in your .env file
-      - DATABASE_URL=sqlserver://YOUR_SQL_SERVER_IP:1433;database=YOUR_DATABASE_NAME;user=YOUR_USERNAME;password=YOUR_PASSWORD;trustServerCertificate=true;
+      # Connect to the local SQL server container
+      - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=YourStrong!Passw0rd;trustServerCertificate=true;
     depends_on:
+      - db
       - ollama
       - n8n
     restart: unless-stopped
@@ -75,6 +76,19 @@ services:
       - n8n_data:/home/node/.n8n
     restart: unless-stopped
 
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: docuflow-db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: unless-stopped
+
 volumes:
   ollama_data:
   n8n_data:
+  mssql_data:
