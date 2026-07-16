@@ -12,6 +12,7 @@ services:
       - LOCAL_LLM_URL=http://ollama:11434/api/generate
       - LOCAL_LLM_MODEL=llama3:latest
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
+      - JWT_SECRET=docuflow_super_secret_key_2026
       # Connect to the local SQL server container
       - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=Admin@1234;trustServerCertificate=true;
     depends_on:
