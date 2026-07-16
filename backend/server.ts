@@ -889,10 +889,11 @@ app.post("/api/admin/test-template", authenticateToken, upload.single("file"), a
     }
 
     const template = JSON.parse(req.body.template);
-    const fullFilePath = path.join(__dirname, req.file.path);
+    const fullFilePath = path.resolve(req.file.path);
 
     // Run OCR
-    const { stdout } = await execAsync(`python local_ocr.py "${fullFilePath}"`);
+    const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
     const jsonMatch = stdout.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No valid JSON found in OCR output.");
     const ocrResult = JSON.parse(jsonMatch[0]);
@@ -1137,10 +1138,11 @@ app.get("/api/users", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/erp/:poNumber", authenticateToken, async (req, res) => {
+app.get("/api/erp/*", authenticateToken, async (req, res) => {
   try {
+    const poNumber = req.params[0]; // Capture everything after /api/erp/
     const erp = await prisma.eRPMaster.findUnique({
-      where: { po_number: req.params.poNumber }
+      where: { po_number: poNumber }
     });
     if (!erp) return res.status(404).json({ error: "PO not found in ERP Master" });
     res.json(erp);
@@ -1168,7 +1170,7 @@ app.post("/api/workflows/save", async (req, res) => {
     const newWorkflow = await prisma.workflow.create({
       data: {
         workflow_name: name,
-        workflow_json: json
+        workflow_json: typeof json === 'object' ? JSON.stringify(json) : json
       }
     });
 
@@ -1718,7 +1720,7 @@ app.post("/api/workflows", async (req, res) => {
     const newWf = await prisma.workflow.create({
       data: {
         workflow_name,
-        workflow_json
+        workflow_json: typeof workflow_json === 'object' ? JSON.stringify(workflow_json) : workflow_json
       }
     });
     res.json(newWf);
@@ -2083,14 +2085,15 @@ app.post("/api/admin/routing-rules", authenticateToken, async (req, res) => {
   try {
     const { id, rule_name, priority, conditions_json, target_workflow_id, document_type } = req.body;
     let rule;
+    const safeConditions = typeof conditions_json === 'object' ? JSON.stringify(conditions_json) : conditions_json;
     if (id) {
       rule = await prisma.businessRule.update({
         where: { id },
-        data: { rule_name, priority: Number(priority), conditions_json, target_workflow_id, document_type }
+        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type }
       });
     } else {
       rule = await prisma.businessRule.create({
-        data: { rule_name, priority: Number(priority), conditions_json, target_workflow_id, document_type: document_type || "Invoice" }
+        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type: document_type || "Invoice" }
       });
     }
     res.json(rule);
@@ -2380,7 +2383,8 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
         let extracted: any = null;
 
         try {
-          const { stdout } = await execAsync(`python local_ocr.py "${fullFilePath}"`);
+          const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
+          const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
           const jsonMatch = stdout.match(/\{[\s\S]*\}/);
           if (!jsonMatch) throw new Error("No valid JSON found in OCR output: " + stdout);
           const ocrResult = JSON.parse(jsonMatch[0]);
@@ -3214,7 +3218,8 @@ app.get("/api/admin/users", authenticateToken, async (req: any, res: any) => {
 app.post("/api/admin/users", authenticateToken, async (req: any, res: any) => {
     try {
         const { name, email, role, password, permissions, username, employee_id } = req.body;
-        const user = await prisma.user.create({ data: { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []), password_hash: password || "default123" } });
+        const hashedPassword = await bcrypt.hash(password || "default123", 10);
+        const user = await prisma.user.create({ data: { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []), password_hash: hashedPassword } });
         res.json(user);
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -3223,8 +3228,12 @@ app.post("/api/admin/users", authenticateToken, async (req: any, res: any) => {
 
 app.put("/api/admin/users/:id", authenticateToken, async (req: any, res: any) => {
     try {
-        const { name, email, role, permissions, username, employee_id } = req.body;
-        const user = await prisma.user.update({ where: { id: req.params.id }, data: { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []) } });
+        const { name, email, role, permissions, username, employee_id, password } = req.body;
+        let updateData: any = { name, email, role, username, employee_id, permissions: JSON.stringify(permissions || []) };
+        if (password && password.trim() !== "") {
+            updateData.password_hash = await bcrypt.hash(password, 10);
+        }
+        const user = await prisma.user.update({ where: { id: req.params.id }, data: updateData });
         res.json(user);
     } catch (e: any) {
         res.status(500).json({ error: e.message });

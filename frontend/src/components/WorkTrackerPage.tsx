@@ -416,7 +416,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
                         <span className="text-[10px] font-semibold text-slate-500 tracking-wide uppercase">{doc.document_type || "Invoice"} • {doc.invoice_number || "Pending"}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-2 text-[12px] font-bold text-slate-900 text-right whitespace-nowrap tracking-tight tabular-nums font-mono">
+                    <td className="py-3 px-2 text-[12px] font-bold text-slate-900 text-right whitespace-nowrap tracking-tight tabular-nums">
                       {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(doc.amount || 0)}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap flex items-center space-x-2">

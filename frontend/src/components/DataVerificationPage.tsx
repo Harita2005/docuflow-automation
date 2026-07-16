@@ -142,7 +142,7 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
                       </span>
                     </td>
                     <td className="py-2.5 px-2 text-right">
-                      <div className="font-black font-mono text-[12px] text-slate-900 tabular-nums">
+                      <div className="font-black text-[12px] text-slate-900 tabular-nums">
                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(inv.amount || 0)}
                       </div>
                     </td>
