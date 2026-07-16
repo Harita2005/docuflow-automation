@@ -999,8 +999,8 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
     const existingFile = await prisma.invoice.findFirst({ where: { file_hash: fileHash } });
     if (existingFile) {
       // Clean up the uploaded file from disk to save space
-      await fs.unlink(req.file.path).catch(() => {});
-      return res.status(400).json({ error: "Duplicate document detected based on file signature. This exact file has already been uploaded." });
+      // await fs.unlink(req.file.path).catch(() => {});
+      // return res.status(400).json({ error: "Duplicate document detected based on file signature. This exact file has already been uploaded." });
     }
 
     const skip_ocr = req.body.skip_ocr === "true";

@@ -8,7 +8,7 @@ logging.disable(logging.WARNING)
 def extract_text(image_path):
     try:
         # Initialize PaddleOCR (runs locally)
-        ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)        
+        ocr = PaddleOCR(use_angle_cls=True, lang='en')        
         # Run OCR
         result = ocr.ocr(image_path, cls=True)        
         lines = []
