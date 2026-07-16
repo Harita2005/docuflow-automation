@@ -285,7 +285,11 @@ export default function Admin() {
       // 2. Upsert rules
       for (const rule of rules) {
         const payload = { ...rule, id: rule.id.startsWith('tmp-') ? undefined : rule.id };
-        await fetch('/api/admin/routing-rules', { method: 'POST', headers, body: JSON.stringify(payload) });
+        const res = await fetch('/api/admin/routing-rules', { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (!res.ok) {
+          const errData = await res.json();
+          alert(`Error saving rule ${rule.rule_name}: ` + (errData.error || res.statusText));
+        }
       }
 
       // 3. Delete steps

@@ -13,7 +13,7 @@ services:
       - LOCAL_LLM_MODEL=llama3:latest
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
       # Connect to the local SQL server container
-      - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=YourStrong!Passw0rd;trustServerCertificate=true;
+      - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=Admin@1234;trustServerCertificate=true;
     depends_on:
       - db
       - ollama
@@ -84,7 +84,7 @@ services:
     container_name: docuflow-db
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+      - MSSQL_SA_PASSWORD=Admin@1234
     ports:
       - "1434:1433"
     volumes:

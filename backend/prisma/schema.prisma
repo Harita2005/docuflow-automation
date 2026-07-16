@@ -98,7 +98,7 @@ model DocumentTemplate {
   id            String   @id @default(uuid())
   name          String   @unique
   description   String
-  fields_json   String   
+  fields_json   String   @db.NVarChar(Max)
   category      String   @default("Vendor Payment Workflows")
   document_type String   @default("AP Invoice")
   created_at    DateTime @default(now())
@@ -108,7 +108,7 @@ model BusinessRule {
   id                 String   @id @default(uuid())
   rule_name          String
   priority           Int
-  conditions_json    String   
+  conditions_json    String   @db.NVarChar(Max)
   target_workflow_id String
   document_type      String   @default("Invoice")
   created_at         DateTime @default(now())

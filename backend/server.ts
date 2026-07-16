@@ -2095,6 +2095,7 @@ app.post("/api/admin/routing-rules", authenticateToken, async (req, res) => {
     }
     res.json(rule);
   } catch (err: any) {
+    console.error("Error saving routing rule:", err);
     res.status(500).json({ error: err.message });
   }
 });
