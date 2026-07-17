@@ -30,7 +30,8 @@ import {
   Calendar,
 } from "lucide-react";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 import { DbInvoice, InvoiceLineItem, DbWorkflowInstance } from "../types";
 
 interface DocumentDetailsProps {
