@@ -10,7 +10,7 @@ def extract_text(image_path):
         # Initialize PaddleOCR (runs locally)
         ocr = PaddleOCR(use_angle_cls=True, lang='en')        
         # Run OCR
-        result = ocr.ocr(image_path, cls=True)        
+        result = ocr.ocr(image_path)        
         lines = []
         layout = []        
         if result and len(result) > 0 and result[0]:
