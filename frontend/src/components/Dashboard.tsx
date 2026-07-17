@@ -313,7 +313,7 @@ export default function Dashboard({
                 className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none"
               >
                 <option value="All">All Types</option>
-                {Array.from(new Set(documents.map(d => d.document_type).filter(Boolean))).map(type => (
+                {Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => (
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
@@ -340,7 +340,7 @@ export default function Dashboard({
             }
             
             if (docTypeFilter !== 'All') {
-              filteredDocs = filteredDocs.filter(d => d.document_type === docTypeFilter);
+              filteredDocs = filteredDocs.filter(d => (d.document_type || "").toUpperCase().trim() === docTypeFilter);
             }
             
             if (timeFilter !== 'all') {

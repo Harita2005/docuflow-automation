@@ -111,11 +111,11 @@ export default function DocumentDetails({
   );
   const [isApplying, setIsApplying] = useState(false);
 
-  const renderLabel = (labelText: string) => {
+  const renderLabel = (labelText: string, idStr?: string) => {
     const isLowConfidence = document && typeof document.ocr_confidence === "number" && document.ocr_confidence < 92;
     return (
       <div className="flex items-center justify-between w-full mb-0.5">
-        <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">
+        <label htmlFor={idStr} className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">
           {labelText}
         </label>
         {isLowConfidence && (
@@ -818,9 +818,9 @@ export default function DocumentDetails({
                 {/* Extracted Form Inputs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 pt-0.5">
                   <div className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 md:col-span-2 hover:bg-slate-50 transition-colors">
-                    {renderLabel("Document Type")}
+                    {renderLabel("Document Type", "inputDocumentType")}
                     {isEditing ? (
-                      <select
+                      <select id="inputDocumentType" name="documentType"
                         value={documentType}
                         onChange={(e) => setDocumentType(e.target.value)}
                         className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -846,9 +846,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Supplier Name (To)")}
+                        {renderLabel("Supplier Name (To)", "inputSupplierName")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("vendorName")}
+                          <input id="inputSupplierName" name="vendorName" onFocus={() => setActiveInputField("vendorName")}
                             type="text"
                             value={vendorName}
                             onChange={(e) => setVendorName(e.target.value)}
@@ -862,9 +862,9 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors">
-                        {renderLabel("Buyer Name (From)")}
+                        {renderLabel("Buyer Name (From)", "inputBuyerName")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("buyerName")}
+                          <input id="inputBuyerName" name="buyerName" onFocus={() => setActiveInputField("buyerName")}
                             type="text"
                             value={buyerName}
                             onChange={(e) => setBuyerName(e.target.value)}
@@ -882,9 +882,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("PO Number")}
+                        {renderLabel("PO Number", "inputPoNumber2")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("poNumber")}
+                          <input id="inputPoNumber2" name="poNumber" onFocus={() => setActiveInputField("poNumber")}
                             type="text"
                             value={poNumber}
                             onChange={(e) => {
@@ -901,11 +901,11 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors">
-                        <label className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
+                        <label htmlFor="inputPoDate" className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
                           PO Date
                         </label>
                         {isEditing ? (
-                          <input
+                          <input id="inputPoDate" name="poDate"
                             type="text"
                             value={poDate}
                             onChange={(e) => setPoDate(e.target.value)}
@@ -919,11 +919,11 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors">
-                        <label className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
+                        <label htmlFor="inputIndentNumber" className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
                           Indent Number
                         </label>
                         {isEditing ? (
-                          <input
+                          <input id="inputIndentNumber" name="indentNumber"
                             type="text"
                             value={indentNumber}
                             onChange={(e) => setIndentNumber(e.target.value)}
@@ -937,11 +937,11 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors">
-                        <label className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
+                        <label htmlFor="inputPaymentTerms" className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
                           Payment Terms
                         </label>
                         {isEditing ? (
-                          <input
+                          <input id="inputPaymentTerms" name="paymentTerms"
                             type="text"
                             value={paymentTerms}
                             onChange={(e) => setPaymentTerms(e.target.value)}
@@ -959,9 +959,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 md:col-span-2 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Grand Total")}
+                        {renderLabel("Grand Total", "inputGrandTotal")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("amount")}
+                          <input id="inputGrandTotal" name="amount" onFocus={() => setActiveInputField("amount")}
                             type="number"
                             value={amount}
                             onChange={(e) => setAmount(Number(e.target.value))}
@@ -984,9 +984,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Supplier/Company Name")}
+                        {renderLabel("Supplier/Company Name", "inputVendorName")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("vendorName")}
+                          <input id="inputVendorName" name="vendorName" onFocus={() => setActiveInputField("vendorName")}
                             type="text"
                             value={vendorName}
                             onChange={(e) => setVendorName(e.target.value)}
@@ -1004,9 +1004,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Invoice Number")}
+                        {renderLabel("Invoice Number", "inputInvoiceNumber")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("invoiceNumber")}
+                          <input id="inputInvoiceNumber" name="invoiceNumber" onFocus={() => setActiveInputField("invoiceNumber")}
                             type="text"
                             value={invoiceNumber}
                             onChange={(e) => setInvoiceNumber(e.target.value)}
@@ -1024,9 +1024,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("PO Number")}
+                        {renderLabel("PO Number", "inputPoNumber")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("poNumber")}
+                          <input id="inputPoNumber" name="poNumber" onFocus={() => setActiveInputField("poNumber")}
                             type="text"
                             value={poNumber}
                             onChange={(e) => {
@@ -1047,9 +1047,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Amount Due")}
+                        {renderLabel("Amount Due", "inputAmountDue")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("amount")}
+                          <input id="inputAmountDue" name="amount" onFocus={() => setActiveInputField("amount")}
                             type="number"
                             value={amount}
                             onChange={(e) => setAmount(Number(e.target.value))}
@@ -1069,9 +1069,9 @@ export default function DocumentDetails({
                         onMouseLeave={() => setHoveredField(null)}
                         className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 md:col-span-2 hover:bg-slate-50 transition-colors"
                       >
-                        {renderLabel("Invoice Date")}
+                        {renderLabel("Invoice Date", "inputInvoiceDate")}
                         {isEditing ? (
-                          <input onFocus={() => setActiveInputField("invoiceDate")}
+                          <input id="inputInvoiceDate" name="invoiceDate" onFocus={() => setActiveInputField("invoiceDate")}
                             type="text"
                             value={invoiceDate}
                             onChange={(e) => setInvoiceDate(e.target.value)}
@@ -1110,16 +1110,16 @@ export default function DocumentDetails({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="bg-gradient-to-b from-slate-50 to-slate-100/50 border border-slate-200/80 rounded-lg p-2 hover:shadow-sm transition-all group">
-                      <label className="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5 block group-hover:text-slate-600 transition-colors">
-                        CGST
-                      </label>
+                      {renderLabel("CGST", "inputCgst")}
                       {isEditing ? (
-                        <input onFocus={() => setActiveInputField("cgst")}
-                          type="number"
-                          value={cgst}
-                          onChange={(e) => setCgst(Number(e.target.value))}
-                          className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
+                        <div className="relative">
+                          <input id="inputCgst" name="cgst" onFocus={() => setActiveInputField("cgst")}
+                            type="number"
+                            value={cgst}
+                            onChange={(e) => setCgst(Number(e.target.value))}
+                            className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        </div>
                       ) : (
                         <div className="text-[10px] font-bold text-slate-800 flex items-center gap-1">
                           <span className="text-slate-400 font-extrabold text-[10px]">
@@ -1130,16 +1130,16 @@ export default function DocumentDetails({
                       )}
                     </div>
                     <div className="bg-gradient-to-b from-slate-50 to-slate-100/50 border border-slate-200/80 rounded-lg p-2 hover:shadow-sm transition-all group">
-                      <label className="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5 block group-hover:text-slate-600 transition-colors">
-                        SGST
-                      </label>
+                      {renderLabel("SGST", "inputSgst")}
                       {isEditing ? (
-                        <input onFocus={() => setActiveInputField("sgst")}
-                          type="number"
-                          value={sgst}
-                          onChange={(e) => setSgst(Number(e.target.value))}
-                          className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
+                        <div className="relative">
+                          <input id="inputSgst" name="sgst" onFocus={() => setActiveInputField("sgst")}
+                            type="number"
+                            value={sgst}
+                            onChange={(e) => setSgst(Number(e.target.value))}
+                            className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        </div>
                       ) : (
                         <div className="text-[10px] font-bold text-slate-800 flex items-center gap-1">
                           <span className="text-slate-400 font-extrabold text-[10px]">
@@ -1150,16 +1150,16 @@ export default function DocumentDetails({
                       )}
                     </div>
                     <div className="bg-gradient-to-b from-slate-50 to-slate-100/50 border border-slate-200/80 rounded-lg p-2 hover:shadow-sm transition-all group">
-                      <label className="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-0.5 block group-hover:text-slate-600 transition-colors">
-                        IGST
-                      </label>
+                      {renderLabel("IGST", "inputIgst")}
                       {isEditing ? (
-                        <input onFocus={() => setActiveInputField("igst")}
-                          type="number"
-                          value={igst}
-                          onChange={(e) => setIgst(Number(e.target.value))}
-                          className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
+                        <div className="relative">
+                          <input id="inputIgst" name="igst" onFocus={() => setActiveInputField("igst")}
+                            type="number"
+                            value={igst}
+                            onChange={(e) => setIgst(Number(e.target.value))}
+                            className="w-full text-[10px] font-semibold rounded-lg p-1.5 border transition-all bg-white border-blue-500 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        </div>
                       ) : (
                         <div className="text-[10px] font-bold text-slate-800 flex items-center gap-1">
                           <span className="text-slate-400 font-extrabold text-[10px]">
@@ -1295,7 +1295,7 @@ export default function DocumentDetails({
                               >
                                 <td className="p-2 font-medium text-[10px] leading-snug text-slate-700">
                                   {isEditing ? (
-                                    <input
+                                    <input id={`item-desc-${itm.id}`} name={`item-desc-${itm.id}`} aria-label="Item description"
                                       type="text"
                                       value={itm.description}
                                       onChange={(e) =>
@@ -1314,7 +1314,7 @@ export default function DocumentDetails({
                                 </td>
                                 <td className="p-2 text-center text-[10px] font-medium text-slate-600">
                                   {isEditing ? (
-                                    <input
+                                    <input id={`item-qty-${itm.id}`} name={`item-qty-${itm.id}`} aria-label="Item quantity"
                                       type="number"
                                       min="1"
                                       value={itm.quantity}
@@ -1332,7 +1332,7 @@ export default function DocumentDetails({
                                 </td>
                                 <td className="p-2 text-right text-[10px] text-slate-500 font-medium group-hover:text-slate-800 transition-colors">
                                   {isEditing ? (
-                                    <input
+                                    <input id={`item-price-${itm.id}`} name={`item-price-${itm.id}`} aria-label="Item unit price"
                                       type="number"
                                       value={itm.unit_price}
                                       onChange={(e) =>
@@ -1349,7 +1349,7 @@ export default function DocumentDetails({
                                 </td>
                                 <td className="p-2 text-right font-bold text-[10px] text-slate-800 pr-3 group-hover:text-blue-700 transition-colors">
                                   {isEditing ? (
-                                    <input
+                                    <input id={`item-amount-${itm.id}`} name={`item-amount-${itm.id}`} aria-label="Item total amount"
                                       type="number"
                                       value={itm.amount}
                                       onChange={(e) =>
@@ -1427,7 +1427,7 @@ export default function DocumentDetails({
                           </div>
                           {isEditing ? (
                             <>
-                              <input
+                              <input id={`warranty-${itm.id}`} name={`warranty-${itm.id}`} aria-label="Warranty details"
                                 type="text"
                                 value={itm.warranty_text || ""}
                                 onChange={(e) => {
@@ -1444,7 +1444,7 @@ export default function DocumentDetails({
                                 placeholder="Enter warranty details..."
                                 className="w-full text-[10px] p-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-150 text-emerald-700 font-semibold"
                               />
-                              <input
+                              <input id={`serial-${itm.id}`} name={`serial-${itm.id}`} aria-label="Serial numbers"
                                 type="text"
                                 value={(itm.serial_numbers || []).join(", ")}
                                 onChange={(e) => {
@@ -1523,7 +1523,7 @@ export default function DocumentDetails({
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <input
+                    <input id="inputNewComment" name="newComment" aria-label="New comment"
                       type="text"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}

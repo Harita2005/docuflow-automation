@@ -78,7 +78,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     }
   };
 
-  const dynamicTypes = Array.from(new Set(documents.map(d => d.document_type).filter(Boolean)));
+  const dynamicTypes = Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
   const TABS = ["All", ...dynamicTypes];
 
   // --- Executive KPI Calculations ---
@@ -155,7 +155,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     const docType = (doc.document_type || "Invoice").toLowerCase();
 
     // Tab filtering
-    if (activeTab !== "All" && doc.document_type !== activeTab) return false;
+    if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) return false;
 
     // KPI filtering
     if (kpiFilter === "grn" && doc.status !== "Waiting for GRN") return false;
