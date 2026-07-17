@@ -65,6 +65,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
           }
         }),
         target_workflow_id: workflows.length > 0 ? workflows[0].profile_name : '',
+        rule_category: selectedCategory || 'Vendor Payment Workflows',
         document_type: defaultDocType || 'Invoice'
       });
     }
@@ -109,7 +110,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   ];
 
   const groupedRules = rules.reduce((acc, r) => {
-    const category = 'Vendor Payment Workflows';
+    const category = r.rule_category || 'Vendor Payment Workflows';
     
     if (!acc[category]) acc[category] = [];
     acc[category].push(r);
@@ -131,8 +132,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {['Vendor Payment Workflows', ...addedCategories]
-              .map(category => {
+            {Object.keys(groupedRules).map(category => {
               const ruleCount = groupedRules[category] ? groupedRules[category].length : 0;
               return (
                 <button key={category} onClick={() => setSelectedCategory(category)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
@@ -412,7 +412,28 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                 <textarea id="condDesc" 
                   value={editingRule.description || ''}
                   onChange={e => setEditingRule({...editingRule, description: e.target.value})}
-                  className="w-full text-xs p-2 border border-slate-200 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none h-24 resize-none"
+                  className="w-full text-xs p-2 border border-slate-200 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none h-full resize-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="ruleCategory" className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Category</label>
+                <select id="ruleCategory" 
+                  value={editingRule.rule_category || ''}
+                  onChange={e => setEditingRule({...editingRule, rule_category: e.target.value})}
+                  className="w-full text-xs p-2 border border-slate-200 rounded-md focus:border-blue-500 outline-none bg-white"
+                >
+                  {Array.from(new Set([...Object.keys(groupedRules), 'Vendor Payment Workflows'])).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="docType" className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Document Type</label>
+                <input id="docType" 
+                  value={editingRule.document_type || ''}
+                  onChange={e => setEditingRule({...editingRule, document_type: e.target.value})}
+                  className="w-full text-xs p-2 border border-slate-200 rounded-md focus:border-blue-500 outline-none bg-white"
+                  placeholder="e.g. AP INVOICE"
                 />
               </div>
               <div>

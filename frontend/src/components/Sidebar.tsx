@@ -62,6 +62,13 @@ export default function Sidebar({
         { id: "goods-receipt", label: "Gate Entry", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
       ]
     } : null,
+    {
+      group: "Operations",
+      items: [
+        { id: "approval-queue", label: "Approval Desk", icon: FileCheck },
+        { id: "payment-readiness", label: "Payment Release", icon: Receipt },
+      ]
+    },
     isAdmin ? {
       group: "Administration",
       items: [

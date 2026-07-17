@@ -140,7 +140,8 @@ export default function Admin() {
       rule_name: fd.get('rule_name') || "New Rule",
       conditions_json: JSON.stringify(ruleConditions),
       target_workflow_id: fd.get('target_workflow_id'),
-      document_type: editingRule.document_type || 'Any'
+      document_type: editingRule.document_type || 'Any',
+      rule_category: editingRule.rule_category || 'Vendor Payment Workflows'
     };
     if (editingRule.id) {
       setRules(rules.map(r => r.id === rule.id ? rule : r));

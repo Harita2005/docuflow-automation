@@ -7,8 +7,7 @@ import DocumentUpload from "./components/DocumentUpload.tsx";
 import DocumentDetails from "./components/DocumentDetails.tsx";
 import GoodsReceiptPage from "./components/GoodsReceiptPage.tsx";
 import DataVerificationPage from "./components/DataVerificationPage.tsx";
-
-
+import ApprovalQueuePage from "./components/ApprovalQueuePage.tsx";
 import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
@@ -321,6 +320,14 @@ export default function App() {
             {currentView === "goods-receipt" && (
               <GoodsReceiptPage
                 onWorkflowTriggered={handleFullRefresh}
+                currentUserEmail={currentUserEmail}
+              />
+            )}
+
+            {currentView === "approval-queue" && (
+              <ApprovalQueuePage
+                documents={documents}
+                onViewDocument={handleViewDocument}
                 currentUserEmail={currentUserEmail}
               />
             )}

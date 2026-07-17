@@ -2094,17 +2094,17 @@ app.get("/api/admin/routing-rules", authenticateToken, async (req, res) => {
 
 app.post("/api/admin/routing-rules", authenticateToken, async (req, res) => {
   try {
-    const { id, rule_name, priority, conditions_json, target_workflow_id, document_type } = req.body;
+    const { id, rule_name, priority, conditions_json, target_workflow_id, document_type, rule_category } = req.body;
     let rule;
     const safeConditions = typeof conditions_json === 'object' ? JSON.stringify(conditions_json) : conditions_json;
     if (id) {
       rule = await prisma.businessRule.update({
         where: { id },
-        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type }
+        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type, rule_category }
       });
     } else {
       rule = await prisma.businessRule.create({
-        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type: document_type || "Invoice" }
+        data: { rule_name, priority: Number(priority), conditions_json: safeConditions, target_workflow_id, document_type: document_type || "Invoice", rule_category: rule_category || "Vendor Payment Workflows" }
       });
     }
     res.json(rule);
@@ -2174,12 +2174,12 @@ app.get("/api/admin/workflows", authenticateToken, async (req, res) => {
 
 app.post("/api/admin/workflows", authenticateToken, async (req, res) => {
   try {
-    const { profile_name, workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation, steps } = req.body;
+    const { profile_name, workflow_code, workflow_category, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation, steps } = req.body;
     
     const profile = await prisma.workflowProfile.upsert({
       where: { profile_name },
-      update: { workflow_code, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) },
-      create: { profile_name, workflow_code, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) }
+      update: { workflow_code, workflow_category, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) },
+      create: { profile_name, workflow_code, workflow_category, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) }
     });
 
     // Handle steps

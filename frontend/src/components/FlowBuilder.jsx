@@ -125,7 +125,8 @@ export default function FlowBuilder({ users = [] }) {
       setEditingWorkflow({
         profile_name: '',
         workflow_code: generatedCode || '',
-        workflow_type: category || selectedCategory || 'Vendor Payment',
+        workflow_category: selectedCategory || 'Vendor Payment Workflows',
+        workflow_type: selectedSubCategory || '',
         description: '',
         status: 'Active',
         approval_threshold: 100,
@@ -282,7 +283,7 @@ export default function FlowBuilder({ users = [] }) {
   ];
 
   const groupedWorkflows = workflows.reduce((acc, wf) => {
-    const category = 'Vendor Payment Workflows';
+    const category = wf.workflow_category || 'Vendor Payment Workflows';
     if (!acc[category]) acc[category] = [];
     acc[category].push(wf);
     return acc;
@@ -361,15 +362,15 @@ export default function FlowBuilder({ users = [] }) {
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-4">
-            <button aria-label="Back to Categories" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+            <button aria-label="Back to Categories" onClick={() => setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
               <ArrowRight className="h-4 w-4 rotate-180" />
             </button>
             <div>
               <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">
-                {selectedCategory} {selectedSubCategory ? `> ${selectedSubCategory}` : 'Workflows'}
+                {selectedCategory}
               </h2>
               <p className="text-sm font-bold text-slate-500 mt-1">
-                {selectedSubCategory ? `Managing workflows in ${selectedSubCategory}` : 'Select a screen to view its workflows.'}
+                Managing workflows in {selectedCategory}
               </p>
             </div>
           </div>
@@ -385,113 +386,55 @@ export default function FlowBuilder({ users = [] }) {
               />
             </div>
             <button onClick={() => openEditor(null, selectedCategory, 0)} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wide rounded-md transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0">
-              <Plus className="h-4 w-4" /> {selectedSubCategory ? 'Create Workflow' : 'Create Doc Type'}
+              <Plus className="h-4 w-4" /> Create Workflow
             </button>
           </div>
         </div>
 
         <div className="flex flex-col gap-8">
-          {!selectedSubCategory ? (
+          <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries((groupedWorkflows[selectedCategory] || [])
-                .reduce((acc, wf) => {
-                  const subCategory = wf.workflow_type || 'Other Workflows';
-                  if (!acc[subCategory]) acc[subCategory] = [];
-                  acc[subCategory].push(wf);
-                  return acc;
-                }, {}))
-                .sort(([subCatA], [subCatB]) => {
-                  let idxA = DOC_TYPE_ORDER.indexOf(subCatA.toUpperCase());
-                  let idxB = DOC_TYPE_ORDER.indexOf(subCatB.toUpperCase());
-                  if (idxA === -1) idxA = 999;
-                  if (idxB === -1) idxB = 999;
-                  if (idxA === idxB) return subCatA.localeCompare(subCatB);
-                  return idxA - idxB;
-                })
-                .filter(([subCat]) => subCat.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(([subCat, wfs]) => (
-                  <button key={subCat} onClick={() => setSelectedSubCategory(subCat)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <Network className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-sm tracking-wide">
-                          {subCat}
-                        </h3>
-                        <p className="text-sm font-bold text-slate-500 mt-0.5">{wfs.length} Workflows</p>
-                      </div>
+              {((groupedWorkflows[selectedCategory] || [])
+                .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }))
+              ).map((wf, index) => (
+                <div key={wf.profile_name} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 transition-colors group flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">
+                        {wf.profile_name}
+                      </h3>
+                      <p className="text-sm font-bold text-slate-500 mt-0.5">{wf.workflow_code || 'NO-CODE'} • {wf.workflow_type || 'Custom'}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={(e) => confirmDeleteDocType(subCat, wfs, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors" aria-label="Delete Doc Type">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                    <span className={`px-2 py-0.5 rounded text-xs font-black uppercase ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {wf.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4 flex-1">{wf.description || 'No description provided.'}</p>
+                  
+                  <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100">
+                    <div className="text-sm font-bold text-slate-600 flex items-center gap-1">
+                      <Network className="h-3 w-3" /> {wf.steps?.length || 0} Steps
                     </div>
-                  </button>
-                ))
-              }
-              {Object.keys((groupedWorkflows[selectedCategory] || [])
-                .reduce((acc, wf) => {
-                  const subCategory = wf.workflow_type || 'Other Workflows';
-                  if (!acc[subCategory]) acc[subCategory] = [];
-                  acc[subCategory].push(wf);
-                  return acc;
-                }, {})).filter(subCat => subCat.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-                <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
-                  <Network className="h-10 w-10 text-slate-300 mb-4" />
-                  <h3 className="text-sm font-bold text-slate-700">No screens found</h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">No screens matching your search were found.</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div key={selectedSubCategory}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {((groupedWorkflows[selectedCategory] || [])
-                  .filter(wf => (wf.workflow_type || 'Other Workflows') === selectedSubCategory)
-                  .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
-                  .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }))
-                ).map((wf, index) => (
-                  <div key={wf.profile_name} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 transition-colors group flex flex-col h-full">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-sm tracking-wide">
-                          {wf.profile_name}
-                        </h3>
-                        <p className="text-sm font-bold text-slate-500 mt-0.5">{wf.workflow_code || 'NO-CODE'} • {wf.workflow_type || 'Custom'}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-black uppercase ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {wf.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mb-4 flex-1">{wf.description || 'No description provided.'}</p>
-                    
-                    <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100">
-                      <div className="text-sm font-bold text-slate-600 flex items-center gap-1">
-                        <Network className="h-3 w-3" /> {wf.steps?.length || 0} Steps
-                      </div>
-                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
-                        <button aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div>
+                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
+                      <button aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
-                ))}
-              </div>
-              {((groupedWorkflows[selectedCategory] || [])
-                .filter(wf => (wf.profile_name.includes(' - ') ? wf.profile_name.split(' - ')[0] : 'Other Workflows') === selectedSubCategory)
-                .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
-              ).length === 0 && (
-                <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
-                  <Network className="h-10 w-10 text-slate-300 mb-4" />
-                  <h3 className="text-sm font-bold text-slate-700">No workflows found</h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new workflow for {selectedSubCategory}.</p>
-                  <button onClick={() => openEditor(null, selectedCategory, 0)} className="mt-5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Create Workflow</button>
                 </div>
-              )}
+              ))}
             </div>
-          )}
+            {((groupedWorkflows[selectedCategory] || [])
+              .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
+            ).length === 0 && (
+              <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
+                <Network className="h-10 w-10 text-slate-300 mb-4" />
+                <h3 className="text-sm font-bold text-slate-700">No workflows found</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new workflow for {selectedCategory}.</p>
+                <button onClick={() => openEditor(null, selectedCategory, 0)} className="mt-5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Create Workflow</button>
+              </div>
+            )}
+          </div>
         </div>
 
         {deleteConfirmTarget && (
@@ -557,12 +500,16 @@ export default function FlowBuilder({ users = [] }) {
                 <input id="wfCode" value={editingWorkflow.workflow_code || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_code: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-mono text-slate-800" placeholder="INV-APP-001" />
               </div>
               <div className="md:col-span-1">
-                <label htmlFor="wfType" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Workflow Type</label>
-                <select id="wfType" value={editingWorkflow.workflow_type || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_type: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800">
-                  {Array.from(new Set([...Object.keys(groupedWorkflows), 'Vendor Payment'])).map(cat => (
+                <label htmlFor="wfCategory" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Category</label>
+                <select id="wfCategory" value={editingWorkflow.workflow_category || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_category: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800">
+                  {Array.from(new Set([...Object.keys(groupedWorkflows), 'Vendor Payment Workflows'])).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
+              </div>
+              <div className="md:col-span-1">
+                <label htmlFor="wfType" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Document Type</label>
+                <input id="wfType" value={editingWorkflow.workflow_type || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_type: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. AP INVOICE" />
               </div>
               <div className="md:col-span-2">
                 <label htmlFor="wfDesc" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Description</label>
