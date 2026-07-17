@@ -1,6 +1,10 @@
 import sys
+import os
 import json
 import logging
+
+os.environ["FLAGS_enable_pir_api"] = "0"
+
 from paddleocr import PaddleOCR
 
 logging.disable(logging.DEBUG)
