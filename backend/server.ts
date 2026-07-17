@@ -2167,8 +2167,8 @@ app.post("/api/admin/workflows", authenticateToken, async (req, res) => {
     
     const profile = await prisma.workflowProfile.upsert({
       where: { profile_name },
-      update: { workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation },
-      create: { profile_name, workflow_code, workflow_type, description, status, approval_threshold, rejection_handling, reminder_interval_hours, escalation_after_hours, auto_escalation }
+      update: { workflow_code, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) },
+      create: { profile_name, workflow_code, workflow_type, description, status, approval_threshold: Number(approval_threshold), rejection_handling, reminder_interval_hours: Number(reminder_interval_hours), escalation_after_hours: Number(escalation_after_hours), auto_escalation: Boolean(auto_escalation) }
     });
 
     // Handle steps
