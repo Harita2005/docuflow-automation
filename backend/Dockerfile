@@ -19,7 +19,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy python requirements and install them
 COPY requirements.txt .
 # Install requirements + paddleocr (which is imported in local_ocr.py)
-RUN pip install --no-cache-dir -r requirements.txt paddlepaddle paddleocr
+RUN pip install --no-cache-dir -r requirements.txt paddlepaddle==2.6.1 paddleocr==2.7.3
 
 # Copy Node.js package files
 COPY package.json ./
