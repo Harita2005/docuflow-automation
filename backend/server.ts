@@ -1144,7 +1144,7 @@ app.get("/api/erp/*", authenticateToken, async (req, res) => {
     const erp = await prisma.eRPMaster.findUnique({
       where: { po_number: poNumber }
     });
-    if (!erp) return res.status(404).json({ error: "PO not found in ERP Master" });
+    if (!erp) return res.json({ not_found: true, error: "PO not found in ERP Master" });
     res.json(erp);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1749,6 +1749,15 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
     const existingInvoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
     if (!existingInvoice) return res.status(404).json({ error: "Not found" });
 
+    let parsedOriginalItems = existingInvoice.items;
+    if (typeof existingInvoice.items === 'string') {
+      try { parsedOriginalItems = JSON.parse(existingInvoice.items); } catch(e) { parsedOriginalItems = []; }
+    }
+    let parsedOriginalCustomData = existingInvoice.custom_data;
+    if (typeof existingInvoice.custom_data === 'string') {
+      try { parsedOriginalCustomData = JSON.parse(existingInvoice.custom_data); } catch(e) { parsedOriginalCustomData = {}; }
+    }
+
     const originalData = {
       documentType: existingInvoice.document_type,
       vendorName: existingInvoice.vendor_name,
@@ -1759,8 +1768,8 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
       cgst: existingInvoice.cgst,
       sgst: existingInvoice.sgst,
       igst: existingInvoice.igst,
-      items: typeof existingInvoice.items === 'string' ? JSON.parse(existingInvoice.items as any) : existingInvoice.items,
-      customData: typeof existingInvoice.custom_data === 'string' ? JSON.parse(existingInvoice.custom_data as any) : existingInvoice.custom_data
+      items: parsedOriginalItems,
+      customData: parsedOriginalCustomData
     };
 
     const newData = {
@@ -1768,12 +1777,14 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
     };
 
     if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
+      const logOriginalData = { ...originalData, customData: undefined };
+      const logNewData = { ...newData, customData: undefined };
       await prisma.correctionLog.create({
         data: {
           invoice_id: existingInvoice.id,
           vendor_name: vendorName || existingInvoice.vendor_name || "Unknown",
-          original_ai_prediction: JSON.stringify(originalData),
-          human_corrected_data: JSON.stringify(newData)
+          original_ai_prediction: JSON.stringify(logOriginalData).substring(0, 990),
+          human_corrected_data: JSON.stringify(logNewData).substring(0, 990)
         }
       });
     }
@@ -1823,11 +1834,11 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
         vendor_name: vendorName,
         invoice_number: invoiceNumber,
         po_number: poNumber,
-        amount: Number(amount),
+        amount: isNaN(Number(amount)) ? 0 : Number(amount),
         invoice_date: date,
-        cgst: Number(cgst),
-        sgst: Number(sgst),
-        igst: Number(igst),
+        cgst: isNaN(Number(cgst)) ? 0 : Number(cgst),
+        sgst: isNaN(Number(sgst)) ? 0 : Number(sgst),
+        igst: isNaN(Number(igst)) ? 0 : Number(igst),
         items: items ? JSON.stringify(items) : existingInvoice.items,
         custom_data: customData ? JSON.stringify(customData) : existingInvoice.custom_data,
         status: newStatus as any
@@ -2392,7 +2403,6 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
           
           const rawText = ocrResult.raw_text || "";
           const layout = ocrResult.layout || [];
-
           const templates = await prisma.documentTemplate.findMany();
           let templatesPrompt = "";
           
@@ -2737,6 +2747,8 @@ ${fewShotExample}
               details: "EXTRACTED JSON: " + firstPassJsonStr
             }
           });
+          
+
           
           extracted.ocrText = rawText;
           extracted.ocrLayout = layout;

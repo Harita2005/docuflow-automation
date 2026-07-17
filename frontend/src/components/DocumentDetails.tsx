@@ -132,6 +132,7 @@ export default function DocumentDetails({
   const [erpLoading, setErpLoading] = useState(false);
   const [hoveredField, setHoveredField] = useState<string | null>(null);
 
+
   const fetchErpData = async (poNum: string) => {
     if (!poNum || poNum === "Not Found" || poNum === "Extracting...") {
       setErpData(null);
@@ -145,7 +146,11 @@ export default function DocumentDetails({
       });
       if (res.ok) {
         const data = await res.json();
-        setErpData(data);
+        if (data.not_found) {
+           setErpData(null);
+        } else {
+           setErpData(data);
+        }
       } else {
         setErpData(null);
       }
@@ -210,6 +215,9 @@ export default function DocumentDetails({
     }
     setCommentsLoading(false);
   };
+
+  const customDataObj = typeof document?.custom_data === 'string' ? JSON.parse(document.custom_data) : (document?.custom_data || {});
+
 
   useEffect(() => {
     if (document && !isEditing) {
@@ -645,13 +653,14 @@ export default function DocumentDetails({
                               </span>
                             }
                           >
-                            <Page
-                              pageNumber={1}
-                              renderTextLayer={false}
-                              renderAnnotationLayer={false}
-                              height={650}
-                              className="shadow-md border border-slate-300"
-                            />
+                            <div className="relative inline-block shadow-md border border-slate-300">
+                              <Page
+                                pageNumber={1}
+                                renderTextLayer={false}
+                                renderAnnotationLayer={false}
+                                height={650}
+                              />
+                            </div>
                           </Document>
                         </div>
                       </div>
@@ -835,7 +844,7 @@ export default function DocumentDetails({
                       <div 
                         onMouseEnter={() => setHoveredField("vendorName")}
                         onMouseLeave={() => setHoveredField(null)}
-                        className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
+                        className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
                         {renderLabel("Supplier Name (To)")}
                         {isEditing ? (
@@ -993,7 +1002,7 @@ export default function DocumentDetails({
                       <div 
                         onMouseEnter={() => setHoveredField("invoiceNumber")}
                         onMouseLeave={() => setHoveredField(null)}
-                        className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors"
+                        className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
                         {renderLabel("Invoice Number")}
                         {isEditing ? (
@@ -1013,7 +1022,7 @@ export default function DocumentDetails({
                       <div 
                         onMouseEnter={() => setHoveredField("poNumber")}
                         onMouseLeave={() => setHoveredField(null)}
-                        className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors"
+                        className="relative bg-slate-50/70 border border-slate-100/80 rounded-lg p-2 hover:bg-slate-50 transition-colors"
                       >
                         {renderLabel("PO Number")}
                         {isEditing ? (

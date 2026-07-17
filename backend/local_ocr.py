@@ -29,7 +29,8 @@ def extract_text(image_path):
                     "text": text,
                     "conf": confidence,
                     "y": y_center,
-                    "x": x_min
+                    "x": x_min,
+                    "box": box
                 })            
             # Sort items by Y axis first
             items.sort(key=lambda item: item['y'])            
