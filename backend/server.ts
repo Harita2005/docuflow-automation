@@ -3937,14 +3937,23 @@ console.log("[BACKGROUND WORKER] Initialized for SLA and Data Retention processi
 // Serve uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Serve frontend static files in production
+// Serve frontend static files in production (only if they exist)
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
-app.use(express.static(frontendDistPath));
+if (require('fs').existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+}
+
 app.get('*', (req: any, res: any, next: any) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
     return next();
   }
-  res.sendFile(path.join(frontendDistPath, 'index.html'));
+  
+  if (require('fs').existsSync(path.join(frontendDistPath, 'index.html'))) {
+    return res.sendFile(path.join(frontendDistPath, 'index.html'));
+  } else {
+    // If running in Docker where frontend is separate, just return a 200 OK for root (healthcheck)
+    return res.status(200).send('DocuFlow Backend API is running.');
+  }
 });
 
 // Fallback for unhandled API routes (404)
