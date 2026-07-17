@@ -50,7 +50,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
       setEditingRule(JSON.parse(JSON.stringify(r)));
     } else {
       setEditingRule({
-        id: `tmp-${Date.now()}`,
+        id: 'tmp-' + Date.now(),
         rule_name: '',
         description: '',
         priority: (rules.length + 1) * 10,
@@ -87,7 +87,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (editingRule.id.startsWith('tmp-')) {
+    if (String(editingRule.id).startsWith('tmp-')) {
       setRules([...rules, editingRule]);
     } else {
       setRules(rules.map(r => r.id === editingRule.id ? editingRule : r));
