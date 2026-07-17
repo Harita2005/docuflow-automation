@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
 import path from "path";
-import { promises as fs, mkdirSync } from "fs";
+import { promises as fs, mkdirSync, existsSync } from "fs";
 import multer from "multer";
 import dotenv from "dotenv";
 import { exec } from "child_process";
@@ -3939,7 +3939,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve frontend static files in production (only if they exist)
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
-if (require('fs').existsSync(frontendDistPath)) {
+if (existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
 }
 
@@ -3948,7 +3948,7 @@ app.get('*', (req: any, res: any, next: any) => {
     return next();
   }
   
-  if (require('fs').existsSync(path.join(frontendDistPath, 'index.html'))) {
+  if (existsSync(path.join(frontendDistPath, 'index.html'))) {
     return res.sendFile(path.join(frontendDistPath, 'index.html'));
   } else {
     // If running in Docker where frontend is separate, just return a 200 OK for root (healthcheck)
