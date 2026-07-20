@@ -3358,8 +3358,72 @@ app.put("/api/admin/users/:id", authenticateToken, async (req: any, res: any) =>
 
 app.delete("/api/admin/users/:id", authenticateToken, async (req: any, res: any) => {
     try {
+        // 1. Fetch user information before deleting
+        const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+        if (!targetUser) return res.status(404).json({ error: "User not found." });
+
+        const username = targetUser.username;
+
+        // 2. Find workflow step definitions where this user is the designated approver
+        const affectedSteps = await prisma.workflowStepDefinition.findMany({
+            where: { approver_target: username }
+        });
+
+        // 3. Find any active pending logs matching those workflow profiles and stages
+        let activeLogs: any[] = [];
+        if (affectedSteps.length > 0) {
+            activeLogs = await prisma.activeApprovalLog.findMany({
+                where: {
+                    status: "Pending",
+                    OR: affectedSteps.map(step => ({
+                        workflow_profile: step.profile_name,
+                        current_stage_number: step.stage_number
+                    }))
+                },
+                include: { invoice: true }
+            });
+        }
+
+        // 4. Delete the user
         await prisma.user.delete({ where: { id: req.params.id } });
-        res.json({ success: true });
+
+        // 5. Notify all admins and log system alerts for each affected document
+        if (activeLogs.length > 0) {
+            const adminUsers = await prisma.user.findMany({ where: { role: "admin" } });
+            
+            for (const log of activeLogs) {
+                // Log audit trail
+                await prisma.systemLog.create({
+                    data: {
+                        invoice_id: log.invoice_id,
+                        action: "Orphaned Approval",
+                        user: "System Off-boarding",
+                        details: `Assigned approver ${targetUser.name} (${targetUser.username}) was deleted. Approval stage is orphaned and requires reassignment.`
+                    }
+                });
+
+                // Create in-app notification alerts for each administrator
+                for (const admin of adminUsers) {
+                    await prisma.notification.create({
+                        data: {
+                            document_id: log.invoice_id,
+                            recipient_user_id: admin.id,
+                            recipient_email: admin.email,
+                            notification_type: "OFFBOARDING_ORPHANED_ALERT",
+                            title: `Orphaned Approval Alert: ${log.invoice.invoice_number}`,
+                            message: `Approver ${targetUser.name} (${targetUser.username}) was deleted. Document ${log.invoice.invoice_number} is now stuck at Stage ${log.current_stage_number} of "${log.workflow_profile}".`,
+                            status: "Pending",
+                            is_read: false
+                        }
+                    });
+                }
+            }
+        }
+
+        res.json({ 
+            success: true, 
+            orphanedApprovalsCount: activeLogs.length 
+        });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }
