@@ -83,9 +83,14 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   };
 
   const uploadFile = async (file: File) => {
-    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
+    const allowedTypes = ["application/pdf"];
     if (!allowedTypes.includes(file.type)) {
-      setErrorMsg("Forbidden format. Please upload invoice assets as modern PDF, PNG, or JPG files.");
+      setErrorMsg("Forbidden format. Please upload invoice assets as PDF files only.");
+      return;
+    }
+
+    if (file.size > 60 * 1024 * 1024) {
+      setErrorMsg("File size exceeds the 60MB limit. Please upload a smaller file.");
       return;
     }
 
@@ -244,19 +249,19 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           onDragLeave={handleDrag}
           onDrop={handleDrop}
           onClick={triggerFileInput}
-          className={`bg-white/60 backdrop-blur-xl border-2 border-dashed rounded-3xl p-8 text-center cursor-pointer transition-all duration-500 relative overflow-hidden group flex flex-col items-center justify-center space-y-4 shadow-sm hover:shadow-xl ${
+          className={`backdrop-blur-xl border-2 border-dashed rounded-[2rem] p-10 text-center cursor-pointer transition-all duration-500 relative overflow-hidden group flex flex-col items-center justify-center space-y-5 shadow-sm hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] ${
             dragActive
-              ? "border-blue-500 bg-blue-50/40 scale-[0.98] shadow-inner"
-              : "border-slate-300/80 hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50/30 hover:to-white/20"
+              ? "border-blue-500 bg-blue-100/50 scale-[0.98] shadow-inner"
+              : "bg-slate-50/80 border-slate-300/80 hover:border-blue-400 hover:bg-blue-50/40"
           }`}
         >
           {/* Animated Glow Background on Hover */}
-          <div className="absolute inset-0 bg-gradient-to-b from-blue-400/0 via-blue-400/0 to-blue-400/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-blue-400/0 via-blue-400/0 to-blue-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
           <div className="relative">
-            <div className="absolute -inset-2 bg-blue-100 rounded-full opacity-0 group-hover:opacity-50 group-hover:scale-150 transition-all duration-700 blur-lg"></div>
-            <div className="bg-gradient-to-b from-white to-blue-50 text-blue-600 h-12 w-12 rounded-xl flex items-center justify-center border border-blue-100/50 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500 shadow-sm relative z-10">
-              <Upload className="h-5 w-5" />
+            <div className="absolute -inset-4 bg-blue-200 rounded-full opacity-0 group-hover:opacity-60 group-hover:scale-125 transition-all duration-700 blur-xl"></div>
+            <div className="bg-gradient-to-br from-white to-blue-50 text-blue-600 h-16 w-16 rounded-full flex items-center justify-center border-4 border-white shadow-[0_4px_20px_rgb(59,130,246,0.15)] group-hover:scale-110 group-hover:-translate-y-2 transition-transform duration-500 relative z-10 mx-auto">
+              <Upload className="h-7 w-7 group-hover:animate-bounce" />
             </div>
           </div>
 
@@ -268,8 +273,8 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               or <span className="text-blue-600 font-semibold hover:text-blue-700 underline decoration-blue-200 underline-offset-4 transition">browse your computer</span>
             </p>
             <div className="pt-2 flex items-center justify-center gap-3 text-[10px] text-slate-400 font-medium">
-              <span className="flex items-center gap-1"><FileText className="h-3 w-3"/> PDF, PNG, JPG</span>
-              <span className="flex items-center gap-1"><Database className="h-3 w-3"/> Max 15MB</span>
+              <span className="flex items-center gap-1"><FileText className="h-3 w-3"/> PDF ONLY</span>
+              <span className="flex items-center gap-1"><Database className="h-3 w-3"/> Max 60MB</span>
             </div>
           </div>
 
@@ -277,59 +282,13 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept=".pdf,.png,.jpeg,.jpg"
+            accept=".pdf"
             onChange={handleFileChange}
           />
         </div>
       )}
 
-      {/* Manual Override Toggle & Form */}
-      {!uploadedDoc && !loading && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-blue-600" /> Use AI Auto-Extraction
-              </h3>
-              <p className="text-[11px] text-slate-500">Automatically extract data using local LLM.</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" checked={useAIExtraction} onChange={(e) => setUseAIExtraction(e.target.checked)} />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
 
-          {!useAIExtraction && (
-            <div className="pt-4 border-t border-slate-100 space-y-3 animate-fadeIn">
-              <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 font-medium">
-                AI extraction disabled. Please manually enter the primary invoice details below before dropping the file. It will be instantly routed.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Vendor Name</label>
-                  <input type="text" value={manualData.vendorName} onChange={e => setManualData({...manualData, vendorName: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g. Acme Corp" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Total Amount</label>
-                  <input type="number" value={manualData.amount} onChange={e => setManualData({...manualData, amount: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="0.00" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Invoice Number</label>
-                  <input type="text" value={manualData.invoiceNumber} onChange={e => setManualData({...manualData, invoiceNumber: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="INV-001" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">PO Number (Optional)</label>
-                  <input type="text" value={manualData.poNumber} onChange={e => setManualData({...manualData, poNumber: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="PO-100" />
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Invoice Date</label>
-                  <input type="date" value={manualData.invoiceDate} onChange={e => setManualData({...manualData, invoiceDate: e.target.value})} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 p-4.5 rounded-2xl flex items-start space-x-3 text-red-800 text-xs shadow-sm">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-650" />

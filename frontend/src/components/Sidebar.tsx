@@ -12,7 +12,8 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
-  ClipboardList
+  ClipboardList,
+  Database
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -50,16 +51,16 @@ export default function Sidebar({
       ]
     },
     isEmployee ? {
-      group: "Invoices",
+      group: "Documents",
       items: [
-        { id: "upload", label: "Upload Invoice", icon: Upload },
+        { id: "upload", label: "Upload Document", icon: Upload },
       ]
     } : null,
     isEmployee ? {
       group: "Verification",
       items: [
         { id: "data-verification", label: "Data Verification", icon: FileCheck },
-        { id: "goods-receipt", label: "Gate Entry", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
+        { id: "goods-receipt", label: "Goods Receipt", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
       ]
     } : null,
 

@@ -116,38 +116,14 @@ export default function Dashboard({
   return (
     <div className="space-y-1 animate-fadeIn w-full">
       
-      {/* Role Banner Badge */}
-      <div className="bg-slate-900 border border-slate-700/50 p-2 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_8px_30px_rgb(0,0,0,0.2)] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black overflow-hidden relative backdrop-blur-2xl">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-80"></div>
-        <div className="flex items-center space-x-3 text-[10px] text-slate-300 z-10 px-1">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.8)]"></span>
-          </span>
-          <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Active Desk:</span>
-          <span className="font-black text-white text-[11px] tracking-wide">{roleLabels[currentUserRole] || "Enterprise Hub view"}</span>
-        </div>
-        <div className="flex items-center gap-2 z-10">
-          <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 font-extrabold px-3 py-1.5 rounded-lg border border-emerald-500/30 uppercase tracking-widest text-[9px] shadow-[inset_0_0_15px_rgba(16,185,129,0.15)] backdrop-blur-md">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            Live Polling Active
-          </div>
-          <div className="text-[10px] bg-blue-500/10 text-blue-400 font-extrabold px-3 py-1.5 rounded-lg border border-blue-500/30 uppercase tracking-widest text-center shadow-[inset_0_0_15px_rgba(59,130,246,0.15)] backdrop-blur-md">
-            Verified Access
-          </div>
-        </div>
-      </div>
 
       {/* RENDER TAILORED KPIS DEPENDING ON ROLE */}
       
       {currentUserRole === "admin" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
           <div 
           onClick={() => { setListFilter('all'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
+            className="bg-white/80 backdrop-blur-xl border border-blue-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/0 to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-2 relative z-10">
@@ -165,27 +141,8 @@ export default function Dashboard({
           </div>
 
           <div 
-          onClick={() => { setListFilter('grn'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-              <div className="bg-amber-50 text-amber-600 rounded-md flex items-center justify-center p-1 border border-amber-100/50 shadow-sm">
-                <Clock className="h-4 w-4" />
-              </div>
-              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Awaiting GRN</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-0.5">
-              <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-amber-600 transition-colors">
-                {pendingGRNCount}
-              </span>
-              <span className="text-[9px] text-amber-600/80 font-bold tracking-widest uppercase mt-0.5">Waiting receipt</span>
-            </div>
-          </div>
-
-          <div 
           onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
+            className="bg-white/80 backdrop-blur-xl border border-emerald-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-2 relative z-10">
@@ -204,7 +161,7 @@ export default function Dashboard({
 
           <div 
           onClick={() => { setListFilter('review'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
+            className="bg-white/80 backdrop-blur-xl border border-indigo-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-50/0 to-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-2 relative z-10">
@@ -221,7 +178,7 @@ export default function Dashboard({
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group min-h-[100px]">
+          <div className="bg-white/80 backdrop-blur-xl border border-slate-300 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group min-h-[100px]">
             <div className="absolute inset-0 bg-gradient-to-tr from-slate-100/0 to-slate-100/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-2 relative z-10">
               <div className="bg-slate-100 text-slate-600 rounded-md flex items-center justify-center p-1 border border-slate-200/50 shadow-sm">
@@ -241,7 +198,7 @@ export default function Dashboard({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mt-3">
           <div 
           onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
+            className="bg-white/80 backdrop-blur-xl border border-amber-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-3 relative z-10">
@@ -260,7 +217,7 @@ export default function Dashboard({
 
           <div 
           onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
+            className="bg-white/80 backdrop-blur-xl border border-emerald-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             <div className="flex items-center gap-2 mb-3 relative z-10">
@@ -368,7 +325,7 @@ export default function Dashboard({
                     <div
                       key={doc.id}
                       onClick={() => onViewDocument(doc.id)}
-                      className="bg-white/90 backdrop-blur-xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] py-1.5 px-2 rounded-lg cursor-pointer hover:border-blue-400 hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-0.5 group transition-all duration-300 flex items-center justify-between relative overflow-hidden mb-1"
+                      className="bg-white/90 backdrop-blur-xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] py-1 px-2 rounded-lg cursor-pointer hover:border-blue-400 hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-0.5 group transition-all duration-300 flex items-center justify-between relative overflow-hidden mb-0.5"
                     >
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200 group-hover:bg-blue-500 transition-colors duration-300"></div>
                       <div className="space-y-0.5 flex items-center space-x-2 pl-2">

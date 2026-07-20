@@ -5,9 +5,10 @@ interface ApprovalQueuePageProps {
   currentUserRole: 'accounting' | 'manager' | 'cfo' | string;
   currentUserEmail: string;
   onRefreshDataSignal: () => void;
+  setCurrentView?: (view: string) => void;
 }
 
-export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, onRefreshDataSignal }: ApprovalQueuePageProps) {
+export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, onRefreshDataSignal, setCurrentView }: ApprovalQueuePageProps) {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [activeQueue, setActiveQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,9 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
         });
 
         setActiveQueue(matched);
+        if (matched.length === 0 && setCurrentView) {
+          setCurrentView("work-tracker");
+        }
       }
     } catch (err) {
       console.error("Failed to load approval queue ledger:", err);

@@ -63,6 +63,30 @@ export default function AdminUsers() {
     } catch(e) { console.error(e); }
   };
 
+  const handleRoleChangeInline = async (user, newRole) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const payload = {
+        name: user.name,
+        email: user.email,
+        username: user.username,
+        employee_id: user.employee_id,
+        role: newRole,
+        permissions: user.permissions
+      };
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        alert("Failed to update user role");
+      }
+    } catch(e) { console.error(e); }
+  };
+
   return (
     <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden flex flex-col">
       <div className="border-b border-slate-100/80 bg-slate-50/50 p-3 flex items-center justify-between">
@@ -108,6 +132,7 @@ export default function AdminUsers() {
                     <option value="employee">Employee (Uploader)</option>
                     <option value="manager">Manager / Dept Head (Approver)</option>
                     <option value="ap_exec">AP Executive (Reviewer)</option>
+                    <option value="executive">Executive (Approver/Viewer)</option>
                     <option value="admin">System Administrator</option>
                   </select>
                 </div>
@@ -119,11 +144,12 @@ export default function AdminUsers() {
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Micro-Permissions (RBAC Matrix)</label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-3 rounded border border-slate-200 shadow-inner">
                     {[
-                      {id: 'manage_users', label: 'Manage Users'},
-                      {id: 'edit_ai', label: 'Edit AI Templates'},
-                      {id: 'routing', label: 'Modify Routing Rules'},
-                      {id: 'audit', label: 'View Audit Logs'},
-                      {id: 'approve', label: 'Approve Invoices'}
+                      {id: 'routing', label: 'Modify Flow Routing Rules'},
+                      {id: 'edit_ai', label: 'Configure AI Templates'},
+                      {id: 'manage_users', label: 'Identity & Access Management (IAM)'},
+                      {id: 'raci', label: 'Configure Email & RACI Rules'},
+                      {id: 'audit', label: 'View Compliance Audit Logs'},
+                      {id: 'system', label: 'Manage Core System Settings'}
                     ].map(p => (
                       <label key={p.id} className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer hover:text-sky-700 transition-colors">
                         <input type="checkbox" name="permissions" value={p.id} defaultChecked={(editingUser.permissions || []).includes(p.id)} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 w-4 h-4" />
@@ -145,11 +171,11 @@ export default function AdminUsers() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">User Details</th>
-                <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Role Level</th>
-                <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Date Provisioned</th>
-                <th className="px-4 py-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-4 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">User Details</th>
+                <th className="px-4 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">Role Level</th>
+                <th className="px-4 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">Date Provisioned</th>
+                <th className="px-4 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -158,29 +184,39 @@ export default function AdminUsers() {
               ) : users.length === 0 ? (
                 <tr><td colSpan="4" className="p-4 text-center text-xs text-slate-400 italic">No users found.</td></tr>
               ) : users.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-4 py-3">
+                <tr key={u.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <td className="px-4 py-2">
                     <div className="flex flex-col">
-                      <span className="font-bold text-slate-800 text-sm">{u.name}</span>
-                      <span className="text-[10px] text-slate-500 flex items-center gap-1"><Mail className="h-3 w-3" /> {u.email}</span>
+                      <span className="font-bold text-slate-900 text-xs">{u.name}</span>
+                      <span className="text-[9px] font-medium text-slate-500 flex items-center gap-1 mt-0.5"><Mail className="h-3 w-3" /> {u.email}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-widest border ${
-                      u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
-                      u.role === 'ap_exec' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
-                      'bg-slate-50 text-slate-600 border-slate-200'
-                    }`}>
-                      {u.role.replace('_', ' ')}
-                    </span>
+                  <td className="px-4 py-2">
+                    <select
+                      value={u.role}
+                      onChange={(e) => handleRoleChangeInline(u, e.target.value)}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border-0 cursor-pointer outline-none bg-transparent transition-colors ${
+                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
+                        u.role === 'ap_exec' ? 'bg-blue-100 text-blue-700' : 
+                        u.role === 'manager' ? 'bg-amber-100 text-amber-700' : 
+                        u.role === 'executive' ? 'bg-rose-100 text-rose-700' : 
+                        'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <option value="employee">Employee</option>
+                      <option value="manager">Manager</option>
+                      <option value="ap_exec">AP Exec</option>
+                      <option value="executive">Executive</option>
+                      <option value="admin">Admin</option>
+                    </select>
                   </td>
-                  <td className="px-4 py-3 text-[10px] font-mono text-slate-500">
+                  <td className="px-4 py-2 text-[9px] font-bold text-slate-500">
                     {new Date(u.created_at).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingUser(u)} className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded"><Edit2 className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => deleteUser(u.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <td className="px-4 py-2 text-right">
+                    <div className="flex justify-end gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditingUser(u)} className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => deleteUser(u.id)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </td>
                 </tr>

@@ -112,10 +112,10 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
-        inv.mockGrnNumber.toLowerCase().includes(q) ||
-        inv.po_number.toLowerCase().includes(q) ||
-        inv.invoice_number.toLowerCase().includes(q) ||
-        inv.vendor_name.toLowerCase().includes(q)
+        (inv.tracking_id || "").toLowerCase().includes(q) ||
+        (inv.po_number || "").toLowerCase().includes(q) ||
+        (inv.invoice_number || "").toLowerCase().includes(q) ||
+        (inv.vendor_name || "").toLowerCase().includes(q)
       );
     }
     return true;
@@ -148,37 +148,30 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
         </div>
       )}
 
-      {/* Header section matching app aesthetic */}
-      <div className="flex-none flex flex-col md:flex-row md:items-end justify-between gap-2 pb-3">
-        <div>
-          <h2 className="text-xl font-bold font-display text-slate-900 tracking-tight flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            Gate Entry
-          </h2>
+      {/* Controls Row */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 mt-2 flex-none">
+        <div className="flex-1 w-full max-w-md bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 flex items-center space-x-3 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all shadow-sm">
+          <Search className="h-4.5 w-4.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search Document Number, PO Number, Supplier..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-transparent border-0 outline-none text-[12px] text-slate-800 w-full placeholder-slate-400 focus:ring-0 p-0 font-sans font-bold tracking-wide"
+          />
         </div>
-      </div>
 
-      {/* Search & Filter section */}
-      <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 p-3 rounded-xl shadow-sm mb-3 flex-none">
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Search Records</label>
-          <div className="relative max-w-xl">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="GRN Number, PO Number, Supplier..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            />
-          </div>
-        </div>
+        <button 
+          onClick={fetchData}
+          className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all shadow-sm group"
+        >
+          <RefreshCw className={`h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors ${loading ? 'animate-spin text-blue-500' : ''}`} />
+          Sync Records
+        </button>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-col shrink min-h-0 bg-white/60 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden">
+      <div className="flex flex-col shrink min-h-0 bg-white/90 backdrop-blur-xl border border-slate-200/80 rounded-[1rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         
         {/* Tabs */}
         <div className="flex border-b border-slate-100 bg-slate-50/50 px-3">
@@ -208,21 +201,20 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
         {/* Table Container */}
         <div className="shrink min-h-0 overflow-auto custom-scrollbar">
           <table className="w-full text-left whitespace-nowrap">
-            <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-md z-10 border-b border-slate-100 shadow-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 font-black sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">GRN Number</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Purchase Invoice No</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">PO Number</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Supplier Name</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">GRN Status</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Invoice Status</th>
-                <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Value</th>
+                <th className="px-4 py-3 w-[15%]">Document Number</th>
+                <th className="px-4 py-3 w-[15%]">Invoice Number</th>
+                <th className="px-4 py-3 w-[15%]">PO Number</th>
+                <th className="px-4 py-3 w-[35%]">Supplier Name</th>
+                <th className="px-4 py-3 w-[10%] text-center">Status</th>
+                <th className="px-4 py-3 w-[10%] text-right">Value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10">
+                  <td colSpan={6} className="text-center py-10">
                     <div className="flex flex-col items-center justify-center">
                       <RefreshCw className="h-6 w-6 animate-spin text-blue-500 mb-2" />
                       <span className="text-xs text-slate-500 font-medium">Loading records...</span>
@@ -231,7 +223,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                 </tr>
               ) : paginatedInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center">
+                  <td colSpan={6} className="px-4 py-8 text-center">
                     <div className="bg-slate-50 text-slate-400 h-10 w-10 rounded-lg flex items-center justify-center mx-auto mb-2 border border-slate-100">
                       <Search className="h-5 w-5" />
                     </div>
@@ -244,7 +236,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                   <tr key={inv.id || idx} className="hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => setSelectedInvoiceId(inv.id)}>
                     <td className="px-4 py-2">
                       <span className="text-blue-600 font-bold text-[11px] group-hover:underline cursor-pointer">
-                        {inv.mockGrnNumber}
+                        {inv.tracking_id || "N/A"}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-800 text-[11px] font-semibold">{inv.invoice_number}</td>
@@ -260,22 +252,7 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                         {inv.grnStatus}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider border ${
-                        inv.invoiceStatus.toLowerCase().includes('exception') || inv.invoiceStatus.toLowerCase().includes('error') ? 'bg-rose-50 text-rose-700 border-rose-200/50' :
-                        inv.invoiceStatus.toLowerCase().includes('waiting') || inv.invoiceStatus.toLowerCase().includes('pending') || inv.invoiceStatus.toLowerCase().includes('in approval') ? 'bg-amber-50 text-amber-700 border-amber-200/50' :
-                        inv.invoiceStatus.toLowerCase().includes('approved') ? 'bg-emerald-50 text-emerald-700 border-emerald-200/50' :
-                        'bg-slate-50 text-slate-700 border-slate-200/50'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${
-                          inv.invoiceStatus.toLowerCase().includes('exception') || inv.invoiceStatus.toLowerCase().includes('error') ? 'bg-rose-500' :
-                          inv.invoiceStatus.toLowerCase().includes('waiting') || inv.invoiceStatus.toLowerCase().includes('pending') || inv.invoiceStatus.toLowerCase().includes('in approval') ? 'bg-amber-500' :
-                          inv.invoiceStatus.toLowerCase().includes('approved') ? 'bg-emerald-500' :
-                          'bg-slate-500'
-                        }`}></span>
-                        {inv.invoiceStatus}
-                      </span>
-                    </td>
+
                     <td className="px-4 py-2 text-right text-slate-900 font-bold text-[11px]">
                       ₹{inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>

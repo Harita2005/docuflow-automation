@@ -153,47 +153,47 @@ export default function AdminRACI() {
   const activeWorkflow = customWorkflow || workflowProfile;
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 flex flex-col gap-4">
+      <div className="flex justify-between items-center bg-white px-4 py-2.5 rounded-lg shadow-sm border border-slate-200/60">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Users className="h-6 w-6 text-blue-600" />
+          <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+            <Users className="h-4 w-4 text-blue-600" />
             RACI Email Matrix
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-[10px] font-bold text-slate-500 mt-0.5">
             Configure automated email notifications based on the Responsible, Accountable, Consulted, and Informed framework.
           </p>
         </div>
         <button 
           onClick={saveRACI} 
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors shadow-sm disabled:opacity-50"
         >
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           Save Matrix
         </button>
       </div>
 
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <label className="block text-sm font-bold text-slate-700">SMTP Email Server Configuration</label>
-          <button onClick={saveProviderConfig} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-bold transition-colors flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
+      <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4">
+        <div className="flex justify-between items-center mb-3">
+          <label className="block text-xs font-black text-blue-600 uppercase tracking-wide">SMTP Email Server Configuration</label>
+          <button onClick={saveProviderConfig} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">SMTP Server</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="e.g. smtp.office365.com"/></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Port</label><input type="number" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.port || ''} onChange={e => setProviderConfig({...providerConfig, port: parseInt(e.target.value)})} placeholder="587"/></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sender Email</label><input type="email" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.sender_email || ''} onChange={e => setProviderConfig({...providerConfig, sender_email: e.target.value})} placeholder="noreply@company.com"/></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.username || ''} onChange={e => setProviderConfig({...providerConfig, username: e.target.value})} placeholder="SMTP Username"/></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Password</label><input type="password" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.encrypted_password || ''} onChange={e => setProviderConfig({...providerConfig, encrypted_password: e.target.value})} placeholder="SMTP Password"/></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sender Name</label><input type="text" className="w-full text-xs p-2 border border-slate-200 rounded focus:border-blue-500 outline-none" value={providerConfig.sender_name || ''} onChange={e => setProviderConfig({...providerConfig, sender_name: e.target.value})} placeholder="e.g. DocuFlow System"/></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">SMTP Server</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="e.g. smtp.office365.com"/></div>
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Port</label><input type="number" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.port || ''} onChange={e => setProviderConfig({...providerConfig, port: parseInt(e.target.value)})} placeholder="587"/></div>
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Sender Email</label><input type="email" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.sender_email || ''} onChange={e => setProviderConfig({...providerConfig, sender_email: e.target.value})} placeholder="noreply@company.com"/></div>
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Username</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.username || ''} onChange={e => setProviderConfig({...providerConfig, username: e.target.value})} placeholder="SMTP Username"/></div>
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Password</label><input type="password" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.encrypted_password || ''} onChange={e => setProviderConfig({...providerConfig, encrypted_password: e.target.value})} placeholder="SMTP Password"/></div>
+          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Sender Name</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.sender_name || ''} onChange={e => setProviderConfig({...providerConfig, sender_name: e.target.value})} placeholder="e.g. DocuFlow System"/></div>
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <label className="block text-sm font-bold text-slate-700 mb-2">Target Workflow Profile</label>
+      <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4">
+        <label className="block text-xs font-black text-blue-600 mb-2 uppercase tracking-wide">Target Workflow Profile</label>
         <div className="flex gap-4">
           <select 
-            className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm w-64 outline-none focus:border-blue-500"
+            className="p-2 bg-slate-50 border border-slate-200/70 hover:border-slate-300 transition-all rounded-md text-xs w-64 outline-none focus:border-blue-500"
             value={workflowProfile}
             onChange={(e) => {
               setWorkflowProfile(e.target.value);
@@ -221,7 +221,7 @@ export default function AdminRACI() {
             <input 
               type="text"
               placeholder="Enter exact workflow name..."
-              className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm w-64 outline-none focus:border-blue-500"
+              className="p-2 bg-slate-50 border border-slate-200/70 hover:border-slate-300 transition-all rounded-md text-xs w-64 outline-none focus:border-blue-500"
               value={customWorkflow}
               onChange={(e) => setCustomWorkflow(e.target.value)}
             />
@@ -229,43 +229,43 @@ export default function AdminRACI() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 text-sm font-bold text-slate-700 w-48">Trigger Event</th>
-              <th className="p-4 text-sm font-bold text-slate-700 w-1/4">
+            <tr className="bg-slate-50 border-b border-slate-100">
+              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-48">Trigger Event</th>
+              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
                 <span className="text-blue-600">R</span>esponsible
-                <div className="text-[10px] text-slate-400 font-normal mt-1">Required to take action</div>
+                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Required to take action</div>
               </th>
-              <th className="p-4 text-sm font-bold text-slate-700 w-1/4">
+              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
                 <span className="text-purple-600">A</span>ccountable
-                <div className="text-[10px] text-slate-400 font-normal mt-1">Owns the outcome</div>
+                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Owns the outcome</div>
               </th>
-              <th className="p-4 text-sm font-bold text-slate-700 w-1/4">
+              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
                 <span className="text-amber-600">C</span>onsulted
-                <div className="text-[10px] text-slate-400 font-normal mt-1">SME / Feedback provider</div>
+                <div className="text-[8px] text-slate-400 font-medium mt-0.5">SME / Feedback provider</div>
               </th>
-              <th className="p-4 text-sm font-bold text-slate-700 w-1/4">
+              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
                 <span className="text-green-600">I</span>nformed
-                <div className="text-[10px] text-slate-400 font-normal mt-1">Kept in the loop</div>
+                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Kept in the loop</div>
               </th>
             </tr>
           </thead>
           <tbody>
             {EVENTS.map(event => (
               <React.Fragment key={event}>
-                <tr className="border-t border-slate-200 bg-white">
-                  <td className="p-4 text-sm font-bold text-slate-800 bg-slate-50/50 align-top">{event}</td>
+                <tr className="border-t border-slate-100 bg-white">
+                  <td className="px-4 py-3 text-xs font-bold text-slate-800 bg-slate-50/50 align-top">{event}</td>
                   {['R', 'A', 'C', 'I'].map(role => (
-                    <td key={role} className="p-4 align-top border-l border-slate-100">
+                    <td key={role} className="px-4 py-3 align-top border-l border-slate-100">
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-1 mb-1">
                           {grid[event] && grid[event][role] && grid[event][role].map(email => (
-                            <span key={email} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 border border-slate-200 rounded-md text-[10px] font-medium text-slate-700">
+                            <span key={email} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 border border-slate-200/80 rounded text-[9px] font-medium text-slate-600 hover:border-slate-300 transition-all">
                               {email}
                               <button onClick={() => handleRemoveEmail(event, role, email)} className="text-slate-400 hover:text-red-500">
-                                <X className="h-3 w-3" />
+                                <X className="h-2.5 w-2.5" />
                               </button>
                             </span>
                           ))}
@@ -275,7 +275,7 @@ export default function AdminRACI() {
                             id={`input-${event}-${role}`}
                             type="text" 
                             placeholder="user@company.com" 
-                            className="w-full text-xs p-1.5 bg-transparent border border-slate-200 rounded outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                            className="w-full text-[10px] px-2 py-1 bg-slate-50/50 border border-slate-200/70 rounded hover:border-slate-300 transition-all outline-none focus:border-blue-500 focus:bg-white"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
@@ -285,7 +285,7 @@ export default function AdminRACI() {
                             }}
                           />
                           <button 
-                            className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 border border-slate-200 rounded flex-shrink-0 transition-colors"
+                            className="p-1 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 border border-slate-200 rounded flex-shrink-0 transition-colors"
                             title="Add User"
                             onClick={() => {
                               const input = document.getElementById(`input-${event}-${role}`);
@@ -295,7 +295,7 @@ export default function AdminRACI() {
                               }
                             }}
                           >
-                            <Plus className="h-4 w-4" />
+                            <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>
@@ -304,30 +304,30 @@ export default function AdminRACI() {
                 </tr>
                 {/* Expandable template editor for the event */}
                 {grid[event] && (
-                  <tr className="bg-slate-50/30 border-b border-slate-200">
-                    <td className="p-4 text-xs font-semibold text-slate-500 text-right align-top border-r border-slate-200">
+                  <tr className="bg-slate-50/20 border-b border-slate-200">
+                    <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-right align-top border-r border-slate-100">
                       Email Content
-                      <div className="text-[9px] font-normal text-slate-400 mt-1">Variables:</div>
-                      <div className="text-[9px] font-normal text-slate-400">{"{{document_number}}"}</div>
-                      <div className="text-[9px] font-normal text-slate-400">{"{{vendor_name}}"}</div>
-                      <div className="text-[9px] font-normal text-slate-400">{"{{amount}}"}</div>
+                      <div className="text-[8px] font-normal text-slate-400 mt-1 leading-normal">Variables:</div>
+                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{document_number}}"}</div>
+                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{vendor_name}}"}</div>
+                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{amount}}"}</div>
                     </td>
-                    <td colSpan={4} className="p-4 align-top">
-                      <div className="flex flex-col gap-3 max-w-4xl">
+                    <td colSpan={4} className="px-4 py-3 align-top">
+                      <div className="flex flex-col gap-2.5 max-w-4xl">
                         <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Subject Template</label>
+                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Subject Template</label>
                           <input 
                             type="text" 
-                            className="w-full text-xs p-2 bg-white border border-slate-200 rounded outline-none focus:border-blue-500"
+                            className="w-full text-xs p-1.5 bg-white border border-slate-200/70 hover:border-slate-300 transition-colors rounded outline-none focus:border-blue-500"
                             placeholder="e.g. [ACTION REQUIRED] Invoice {{document_number}} needs your approval"
                             value={grid[event].title_template || ''}
                             onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], title_template: e.target.value } }))}
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Body Template</label>
+                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Body Template</label>
                           <textarea 
-                            className="w-full text-xs p-2 bg-white border border-slate-200 rounded outline-none focus:border-blue-500 min-h-[60px]"
+                            className="w-full text-xs p-1.5 bg-white border border-slate-200/70 hover:border-slate-300 transition-colors rounded outline-none focus:border-blue-500 min-h-[50px]"
                             placeholder={`e.g. Please review the invoice from {{vendor_name}} for {{amount}}.\nLast Action: {{performed_by}}\nComments: {{comments}}`}
                             value={grid[event].message_template || ''}
                             onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], message_template: e.target.value } }))}

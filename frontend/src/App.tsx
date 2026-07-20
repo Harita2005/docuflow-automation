@@ -13,7 +13,7 @@ import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
 import { DbInvoice } from "./types.ts";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
 import { io } from "socket.io-client";
 
 export default function App() {
@@ -42,6 +42,7 @@ export default function App() {
   const [stats, setStats] = useState<any | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [showPendingModal, setShowPendingModal] = useState(false);
 
   // Sync Registry documents
   const fetchDocuments = async (silent = false) => {
@@ -219,6 +220,49 @@ export default function App() {
     setIsLoggedIn(false);
   }
 
+  useEffect(() => {
+    if (isLoggedIn && documents.length > 0) {
+      const hasShown = sessionStorage.getItem("hasShownWelcomeQueue");
+      if (hasShown === "false") {
+        const pending = documents.filter(doc => {
+          const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+          if (terminalStates.includes(doc.status)) return false;
+          if (currentUserRole === "admin") return true;
+          if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
+          if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
+            return !!doc.is_current_approver;
+          }
+          return false;
+        });
+
+        if (pending.length > 0) {
+          setShowPendingModal(true);
+        }
+        sessionStorage.setItem("hasShownWelcomeQueue", "true");
+      }
+    }
+  }, [documents, isLoggedIn, currentUserRole]);
+
+  // Redirect to work tracker if approval queue is empty
+  useEffect(() => {
+    if (isLoggedIn && currentView === "approval-queue" && documents.length > 0) {
+      const pending = documents.filter(doc => {
+        const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+        if (terminalStates.includes(doc.status)) return false;
+        if (currentUserRole === "admin") return true;
+        if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
+        if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
+          return !!doc.is_current_approver;
+        }
+        return false;
+      });
+
+      if (pending.length === 0) {
+        setCurrentView("work-tracker");
+      }
+    }
+  }, [currentView, documents, isLoggedIn, currentUserRole]);
+
   // Get active selected doc object
   const activeDocument = documents.find((d) => d.id === selectedDocId) || null;
 
@@ -231,11 +275,12 @@ export default function App() {
           setCurrentUserEmail(email);
           setCurrentUserUsername(username);
           setIsLoggedIn(true);
+          sessionStorage.setItem("hasShownWelcomeQueue", "false");
           // Smart Routing based on role
           setCurrentView((prev) => {
             if (prev === "details" && selectedDocId) return "details";
-            // If they are an approver or employee, send them straight to the queue!
-            if (role === "manager" || role === "executive" || role === "employee") return "approval-queue";
+            // If they are an approver or employee, send them straight to the work tracker!
+            if (role === "manager" || role === "executive" || role === "employee") return "work-tracker";
             return "dashboard";
           });
         }}
@@ -326,9 +371,10 @@ export default function App() {
 
             {currentView === "approval-queue" && (
               <ApprovalQueuePage
-                documents={documents}
-                onViewDocument={handleViewDocument}
+                currentUserRole={currentUserRole}
                 currentUserEmail={currentUserEmail}
+                onRefreshDataSignal={handleFullRefresh}
+                setCurrentView={setCurrentView}
               />
             )}
 
@@ -373,6 +419,110 @@ export default function App() {
 
 
       </div>
+
+      {/* Welcome Pending Approvals Modal */}
+      {showPendingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn border border-slate-100">
+            {/* Header / Graphic */}
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white relative">
+              <button 
+                onClick={() => setShowPendingModal(false)}
+                className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              
+              <div className="h-12 w-12 bg-white/15 rounded-xl backdrop-blur-md flex items-center justify-center mb-4 border border-white/10 shadow-inner">
+                <ClipboardCheck className="h-6 w-6 text-white" />
+              </div>
+              
+              <h3 className="text-base font-black font-display tracking-tight leading-none mb-1">
+                Welcome back, {currentUserUsername || currentUserEmail.split('@')[0]}!
+              </h3>
+              <p className="text-[11px] text-blue-100 font-semibold tracking-wide uppercase mt-1">
+                You have {documents.filter(doc => {
+                  const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+                  if (terminalStates.includes(doc.status)) return false;
+                  if (currentUserRole === "admin") return true;
+                  if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
+                  if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
+                    return !!doc.is_current_approver;
+                  }
+                  return false;
+                }).length} pending actions waiting
+              </p>
+            </div>
+
+            {/* List of pending docs */}
+            <div className="p-5">
+              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-3">Awaiting your approval</p>
+              
+              <div className="space-y-2.5 max-h-[220px] overflow-y-auto custom-scrollbar mb-5 p-1.5 pr-2">
+                {documents.filter(doc => {
+                  const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+                  if (terminalStates.includes(doc.status)) return false;
+                  if (currentUserRole === "admin") return true;
+                  if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
+                  if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
+                    return !!doc.is_current_approver;
+                  }
+                  return false;
+                }).slice(0, 3).map(doc => (
+                  <div 
+                    key={doc.id}
+                    onClick={() => {
+                      setSelectedDocId(doc.id);
+                      setCurrentView("details");
+                      setShowPendingModal(false);
+                    }}
+                    className="group border border-slate-100 hover:border-blue-300 hover:bg-blue-50/20 p-3 rounded-xl transition cursor-pointer flex items-center justify-between shadow-sm relative overflow-hidden"
+                  >
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className="text-[10px] font-black text-slate-800 tracking-tight">
+                        {doc.tracking_id || doc.id}
+                      </span>
+                      <span className="text-[11px] font-extrabold text-slate-900 truncate mt-0.5">
+                        {doc.vendor_name || "Unknown Vendor"}
+                      </span>
+                      <span className="text-[9px] font-semibold text-slate-500 tracking-wide uppercase mt-0.5">
+                        {doc.document_type || "Invoice"} • {doc.invoice_number}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="block text-[11px] font-black text-slate-900">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(doc.amount || 0)}
+                      </span>
+                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-blue-600 mt-1 uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity">
+                        Review <ArrowRight className="h-2 w-2" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setCurrentView("work-tracker");
+                    setShowPendingModal(false);
+                  }}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-1.5 active:scale-98"
+                >
+                  <ClipboardCheck className="h-4 w-4" /> Go to Work Tracker
+                </button>
+                <button
+                  onClick={() => setShowPendingModal(false)}
+                  className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 text-center active:scale-98"
+                >
+                  Review Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

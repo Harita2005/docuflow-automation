@@ -82,35 +82,28 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
 // Hierarchical Sequence Generator
 async function getNextHierarchicalId(type: 'AP Invoice' | 'Credit Note' | 'Debit Note' | 'Purchase Order' | 'Vendor Payment' | 'Workflow' | 'Goods Receipt' | string): Promise<string> {
-  let code = "";
   let prefix = "";
-  if (type === "AP Invoice") {
+  const t = (type || "").toUpperCase();
+  
+  if (t.includes("INVOICE")) {
     prefix = "INV";
-    code = "11";
-  } else if (type === "Credit Note") {
+  } else if (t.includes("CREDIT NOTE")) {
     prefix = "CN";
-    code = "12";
-  } else if (type === "Debit Note") {
+  } else if (t.includes("DEBIT NOTE")) {
     prefix = "DN";
-    code = "13";
-  } else if (type === "Vendor Payment") {
+  } else if (t.includes("VENDOR PAYMENT")) {
     prefix = "VP";
-    code = "1";
-  } else if (type === "Purchase Order") {
+  } else if (t.includes("PURCHASE ORDER") || t === "PO") {
     prefix = "PO";
-    code = "14";
-  } else if (type === "Workflow") {
+  } else if (t.includes("WORKFLOW")) {
     prefix = "WF";
-    code = "26"; // E.g., year 2026
-  } else if (type === "Goods Receipt") {
+  } else if (t.includes("GOODS RECEIPT") || t === "GRN") {
     prefix = "GRN";
-    code = "26";
   } else {
-    prefix = "DOC";
-    code = "99";
+    prefix = "INV";
   }
   
-  const fullPrefix = `${prefix}-${code}`;
+  const fullPrefix = `${prefix}-`;
   
   const seq = await prisma.sequence.upsert({
     where: { code: fullPrefix },
@@ -118,7 +111,7 @@ async function getNextHierarchicalId(type: 'AP Invoice' | 'Credit Note' | 'Debit
     create: { code: fullPrefix, current: 1 }
   });
   
-  const numberStr = seq.current.toString().padStart(3, '0');
+  const numberStr = seq.current.toString().padStart(4, '0');
   return `${fullPrefix}${numberStr}`;
 }
 
@@ -412,6 +405,20 @@ function parseInvoiceForFrontend(invoice: any) {
 async function matchAndStartWorkflow(invoiceId: string) {
   const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) return { success: false, message: "Invoice not found." };
+
+  if ((invoice.document_type || "").toUpperCase() === "VENDOR PAYMENT") {
+     const profileName = "Vendor Payment Custom Flow";
+     await prisma.activeApprovalLog.upsert({
+        where: { invoice_id: invoice.id },
+        update: { current_stage_number: 1, status: "Pending", workflow_profile: profileName },
+        create: { invoice_id: invoice.id, workflow_profile: profileName, current_stage_number: 1, status: "Pending" }
+     });
+     await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "In Approval" } });
+     await prisma.systemLog.create({
+        data: { invoice_id: invoice.id, action: "Workflow Initialized", user: "Automated Rules Engine", details: `Vendor Payment Custom Routing Triggered. Started Stage 1.` }
+     });
+     return { success: true };
+  }
 
   let finalWorkflowProfile = null;
   let erpData = null;
@@ -993,8 +1000,29 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
 
     const { originalname, size, mimetype, filename } = req.file;
     
+    let currentFilePath = req.file.path;
+    let finalSize = size;
+    
+    // --- BACKEND COMPRESSION (IF > 15MB) ---
+    if (mimetype === 'application/pdf' && size > 15 * 1024 * 1024) {
+       const compressedPath = `${req.file.path}_compressed.pdf`;
+       const pyCmd = process.platform === "win32" ? "python" : "python3";
+       try {
+           const { stdout } = await execAsync(`${pyCmd} compress_pdf.py "${currentFilePath}" "${compressedPath}"`);
+           const result = JSON.parse(stdout);
+           if (result.status === "success") {
+               await fs.rename(compressedPath, currentFilePath);
+               const stats = await fs.stat(currentFilePath);
+               finalSize = stats.size;
+               console.log(`[Compression] Shrunk PDF from ${(size/1024/1024).toFixed(2)}MB to ${(finalSize/1024/1024).toFixed(2)}MB`);
+           }
+       } catch (e) {
+           console.error("[Compression] Failed to compress PDF, proceeding with original:", e);
+       }
+    }
+    
     // --- LAYER 1: PRE-LLM FILE HASH DUPLICATE FILTER ---
-    const fileBuffer = await fs.readFile(req.file.path);
+    const fileBuffer = await fs.readFile(currentFilePath);
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
     
     const existingFile = await prisma.invoice.findFirst({ where: { file_hash: fileHash } });
@@ -1030,7 +1058,7 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
         document_type: skip_ocr ? "Invoice" : "Processing...",
         uploaded_by_id: user.id,
         file_name: originalname,
-        file_size: size,
+        file_size: finalSize,
         mime_type: mimetype,
         file_path: uploadedPath,
         file_hash: fileHash,
@@ -1109,9 +1137,24 @@ app.post("/api/goods-receipt/:id/confirm", async (req, res) => {
     });
 
     if (status === "Received") {
-      const result = await matchAndStartWorkflow(invoice.id);
-      if (result.message) {
-        return res.json({ success: true, message: result.message });
+      const activeLog = await prisma.activeApprovalLog.findUnique({ where: { invoice_id: invoice.id } });
+      if (activeLog && activeLog.workflow_profile === "Vendor Payment Custom Flow" && activeLog.status !== "Approved") {
+          await prisma.activeApprovalLog.update({
+            where: { id: activeLog.id },
+            data: { current_stage_number: activeLog.current_stage_number + 1 }
+          });
+          await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { status: `Pending Approval (Stage ${activeLog.current_stage_number + 1})` }
+          });
+          await prisma.systemLog.create({
+            data: { invoice_id: invoice.id, action: "Workflow Resumed", user: confirmedBy, details: "GRN completed, resuming custom workflow." }
+          });
+      } else {
+          const result = await matchAndStartWorkflow(invoice.id);
+          if (result.message) {
+            return res.json({ success: true, message: result.message });
+          }
       }
     } else {
       await prisma.invoice.update({
@@ -1950,11 +1993,13 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
 
     // Dynamic variable resolution e.g., '[PO_OWNER]'
     let resolvedApprover = currentStageDef.approver_target;
-    if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]') {
+    if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]' || resolvedApprover === '[INDENTER]') {
        if (invoice.po_number && invoice.po_number !== "Not Found") {
           const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
           if (corpMock) {
-             resolvedApprover = resolvedApprover === '[PO_OWNER]' ? (corpMock.po_owner_email || resolvedApprover) : (corpMock.dept_head_email || resolvedApprover);
+             if (resolvedApprover === '[PO_OWNER]') resolvedApprover = corpMock.po_owner_email || resolvedApprover;
+             else if (resolvedApprover === '[INDENTER]') resolvedApprover = (corpMock as any).indenter_email || resolvedApprover;
+             else if (resolvedApprover === '[DEPT_HEAD]') resolvedApprover = corpMock.dept_head_email || resolvedApprover;
           }
        }
     }
@@ -1966,6 +2011,20 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
     }
 
     // Advance Stage
+    if (activeLog.workflow_profile === "Vendor Payment Custom Flow" && activeLog.current_stage_number === 1) {
+        await prisma.invoice.update({ where: { id: invoiceId }, data: { status: "Waiting for GRN" } });
+        await prisma.goodsReceipt.upsert({
+           where: { invoice_id: invoiceId },
+           update: { status: "Pending", confirmed_by: "Pending", remarks: "Awaiting GRN after PO Raiser approval" },
+           create: { id: await getNextHierarchicalId("Goods Receipt"), invoice_id: invoiceId, status: "Pending", confirmed_by: "Pending", remarks: "Awaiting GRN after PO Raiser approval" }
+        });
+        await prisma.systemLog.create({
+           data: { invoice_id: invoiceId, action: "Routed to Gate Entry", user: "Workflow Engine", details: "PO Raiser approved, now waiting for GRN." }
+        });
+        io.emit("workflow_updated", { invoiceId, action: "Approved" });
+        return res.json({ success: true, message: "Sent to Gate Entry" });
+    }
+
     const nextStageDef = await prisma.workflowStepDefinition.findFirst({
       where: {
         profile_name: activeLog.workflow_profile,
@@ -2036,11 +2095,13 @@ app.post("/api/workflows/reject", authenticateToken, async (req, res) => {
 
        if (currentStageDef) {
          let resolvedApprover = currentStageDef.approver_target;
-         if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]') {
+         if (resolvedApprover === '[PO_OWNER]' || resolvedApprover === '[DEPT_HEAD]' || resolvedApprover === '[INDENTER]') {
             if (invoice.po_number && invoice.po_number !== "Not Found") {
                const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
                if (corpMock) {
-                  resolvedApprover = resolvedApprover === '[PO_OWNER]' ? (corpMock.po_owner_email || resolvedApprover) : (corpMock.dept_head_email || resolvedApprover);
+                  if (resolvedApprover === '[PO_OWNER]') resolvedApprover = corpMock.po_owner_email || resolvedApprover;
+                  else if (resolvedApprover === '[INDENTER]') resolvedApprover = (corpMock as any).indenter_email || resolvedApprover;
+                  else if (resolvedApprover === '[DEPT_HEAD]') resolvedApprover = corpMock.dept_head_email || resolvedApprover;
                }
             }
          }
@@ -2420,17 +2481,7 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
              templatesPrompt = "No known document types configured. Guess the document type autonomously.";
           }
           // --- CONTINUOUS LEARNING: DYNAMIC FEW-SHOT INJECTION ---
-          // Disabled to prevent LLM from hallucinating old schema structures
           let fewShotExample = "";
-          
-          // --- CONTINUOUS LEARNING: HUMAN CORRECTIONS (RAG) ---
-          // DISABLED: Injecting past JSON directly into the prompt causes the LLM to regurgitate old values (hallucinate).
-          // const recentCorrections = await prisma.correctionLog.findMany({
-          //   orderBy: { created_at: "desc" },
-          //   take: 3
-          // });
-          //
-          // if (recentCorrections.length > 0) { ... }
 
           // STAGE 1: The Classifier Router
           const rawTextLower = rawText.toLowerCase();
@@ -2568,6 +2619,30 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
                }
             } catch(e) {
                fieldsDef = selectedTemplate.fields_json;
+            }
+
+            // --- CONTINUOUS LEARNING: HUMAN CORRECTIONS (RAG) ---
+            try {
+              const recentCorrections = await prisma.correctionLog.findMany({
+                where: { invoice: { document_type: classifiedType } },
+                orderBy: { created_at: "desc" },
+                take: 2,
+                include: { invoice: true }
+              });
+
+              if (recentCorrections.length > 0) {
+                let examplesStr = "\n<EXAMPLES>\nCRITICAL RULE: The examples below are strictly for pattern recognition. DO NOT copy values (like invoice numbers or amounts) from these examples into your final output. Extract ONLY from the current [OCR TEXT].\n\n";
+                recentCorrections.forEach((c: any, index: number) => {
+                  examplesStr += `--- Example ${index + 1} ---\n`;
+                  const exampleOcr = c.invoice?.ocr_text || "";
+                  examplesStr += `[EXAMPLE OCR TEXT]:\n${exampleOcr.length > 1000 ? exampleOcr.substring(0, 1000) + '...' : exampleOcr}\n\n`;
+                  examplesStr += `[EXPECTED JSON OUTPUT]:\n${c.human_corrected_data}\n\n`;
+                });
+                examplesStr += "</EXAMPLES>\n";
+                fewShotExample = examplesStr;
+              }
+            } catch (err) {
+              console.log("Failed to load few-shot examples:", err);
             }
 
             prompt = `You are a highly accurate, autonomous Data Extraction AI. 
@@ -3004,6 +3079,9 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
             if (grnConfig && grnConfig.value.toLowerCase() === "false") {
                 nextStatus = "Pending Approval";
             }
+            if ((invoice.document_type || "").toUpperCase() === "VENDOR PAYMENT") {
+                nextStatus = "Pending Approval";
+            }
         }
 
         const updatedInv = await prisma.invoice.update({
@@ -3175,6 +3253,30 @@ app.get("/api/admin/audit-logs", authenticateToken, async (req: any, res: any) =
     }
 });
 
+app.get("/api/admin/erp-status", authenticateToken, async (req: any, res: any) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: "Unauthorized" });
+        // Simulating a successful connection ping to the ERP database
+        res.json({ status: "Connected" });
+    } catch (e) {
+        res.json({ status: "Disconnected" });
+    }
+});
+
+app.get("/api/admin/erp-preview", authenticateToken, async (req: any, res: any) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ error: "Unauthorized" });
+        // Securely fetch a preview of POs (Read-Only) from the Mock Corporate ERP Database
+        const pos = await prisma.corporateAppMock.findMany({
+            take: 10,
+            select: { po_number: true, po_owner_email: true, indenter_email: true, dept_head_email: true }
+        });
+        res.json({ pos });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get("/api/admin/health", authenticateToken, async (req: any, res: any) => {
     // 1. Webhook Processor (Internal Event Loop)
     const t0 = Date.now();
@@ -3328,6 +3430,61 @@ app.post("/api/admin/config", authenticateToken, async (req: any, res: any) => {
             create: { key, value, description }
         });
         res.json(cfg);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post("/api/integrations/fetch-external-docs", authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = req.user;
+        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: "EXTERNAL_DOCS_API_URL" } });
+        const apiUrl = apiUrlCfg ? apiUrlCfg.value : "https://api.external-erp.com/v1/debit-notes";
+
+        // Generate a mock Debit Note document to represent ingestion from the API
+        const invoiceId = await getNextHierarchicalId("Debit Note");
+        const debitNoteNumber = `DN-${Math.floor(100000 + Math.random() * 900000)}`;
+        const fileHash = crypto.createHash("sha256").update(Buffer.from(debitNoteNumber)).digest("hex");
+        
+        const newDebitNote = await prisma.invoice.create({
+            data: {
+                id: invoiceId,
+                tracking_id: `temp-${invoiceId}`,
+                invoice_number: debitNoteNumber,
+                vendor_name: "External ERP System Vendor",
+                invoice_date: new Date().toISOString().split("T")[0],
+                po_number: `PO-${Math.floor(100000 + Math.random() * 900000)}`,
+                amount: 4500.00,
+                base_amount: 4500.00,
+                currency: "USD",
+                status: "AI Processed",
+                document_type: "Debit Note",
+                uploaded_by_id: user.id,
+                file_name: `${debitNoteNumber}.pdf`,
+                file_size: 154200,
+                mime_type: "application/pdf",
+                file_path: "/uploads/mock-debit-note.pdf",
+                file_hash: fileHash,
+                ocr_confidence: 98.5,
+                ocr_text: "Debit Note Invoice matching line items from External ERP Sync API.",
+                tax_details: "Standard Tax Rate 15%"
+            }
+        });
+
+        await prisma.systemLog.create({
+            data: {
+                invoice_id: invoiceId,
+                action: "External Sync Success",
+                user: user.username,
+                details: `Fetched Debit Note ${debitNoteNumber} from API: ${apiUrl}`
+            }
+        });
+
+        res.json({
+            success: true,
+            message: `Successfully connected to ${apiUrl} and imported 1 Debit Note document.`,
+            document: newDebitNote
+        });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }

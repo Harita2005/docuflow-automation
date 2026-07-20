@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder } from 'lucide-react';
 
 const getPrefixCode = (category, subCat) => {
   if (!category || !subCat) return "";
@@ -45,6 +45,7 @@ export default function FlowBuilder({ users = [] }) {
   const [draggedStepIdx, setDraggedStepIdx] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
   const [configuringStepIndex, setConfiguringStepIndex] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -53,6 +54,16 @@ export default function FlowBuilder({ users = [] }) {
   const handleAddCategory = () => {
     setShowAddModal(true);
   };
+
+  useEffect(() => {
+    const handleOpenAddCategory = () => handleAddCategory();
+    window.addEventListener('open-add-category', handleOpenAddCategory);
+    return () => window.removeEventListener('open-add-category', handleOpenAddCategory);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('update-add-action', { detail: !selectedCategory }));
+  }, [selectedCategory]);
 
   const confirmAddCategory = (e) => {
     e.preventDefault();
@@ -68,9 +79,9 @@ export default function FlowBuilder({ users = [] }) {
     }
   };
 
-  const confirmDeleteDocType = async (docType, wfs, e) => {
-    e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete Document Type "${docType}" and all its ${wfs.length} workflows? This cannot be undone.`)) return;
+  const handleDeleteCategoryModal = async () => {
+    if (!deleteCategoryTarget) return;
+    const { category, wfs } = deleteCategoryTarget;
     try {
       const token = localStorage.getItem("authToken");
       await Promise.all(wfs.map(wf => 
@@ -79,10 +90,12 @@ export default function FlowBuilder({ users = [] }) {
           headers: token ? { "Authorization": `Bearer ${token}` } : {}
         })
       ));
+      setAddedCategories(prev => prev.filter(c => c !== category));
       fetchWorkflows();
+      setDeleteCategoryTarget(null);
     } catch (err) {
       console.error(err);
-      alert("Error deleting document type workflows");
+      alert("Error deleting category");
     }
   };
 
@@ -298,30 +311,26 @@ export default function FlowBuilder({ users = [] }) {
 
     if (!selectedCategory) {
       return (
-        <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <div>
-                <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">Workflow Categories</h2>
-                <p className="text-sm font-bold text-slate-500 mt-1">Select a category to view and manage its workflows.</p>
-              </div>
-              <button onClick={handleAddCategory} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-xs uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                <Plus className="h-4 w-4" /> Add Category
-              </button>
-            </div>
+        <div className="flex flex-col gap-4 mt-2">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.keys(groupedWorkflows).map(cat => (
-              <button key={cat} onClick={() => setSelectedCategory(cat)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              <div key={cat} onClick={() => setSelectedCategory(cat)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Network className="h-5 w-5" />
+                  <div className="h-8 w-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    <Network className="h-4 w-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-sm tracking-wide">{cat}</h3>
-                    <p className="text-sm font-bold text-slate-500 mt-0.5">{groupedWorkflows[cat].length} Workflows</p>
+                    <h3 className="font-bold text-slate-800 text-xs tracking-wide group-hover:text-blue-700 transition-colors">{cat}</h3>
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">{groupedWorkflows[cat].length} Workflows</p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-              </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget({ category: cat, wfs: groupedWorkflows[cat] }); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100" title="Delete Category">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                </div>
+              </div>
             ))}
           </div>
 
@@ -354,23 +363,42 @@ export default function FlowBuilder({ users = [] }) {
               </div>
             </div>
           )}
+
+          {/* DELETE CATEGORY MODAL */}
+          {deleteCategoryTarget && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-xs overflow-hidden scale-in">
+                <div className="p-5 flex flex-col items-center text-center">
+                  <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-3">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-black text-slate-900 text-base mb-1.5">Delete Category</h3>
+                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">Are you sure you want to delete <strong className="text-slate-800">{deleteCategoryTarget.category}</strong> and all its {deleteCategoryTarget.wfs?.length || 0} workflows? This action cannot be undone.</p>
+                  <div className="flex w-full gap-2.5">
+                    <button type="button" onClick={() => setDeleteCategoryTarget(null)} className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">Cancel</button>
+                    <button type="button" onClick={handleDeleteCategoryModal} className="flex-1 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
 
     return (
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+      <div className="flex flex-col gap-4 mt-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
           <div className="flex items-center gap-4">
-            <button aria-label="Back to Categories" onClick={() => setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
-              <ArrowRight className="h-4 w-4 rotate-180" />
+            <button aria-label="Back" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+              <ArrowRight className="h-3 w-3 rotate-180" />
             </button>
             <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest">
-                {selectedCategory}
+              <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                {selectedCategory} {selectedSubCategory && <><span className="text-slate-300">/</span> <span className="text-blue-600">{selectedSubCategory}</span></>}
               </h2>
-              <p className="text-sm font-bold text-slate-500 mt-1">
-                Managing workflows in {selectedCategory}
+              <p className="text-[10px] font-bold text-slate-500">
+                {selectedSubCategory ? `Managing workflows in ${selectedSubCategory}` : `Select a document folder to view its workflows`}
               </p>
             </div>
           </div>
@@ -392,49 +420,87 @@ export default function FlowBuilder({ users = [] }) {
         </div>
 
         <div className="flex flex-col gap-8">
-          <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {((groupedWorkflows[selectedCategory] || [])
-                .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
-                .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }))
-              ).map((wf, index) => (
-                <div key={wf.profile_name} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 transition-colors group flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">
+          {(() => {
+            const filtered = (groupedWorkflows[selectedCategory] || [])
+              .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
+              .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }));
+
+            const byType = filtered.reduce((acc, wf) => {
+              const type = wf.workflow_type || 'Uncategorized';
+              if (!acc[type]) acc[type] = [];
+              acc[type].push(wf);
+              return acc;
+            }, {});
+
+            if (!selectedSubCategory) {
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.keys(byType).sort().map(type => (
+                    <button key={type} onClick={() => setSelectedSubCategory(type)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded bg-blue-50/80 text-blue-500 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                           <Network className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-700 text-xs tracking-wide group-hover:text-blue-700 transition-colors">{type}</h3>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">{byType[type].length}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+
+            const workflowsForType = byType[selectedSubCategory] || [];
+
+            if (workflowsForType.length === 0 && selectedSubCategory) {
+               setSelectedSubCategory(null);
+               return null;
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {workflowsForType.map((wf, index) => (
+                  <div key={wf.profile_name} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col p-3 relative">
+                    <div className="absolute top-3 right-3">
+                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {wf.status}
+                      </span>
+                    </div>
+
+                    <div className="pr-16 mb-1.5">
+                      <h3 className="font-bold text-slate-900 text-xs truncate" title={wf.profile_name}>
                         {wf.profile_name}
                       </h3>
-                      <p className="text-sm font-bold text-slate-500 mt-0.5">{wf.workflow_code || 'NO-CODE'} • {wf.workflow_type || 'Custom'}</p>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate">
+                        {wf.workflow_code || 'NO-CODE'} <span className="text-slate-300">•</span> {wf.workflow_type || 'Custom'}
+                      </p>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-xs font-black uppercase ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {wf.status}
-                    </span>
+                    
+                    <div className="mb-1.5 flex-1">
+                      <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug">
+                        {wf.description || 'No description provided.'}
+                      </p>
+                    </div>
+                    
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-auto">
+                      <div className="text-[10px] font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                        <Network className="h-3 w-3 flex-shrink-0" /> {wf.steps?.length || 0} Steps
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
+                        <button type="button" aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 mb-4 flex-1">{wf.description || 'No description provided.'}</p>
-                  
-                  <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100">
-                    <div className="text-sm font-bold text-slate-600 flex items-center gap-1">
-                      <Network className="h-3 w-3" /> {wf.steps?.length || 0} Steps
-                    </div>
-                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
-                      <button aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {((groupedWorkflows[selectedCategory] || [])
-              .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
-            ).length === 0 && (
-              <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-200 border-dashed">
-                <Network className="h-10 w-10 text-slate-300 mb-4" />
-                <h3 className="text-sm font-bold text-slate-700">No workflows found</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">Get started by creating a new workflow for {selectedCategory}.</p>
-                <button onClick={() => openEditor(null, selectedCategory, 0)} className="mt-5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Create Workflow</button>
+                ))}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
 
         {deleteConfirmTarget && (
@@ -461,65 +527,65 @@ export default function FlowBuilder({ users = [] }) {
   // EDIT VIEW (The requested Redesign)
   return (
     <>
-      <form onSubmit={handleSave} className="flex flex-col gap-6 bg-slate-50 min-h-screen rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-8">
+      <form onSubmit={handleSave} className="flex flex-col gap-1.5 bg-slate-50 h-full rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-5 overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-600" onClick={() => setEditingWorkflow(null)}>
+      <div className="flex flex-col shrink-0 z-10 bg-slate-50 pb-1 -mx-4 -mt-4 px-4 pt-1.5 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-2 border-b border-slate-200/60 shadow-sm mb-0">
+        <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors" onClick={() => setEditingWorkflow(null)}>
           Workflows <span className="text-slate-300">&gt;</span> Configure Workflow
         </div>
-        <div className="flex justify-between items-center mt-2">
+        <div className="flex justify-between items-center mt-0">
           <div>
-            <h1 className="text-2xl font-black text-slate-900">Configure Workflow</h1>
-            <p className="text-xs font-semibold text-slate-500 mt-1">Define approval process by adding approval steps, roles and approvers.</p>
+            <h1 className="text-sm font-black text-slate-900 tracking-tight">Configure Workflow</h1>
+            <p className="text-[8px] font-semibold text-slate-500 mt-0">Define approval process by adding approval steps, roles and approvers.</p>
           </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setEditingWorkflow(null)} className="px-5 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded shadow-sm hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save Workflow'} <CheckCircle2 className="h-4 w-4" />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setEditingWorkflow(null)} className="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 font-bold text-[8px] uppercase tracking-wide rounded hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
+            <button type="submit" disabled={saving} className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[8px] uppercase tracking-wide rounded transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm shadow-blue-500/20">
+              {saving ? 'Saving...' : 'Save Workflow'} <CheckCircle2 className="h-2.5 w-2.5" />
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 items-start flex-1 min-h-0 overflow-hidden -mx-4 px-4 sm:-mx-5 sm:px-5">
         {/* LEFT COLUMN: Form Sections */}
-        <div className="flex-1 w-full flex flex-col gap-6">
+        <div className="flex-1 w-full flex flex-col gap-4 h-full overflow-y-auto custom-scrollbar pr-2 pb-6">
           
           {/* Section 1: Workflow Information */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-5">
-              <span className="bg-blue-600 text-white h-5 w-5 rounded-full flex items-center justify-center text-sm">1</span> Workflow Information
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <h2 className="text-xs font-black text-slate-800 flex items-center gap-1.5 mb-4">
+              <span className="bg-blue-600 text-white h-4 w-4 rounded-full flex items-center justify-center text-[10px]">1</span> Workflow Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-1">
-                <label htmlFor="wfName" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Workflow Name <span className="text-rose-500">*</span></label>
-                <input id="wfName" required value={editingWorkflow.profile_name} onChange={e => setEditingWorkflow({...editingWorkflow, profile_name: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Invoice Approval Workflow" />
+                <label htmlFor="wfName" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Workflow Name <span className="text-rose-500">*</span></label>
+                <input id="wfName" required value={editingWorkflow.profile_name} onChange={e => setEditingWorkflow({...editingWorkflow, profile_name: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Invoice Approval Workflow" />
               </div>
               <div className="md:col-span-1">
-                <label htmlFor="wfCode" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Workflow Code</label>
-                <input id="wfCode" value={editingWorkflow.workflow_code || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_code: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-mono text-slate-800" placeholder="INV-APP-001" />
+                <label htmlFor="wfCode" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Workflow Code</label>
+                <input id="wfCode" value={editingWorkflow.workflow_code || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_code: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-mono text-slate-800" placeholder="INV-APP-001" />
               </div>
               <div className="md:col-span-1">
-                <label htmlFor="wfCategory" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Category</label>
-                <select id="wfCategory" value={editingWorkflow.workflow_category || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_category: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800">
+                <label htmlFor="wfCategory" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Category</label>
+                <select id="wfCategory" value={editingWorkflow.workflow_category || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_category: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800">
                   {Array.from(new Set([...Object.keys(groupedWorkflows), 'Vendor Payment Workflows'])).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
               </div>
               <div className="md:col-span-1">
-                <label htmlFor="wfType" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Document Type</label>
-                <input id="wfType" value={editingWorkflow.workflow_type || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_type: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. AP INVOICE" />
+                <label htmlFor="wfType" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Document Type</label>
+                <input id="wfType" value={editingWorkflow.workflow_type || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_type: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. AP INVOICE" />
               </div>
               <div className="md:col-span-2">
-                <label htmlFor="wfDesc" className="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Description</label>
-                <input id="wfDesc" value={editingWorkflow.description || ''} onChange={e => setEditingWorkflow({...editingWorkflow, description: e.target.value})} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none text-slate-600" placeholder="Workflow for invoice approval based on roles..." />
+                <label htmlFor="wfDesc" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Description</label>
+                <input id="wfDesc" value={editingWorkflow.description || ''} onChange={e => setEditingWorkflow({...editingWorkflow, description: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none text-slate-600" placeholder="Workflow for invoice approval based on roles..." />
               </div>
               <div className="md:col-span-1 flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-wider text-slate-500">Status</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</span>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" className="sr-only peer" checked={editingWorkflow.status === 'Active'} onChange={e => setEditingWorkflow({...editingWorkflow, status: e.target.checked ? 'Active' : 'Inactive'})} />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-7 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
                   <span className="ml-2 text-xs font-bold text-slate-700">{editingWorkflow.status}</span>
                 </label>
               </div>
@@ -527,13 +593,13 @@ export default function FlowBuilder({ users = [] }) {
           </div>
 
           {/* Section 2: Approval Steps */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <span className="bg-blue-600 text-white h-5 w-5 rounded-full flex items-center justify-center text-sm">2</span> Approval Steps
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <span className="bg-blue-600 text-white h-4 w-4 rounded-full flex items-center justify-center text-[10px]">2</span> Approval Steps
               </h2>
-              <button type="button" onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold text-sm uppercase tracking-wider rounded transition-colors shadow-sm">
-                <Plus className="h-3.5 w-3.5" /> Add Step
+              <button type="button" onClick={addStep} className="flex items-center gap-1.5 px-2.5 py-1 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold text-[10px] uppercase tracking-wide rounded transition-colors shadow-sm">
+                <Plus className="h-3 w-3" /> Add Step
               </button>
             </div>
             
@@ -541,10 +607,10 @@ export default function FlowBuilder({ users = [] }) {
               <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="pb-3 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-12 text-center">Step</th>
-                    <th className="pb-3 px-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-40">Stage Title</th>
-                    <th className="pb-3 px-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Assignment Strategy & Target</th>
-                    <th className="pb-3 text-xs font-extrabold text-slate-500 uppercase tracking-wider w-16 text-right">Actions</th>
+                    <th className="pb-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-12 text-center">Step</th>
+                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-40">Stage Title</th>
+                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Assignment Strategy & Target</th>
+                    <th className="pb-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-16 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -557,21 +623,21 @@ export default function FlowBuilder({ users = [] }) {
                       onDragEnd={onDragEnd}
                       className="group bg-white hover:bg-slate-50 transition-colors"
                     >
-                      <td className="py-3 align-top text-center cursor-move">
+                      <td className="py-2.5 align-top text-center cursor-move">
                         <div className="flex items-center justify-center gap-1">
-                          <GripVertical className="h-4 w-4 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
-                          <span className="h-6 w-6 rounded flex items-center justify-center bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200">
+                          <GripVertical className="h-3.5 w-3.5 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
+                          <span className="h-5 w-5 rounded flex items-center justify-center bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
                             {idx + 1}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-2 align-top">
-                        <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs p-2 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
+                      <td className="py-2.5 px-2 align-top">
+                        <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs px-2 py-1.5 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
                       </td>
-                      <td className="py-3 px-2 align-middle">
+                      <td className="py-2.5 px-2 align-middle">
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
-                          <span className="text-xs text-slate-500 mt-0.5">
+                          <span className="text-xs font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
+                          <span className="text-[10px] text-slate-500 mt-0.5">
                             {step.approver_target ? step.approver_target : 'Not configured'}
                           </span>
                         </div>
@@ -606,44 +672,45 @@ export default function FlowBuilder({ users = [] }) {
             </div>
           </div>
 
-          {/* Section 3: Additional Settings */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-10">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4">
-              <Settings2 className="h-4 w-4 text-slate-500" /> Additional Settings
+          {/* Section 3: Settings */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <h2 className="text-xs font-black text-slate-800 flex items-center gap-1.5 mb-4">
+              <span className="bg-blue-600 text-white h-4 w-4 rounded-full flex items-center justify-center text-[10px]">3</span> 
+              <Settings2 className="h-3 w-3 text-slate-500" /> Additional Settings
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Approval Threshold</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Approval Threshold</label>
                 <div className="relative">
-                  <input type="number" value={editingWorkflow.approval_threshold} onChange={e=>setEditingWorkflow({...editingWorkflow, approval_threshold: parseInt(e.target.value)||0})} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded outline-none font-mono" />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                  <input type="number" value={editingWorkflow.approval_threshold} onChange={e=>setEditingWorkflow({...editingWorkflow, approval_threshold: parseInt(e.target.value)||0})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded outline-none font-mono text-slate-800" />
+                  <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
                 </div>
               </div>
               <div className="col-span-2 md:col-span-1">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Rejection Handling</label>
-                <select value={editingWorkflow.rejection_handling} onChange={e=>setEditingWorkflow({...editingWorkflow, rejection_handling: e.target.value})} className="w-full text-xs p-2 pr-8 truncate bg-slate-50 border border-slate-200 rounded outline-none font-medium text-slate-700">
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Rejection Handling</label>
+                <select value={editingWorkflow.rejection_handling} onChange={e=>setEditingWorkflow({...editingWorkflow, rejection_handling: e.target.value})} className="w-full text-xs px-2.5 py-1.5 pr-6 truncate bg-slate-50 border border-slate-200 rounded outline-none font-medium text-slate-800">
                   <option value="Return to Previous Step">Return to Previous Step</option>
                   <option value="Terminate Workflow">Terminate Workflow</option>
                   <option value="Return to Submitter">Return to Submitter</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Reminder Interval</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Reminder Interval</label>
                 <div className="relative">
-                  <input type="number" value={editingWorkflow.reminder_interval_hours} onChange={e=>setEditingWorkflow({...editingWorkflow, reminder_interval_hours: parseInt(e.target.value)||0})} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded outline-none font-mono" />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">hrs</span>
+                  <input type="number" value={editingWorkflow.reminder_interval_hours} onChange={e=>setEditingWorkflow({...editingWorkflow, reminder_interval_hours: parseInt(e.target.value)||0})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded outline-none font-mono text-slate-800" />
+                  <span className="absolute right-2 top-1.5 text-[10px] font-bold text-slate-400">hrs</span>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Escalation After</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Escalation After</label>
                 <div className="relative">
-                  <input type="number" value={editingWorkflow.escalation_after_hours} onChange={e=>setEditingWorkflow({...editingWorkflow, escalation_after_hours: parseInt(e.target.value)||0})} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded outline-none font-mono" />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">hrs</span>
+                  <input type="number" value={editingWorkflow.escalation_after_hours} onChange={e=>setEditingWorkflow({...editingWorkflow, escalation_after_hours: parseInt(e.target.value)||0})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded outline-none font-mono text-slate-800" />
+                  <span className="absolute right-2 top-1.5 text-[10px] font-bold text-slate-400">hrs</span>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Auto Escalation</label>
-                <select value={editingWorkflow.auto_escalation ? 'Enabled' : 'Disabled'} onChange={e=>setEditingWorkflow({...editingWorkflow, auto_escalation: e.target.value === 'Enabled'})} className="w-full text-xs p-2 pr-8 truncate bg-slate-50 border border-slate-200 rounded outline-none font-medium text-slate-700">
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Auto Escalation</label>
+                <select value={editingWorkflow.auto_escalation ? 'Enabled' : 'Disabled'} onChange={e=>setEditingWorkflow({...editingWorkflow, auto_escalation: e.target.value === 'Enabled'})} className="w-full text-xs px-2.5 py-1.5 pr-6 truncate bg-slate-50 border border-slate-200 rounded outline-none font-medium text-slate-800">
                   <option value="Enabled">Enabled</option>
                   <option value="Disabled">Disabled</option>
                 </select>
@@ -653,46 +720,47 @@ export default function FlowBuilder({ users = [] }) {
         </div>
 
         {/* RIGHT COLUMN: Workflow Summary Sidebar */}
-        <div className="w-full lg:w-80 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-5 sticky top-8">
-          <h2 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-wide">Workflow Summary</h2>
+        <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-6">
+          <h2 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest">Workflow Summary</h2>
           
-          <div className="space-y-3 pb-4 border-b border-slate-100">
+          <div className="space-y-2.5 pb-4 border-b border-slate-100">
             <div>
-              <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Workflow Name</div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Workflow Name</div>
               <div className="text-xs font-bold text-slate-800 mt-0.5">{editingWorkflow.profile_name || '-'}</div>
             </div>
             <div>
-              <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Workflow Code</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5 font-mono">{editingWorkflow.workflow_code || '-'}</div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Workflow Code</div>
+              <div className="text-[11px] font-bold text-slate-800 mt-0.5 font-mono bg-slate-50 px-1 py-0.5 rounded border border-slate-100 inline-block">{editingWorkflow.workflow_code || '-'}</div>
             </div>
             <div className="flex gap-4">
               <div>
-                <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Type</div>
-                <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-sm border border-emerald-200">{editingWorkflow.workflow_type || '-'}</span>
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Type</div>
+                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-sm border border-emerald-200">{editingWorkflow.workflow_type || '-'}</span>
               </div>
               <div>
-                <div className="text-xs font-extrabold uppercase tracking-widest text-slate-400">Status</div>
-                <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded-sm border ${editingWorkflow.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{editingWorkflow.status}</span>
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Status</div>
+                <span className={`inline-block mt-0.5 px-1.5 py-0.5 text-[10px] font-bold rounded-sm border ${editingWorkflow.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{editingWorkflow.status}</span>
               </div>
             </div>
           </div>
 
           <div className="pt-4">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 mb-4">Approval Sequence ({editingWorkflow.steps.length})</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-3">Approval Sequence ({editingWorkflow.steps.length})</h3>
             
-            <div className="relative pl-3 border-l-2 border-slate-200/60 ml-2 space-y-5">
+            <div className="relative pl-3 border-l-2 border-slate-100 space-y-3">
               {editingWorkflow.steps.length === 0 ? (
-                <div className="text-xs text-slate-400 italic font-medium -ml-5">No steps added.</div>
+                <div className="text-[10px] text-slate-400 italic font-medium -ml-5">No steps added.</div>
               ) : (
                 editingWorkflow.steps.map((step, idx) => (
                   <div key={idx} className="relative">
-                    <div className="absolute -left-[23px] top-0 h-5 w-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold ring-4 ring-white shadow-sm">
+                    <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold ring-4 ring-white shadow-sm">
                       {idx + 1}
                     </div>
-                    <div className="pl-2">
-                      <div className="text-sm font-bold text-slate-800">{step.step_name || `Step ${idx+1}`}</div>
-                      <div className="text-xs font-medium text-slate-500 leading-snug mt-0.5">
-                        <span className="font-bold text-slate-600">{step.role}</span> • {step.approver_target || 'Target Unassigned'}
+                    <div className="pl-1.5">
+                      <div className="text-[11px] font-bold text-slate-800 leading-tight">{step.step_name || `Step ${idx+1}`}</div>
+                      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide leading-snug mt-0.5 flex flex-wrap gap-1">
+                        <span className="text-slate-400">•</span> 
+                        {step.approver_target || step.approver_type || 'Unassigned'}
                       </div>
                     </div>
                   </div>

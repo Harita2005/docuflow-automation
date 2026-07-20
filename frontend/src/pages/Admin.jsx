@@ -40,11 +40,13 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState("routing");
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [isRootView, setIsRootView] = useState(true);
   
   // New States for Search and Diagnostics
   const [logSearchQuery, setLogSearchQuery] = useState("");
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
+  const [templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
   const [publishConfirm, setPublishConfirm] = useState(false);
 
   // Sandbox State
@@ -54,7 +56,17 @@ export default function Admin() {
   useEffect(() => {
     fetchData();
     fetchAuditLogs();
+
+    const handleUpdateAddAction = (e) => {
+      setIsRootView(e.detail);
+    };
+    window.addEventListener('update-add-action', handleUpdateAddAction);
+    return () => window.removeEventListener('update-add-action', handleUpdateAddAction);
   }, []);
+
+  useEffect(() => {
+    setIsRootView(true);
+  }, [activeTab]);
 
   const fetchAuditLogs = async () => {
     try {
@@ -153,8 +165,10 @@ export default function Admin() {
   };
 
   const handleDeleteRuleLocal = (id) => {
-    if (!id.startsWith('tmp-')) setDeletedRuleIds([...deletedRuleIds, id]);
-    setRules(rules.filter(r => r.id !== id));
+    if (!id.startsWith('tmp-')) {
+      setDeletedRuleIds(prev => [...prev, id]);
+    }
+    setRules(prev => prev.filter(r => r.id !== id));
     setHasChanges(true);
   };
 
@@ -349,10 +363,10 @@ export default function Admin() {
   }));
 
   return (
-    <div className="flex gap-4 min-h-[calc(100vh-6rem)] w-full font-sans">
+    <div className="flex gap-8 h-[calc(100vh-4.5rem)] w-full font-sans overflow-hidden">
       
       {/* Secondary Sidebar */}
-      <div className="w-48 shrink-0 flex flex-col gap-4 sticky top-6 h-fit">
+      <div className="w-56 shrink-0 flex flex-col gap-4 h-full overflow-y-auto border-r border-slate-200 pr-6 pt-6 pb-6 custom-scrollbar">
         <div>
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">Settings</h2>
           <p className="text-[10px] text-slate-500 mt-0.5">Manage system configuration and policies.</p>
@@ -418,65 +432,81 @@ export default function Admin() {
               onClick={() => setActiveTab("system")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
-              System Core & Health
+              System Settings
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-w-0 flex flex-col font-sans pb-12">
+      <div className="flex-1 min-w-0 flex flex-col font-sans pt-2 h-full">
         
         {/* Settings Header */}
-        <div className={`mb-3 border rounded-lg p-2 backdrop-blur-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2 transition-colors ${hasChanges ? 'bg-amber-50/90 border-amber-200/60' : 'bg-white/80 border-slate-200/60'}`}>
-          <div className="flex items-center gap-2">
-            <div className={`h-6 w-6 rounded-md flex items-center justify-center text-white shadow-sm transition-colors ${hasChanges ? 'bg-gradient-to-br from-amber-400 to-amber-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
-              {hasChanges ? <AlertTriangle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+        <div className={`mb-1.5 border rounded-lg p-2 backdrop-blur-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2 transition-colors ${hasChanges ? 'bg-amber-50/90 border-amber-200/60' : 'bg-white/80 border-slate-200/60'}`}>
+            <div className="flex items-center gap-2">
+              <div className={`h-6 w-6 rounded-md flex items-center justify-center text-white shadow-sm transition-colors ${hasChanges ? 'bg-gradient-to-br from-amber-400 to-amber-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
+                {hasChanges ? <AlertTriangle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+              </div>
+              <div>
+                <h1 className="text-xs font-display font-bold text-slate-900 tracking-tight leading-none">
+                  {activeTab === 'matrix' && 'Condition Policy Matrix'}
+                  {activeTab === 'routing' && 'Flow Builder'}
+                  {activeTab === 'templates' && 'AI Templates'}
+                  {activeTab === 'users' && 'IAM & Users'}
+                  {activeTab === 'masterdata' && 'ERP Master'}
+                  {activeTab === 'system' && 'System Settings'}
+                  {activeTab === 'raci' && 'Email & RACI'}
+                  {activeTab === 'inapp' && 'In-App Notifications'}
+                  {activeTab === 'audit' && 'Audit Logs'}
+                </h1>
+                <p className="text-[9px] text-slate-500 mt-0.5 leading-none">
+                  {hasChanges 
+                    ? <span className="text-amber-700 font-bold">You have unpublished draft modifications.</span> 
+                    : <span>Live Configuration. All system settings are active.</span>}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xs font-display font-bold text-slate-900 tracking-tight leading-none">
-                {activeTab === 'matrix' && 'Condition Policy Matrix'}
-                {activeTab === 'routing' && 'Flow Builder'}
-                {activeTab === 'templates' && 'AI Templates'}
-                {activeTab === 'users' && 'IAM & Users'}
-                {activeTab === 'masterdata' && 'ERP Master'}
-                {activeTab === 'system' && 'System Core & Health'}
-                {activeTab === 'raci' && 'Email & RACI'}
-                {activeTab === 'inapp' && 'In-App Notifications'}
-                {activeTab === 'audit' && 'Audit Logs'}
-              </h1>
-              <p className="text-[9px] text-slate-500 mt-0.5 leading-none">
-                {hasChanges 
-                  ? <span className="text-amber-700 font-bold">You have unpublished draft modifications.</span> 
-                  : <span>Live Configuration. All system settings are active.</span>}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-1.5">
-            {hasChanges && (
-              <>
+            
+            <div className="flex items-center gap-1.5">
+              {(activeTab === 'routing' || activeTab === 'matrix') && isRootView && (
                 <button 
-                  onClick={discardChanges}
-                  disabled={publishing}
-                  className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100 rounded-md transition"
+                  onClick={() => window.dispatchEvent(new Event('open-add-category'))} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shadow-sm border border-blue-100 mr-2"
                 >
-                  Discard Draft
+                  <Plus className="h-3 w-3" /> Add Category
                 </button>
-                <button 
-                  onClick={publishChanges}
-                  disabled={publishing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-bold rounded-md shadow-md transition disabled:opacity-50"
+              )}
+              {activeTab === 'templates' && !selectedTemplateCategory && (
+                <button
+                  onClick={() => openEditTemplate(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shadow-sm border border-blue-200 mr-2"
                 >
-                  {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                  Publish Configuration
+                  <Plus className="h-3 w-3" /> New Template
                 </button>
-              </>
-            )}
-          </div>
-        </div>
+              )}
 
-      <div className="flex flex-col gap-3 items-stretch relative">
+              {hasChanges && (
+                <>
+                  <button 
+                    onClick={discardChanges}
+                    disabled={publishing}
+                    className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100 rounded-md transition"
+                  >
+                    Discard Draft
+                  </button>
+                  <button 
+                    onClick={publishChanges}
+                    disabled={publishing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-bold rounded-md shadow-md transition disabled:opacity-50"
+                  >
+                    {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    Publish Configuration
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+      <div className="flex-1 min-h-0 flex flex-col gap-3 items-stretch relative overflow-y-auto custom-scrollbar pr-2">
         {publishing && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-50 rounded-xl flex items-center justify-center">
             <div className="bg-white p-4 rounded-xl shadow-xl flex items-center gap-3 font-bold text-slate-700">
@@ -502,25 +532,11 @@ export default function Admin() {
 
     {/* --- TEMPLATES TAB CONTENT --- */}
     {activeTab === "templates" && (
-      <div className="w-full bg-white/60 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] overflow-hidden flex flex-col transition-all">
-        <div className="border-b border-slate-100/80 bg-slate-50/50 p-2.5 px-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wider">
-              <Network className="h-4 w-4 text-purple-600" />
-              Dynamic Data Extraction Templates
-            </h2>
-          </div>
-          <button
-            onClick={() => openEditTemplate(null)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm"
-          >
-            <Plus className="h-3.5 w-3.5" /> New Template
-          </button>
-        </div>
+      <div className="flex flex-col gap-4 mt-2">
 
-        <div className="p-0 flex-1">
+        <div className="flex flex-col gap-4">
           {editingTemplate && (
-            <div className="bg-purple-50/30 p-3 border-b border-purple-100/50">
+            <div className="bg-blue-50/30 p-3 border-b border-blue-100/50">
               <form onSubmit={handleSaveTemplateLocal} className="space-y-4 relative">
                 <button type="button" onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} className="absolute -top-1 -right-1 text-slate-400 hover:text-slate-600">
                   <X className="h-4 w-4" />
@@ -535,7 +551,7 @@ export default function Admin() {
                     <input type="text" name="description" defaultValue={editingTemplate.description} className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner" />
                   </div>
                 </div>
-                <div className="pt-2 border-t border-purple-100">
+                <div className="pt-2 border-t border-blue-100">
                   <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Global AI Instructions</label>
                   <textarea 
                     name="instructions" 
@@ -546,10 +562,10 @@ export default function Admin() {
                     className="w-full text-xs p-1.5 border border-slate-200 rounded font-mono shadow-inner resize-none"
                   ></textarea>
                 </div>
-                <div className="pt-2 border-t border-purple-100">
+                <div className="pt-2 border-t border-blue-100">
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">Document Fields</label>
-                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1 text-[9px] font-bold text-purple-600 hover:text-purple-800 bg-purple-100/50 hover:bg-purple-100 px-2 py-1 rounded">
+                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-800 bg-blue-100/50 hover:bg-blue-100 px-2 py-1 rounded">
                       <Plus className="h-3 w-3" /> Add Field
                     </button>
                   </div>
@@ -566,7 +582,7 @@ export default function Admin() {
                             setTemplateFields(newFields);
                           }}
                           required
-                          className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-purple-400 focus:outline-none"
+                          className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-blue-400 focus:outline-none"
                         />
                         <select
                           value={field.type}
@@ -575,7 +591,7 @@ export default function Admin() {
                             newFields[idx].type = e.target.value;
                             setTemplateFields(newFields);
                           }}
-                          className="w-24 text-xs p-1.5 border border-slate-200 rounded focus:border-purple-400 focus:outline-none bg-slate-50"
+                          className="w-24 text-xs p-1.5 border border-slate-200 rounded focus:border-blue-400 focus:outline-none bg-slate-50"
                         >
                           <option value="string">String</option>
                           <option value="number">Number</option>
@@ -604,7 +620,7 @@ export default function Admin() {
                             newFields[idx].description = e.target.value;
                             setTemplateFields(newFields);
                           }}
-                          className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-purple-400 focus:outline-none"
+                          className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-blue-400 focus:outline-none"
                         />
                         <button type="button" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-rose-500 transition-colors">
                           <Trash2 className="h-4 w-4" />
@@ -617,7 +633,7 @@ export default function Admin() {
                   </div>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold rounded shadow transition-colors uppercase tracking-wider">
+                  <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded shadow transition-colors uppercase tracking-wider">
                     <Save className="h-3 w-3" /> Save Draft
                   </button>
                 </div>
@@ -626,42 +642,43 @@ export default function Admin() {
           )}
 
           {!selectedTemplateCategory ? (
-            <div className="p-4 bg-slate-50/30">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div onClick={() => setSelectedTemplateCategory('Vendor Payment Workflows')} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
-                      <Network className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-sm tracking-wide">Vendor Payment Workflows</h3>
-                      <p className="text-sm font-bold text-slate-500 mt-0.5">{templates.length} Templates</p>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div onClick={() => setSelectedTemplateCategory('Vendor Payment Workflows')} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    <Network className="h-4 w-4" />
                   </div>
-                  <ArrowRight className="h-5 w-5 text-slate-300 group-hover:text-purple-500 transition-colors" />
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-xs tracking-wide group-hover:text-blue-700 transition-colors">Vendor Payment Workflows</h3>
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">{templates.length} Templates</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={(e) => { e.stopPropagation(); setTemplateCategoryDeleteTarget('Vendor Payment Workflows'); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100" title="Delete Category">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="p-4 bg-slate-50/30">
-              <div className="mb-4 flex flex-col md:flex-row justify-between md:items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
-                <div className="flex items-center gap-3">
-                  <button aria-label="Back" onClick={() => setSelectedTemplateCategory(null)} className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
-                    <ArrowRight className="h-4 w-4 rotate-180" />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col md:flex-row justify-between md:items-center bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 gap-4">
+                <div className="flex items-center gap-4">
+                  <button aria-label="Back" onClick={() => setSelectedTemplateCategory(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+                    <ArrowRight className="h-3 w-3 rotate-180" />
                   </button>
                   <div>
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                      <Settings2 className="h-4 w-4 text-purple-600" /> Vendor Payment
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                      <Settings2 className="h-3 w-3 text-blue-600" /> {selectedTemplateCategory}
                     </h3>
-                    <p className="text-[10px] font-bold text-slate-500 mt-1">Extraction templates for vendor invoices, debit notes, and related documents.</p>
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">Extraction templates for vendor invoices, debit notes, and related documents.</p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                {templates.length === 0 ? (
-                   <div className="p-8 text-center text-slate-400 text-xs font-bold bg-white rounded-xl border border-slate-200">No templates configured yet.</div>
-                ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {templates.length === 0 ? null : (
                  templates.map(t => {
                    const isDraft = t.id && String(t.id).startsWith('tmp-');
                    let parsedFields = [];
@@ -675,66 +692,90 @@ export default function Admin() {
                    } catch(e) {}
                    
                    return (
-                     <div key={t.id} className={`bg-white border border-slate-200 rounded-xl p-4 flex flex-col group hover:border-purple-300 hover:shadow-md transition-all ${isDraft ? 'bg-amber-50/20' : ''}`}>
-                       <div className="flex items-start justify-between">
-                         <div>
-                           <div className="flex items-center gap-2 mb-1">
-                             <h3 className="font-bold text-slate-800 text-sm">{t.name}</h3>
-                             {isDraft && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Draft</span>}
-                           </div>
-                           <p className="text-xs text-slate-500">{t.description}</p>
-                         </div>
-                         <div className="flex gap-1.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => {
-                              const fileInput = document.createElement('input');
-                              fileInput.type = 'file';
-                              fileInput.accept = 'application/pdf,image/*';
-                              fileInput.onchange = async (e) => {
-                                 const file = e.target.files[0];
-                                 if(!file) return;
-                                 setTestingSandbox(true);
-                                 const token = localStorage.getItem("authToken");
-                                 const formData = new FormData();
-                                 formData.append("file", file);
-                                 formData.append("template", JSON.stringify(t));
-                                 try {
-                                   const res = await fetch("/api/admin/test-template", {
-                                     method: "POST",
-                                     headers: token ? { "Authorization": `Bearer ${token}` } : {},
-                                     body: formData
-                                   });
-                                   const data = await res.json();
-                                   setSandboxResult({ ...data, templateName: t.name });
-                                 } catch (err) {
-                                   alert("Sandbox testing failed: " + err.message);
-                                 } finally {
-                                   setTestingSandbox(false);
-                                 }
-                              };
-                              fileInput.click();
-                            }} className="px-2.5 py-1.5 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 text-[10px] font-bold rounded-md shadow-sm flex items-center gap-1 transition-colors"><Activity className="h-3.5 w-3.5" /> Test Sandbox</button>
-                            <button onClick={() => openEditTemplate(t)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"><Edit2 className="h-4 w-4" /></button>
-                            <button onClick={() => handleDeleteTemplateLocal(t.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
-                         </div>
-                       </div>
-                       
-                       <div className="mt-4 pt-3 border-t border-slate-100">
-                          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Extraction Schema ({parsedFields.length} fields)</h4>
-                          <div className="flex flex-wrap gap-2">
-                             {parsedFields.length === 0 && <span className="text-xs text-slate-400 italic">No fields defined</span>}
-                             {parsedFields.map((f, i) => (
-                               <div key={i} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-md hover:bg-slate-100 transition-colors">
-                                 <span className="text-xs font-bold text-slate-700">{f.name}</span>
-                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-1 bg-white border border-slate-200 rounded">{f.type}</span>
-                                 {f.required && <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest ml-1" title="Required Field">REQ</span>}
-                               </div>
-                             ))}
+                      <div key={t.id} className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col group hover:border-blue-300 hover:shadow transition-all ${isDraft ? 'bg-amber-50/20' : ''}`}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-800 text-xs">{t.name}</h3>
+                              {isDraft && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Draft</span>}
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{t.description}</p>
                           </div>
-                       </div>
-                     </div>
+                          <div className="flex gap-1.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button onClick={() => {
+                               const fileInput = document.createElement('input');
+                               fileInput.type = 'file';
+                               fileInput.accept = 'application/pdf,image/*';
+                               fileInput.onchange = async (e) => {
+                                  const file = e.target.files[0];
+                                  if(!file) return;
+                                  setTestingSandbox(true);
+                                  const token = localStorage.getItem("authToken");
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  formData.append("template", JSON.stringify(t));
+                                  try {
+                                    const res = await fetch("/api/admin/test-template", {
+                                      method: "POST",
+                                      headers: token ? { "Authorization": `Bearer ${token}` } : {},
+                                      body: formData
+                                    });
+                                    const data = await res.json();
+                                    setSandboxResult({ ...data, templateName: t.name });
+                                  } catch (err) {
+                                    alert("Sandbox testing failed: " + err.message);
+                                  } finally {
+                                    setTestingSandbox(false);
+                                  }
+                               };
+                               fileInput.click();
+                             }} className="px-2 py-1 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 text-[10px] font-bold rounded shadow-sm flex items-center gap-1 transition-colors"><Activity className="h-3 w-3" /> Test Sandbox</button>
+                             <button onClick={() => openEditTemplate(t)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
+                             <button onClick={() => handleDeleteTemplateLocal(t.id)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                           <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Extraction Schema ({parsedFields.length} fields)</h4>
+                           <div className="flex flex-wrap gap-1.5">
+                              {parsedFields.length === 0 && <span className="text-[10px] text-slate-400 italic">No fields defined</span>}
+                              {parsedFields.map((f, i) => (
+                                <div key={i} className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded hover:bg-slate-100 transition-colors">
+                                  <span className="text-[10px] font-bold text-slate-700">{f.name}</span>
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1 bg-white border border-slate-200 rounded">{f.type}</span>
+                                  {f.required && <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest ml-0.5" title="Required Field">REQ</span>}
+                                </div>
+                              ))}
+                           </div>
+                        </div>
+                      </div>
                    );
                  })
               )}
+              </div>
+            </div>
+          )}
+
+          {templateCategoryDeleteTarget && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-xs overflow-hidden scale-in">
+                <div className="p-5 flex flex-col items-center text-center">
+                  <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-3">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-black text-slate-900 text-base mb-1.5">Delete Category</h3>
+                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">Are you sure you want to delete <strong className="text-slate-800">{templateCategoryDeleteTarget}</strong> and all its templates? This action cannot be undone.</p>
+                  <div className="flex w-full gap-2.5">
+                    <button type="button" onClick={() => setTemplateCategoryDeleteTarget(null)} className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">Cancel</button>
+                    <button type="button" onClick={() => {
+                      const ids = templates.map(t => t.id);
+                      setDeletedTemplateIds([...deletedTemplateIds, ...ids.filter(id => !String(id).startsWith('tmp-'))]);
+                      setTemplates([]);
+                      setHasChanges(true);
+                      setTemplateCategoryDeleteTarget(null);
+                    }} className="flex-1 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Delete</button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -748,7 +789,7 @@ export default function Admin() {
 
           {sandboxResult && !testingSandbox && (
              <div className="mt-4 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden relative animate-fadeIn">
-               <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-3 flex items-center justify-between">
+               <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-3 flex items-center justify-between">
                  <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
                    <Activity className="h-4 w-4" /> Live Extraction Results: {sandboxResult.templateName}
                  </h3>

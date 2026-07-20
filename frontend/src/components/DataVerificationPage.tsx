@@ -44,71 +44,53 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
 
   return (
     <div className="space-y-3 animate-fadeIn pb-8 w-full max-w-[1600px] mx-auto pt-1 px-2 sm:px-4">
-      {/* Premium Header Banner (Matching WorkTrackerPage theme exactly) */}
-      <div className="bg-slate-900 rounded-xl px-4 py-2.5 shadow-lg bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black relative overflow-hidden flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 border border-slate-700/50 mb-3">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-80"></div>
-        <div className="absolute -right-10 -top-10 opacity-10 pointer-events-none">
-          <FileCheck className="h-40 w-40 text-blue-400 transform rotate-12" />
-        </div>
-        
-        <div className="relative z-10 flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-blue-400 hidden sm:block" />
-          <div>
-            <h2 className="text-lg font-black font-display text-white tracking-tight leading-tight">Data Verification Queue</h2>
-            <p className="text-blue-400 text-[9px] mt-0.5 font-bold tracking-widest uppercase">
-              AI-Extraction Review & Exception Handling
-            </p>
-          </div>
-        </div>
-
-        <div className="relative z-10 flex items-center gap-3">
-          <button 
-            onClick={fetchData}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 border border-slate-700/60 text-slate-200 font-bold text-[9px] uppercase tracking-wider rounded text-slate-400 hover:text-slate-200 transition-all shadow-inner backdrop-blur-md"
-          >
-            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin text-blue-400' : ''}`} />
-            Sync Queue
-          </button>
-        </div>
-      </div>
-
-
       {/* Controls Row */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-1">
-        <div className="flex-1 w-full max-w-sm bg-white border border-slate-200/80 rounded-xl px-4 py-2 flex items-center space-x-3 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all shadow-sm">
-          <Search className="h-4 w-4 text-slate-400" />
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 mt-2">
+        <div className="flex-1 w-full max-w-md bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 flex items-center space-x-3 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all shadow-sm">
+          <Search className="h-4.5 w-4.5 text-slate-400" />
           <input
             type="text"
             placeholder="Search vendor, tracking ID, or invoice..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-0 outline-none text-[11px] text-slate-800 w-full placeholder-slate-400 focus:ring-0 p-0 font-sans font-bold tracking-wide"
+            className="bg-transparent border-0 outline-none text-[12px] text-slate-800 w-full placeholder-slate-400 focus:ring-0 p-0 font-sans font-bold tracking-wide"
           />
         </div>
+
+        <button 
+          onClick={fetchData}
+          className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all shadow-sm group"
+        >
+          <RefreshCw className={`h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors ${loading ? 'animate-spin text-blue-500' : ''}`} />
+          Sync Queue
+        </button>
       </div>
 
       {/* Highly Dense Data Table */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-[1rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden mt-3">
+      <div className="bg-white/90 backdrop-blur-xl rounded-[1rem] border border-slate-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400 bg-slate-50/50">
-            <RefreshCw className="h-8 w-8 animate-spin mb-3 text-blue-500" />
-            <p className="font-bold text-[10px] uppercase tracking-widest">Synchronizing Queue...</p>
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-slate-50/50">
+            <RefreshCw className="h-8 w-8 animate-spin mb-4 text-blue-500" />
+            <p className="font-bold text-[11px] uppercase tracking-widest">Synchronizing Queue...</p>
           </div>
         ) : filteredInvoices.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-50/50">
-            <div className="h-12 w-12 bg-white rounded-xl shadow-sm flex items-center justify-center mb-3 border border-slate-100">
-              <CheckCircle className="h-6 w-6 text-blue-500" />
+          <div className="flex flex-col items-center justify-center py-12 text-center bg-gradient-to-b from-white to-slate-50/50">
+            <div className="relative mb-4 group">
+              <div className="absolute -inset-3 bg-blue-100 rounded-full opacity-50 blur-lg group-hover:opacity-70 transition-opacity duration-500"></div>
+              <div className="h-12 w-12 bg-white rounded-xl shadow-sm flex items-center justify-center border border-blue-50 relative z-10">
+                <CheckCircle className="h-6 w-6 text-blue-500" />
+              </div>
             </div>
-            <h3 className="text-sm font-black font-display text-slate-800 uppercase tracking-wide mb-1">Queue Empty</h3>
-            <p className="text-[11px] text-slate-500 font-medium max-w-sm">
-              All extracted documents have been successfully verified.
+            <h3 className="text-sm font-black font-display text-slate-800 tracking-tight mb-1">Queue Empty</h3>
+            <p className="text-[11px] text-slate-500 font-medium max-w-xs leading-relaxed">
+              You're all caught up! All extracted documents have been successfully verified and dispatched.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
               <thead>
-                <tr className="bg-blue-950 border-b border-blue-900 text-[10px] uppercase tracking-wider text-slate-300 font-black">
+                <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 font-black">
                   <th className="py-3 px-4 w-[15%] rounded-tl-xl">Tracking ID</th>
                   <th className="py-3 px-2 w-[25%]">Vendor Details</th>
                   <th className="py-3 px-2 w-[15%]">Document Type</th>

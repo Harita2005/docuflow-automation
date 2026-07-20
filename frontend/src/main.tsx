@@ -12,7 +12,7 @@ window.fetch = async (url, options: any = {}) => {
       Authorization: `Bearer ${token}`,
     };
   }
-  return originalFetch(url, options);
+  return originalFetch.call(window, url, options);
 };
 
 createRoot(document.getElementById('root')!).render(

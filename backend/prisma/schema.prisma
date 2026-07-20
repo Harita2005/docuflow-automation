@@ -254,6 +254,7 @@ model Notification {
 model CorporateAppMock {
   po_number       String  @id
   po_owner_email  String?
+  indenter_email  String?
   dept_head_email String?
 }
 
