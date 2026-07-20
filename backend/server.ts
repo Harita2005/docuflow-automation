@@ -550,7 +550,7 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
 
     if (user.role === 'admin' || user.role === 'executive') {
       invoices = await prisma.invoice.findMany({ 
-        include: { activeApprovalLog: true },
+        include: { activeApprovalLog: true, goodsReceipt: true },
         orderBy: { created_at: 'desc' } 
       });
     } else {
@@ -579,7 +579,7 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
             { id: { in: Array.from(invoiceIds) } }
           ]
         },
-        include: { activeApprovalLog: true },
+        include: { activeApprovalLog: true, goodsReceipt: true },
         orderBy: { created_at: 'desc' } 
       });
     }
@@ -1123,7 +1123,9 @@ app.post("/api/goods-receipt/:id/confirm", async (req, res) => {
         status,
         confirmed_by: confirmedBy,
         confirmed_at: new Date(),
-        remarks: remarks || `Goods marked as ${status}`
+        remarks: remarks || `Goods marked as ${status}`,
+        box_count: req.body.boxCount ? Number(req.body.boxCount) : null,
+        quantity_received: req.body.qtyReceived ? Number(req.body.qtyReceived) : null
       }
     });
 
@@ -1132,7 +1134,7 @@ app.post("/api/goods-receipt/:id/confirm", async (req, res) => {
         invoice_id: invoice.id,
         action: "GRN Confirmation",
         user: confirmedBy,
-        details: `Goods receipt marked as completed. Status: "${status}". Remarks: "${remarks}"`
+        details: `Goods receipt marked as completed. Status: "${status}". Box Count: ${req.body.boxCount || 0}, Qty Received: ${req.body.qtyReceived || 0}. Remarks: "${remarks}"`
       }
     });
 

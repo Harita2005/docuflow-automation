@@ -79,13 +79,15 @@ model Invoice {
 }
 
 model GoodsReceipt {
-  id           String    @id @default(uuid())
-  invoice_id   String    @unique
-  invoice      Invoice   @relation(fields: [invoice_id], references: [id])
-  status       String
-  confirmed_by String
-  confirmed_at DateTime?
-  remarks      String    
+  id                String    @id @default(uuid())
+  invoice_id        String    @unique
+  invoice           Invoice   @relation(fields: [invoice_id], references: [id])
+  status            String
+  confirmed_by      String
+  confirmed_at      DateTime?
+  remarks           String    
+  box_count         Int?
+  quantity_received Int?
 }
 
 model Workflow {

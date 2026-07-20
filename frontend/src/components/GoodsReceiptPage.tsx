@@ -35,6 +35,23 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
   const [remarks, setRemarks] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [boxCount, setBoxCount] = useState<number>(1);
+  const [qtyReceived, setQtyReceived] = useState<number>(0);
+
+  // Auto-fill expected values when opening details modal
+  useEffect(() => {
+    if (selectedInvoiceId) {
+      const inv = invoices.find(i => i.id === selectedInvoiceId);
+      if (inv && Array.isArray(inv.items)) {
+        const expectedQty = inv.items.reduce((sum: number, item: any) => sum + Number(item.quantity || 1), 0);
+        setQtyReceived(expectedQty);
+        setBoxCount(Math.ceil(expectedQty / 10) || 1);
+      } else {
+        setQtyReceived(0);
+        setBoxCount(1);
+      }
+    }
+  }, [selectedInvoiceId, invoices]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -68,8 +85,10 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status,
-          remarks: remarks || `Goods reception confirmed by ${currentUserEmail}`,
-          confirmedBy: currentUserEmail
+          remarks: remarks || `Goods reception confirmed by ${currentUserEmail}. Box Count: ${boxCount}, Qty: ${qtyReceived}`,
+          confirmedBy: currentUserEmail,
+          boxCount,
+          qtyReceived
         })
       });
 
@@ -379,6 +398,46 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Box and Quantity Received inputs / display */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 mb-1 block">
+                    Boxes Received {activeInvoice.grnStatus !== 'Completed' && <span className="text-red-500">*</span>}
+                  </label>
+                  {activeInvoice.grnStatus === 'Completed' ? (
+                    <div className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800">
+                      {activeInvoice.goodsReceipt?.box_count ?? 1} Boxes
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={boxCount}
+                      onChange={(e) => setBoxCount(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-slate-800 shadow-sm"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 mb-1 block">
+                    Quantity Received {activeInvoice.grnStatus !== 'Completed' && <span className="text-red-500">*</span>}
+                  </label>
+                  {activeInvoice.grnStatus === 'Completed' ? (
+                    <div className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800">
+                      {activeInvoice.goodsReceipt?.quantity_received ?? 0} Units
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={qtyReceived}
+                      onChange={(e) => setQtyReceived(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-slate-800 shadow-sm"
+                    />
+                  )}
                 </div>
               </div>
 
