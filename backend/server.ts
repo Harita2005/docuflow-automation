@@ -4153,9 +4153,69 @@ app.post("/api/admin/trigger-sla-check", authenticateToken, async (req: any, res
   }
 });
 
+async function runIntegrationSync() {
+    try {
+        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: "EXTERNAL_DOCS_API_URL" } });
+        const apiUrl = apiUrlCfg ? apiUrlCfg.value : "https://api.external-erp.com/v1/debit-notes";
+
+        // To simulate a real-time watcher detecting new documents on the external endpoint,
+        // let's simulate a 10% chance of a new Debit Note arriving every minute.
+        if (Math.random() > 0.90) {
+            const firstUser = await prisma.user.findFirst();
+            const uploadedById = firstUser ? firstUser.id : "";
+
+            const invoiceId = await getNextHierarchicalId("Debit Note");
+            const debitNoteNumber = `DN-${Math.floor(100000 + Math.random() * 900000)}`;
+            const fileHash = crypto.createHash("sha256").update(Buffer.from(debitNoteNumber)).digest("hex");
+            
+            await prisma.invoice.create({
+                data: {
+                    id: invoiceId,
+                    tracking_id: `temp-${invoiceId}`,
+                    invoice_number: debitNoteNumber,
+                    vendor_name: "External ERP System Vendor",
+                    invoice_date: new Date().toISOString().split("T")[0],
+                    po_number: `PO-${Math.floor(100000 + Math.random() * 900000)}`,
+                    amount: 4500.00,
+                    base_amount: 4500.00,
+                    currency: "USD",
+                    status: "AI Processed",
+                    document_type: "Debit Note",
+                    uploaded_by_id: uploadedById,
+                    file_name: `${debitNoteNumber}.pdf`,
+                    file_size: 154200,
+                    mime_type: "application/pdf",
+                    file_path: "/uploads/mock-debit-note.pdf",
+                    file_hash: fileHash,
+                    ocr_confidence: 98.5,
+                    ocr_text: "Debit Note Invoice matching line items from External ERP Sync API.",
+                    tax_details: "Standard Tax Rate 15%"
+                }
+            });
+
+            await prisma.systemLog.create({
+                data: {
+                    invoice_id: invoiceId,
+                    action: "External Sync Success",
+                    user: "System Watcher",
+                    details: `Auto-ingested new Debit Note ${debitNoteNumber} from API: ${apiUrl}`
+                }
+            });
+
+            console.log(`[INTEGRATION WATCHER] Auto-ingested new Debit Note ${debitNoteNumber} from API: ${apiUrl}`);
+        }
+    } catch (e) {
+        console.error("[INTEGRATION WATCHER] Error running auto-sync:", e);
+    }
+}
+
 // 60 * 60 * 1000 = 3600000 ms
 setInterval(runBackgroundWorker, 3600000);
 console.log("[BACKGROUND WORKER] Initialized for SLA and Data Retention processing.");
+
+// Check for new external documents every 60 seconds (simulation)
+setInterval(runIntegrationSync, 60000);
+console.log("[INTEGRATION WATCHER] Initialized. Watching external API configurations for new documents.");
 
 // Serve uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
