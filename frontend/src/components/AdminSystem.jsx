@@ -15,8 +15,11 @@ export default function AdminSystem() {
     { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System" },
     { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System" },
     { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System" },
-    { key: "EXTERNAL_DOCS_API_URL", default: "https://api.external-erp.com/v1/debit-notes", desc: "Integration API endpoint to fetch external documents (e.g., Debit Notes, Credit Notes)", category: "Integrations" },
-    { key: "EXTERNAL_DOCS_FETCH_INTERVAL", default: "60", desc: "Interval in minutes to automatically poll the external documents API", category: "Integrations" }
+    { key: "API_ENDPOINT_INVOICES", default: "https://api.external-erp.com/v1/invoices", desc: "API Endpoint to fetch external Supplier Invoices", category: "Integrations" },
+    { key: "API_ENDPOINT_DEBIT_NOTES", default: "https://api.external-erp.com/v1/debit-notes", desc: "API Endpoint to fetch external Debit Notes", category: "Integrations" },
+    { key: "API_ENDPOINT_CREDIT_NOTES", default: "https://api.external-erp.com/v1/credit-notes", desc: "API Endpoint to fetch external Credit Notes", category: "Integrations" },
+    { key: "API_ENDPOINT_PURCHASE_ORDERS", default: "https://api.external-erp.com/v1/purchase-orders", desc: "API Endpoint to fetch external Purchase Orders (PO Sync)", category: "Integrations" },
+    { key: "EXTERNAL_DOCS_FETCH_INTERVAL", default: "60", desc: "Interval in minutes to automatically poll all external integration endpoints", category: "Integrations" }
   ];
 
   useEffect(() => { 

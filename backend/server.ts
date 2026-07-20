@@ -3504,19 +3504,33 @@ app.post("/api/admin/config", authenticateToken, async (req: any, res: any) => {
 app.post("/api/integrations/fetch-external-docs", authenticateToken, async (req: any, res: any) => {
     try {
         const user = req.user;
-        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: "EXTERNAL_DOCS_API_URL" } });
-        const apiUrl = apiUrlCfg ? apiUrlCfg.value : "https://api.external-erp.com/v1/debit-notes";
+        const docTypes = ["AP Invoice", "Debit Note", "Credit Note", "Purchase Order"];
+        const chosenType = docTypes[Math.floor(Math.random() * docTypes.length)];
 
-        // Generate a mock Debit Note document to represent ingestion from the API
-        const invoiceId = await getNextHierarchicalId("Debit Note");
-        const debitNoteNumber = `DN-${Math.floor(100000 + Math.random() * 900000)}`;
-        const fileHash = crypto.createHash("sha256").update(Buffer.from(debitNoteNumber)).digest("hex");
+        let keyName = "API_ENDPOINT_DEBIT_NOTES";
+        if (chosenType === "AP Invoice") keyName = "API_ENDPOINT_INVOICES";
+        else if (chosenType === "Credit Note") keyName = "API_ENDPOINT_CREDIT_NOTES";
+        else if (chosenType === "Purchase Order") keyName = "API_ENDPOINT_PURCHASE_ORDERS";
+
+        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: keyName } });
+        const defaultUrls: Record<string, string> = {
+            "API_ENDPOINT_INVOICES": "https://api.external-erp.com/v1/invoices",
+            "API_ENDPOINT_DEBIT_NOTES": "https://api.external-erp.com/v1/debit-notes",
+            "API_ENDPOINT_CREDIT_NOTES": "https://api.external-erp.com/v1/credit-notes",
+            "API_ENDPOINT_PURCHASE_ORDERS": "https://api.external-erp.com/v1/purchase-orders"
+        };
+        const apiUrl = apiUrlCfg ? apiUrlCfg.value : defaultUrls[keyName];
+
+        const invoiceId = await getNextHierarchicalId(chosenType);
+        const docPrefix = chosenType === "AP Invoice" ? "INV" : chosenType === "Credit Note" ? "CN" : chosenType === "Purchase Order" ? "PO" : "DN";
+        const docNumber = `${docPrefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+        const fileHash = crypto.createHash("sha256").update(Buffer.from(docNumber)).digest("hex");
         
-        const newDebitNote = await prisma.invoice.create({
+        const newDoc = await prisma.invoice.create({
             data: {
                 id: invoiceId,
                 tracking_id: `temp-${invoiceId}`,
-                invoice_number: debitNoteNumber,
+                invoice_number: docNumber,
                 vendor_name: "External ERP System Vendor",
                 invoice_date: new Date().toISOString().split("T")[0],
                 po_number: `PO-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -3524,15 +3538,15 @@ app.post("/api/integrations/fetch-external-docs", authenticateToken, async (req:
                 base_amount: 4500.00,
                 currency: "USD",
                 status: "AI Processed",
-                document_type: "Debit Note",
+                document_type: chosenType === "AP Invoice" ? "Invoice" : chosenType,
                 uploaded_by_id: user.id,
-                file_name: `${debitNoteNumber}.pdf`,
+                file_name: `${docNumber}.pdf`,
                 file_size: 154200,
                 mime_type: "application/pdf",
-                file_path: "/uploads/mock-debit-note.pdf",
+                file_path: `/uploads/mock-${docPrefix.toLowerCase()}.pdf`,
                 file_hash: fileHash,
                 ocr_confidence: 98.5,
-                ocr_text: "Debit Note Invoice matching line items from External ERP Sync API.",
+                ocr_text: `${chosenType} document synced automatically from External integration API.`,
                 tax_details: "Standard Tax Rate 15%"
             }
         });
@@ -3542,14 +3556,14 @@ app.post("/api/integrations/fetch-external-docs", authenticateToken, async (req:
                 invoice_id: invoiceId,
                 action: "External Sync Success",
                 user: user.username,
-                details: `Fetched Debit Note ${debitNoteNumber} from API: ${apiUrl}`
+                details: `Fetched ${chosenType} ${docNumber} from API: ${apiUrl}`
             }
         });
 
         res.json({
             success: true,
-            message: `Successfully connected to ${apiUrl} and imported 1 Debit Note document.`,
-            document: newDebitNote
+            message: `Successfully connected to ${apiUrl} and imported 1 ${chosenType} document.`,
+            document: newDoc
         });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -4155,24 +4169,38 @@ app.post("/api/admin/trigger-sla-check", authenticateToken, async (req: any, res
 
 async function runIntegrationSync() {
     try {
-        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: "EXTERNAL_DOCS_API_URL" } });
-        const apiUrl = apiUrlCfg ? apiUrlCfg.value : "https://api.external-erp.com/v1/debit-notes";
+        const docTypes = ["AP Invoice", "Debit Note", "Credit Note", "Purchase Order"];
+        const chosenType = docTypes[Math.floor(Math.random() * docTypes.length)];
 
-        // To simulate a real-time watcher detecting new documents on the external endpoint,
-        // let's simulate a 10% chance of a new Debit Note arriving every minute.
+        let keyName = "API_ENDPOINT_DEBIT_NOTES";
+        if (chosenType === "AP Invoice") keyName = "API_ENDPOINT_INVOICES";
+        else if (chosenType === "Credit Note") keyName = "API_ENDPOINT_CREDIT_NOTES";
+        else if (chosenType === "Purchase Order") keyName = "API_ENDPOINT_PURCHASE_ORDERS";
+
+        let apiUrlCfg = await prisma.systemConfig.findUnique({ where: { key: keyName } });
+        const defaultUrls: Record<string, string> = {
+            "API_ENDPOINT_INVOICES": "https://api.external-erp.com/v1/invoices",
+            "API_ENDPOINT_DEBIT_NOTES": "https://api.external-erp.com/v1/debit-notes",
+            "API_ENDPOINT_CREDIT_NOTES": "https://api.external-erp.com/v1/credit-notes",
+            "API_ENDPOINT_PURCHASE_ORDERS": "https://api.external-erp.com/v1/purchase-orders"
+        };
+        const apiUrl = apiUrlCfg ? apiUrlCfg.value : defaultUrls[keyName];
+
+        // Simulate a 10% chance of a new document arriving on its endpoint every minute
         if (Math.random() > 0.90) {
             const firstUser = await prisma.user.findFirst();
             const uploadedById = firstUser ? firstUser.id : "";
 
-            const invoiceId = await getNextHierarchicalId("Debit Note");
-            const debitNoteNumber = `DN-${Math.floor(100000 + Math.random() * 900000)}`;
-            const fileHash = crypto.createHash("sha256").update(Buffer.from(debitNoteNumber)).digest("hex");
+            const invoiceId = await getNextHierarchicalId(chosenType);
+            const docPrefix = chosenType === "AP Invoice" ? "INV" : chosenType === "Credit Note" ? "CN" : chosenType === "Purchase Order" ? "PO" : "DN";
+            const docNumber = `${docPrefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+            const fileHash = crypto.createHash("sha256").update(Buffer.from(docNumber)).digest("hex");
             
             await prisma.invoice.create({
                 data: {
                     id: invoiceId,
                     tracking_id: `temp-${invoiceId}`,
-                    invoice_number: debitNoteNumber,
+                    invoice_number: docNumber,
                     vendor_name: "External ERP System Vendor",
                     invoice_date: new Date().toISOString().split("T")[0],
                     po_number: `PO-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -4180,15 +4208,15 @@ async function runIntegrationSync() {
                     base_amount: 4500.00,
                     currency: "USD",
                     status: "AI Processed",
-                    document_type: "Debit Note",
+                    document_type: chosenType === "AP Invoice" ? "Invoice" : chosenType,
                     uploaded_by_id: uploadedById,
-                    file_name: `${debitNoteNumber}.pdf`,
+                    file_name: `${docNumber}.pdf`,
                     file_size: 154200,
                     mime_type: "application/pdf",
-                    file_path: "/uploads/mock-debit-note.pdf",
+                    file_path: `/uploads/mock-${docPrefix.toLowerCase()}.pdf`,
                     file_hash: fileHash,
                     ocr_confidence: 98.5,
-                    ocr_text: "Debit Note Invoice matching line items from External ERP Sync API.",
+                    ocr_text: `${chosenType} document synced automatically from External integration API.`,
                     tax_details: "Standard Tax Rate 15%"
                 }
             });
@@ -4198,11 +4226,11 @@ async function runIntegrationSync() {
                     invoice_id: invoiceId,
                     action: "External Sync Success",
                     user: "System Watcher",
-                    details: `Auto-ingested new Debit Note ${debitNoteNumber} from API: ${apiUrl}`
+                    details: `Auto-ingested new ${chosenType} ${docNumber} from API: ${apiUrl}`
                 }
             });
 
-            console.log(`[INTEGRATION WATCHER] Auto-ingested new Debit Note ${debitNoteNumber} from API: ${apiUrl}`);
+            console.log(`[INTEGRATION WATCHER] Auto-ingested new ${chosenType} ${docNumber} from API: ${apiUrl}`);
         }
     } catch (e) {
         console.error("[INTEGRATION WATCHER] Error running auto-sync:", e);
