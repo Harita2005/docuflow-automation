@@ -60,7 +60,7 @@ export default function Sidebar({
       group: "Verification",
       items: [
         { id: "data-verification", label: "Data Verification", icon: FileCheck },
-        { id: "goods-receipt", label: "Goods Receipt", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
+        { id: "goods-receipt", label: "Gate Entry", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
       ]
     } : null,
 

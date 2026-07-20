@@ -121,7 +121,7 @@ export default function Header({
       case "dashboard": return "Executive Command Dashboard";
       case "upload": return "Supplier Invoice Ingest";
       case "incoming": return "Document Ledger Repository";
-      case "goods-receipt": return "Goods Receipt Verification";
+      case "goods-receipt": return "Gate Entry Verification";
       case "workflow-builder": return "Compliance Route Designer";
       case "approval-queue": return "Compliance & Audit Desk";
       case "payment-readiness": return "Treasury Release Panel";
