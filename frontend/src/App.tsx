@@ -44,6 +44,24 @@ export default function App() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [showPendingModal, setShowPendingModal] = useState(false);
 
+  const isDocumentPendingForUser = (doc: DbInvoice) => {
+    const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+    if (terminalStates.includes(doc.status)) return false;
+
+    const isInvoice = (doc.document_type || "").toLowerCase().includes("invoice");
+    if (!isInvoice) return false;
+
+    if (doc.status === "Data Verification Pending") {
+      return currentUserRole === "admin" || currentUserRole === "ap_executive";
+    }
+
+    if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
+      return !!doc.is_current_approver;
+    }
+
+    return false;
+  };
+
   // Sync Registry documents
   const fetchDocuments = async (silent = false) => {
     if (!silent) setLoadingDocs(true);
@@ -217,23 +235,21 @@ export default function App() {
 
   function handleLogout() {
     localStorage.removeItem("authToken");
+    sessionStorage.removeItem("hasShownWelcomeQueue");
     setIsLoggedIn(false);
   }
+
+  // Reset the hasShownWelcomeQueue flag when the app loads, the role changes, or the user logs in,
+  // ensuring they see the pending popup on every new session, refresh, or login.
+  useEffect(() => {
+    sessionStorage.setItem("hasShownWelcomeQueue", "false");
+  }, [currentUserRole, isLoggedIn]);
 
   useEffect(() => {
     if (isLoggedIn && documents.length > 0) {
       const hasShown = sessionStorage.getItem("hasShownWelcomeQueue");
-      if (hasShown === "false") {
-        const pending = documents.filter(doc => {
-          const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
-          if (terminalStates.includes(doc.status)) return false;
-          if (currentUserRole === "admin") return true;
-          if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
-          if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
-            return !!doc.is_current_approver;
-          }
-          return false;
-        });
+      if (hasShown !== "true") {
+        const pending = documents.filter(isDocumentPendingForUser);
 
         if (pending.length > 0) {
           setShowPendingModal(true);
@@ -246,16 +262,7 @@ export default function App() {
   // Redirect to work tracker if approval queue is empty
   useEffect(() => {
     if (isLoggedIn && currentView === "approval-queue" && documents.length > 0) {
-      const pending = documents.filter(doc => {
-        const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
-        if (terminalStates.includes(doc.status)) return false;
-        if (currentUserRole === "admin") return true;
-        if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
-        if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
-          return !!doc.is_current_approver;
-        }
-        return false;
-      });
+      const pending = documents.filter(isDocumentPendingForUser);
 
       if (pending.length === 0) {
         setCurrentView("work-tracker");
@@ -411,6 +418,8 @@ export default function App() {
                     setCurrentView("dashboard");
                     setSelectedDocId(null);
                   }}
+                  onSelectDocument={(docId) => setSelectedDocId(docId)}
+                  pendingDocIds={documents.filter(isDocumentPendingForUser).map(d => d.id)}
                 />
               )
             )}
@@ -441,16 +450,7 @@ export default function App() {
                 Welcome back, {currentUserUsername || currentUserEmail.split('@')[0]}!
               </h3>
               <p className="text-[11px] text-blue-100 font-semibold tracking-wide uppercase mt-1">
-                You have {documents.filter(doc => {
-                  const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
-                  if (terminalStates.includes(doc.status)) return false;
-                  if (currentUserRole === "admin") return true;
-                  if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
-                  if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
-                    return !!doc.is_current_approver;
-                  }
-                  return false;
-                }).length} pending actions waiting
+                You have {documents.filter(isDocumentPendingForUser).length} pending actions waiting
               </p>
             </div>
 
@@ -459,16 +459,7 @@ export default function App() {
               <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-3">Awaiting your approval</p>
               
               <div className="space-y-2.5 max-h-[220px] overflow-y-auto custom-scrollbar mb-5 p-1.5 pr-2">
-                {documents.filter(doc => {
-                  const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
-                  if (terminalStates.includes(doc.status)) return false;
-                  if (currentUserRole === "admin") return true;
-                  if (doc.status === "AI Processed" && currentUserRole === "ap_executive") return true;
-                  if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
-                    return !!doc.is_current_approver;
-                  }
-                  return false;
-                }).slice(0, 3).map(doc => (
+                {documents.filter(isDocumentPendingForUser).slice(0, 3).map(doc => (
                   <div 
                     key={doc.id}
                     onClick={() => {

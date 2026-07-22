@@ -33,6 +33,9 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
     invoiceDate: new Date().toISOString().split("T")[0]
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [showExtractConfirmModal, setShowExtractConfirmModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   // Rotate reassurance loading messages to keep user engaged
   const startReassuranceRotation = () => {
@@ -67,14 +70,34 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
     setErrorMsg(null);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      await uploadFile(e.dataTransfer.files[0]);
+      const file = e.dataTransfer.files[0];
+      const allowedTypes = ["application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        setErrorMsg("Forbidden format. Please upload invoice assets as PDF files only.");
+        return;
+      }
+      if (file.size > 60 * 1024 * 1024) {
+        setErrorMsg("File size exceeds the 60MB limit. Please upload a smaller file.");
+        return;
+      }
+      setPendingFile(file);
     }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setErrorMsg(null);
-      await uploadFile(e.target.files[0]);
+      const file = e.target.files[0];
+      const allowedTypes = ["application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        setErrorMsg("Forbidden format. Please upload invoice assets as PDF files only.");
+        return;
+      }
+      if (file.size > 60 * 1024 * 1024) {
+        setErrorMsg("File size exceeds the 60MB limit. Please upload a smaller file.");
+        return;
+      }
+      setPendingFile(file);
     }
   };
 
@@ -94,73 +117,30 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
       return;
     }
 
-    setLoading(true);
-    setUploadedDoc(null);
-    const textInterval = startReassuranceRotation();
-
     try {
       const formData = new FormData();
       formData.append("file", file);
       
-      if (!useAIExtraction) {
-        formData.append("skip_ocr", "true");
-        formData.append("vendor_name", manualData.vendorName);
-        formData.append("invoice_number", manualData.invoiceNumber);
-        formData.append("amount", manualData.amount);
-        formData.append("po_number", manualData.poNumber);
-        formData.append("invoice_date", manualData.invoiceDate);
-      }
-
       const token = localStorage.getItem("authToken");
-      const response = await fetch("/api/documents/upload", {
+      
+      // Run file upload in background asynchronously
+      fetch("/api/documents/upload", {
         method: "POST",
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
         body: formData,
+      }).then(async (response) => {
+        if (response.ok) {
+          const doc = await response.json();
+          onUploadSuccess(doc);
+        }
+      }).catch(err => {
+        console.error("Background upload failed:", err);
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 401 || response.status === 403) {
-           throw new Error("Your security session has expired. Please click 'Logout' and sign in again.");
-        }
-        throw new Error(errorData.error || `Server Error ${response.status}: Relational extraction server failed.`);
-      }
-
-      const initialDoc = await response.json();
-      
-      // Polling Loop for Async Queue (only if using AI)
-      let currentDoc = initialDoc;
-      let attempts = 0;
-      if (useAIExtraction) {
-        while ((currentDoc.status === "Received" || currentDoc.status === "AI Processed") && attempts < 60) {
-           await new Promise(r => setTimeout(r, 2000));
-           try {
-             const checkRes = await fetch(`/api/invoices/${currentDoc.id}`, {
-               headers: token ? { "Authorization": `Bearer ${token}` } : {}
-             });
-             if (checkRes.ok) {
-               currentDoc = await checkRes.json();
-             }
-           } catch(e) {}
-           attempts++;
-        }
-      }
-      
-      if (currentDoc.status === "Received" || currentDoc.status === "AI Processed") {
-         throw new Error("Processing timed out. Please check the Work Tracker later.");
-      }
-      
-      if (currentDoc.status === "Failed") {
-         throw new Error("Extraction failed: " + (currentDoc.exception_reason || "Unknown error"));
-      }
-
-      setUploadedDoc(currentDoc);
-      onUploadSuccess(currentDoc);
+      // Redirect immediately to dashboard
+      setCurrentView("dashboard");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to initialize pipeline extraction. Server state offline.");
-    } finally {
-      clearInterval(textInterval);
-      setLoading(false);
+      console.error("Upload initialization failed:", err);
     }
   };
 
@@ -242,6 +222,48 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
             </button>                        
           </div>
         </div>
+      ) : pendingFile ? (
+        <div className="backdrop-blur-xl border border-slate-200 bg-white rounded-[2rem] p-10 text-center relative overflow-hidden flex flex-col items-center justify-center space-y-5 shadow-sm min-h-[200px]">
+          {/* File Info Card */}
+          <div className="w-full max-w-sm bg-slate-50 border border-slate-100 rounded-2xl p-4 flex items-center space-x-3 text-left">
+            <div className="h-10 w-10 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+              <FileText className="h-5.5 w-5.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-slate-850 truncate">
+                {pendingFile.name}
+              </div>
+              <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                {pendingFile.size ? `${(pendingFile.size / (1024 * 1024)).toFixed(2)} MB` : "PDF Document"}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 w-full max-w-xs justify-center">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPendingFile(null);
+              }}
+              className="px-5 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-250 text-slate-700 font-semibold rounded-xl text-xs transition duration-200"
+            >
+              Clear
+            </button>
+            
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const file = pendingFile;
+                setPendingFile(null);
+                uploadFile(file);
+              }}
+              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white font-semibold rounded-xl text-xs transition-all duration-200 shadow-md shadow-blue-500/10 hover:shadow-lg hover:shadow-blue-500/20 flex items-center justify-center space-x-1.5"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Extract</span>
+            </button>
+          </div>
+        </div>
       ) : (
         <div
           onDragEnter={handleDrag}
@@ -287,7 +309,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           />
         </div>
       )}
-
 
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 p-4.5 rounded-2xl flex items-start space-x-3 text-red-800 text-xs shadow-sm">

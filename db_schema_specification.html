@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Database Schema & Workflow Specification</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      body {
+        background-color: #fff;
+        color: #000;
+      }
+      .no-print {
+        display: none;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased">
+  <div class="max-w-4xl mx-auto py-12 px-6 bg-white my-8 shadow-sm rounded-xl border border-gray-200">
+    
+    <!-- Header -->
+    <div class="border-b border-gray-300 pb-6 mb-8 flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-black tracking-tight text-black">DocuFlow Automation</h1>
+        <p class="text-sm text-gray-500 font-medium mt-1">Database Schema & Workflow Specification</p>
+      </div>
+      <button onclick="window.print()" class="no-print px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded hover:bg-gray-800 transition">
+        Print / Save to PDF
+      </button>
+    </div>
+
+    <!-- Section 1: Inflow Pipeline Diagram -->
+    <div class="mb-12">
+      <h2 class="text-lg font-bold text-black border-b border-gray-200 pb-2 mb-4 uppercase tracking-wider">1. Document Lifecycle & Approval Pipeline</h2>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 flex flex-col items-center">
+        <!-- Text Flowchart Representation -->
+        <div class="space-y-4 w-full max-w-lg text-sm">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">1</span>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="text-black">Document Ingestion:</strong> Scan files via OCR, extract key-value data, and determine type using the LLM engine.
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">2</span>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="text-black">Data Verification Desk:</strong> AP Executive reviews extracted metadata and corrects variances.
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">3</span>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="text-black">Gate Entry Verification:</strong> Cross-reference invoice items with a physical Goods Receipt (GRN).
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">4</span>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="text-black">Decision: Is the PO in the Master Table?</strong>
+              <div class="mt-2 flex gap-4 text-xs font-semibold">
+                <span class="text-emerald-700 bg-emerald-50 px-2 py-0.5 border border-emerald-200 rounded">YES Path:</span>
+                <span class="text-rose-700 bg-rose-50 px-2 py-0.5 border border-rose-200 rounded">NO / EMPTY Path:</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-4 pl-11">
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="block text-black text-xs uppercase mb-1">PO Invoice Workflow</strong>
+              <ol class="list-decimal pl-4 text-xs text-gray-600 space-y-1">
+                <li>Indenter Approval</li>
+                <li>PO Owner Approval</li>
+                <li>Department Head Approval</li>
+              </ol>
+            </div>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="block text-black text-xs uppercase mb-1">Non-PO Standard Flow</strong>
+              <ol class="list-decimal pl-4 text-xs text-gray-600 space-y-1">
+                <li>Cost Center Manager</li>
+                <li>Head of Finance</li>
+              </ol>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0">5</span>
+            <div class="bg-white border border-gray-300 p-3 rounded shadow-sm flex-1">
+              <strong class="text-black">Local Server Archival:</strong> Permanently save documents in local disk `/uploads/` and flag for ERP Sync.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Data Dictionary -->
+    <div class="page-break">
+      <h2 class="text-lg font-bold text-black border-b border-gray-200 pb-2 mb-6 uppercase tracking-wider">2. Data Dictionary Specifications</h2>
+      
+      <!-- User Table -->
+      <div class="mb-8">
+        <h3 class="font-bold text-sm text-black mb-3 uppercase tracking-wide">2.1 User / Employee Table (<code>User</code>)</h3>
+        <table class="w-full text-xs text-left border border-gray-200 rounded overflow-hidden">
+          <thead class="bg-gray-100 border-b border-gray-200">
+            <tr>
+              <th class="p-2.5 font-bold text-black">Field Name</th>
+              <th class="p-2.5 font-bold text-black">Data Type</th>
+              <th class="p-2.5 font-bold text-black text-center">Key</th>
+              <th class="p-2.5 font-bold text-black">Description</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr>
+              <td class="p-2.5 font-mono">id</td>
+              <td class="p-2.5 text-gray-600">String (UUID)</td>
+              <td class="p-2.5 text-center font-bold text-black">PK</td>
+              <td class="p-2.5">Unique identifier for the user.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">username</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center font-bold text-gray-400">UNIQUE</td>
+              <td class="p-2.5">Unique username used for local credential login.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">employee_id</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center font-bold text-gray-400">UNIQUE</td>
+              <td class="p-2.5">Corporate employee ID (e.g. <code>EMP-1003</code>).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">email</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center font-bold text-gray-400">UNIQUE</td>
+              <td class="p-2.5">Email address (used for notifications and logins).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">role</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">System role (e.g., <code>admin</code>, <code>employee</code>).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">name</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Display name of the employee (e.g., Vijay Kumar).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">department</td>
+              <td class="p-2.5 text-gray-600">String (Nullable)</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Department name.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Invoice Table -->
+      <div class="mb-8 page-break">
+        <h3 class="font-bold text-sm text-black mb-3 uppercase tracking-wide">2.2 Invoice Table (<code>Invoice</code>)</h3>
+        <table class="w-full text-xs text-left border border-gray-200 rounded overflow-hidden">
+          <thead class="bg-gray-100 border-b border-gray-200">
+            <tr>
+              <th class="p-2.5 font-bold text-black">Field Name</th>
+              <th class="p-2.5 font-bold text-black">Data Type</th>
+              <th class="p-2.5 font-bold text-black text-center">Key</th>
+              <th class="p-2.5 font-bold text-black">Description</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr>
+              <td class="p-2.5 font-mono">id</td>
+              <td class="p-2.5 text-gray-600">String (UUID)</td>
+              <td class="p-2.5 text-center font-bold text-black">PK</td>
+              <td class="p-2.5">Unique invoice ID.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">invoice_number</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Vendor invoice number.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">vendor_name</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Extracted name of the supplier/vendor.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">po_number</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">PO number associated with the invoice.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">amount</td>
+              <td class="p-2.5 text-gray-600">Float</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Total invoice amount.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">status</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Main status (e.g. <code>Data Verification Pending</code>).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">file_path</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Path to the document stored on the local server disk.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PO Details Table -->
+      <div class="mb-8">
+        <h3 class="font-bold text-sm text-black mb-3 uppercase tracking-wide">2.3 PO Details Table (<code>CorporateAppMock</code>)</h3>
+        <table class="w-full text-xs text-left border border-gray-200 rounded overflow-hidden">
+          <thead class="bg-gray-100 border-b border-gray-200">
+            <tr>
+              <th class="p-2.5 font-bold text-black">Field Name</th>
+              <th class="p-2.5 font-bold text-black">Data Type</th>
+              <th class="p-2.5 font-bold text-black text-center">Key</th>
+              <th class="p-2.5 font-bold text-black">Description</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr>
+              <td class="p-2.5 font-mono">po_number</td>
+              <td class="p-2.5 text-gray-600">String</td>
+              <td class="p-2.5 text-center font-bold text-black">PK</td>
+              <td class="p-2.5">Unique PO identifier.</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">po_owner_email</td>
+              <td class="p-2.5 text-gray-600">String (Nullable)</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Email of the PO owner (approver token: <code>[PO_OWNER]</code>).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">indenter_email</td>
+              <td class="p-2.5 text-gray-600">String (Nullable)</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Email of the indenter/requester (approver token: <code>[INDENTER]</code>).</td>
+            </tr>
+            <tr>
+              <td class="p-2.5 font-mono">dept_head_email</td>
+              <td class="p-2.5 text-gray-600">String (Nullable)</td>
+              <td class="p-2.5 text-center">-</td>
+              <td class="p-2.5">Email of the department head (approver token: <code>[DEPT_HEAD]</code>).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="border-t border-gray-300 pt-6 mt-12 text-center text-[10px] text-gray-400 font-medium">
+      &copy; 2026 DocuFlow Solutions LLC. All rights reserved.
+    </div>
+
+  </div>
+</body>
+</html>

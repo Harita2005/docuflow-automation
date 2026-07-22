@@ -53,6 +53,25 @@ export async function triggerNotificationFlow(
     const performed_by = performedBy;
     const timestamp = new Date().toISOString();
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+    // Resolve performed_by to actual user's name
+    let performedByName = performedBy;
+    if (performedBy) {
+      const dbUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: performedBy },
+            { username: performedBy }
+          ]
+        }
+      });
+      if (dbUser) {
+        performedByName = dbUser.name;
+      } else if (performedBy.includes("@")) {
+        performedByName = performedBy.split("@")[0].replace(/[._]/g, ' ');
+        performedByName = performedByName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+    }
     const review_url = `${frontendUrl}/review/${invoice.id}`;
 
     // Get workflow name
@@ -101,10 +120,62 @@ export async function triggerNotificationFlow(
     const amountStr = `₹${(invoice.amount || 0).toLocaleString()}`;
 
     // 2. Resolve recipients based on action
-    if (action === "Reject") {
+    if (action === "Workflow Started") {
+      // Fetch all approvers across every stage of the workflow and notify them
+      let allStages: any[] = [];
+      if (invoice.activeApprovalLog) {
+        const profileSteps = await prisma.workflowStepDefinition.findMany({
+          where: { profile_name: invoice.activeApprovalLog.workflow_profile },
+          orderBy: { stage_number: 'asc' }
+        });
+        allStages = profileSteps.filter(s => 
+          (s.document_type || "").toLowerCase() === (invoice.document_type || "").toLowerCase()
+        );
+      }
+
+      const amountStr2 = `₹${(invoice.amount || 0).toLocaleString()}`;
+      for (const stage of allStages) {
+        let approverTarget = stage.approver_target;
+        // Resolve dynamic tokens
+        if ((approverTarget === '[PO_OWNER]' || approverTarget === '[DEPT_HEAD]') && invoice.po_number) {
+          const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
+          if (corpMock) {
+            approverTarget = approverTarget === '[PO_OWNER]' ? (corpMock.po_owner_email || approverTarget) : (corpMock.dept_head_email || approverTarget);
+          }
+        }
+        // Resolve username to email
+        let email = approverTarget;
+        if (!approverTarget.includes('@')) {
+          const u = await prisma.user.findFirst({ where: { username: approverTarget } })
+            || (await prisma.user.findMany()).find(user => (user.username || "").toLowerCase() === approverTarget.toLowerCase());
+          if (u) email = u.email;
+        }
+        if (email && email.includes('@')) {
+          const name = await getUserName(email);
+          recipients.push({
+            email,
+            name,
+            type: "PENDING_APPROVAL",
+            title: `[ACTION REQUIRED] Document Assigned: ${document_number}`,
+            message: `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr2} has entered the approval workflow and is assigned to you at Stage ${stage.stage_number}. Please review it at: ${review_url}`
+          });
+        }
+      }
+
+      // Also notify the document uploader
+      if (ownerEmail) {
+        recipients.push({
+          email: ownerEmail,
+          name: ownerName,
+          type: "PENDING_APPROVAL",
+          title: `Workflow Started: ${document_number}`,
+          message: `Your document ${document_number} from ${invoice.vendor_name} has been verified and entered the approval workflow.`
+        });
+      }
+    } else if (action === "Reject") {
       // Notify Owner and Administrators
       const title = "Document Workflow Rejected";
-      const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has been REJECTED by ${performedBy}. Comments: ${comments || "No comments provided."}`;
+      const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has been REJECTED by ${performedByName}. Comments: ${comments || "No comments provided."}`;
 
       recipients.push({ email: ownerEmail, name: ownerName, type: "REJECTED", title, message });
       for (const adminEmail of adminEmails) {
@@ -114,13 +185,13 @@ export async function triggerNotificationFlow(
     } else if (action === "Request Clarification") {
       // Notify Owner
       const title = "Clarification Requested on Document";
-      const message = `Clarification has been requested on Invoice ${document_number} from ${invoice.vendor_name} by ${performedBy}. Query: "${comments || "No details provided."}"`;
+      const message = `Clarification has been requested on Invoice ${document_number} from ${invoice.vendor_name} by ${performedByName}. Query: "${comments || "No details provided."}"`;
 
       recipients.push({ email: ownerEmail, name: ownerName, type: "CLARIFICATION", title, message });
     } else if (action === "Send Back") {
       // Notify Owner and previous stage if linear
       const title = "Document Sent Back";
-      const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has been SENT BACK by ${performedBy}. Comments: "${comments || "No comments provided."}"`;
+      const message = `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr} has been SENT BACK by ${performedByName}. Comments: "${comments || "No comments provided."}"`;
 
       recipients.push({ email: ownerEmail, name: ownerName, type: "SENT_BACK", title, message });
     } else if (action === "Escalate") {
@@ -131,13 +202,15 @@ export async function triggerNotificationFlow(
 
       // Scenario A: ActiveApprovalLog system
       if (invoice.activeApprovalLog) {
-        const currentStageDef = await prisma.workflowStepDefinition.findFirst({
+        const matchingStages = await prisma.workflowStepDefinition.findMany({
           where: {
             profile_name: invoice.activeApprovalLog.workflow_profile,
-            stage_number: invoice.activeApprovalLog.current_stage_number,
-            document_type: invoice.document_type
+            stage_number: invoice.activeApprovalLog.current_stage_number
           }
         });
+        const currentStageDef = matchingStages.find(s => 
+          (s.document_type || "").toLowerCase() === (invoice.document_type || "").toLowerCase()
+        ) || null;
 
         if (currentStageDef) {
           let currentApprover = currentStageDef.approver_target;
@@ -153,7 +226,8 @@ export async function triggerNotificationFlow(
             if (currentApprover.includes("@")) {
               currentEmails.push(currentApprover);
             } else {
-              const u = await prisma.user.findFirst({ where: { username: currentApprover } });
+              const u = await prisma.user.findFirst({ where: { username: currentApprover } })
+                || (await prisma.user.findMany()).find(user => (user.username || "").toLowerCase() === currentApprover.toLowerCase());
               if (u && u.email) currentEmails.push(u.email);
             }
           }
@@ -252,13 +326,15 @@ export async function triggerNotificationFlow(
 
         // Scenario A: ActiveApprovalLog (WorkflowStepDefinition) system
         if (invoice.activeApprovalLog) {
-          const nextStageDef = await prisma.workflowStepDefinition.findFirst({
+          const matchingStages = await prisma.workflowStepDefinition.findMany({
             where: {
               profile_name: invoice.activeApprovalLog.workflow_profile,
-              stage_number: invoice.activeApprovalLog.current_stage_number,
-              document_type: invoice.document_type
+              stage_number: invoice.activeApprovalLog.current_stage_number
             }
           });
+          const nextStageDef = matchingStages.find(s => 
+            (s.document_type || "").toLowerCase() === (invoice.document_type || "").toLowerCase()
+          ) || null;
 
           if (nextStageDef) {
             let nextApprover = nextStageDef.approver_target;
@@ -274,7 +350,8 @@ export async function triggerNotificationFlow(
               if (nextApprover.includes("@")) {
                 nextEmails.push(nextApprover);
               } else {
-                const u = await prisma.user.findFirst({ where: { username: nextApprover } });
+                const u = await prisma.user.findFirst({ where: { username: nextApprover } })
+                  || (await prisma.user.findMany()).find(user => (user.username || "").toLowerCase() === nextApprover.toLowerCase());
                 if (u && u.email) nextEmails.push(u.email);
               }
             }
@@ -346,6 +423,48 @@ export async function triggerNotificationFlow(
           }
         }
       }
+    } else if (action === "Data Verification Pending") {
+      const title = `[ACTION REQUIRED] New Document Ingested: ${document_number}`;
+      const message = `A new document (${document_type} ${document_number}) from ${invoice.vendor_name} for ${amountStr} has been received and requires data verification. Please review and verify it at: ${review_url}`;
+
+      const executives = await prisma.user.findMany({ where: { role: "ap_executive" } });
+      const execEmails = executives.map(e => e.email);
+      const targets = new Set<string>([...adminEmails, ...execEmails]);
+
+      // Resolve all workflow approvers for this document type
+      try {
+        const allSteps = await prisma.workflowStepDefinition.findMany();
+        const matchedSteps = allSteps.filter(s => 
+          (s.document_type || "").toLowerCase() === (invoice.document_type || "").toLowerCase()
+        );
+
+        for (const step of matchedSteps) {
+          let target = step.approver_target;
+          if ((target === '[PO_OWNER]' || target === '[DEPT_HEAD]') && invoice.po_number) {
+            const corpMock = await prisma.corporateAppMock.findUnique({ where: { po_number: invoice.po_number } });
+            if (corpMock) {
+              target = target === '[PO_OWNER]' ? (corpMock.po_owner_email || target) : (corpMock.dept_head_email || target);
+            }
+          }
+          if (target) {
+            if (target.includes("@")) {
+              targets.add(target);
+            } else {
+              const u = (await prisma.user.findMany()).find(user => (user.username || "").toLowerCase() === target.toLowerCase());
+              if (u && u.email) {
+                targets.add(u.email);
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error("[Notification Service] Error resolving workflow approvers for Data Verification stage:", err.message);
+      }
+
+      for (const email of targets) {
+        const name = await getUserName(email);
+        recipients.push({ email, name, type: "PENDING_APPROVAL", title, message });
+      }
     }
 
     // 2.5 Inject RACI Matrix logic
@@ -365,7 +484,7 @@ export async function triggerNotificationFlow(
             .replace(/\{\{document_number\}\}/g, document_number)
             .replace(/\{\{vendor_name\}\}/g, invoice.vendor_name)
             .replace(/\{\{amount\}\}/g, amountStr)
-            .replace(/\{\{performed_by\}\}/g, performedBy)
+            .replace(/\{\{performed_by\}\}/g, performedByName)
             .replace(/\{\{comments\}\}/g, comments || "");
         };
 
@@ -384,7 +503,7 @@ export async function triggerNotificationFlow(
                   name, 
                   type: "RACI_NOTIFICATION", 
                   title: customTitle ? `${prefix} ${customTitle}` : `${prefix} ${action} Event on ${document_number}`, 
-                  message: customMessage || `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr}. Action: ${action} by ${performedBy}. Comments: ${comments || "None"}`
+                  message: customMessage || `Invoice ${document_number} from ${invoice.vendor_name} for ${amountStr}. Action: ${action} by ${performedByName}. Comments: ${comments || "None"}`
                 });
               }
             }
@@ -400,8 +519,13 @@ export async function triggerNotificationFlow(
       console.error("[Notification Service] Error applying RACI matrix", e);
     }
 
-    // 3. Dispatch notifications by calling our API endpoint
-    
+    // Dev Override: Redirect all outgoing emails to harita010905@gmail.com for testing
+    for (const r of recipients) {
+      if (r.email) {
+        r.email = "harita010905@gmail.com";
+      }
+    }
+
     // Deduplicate recipients by email to prevent double-notifying
     const uniqueRecipientsMap = new Map();
     for (const r of recipients) {
@@ -433,8 +557,10 @@ export async function triggerNotificationFlow(
             .replace(/\{\{document_number\}\}/g, document_number)
             .replace(/\{\{vendor_name\}\}/g, invoice.vendor_name)
             .replace(/\{\{amount\}\}/g, amountStr)
-            .replace(/\{\{performed_by\}\}/g, performedBy)
-            .replace(/\{\{comments\}\}/g, comments || "");
+            .replace(/\{\{performed_by\}\}/g, performedByName)
+            .replace(/\{\{comments\}\}/g, comments || "")
+            .replace(/\{\{review_url\}\}/g, review_url)
+            .replace(/\{\{approval_link\}\}/g, review_url);
         };
         if (config.title_template && config.title_template.trim() !== "") finalTitle = replaceVars(config.title_template);
         if (config.message_template && config.message_template.trim() !== "") finalMessage = replaceVars(config.message_template);

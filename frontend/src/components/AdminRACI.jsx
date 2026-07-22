@@ -93,17 +93,33 @@ export default function AdminRACI() {
     setLoading(true);
     const activeWorkflow = customWorkflow || workflowProfile;
     
+    // Proactively harvest any typed emails that weren't submitted via the '+' button
+    const currentGrid = { ...grid };
+    EVENTS.forEach(event => {
+      ['R', 'A', 'C', 'I'].forEach(role => {
+        const input = document.getElementById(`input-${event}-${role}`);
+        if (input && input.value.trim()) {
+          const email = input.value.trim();
+          if (currentGrid[event] && currentGrid[event][role]) {
+            currentGrid[event][role] = [...new Set([...currentGrid[event][role], email])];
+          }
+          input.value = '';
+        }
+      });
+    });
+    setGrid(currentGrid);
+    
     try {
       for (const event of EVENTS) {
         const payload = {
           workflow_profile: activeWorkflow,
           event_name: event,
-          responsible_emails: JSON.stringify(grid[event].R),
-          accountable_emails: JSON.stringify(grid[event].A),
-          consulted_emails: JSON.stringify(grid[event].C),
-          informed_emails: JSON.stringify(grid[event].I),
-          title_template: grid[event].title_template,
-          message_template: grid[event].message_template
+          responsible_emails: JSON.stringify(currentGrid[event].R),
+          accountable_emails: JSON.stringify(currentGrid[event].A),
+          consulted_emails: JSON.stringify(currentGrid[event].C),
+          informed_emails: JSON.stringify(currentGrid[event].I),
+          title_template: currentGrid[event].title_template,
+          message_template: currentGrid[event].message_template
         };
 
         await fetch('/api/admin/notifications/raci', {
@@ -126,6 +142,30 @@ export default function AdminRACI() {
       await fetch('/api/admin/notifications/provider', { method: 'POST', headers, body: JSON.stringify(providerConfig) });
       alert('SMTP settings saved!');
     } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const testSMTPConnection = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/notifications/test', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          to: 'harita010905@gmail.com',
+          subject: 'DocuFlow Automation - SMTP Test',
+          html: '<p>This is a test email from the Workflow Automation Notification Module. If you received this, your SMTP settings are configured correctly!</p>'
+        })
+      });
+      if (res.ok) {
+        alert('Test email sent to harita010905@gmail.com!');
+      } else {
+        const err = await res.json();
+        alert('Error sending test email: ' + (err.error || 'Unknown error'));
+      }
+    } catch(e) {
+      alert('Error: ' + e.message);
+    }
     setLoading(false);
   };
 
@@ -177,7 +217,10 @@ export default function AdminRACI() {
       <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4">
         <div className="flex justify-between items-center mb-3">
           <label className="block text-xs font-black text-blue-600 uppercase tracking-wide">SMTP Email Server Configuration</label>
-          <button onClick={saveProviderConfig} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
+          <div className="flex gap-2">
+            <button onClick={testSMTPConnection} className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Mail className="h-3 w-3" /> Send Test Email</button>
+            <button onClick={saveProviderConfig} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">SMTP Server</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="e.g. smtp.office365.com"/></div>
@@ -311,6 +354,7 @@ export default function AdminRACI() {
                       <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{document_number}}"}</div>
                       <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{vendor_name}}"}</div>
                       <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{amount}}"}</div>
+                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{review_url}}"}</div>
                     </td>
                     <td colSpan={4} className="px-4 py-3 align-top">
                       <div className="flex flex-col gap-2.5 max-w-4xl">

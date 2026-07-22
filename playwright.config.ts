@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'cd backend && npm run start',
-      port: 5000,
+      port: 3000,
       reuseExistingServer: !process.env.CI,
     },
     {

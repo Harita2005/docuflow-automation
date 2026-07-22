@@ -126,7 +126,9 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
       if (log) {
         if (log.status === "Approved") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm">Approved (Stage {log.current_stage_number})</span>;
         if (log.status === "Rejected") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Rejected at Stage {log.current_stage_number}</span>;
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm border border-blue-200">Pending Stage {log.current_stage_number}</span>;
+        const stageName = (doc as any).current_stage_name;
+        const stageLabel = stageName ? `Pending: ${stageName}` : `Pending Stage ${log.current_stage_number}`;
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm border border-blue-200">{stageLabel}</span>;
       }
       return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm">In progress</span>;
     }
@@ -137,9 +139,11 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
       case "Waiting for GRN":
         return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-teal-800 text-teal-50 shadow-sm border border-teal-900/20">Waiting for GRN</span>;
       case "Approved":
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-200">Approved</span>;
       case "Paid":
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-300">Paid</span>;
       case "Ready for Payment":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-200">Completed</span>;
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-150">Ready for Payment</span>;
       case "Rejected":
       case "Failed":
         return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Blocked</span>;

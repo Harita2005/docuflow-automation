@@ -24,6 +24,8 @@ import { triggerNotificationFlow } from "./notification-service";
 import { registerNotificationAdminRoutes } from "./notification-admin";
 import { runSLAEngine } from "./sla-engine";
 import { archiveApprovedDocument } from "./archive-service";
+import { PDFParse } from "pdf-parse";
+
 
 dotenv.config();
 
@@ -148,7 +150,95 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+/*
+// Microsoft SSO Login Endpoint
+app.get("/api/auth/microsoft/login", (req: any, res: any) => {
+  const clientId = process.env.AZURE_CLIENT_ID;
+  const redirectUri = process.env.AZURE_REDIRECT_URI;
+  const tenantId = process.env.AZURE_TENANT_ID || "common";
+  const loginHint = req.query.login_hint;
+  if (!clientId || !redirectUri) {
+    return res.status(500).send("Azure AD Client ID or Redirect URI is not configured");
+  }
+  let authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=openid%20profile%20email`;
+  if (loginHint) {
+    authUrl += `&login_hint=${encodeURIComponent(String(loginHint))}`;
+  }
+  res.redirect(authUrl);
+});
+
+// Microsoft SSO Callback Endpoint
+app.get("/api/auth/microsoft/callback", async (req: any, res: any) => {
+  const { code, error, error_description } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  
+  if (error) {
+    console.error("[SSO Callback] Microsoft returned error:", error, error_description);
+    return res.redirect(`${frontendUrl}?sso_error=${encodeURIComponent(String(error_description || error))}`);
+  }
+  
+  if (!code) {
+    return res.redirect(`${frontendUrl}?sso_error=No%20authorization%20code%20received`);
+  }
+  
+  try {
+    const clientId = process.env.AZURE_CLIENT_ID;
+    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    const redirectUri = process.env.AZURE_REDIRECT_URI;
+    
+    // Exchange code for token
+    const tokenResponse = await fetch(`https://login.microsoftonline.com/common/oauth2/v2.0/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId || "",
+        client_secret: clientSecret || "",
+        code: String(code),
+        redirect_uri: redirectUri || "",
+        grant_type: "authorization_code"
+      })
+    });
+    
+    if (!tokenResponse.ok) {
+      const errText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${errText}`);
+    }
+    
+    const tokenData = await tokenResponse.json() as any;
+    const idToken = tokenData.id_token;
+    
+    // Decode ID Token payload
+    const tokenParts = idToken.split(".");
+    const payload = JSON.parse(Buffer.from(tokenParts[1], "base64").toString("utf-8"));
+    
+    const email = payload.email || payload.preferred_username || payload.upn;
+    if (!email) {
+      throw new Error("No email found in identity token");
+    }
+    
+    // Find the user in our database matching this email
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email } }
+    });
+    
+    if (!user) {
+      return res.redirect(`${frontendUrl}?sso_error=${encodeURIComponent("User with email " + email + " is not registered in DocuFlow. Please contact your administrator.")}`);
+    }
+    
+    // Generate DocuFlow JWT
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '12h' });
+    
+    // Redirect user back to frontend with credentials
+    res.redirect(`${frontendUrl}?token=${encodeURIComponent(token)}&id=${encodeURIComponent(user.id)}&role=${encodeURIComponent(user.role)}&email=${encodeURIComponent(user.email)}&username=${encodeURIComponent(user.username)}`);
+  } catch (err: any) {
+    console.error("[SSO Callback] Error:", err.message);
+    res.redirect(`${frontendUrl}?sso_error=${encodeURIComponent(err.message)}`);
+  }
+});
+*/
+
 // Serve uploaded files inline using DB mime type
+
 app.get("/uploads/:filename", async (req, res) => {
   const filename = req.params.filename;
   try {
@@ -548,6 +638,12 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
           where: { approver_target: currentUsername }
       });
 
+    const userApprovedApprovals = await prisma.approval.findMany({ where: { approver: user.email } });
+    const userApprovedWfInstances = await prisma.workflowInstance.findMany({ 
+      where: { id: { in: userApprovedApprovals.map(a => a.workflow_instance_id) } } 
+    });
+    const userApprovedInvoiceIds = new Set(userApprovedWfInstances.map(w => w.invoice_id));
+
     if (user.role === 'admin' || user.role === 'executive') {
       invoices = await prisma.invoice.findMany({ 
         include: { activeApprovalLog: true, goodsReceipt: true },
@@ -561,15 +657,9 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
           where: { workflow_profile: { in: userProfiles } }
       });
       
-      // Also get invoices they've already approved (historical)
-      const approvals = await prisma.approval.findMany({ where: { approver: user.email } });
-      const wfInstances = await prisma.workflowInstance.findMany({ 
-        where: { id: { in: approvals.map(a => a.workflow_instance_id) } } 
-      });
-
       const invoiceIds = new Set([
         ...userLogs.map(l => l.invoice_id),
-        ...wfInstances.map(w => w.invoice_id)
+        ...userApprovedWfInstances.map(w => w.invoice_id)
       ]);
 
       invoices = await prisma.invoice.findMany({ 
@@ -592,6 +682,7 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
     const enrichedInvoices = invoices.map((inv: any) => {
       let isCurrent = false;
       let assigned_to = "-";
+      let current_stage_name = "";
       if (inv.activeApprovalLog && inv.activeApprovalLog.status === 'Pending') {
          const log = inv.activeApprovalLog;
          const step = userSteps.find(s => 
@@ -606,9 +697,13 @@ app.get("/api/documents", authenticateToken, async (req, res) => {
          );
          if (currentStageStep) {
             assigned_to = currentStageStep.approver_target;
+            current_stage_name = currentStageStep.step_name || `Stage ${log.current_stage_number}`;
          }
+      } else if (inv.status === "Approved" || inv.status === "Paid" || inv.status === "Ready for Payment") {
+         assigned_to = "Archived";
       }
-      return { ...inv, is_current_approver: isCurrent, assigned_to };
+      const has_approved = userApprovedInvoiceIds.has(inv.id);
+      return { ...inv, is_current_approver: isCurrent, assigned_to, current_stage_name, has_approved };
     });
 
     res.json(enrichedInvoices.map(parseInvoiceForFrontend));
@@ -898,15 +993,29 @@ app.post("/api/admin/test-template", authenticateToken, upload.single("file"), a
     const template = JSON.parse(req.body.template);
     const fullFilePath = path.resolve(req.file.path);
 
-    // Run OCR
-    const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
-    const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No valid JSON found in OCR output.");
-    const ocrResult = JSON.parse(jsonMatch[0]);
-    if (ocrResult.error) throw new Error("OCR Error: " + ocrResult.error);
-    
-    const rawText = ocrResult.raw_text || "";
+    // Run OCR with pure JS fallback
+    let rawText = "";
+    try {
+      const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
+      const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No valid JSON found in OCR output.");
+      const ocrResult = JSON.parse(jsonMatch[0]);
+      if (ocrResult.error) throw new Error("OCR Error: " + ocrResult.error);
+      rawText = ocrResult.raw_text || "";
+    } catch (ocrErr: any) {
+      console.log(`[Template Test] Python local_ocr failed: ${ocrErr.message}. Trying pure-JS pdf-parse fallback...`);
+      if (fullFilePath.toLowerCase().endsWith(".pdf")) {
+        const dataBuffer = await fs.readFile(fullFilePath);
+        const parser = new PDFParse({ data: new Uint8Array(dataBuffer) });
+        await (parser as any).load();
+        const pdfData = await parser.getText();
+        rawText = pdfData.text || "";
+      } else {
+        throw ocrErr;
+      }
+    }
+
 
     // Build Schema Prompt
     let fieldsDef = "";
@@ -1040,7 +1149,7 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
 
     let invoiceStatus = "Received";
     if (skip_ocr) {
-      invoiceStatus = "Manual Entry"; // Initial state before matching
+      invoiceStatus = "Data Verification Pending";
     }
 
     const newInvoice = await prisma.invoice.create({
@@ -1068,17 +1177,16 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
       }
     });
 
-    if (!skip_ocr) {
-      await prisma.goodsReceipt.create({
-        data: {
-          id: await getNextHierarchicalId("Goods Receipt"),
-          invoice_id: invoiceId,
-          status: "Waiting",
-          confirmed_by: "",
-          remarks: ""
-        }
-      });
-    }
+    // Always create a Goods Receipt record for invoices so they can route through Gate Entry
+    await prisma.goodsReceipt.create({
+      data: {
+        id: await getNextHierarchicalId("Goods Receipt"),
+        invoice_id: invoiceId,
+        status: "Waiting",
+        confirmed_by: "",
+        remarks: ""
+      }
+    });
 
     await prisma.systemLog.create({
       data: {
@@ -1090,11 +1198,8 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
     });
 
     if (skip_ocr) {
-      // Instantly route to workflow
-      await matchAndStartWorkflow(invoiceId);
-      // Fetch the newly updated invoice to return to frontend
-      const routedInvoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
-      return res.json(routedInvoice);
+      triggerNotificationFlow(newInvoice.id, "Data Verification Pending", "Manual Upload Bypassing OCR", user.username || user.email).catch(console.error);
+      return res.json(newInvoice);
     } else {
       // Background processing
       ocrQueue.push(invoiceId, filename);
@@ -1794,11 +1899,11 @@ app.put("/api/documents/:id/metadata", async (req, res) => {
     const existingInvoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
     if (!existingInvoice) return res.status(404).json({ error: "Not found" });
 
-    let parsedOriginalItems = existingInvoice.items;
+    let parsedOriginalItems: any = existingInvoice.items;
     if (typeof existingInvoice.items === 'string') {
       try { parsedOriginalItems = JSON.parse(existingInvoice.items); } catch(e) { parsedOriginalItems = []; }
     }
-    let parsedOriginalCustomData = existingInvoice.custom_data;
+    let parsedOriginalCustomData: any = existingInvoice.custom_data;
     if (typeof existingInvoice.custom_data === 'string') {
       try { parsedOriginalCustomData = JSON.parse(existingInvoice.custom_data); } catch(e) { parsedOriginalCustomData = {}; }
     }
@@ -2012,6 +2117,26 @@ app.post("/api/workflows/approve", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: `YOU ARE NOT AUTHORIZED TO APPROVE THIS STAGE. ASSIGNED TO: ${resolvedApprover}` });
     }
 
+    // Ensure workflow instance and approval records are logged
+    let wfInst = await prisma.workflowInstance.findUnique({ where: { invoice_id: invoiceId } });
+    if (!wfInst) {
+      wfInst = await prisma.workflowInstance.create({
+        data: {
+          invoice_id: invoiceId,
+          current_stage: `Stage ${activeLog.current_stage_number}`,
+          status: "Pending"
+        }
+      });
+    }
+    await prisma.approval.create({
+      data: {
+        workflow_instance_id: wfInst.id,
+        approver: user.email,
+        action: "Approve",
+        comments: comments || `Approved Stage ${activeLog.current_stage_number}.`
+      }
+    });
+
     // Advance Stage
     if (activeLog.workflow_profile === "Vendor Payment Custom Flow" && activeLog.current_stage_number === 1) {
         await prisma.invoice.update({ where: { id: invoiceId }, data: { status: "Waiting for GRN" } });
@@ -2115,6 +2240,26 @@ app.post("/api/workflows/reject", authenticateToken, async (req, res) => {
          }
        }
     }
+
+    // Ensure workflow instance and approval/rejection records are logged
+    let wfInst = await prisma.workflowInstance.findUnique({ where: { invoice_id: invoiceId } });
+    if (!wfInst) {
+      wfInst = await prisma.workflowInstance.create({
+        data: {
+          invoice_id: invoiceId,
+          current_stage: `Stage ${activeLog.current_stage_number}`,
+          status: "Pending"
+        }
+      });
+    }
+    await prisma.approval.create({
+      data: {
+        workflow_instance_id: wfInst.id,
+        approver: user.email,
+        action: "Reject",
+        comments: comments || `Rejected at Stage ${activeLog.current_stage_number}.`
+      }
+    });
 
     await prisma.activeApprovalLog.update({
       where: { id: activeLog.id },
@@ -2455,17 +2600,38 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
         });
 
         let extracted: any = null;
+        let rawText = "";
+        let layout: any[] = [];
 
         try {
-          const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
-          const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
-          const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-          if (!jsonMatch) throw new Error("No valid JSON found in OCR output: " + stdout);
-          const ocrResult = JSON.parse(jsonMatch[0]);
-          if (ocrResult.error) throw new Error("OCR Error: " + ocrResult.error);
-          
-          const rawText = ocrResult.raw_text || "";
-          const layout = ocrResult.layout || [];
+          try {
+            const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
+            const { stdout } = await execAsync(`${pyCmd} local_ocr.py "${fullFilePath}"`);
+            const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error("No valid JSON found in OCR output: " + stdout);
+            const ocrResult = JSON.parse(jsonMatch[0]);
+            if (ocrResult.error) throw new Error("OCR Error: " + ocrResult.error);
+            
+            rawText = ocrResult.raw_text || "";
+            layout = ocrResult.layout || [];
+          } catch (ocrErr: any) {
+            console.log(`[OCR Pipeline] Python local_ocr failed: ${ocrErr.message}. Trying pure-JS pdf-parse fallback...`);
+            if (fullFilePath.toLowerCase().endsWith(".pdf")) {
+              const dataBuffer = await fs.readFile(fullFilePath);
+              const parser = new PDFParse({ data: new Uint8Array(dataBuffer) });
+              await (parser as any).load();
+              const pdfData = await parser.getText();
+              rawText = pdfData.text || "";
+              console.log(`[OCR Pipeline] pdf-parse successfully extracted ${rawText.length} characters.`);
+              layout = rawText.split("\n").filter(line => line.trim().length > 0).map(line => ({
+                lineText: line.trim(),
+                confidence: 100
+              }));
+            } else {
+              throw ocrErr;
+            }
+          }
+
           const templates = await prisma.documentTemplate.findMany();
           let templatesPrompt = "";
           
@@ -2614,7 +2780,7 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
                    schemaObj[f.name] = def;
                  });
                  // Also explicitly request items array for all templates to be safe
-                 schemaObj["items"] = "[OPTIONAL] array of objects containing line item details. Fields: description, quantity, unitprice, amount, serialNumbers (array of strings), warrantyText. CRITICAL RULES: 1) Merge multi-line descriptions into ONE item. Do NOT split a single product into multiple items. 2) Serial numbers (e.g. WX...) and warranties (e.g. '3 YEARS') usually appear directly below the item description.";
+                 schemaObj["items"] = "[OPTIONAL] array of objects containing line item details. Fields: description, quantity, unitprice, amount, serialNumbers (array of strings), warrantyText. CRITICAL RULES: 1) Merge multi-line descriptions into ONE item. Do NOT split a single product into multiple items. 2) Serial numbers: Extract ALL serial numbers for each item. Often the first serial number starts with a prefix like 'S/N:' or 'Serial No:', followed by several other serial numbers printed line-by-line below it without prefixes. You MUST extract every single one of these lines as separate serial numbers in the array (e.g., if quantity is 6, there should be 6 serial numbers in the array). 3) Warranties (e.g. '2 YEARS WARRANTY') should go to warrantyText.";
                  fieldsDef = JSON.stringify(schemaObj, null, 2);
                } else if (!fieldsDef) {
                  fieldsDef = "{}";
@@ -2869,11 +3035,15 @@ ${fewShotExample}
         };
 
         let itemsArray = extracted.items || extracted.orderedItems || [];
-        if (!itemsArray.length && (extracted.item_purchased || extracted.serial_number || extracted.warranty)) {
+        const hasFlatSerial = extracted.serial_number || extracted.serial_numbers || extracted.serialnumbers || getVal(extracted, "serialnumber", "serialnumbers", "serialno", "srno");
+        const hasFlatWarranty = extracted.warranty || extracted.warranty_text || extracted.warrantyText || getVal(extracted, "warranty", "warrantytext", "warrantyperiod");
+        const hasFlatItem = extracted.item_purchased || extracted.item || extracted.product || getVal(extracted, "itempurchased", "item", "product");
+
+        if (!itemsArray.length && (hasFlatItem || hasFlatSerial || hasFlatWarranty)) {
           itemsArray = [{
-            description: extracted.item_purchased,
-            serialNumbers: extracted.serial_number,
-            warranty: extracted.warranty,
+            description: hasFlatItem || "Purchased Item",
+            serialNumbers: hasFlatSerial,
+            warranty: hasFlatWarranty,
             quantity: 1,
             unitprice: getVal(extracted, "amount"),
             amount: getVal(extracted, "amount")
@@ -2881,13 +3051,14 @@ ${fewShotExample}
         }
         const items = Array.isArray(itemsArray) ? itemsArray.map((item: any) => {
           let sns: string[] = [];
-          if (Array.isArray(item.serialNumbers)) {
-            sns = item.serialNumbers.map(String);
-          } else if (typeof item.serialNumbers === 'string') {
-            sns = item.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
-          } else {
-            const raw = getVal(item, "serialnumber", "serialno", "srno");
-            if (raw) sns = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+          const rawSN = item.serialNumbers || item.serial_numbers || item.serialnumbers || item.serialNumber || item.serial_number || getVal(item, "serialnumber", "serialnumbers", "serial_no", "serialno", "srno", "sns", "sn");
+          
+          if (Array.isArray(rawSN)) {
+            sns = rawSN.map(String);
+          } else if (typeof rawSN === 'string') {
+            sns = rawSN.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
+          } else if (rawSN !== null && rawSN !== undefined) {
+            sns = String(rawSN).split(/,|\n/).map(s => s.trim()).filter(Boolean);
           }
           
           return {
@@ -2895,7 +3066,7 @@ ${fewShotExample}
             quantity: Number(getVal(item, "quantity", "qty", "count") || 1),
             unit_price: Number(getVal(item, "unitprice", "unit_price", "price", "rate", "cost") || 0),
             amount: Number(getVal(item, "total", "amount", "linetotal", "sum") || 0),
-            warranty_text: String(getVal(item, "warrantytext", "warranty", "warrantyperiod", "warrantydetails") || ""),
+            warranty_text: String(item.warranty || item.warrantyText || item.warranty_text || getVal(item, "warrantytext", "warranty", "warrantyperiod", "warrantydetails") || ""),
             serial_numbers: sns
           };
         }) : [];
@@ -3051,6 +3222,11 @@ ${fewShotExample}
             details: `Extracted Vendor: "${updatedInv.vendor_name}". Awaiting admin data verification.`
           }
         });
+
+        // Trigger email notification for Data Verification stage
+        if (finalStatus === "Data Verification Pending") {
+          triggerNotificationFlow(invoiceId, "Data Verification Pending", "Automated OCR Ingestion", "AI Engine").catch(console.error);
+        }
         
         // Wait for admin verification before proceeding to GRN or Workflow stages
     } catch (procErr: any) {
@@ -3231,6 +3407,9 @@ app.post("/api/documents/:id/verify-data", authenticateToken, async (req: any, r
                 details: "Started " + finalWorkflowProfile + " at Stage 1."
             }
         });
+
+        // Notify all approvers in the workflow that a document has been assigned to them
+        await triggerNotificationFlow(invoiceId, "Workflow Started", "", "Routing Engine");
 
         res.json({ success: true, message: "Workflow started successfully." });
     } catch (error: any) {
@@ -3820,14 +3999,22 @@ import nodemailer from "nodemailer";
 
 async function getTransporter() {
   const config = await prisma.emailProviderConfig.findFirst();
-  if (!config) throw new Error("Email provider not configured");
+  const host = process.env.SMTP_HOST || config?.smtp_server;
+  const port = Number(process.env.SMTP_PORT) || config?.port || 587;
+  const user = process.env.SMTP_USER || config?.username;
+  const pass = process.env.SMTP_PASS || config?.encrypted_password;
+
+  if (!host || !user || !pass) {
+    throw new Error("Email provider not configured in environment or database");
+  }
+
   return nodemailer.createTransport({
-    host: config.smtp_server,
-    port: config.port,
-    secure: config.port === 465, // true for 465, false for other ports
+    host,
+    port,
+    secure: port === 465, // true for 465, false for other ports
     auth: {
-      user: config.username,
-      pass: config.encrypted_password,
+      user,
+      pass,
     },
     tls: { rejectUnauthorized: false }
   });
@@ -3836,9 +4023,21 @@ async function getTransporter() {
 app.get("/api/admin/notifications/provider", authenticateToken, async (req: any, res: any) => {
   try {
     const config = await prisma.emailProviderConfig.findFirst();
-    res.json(config || {});
+    const responseConfig = {
+      id: config?.id || "env",
+      provider: config?.provider || "Microsoft 365",
+      smtp_server: process.env.SMTP_HOST || config?.smtp_server || "smtp.office365.com",
+      port: Number(process.env.SMTP_PORT) || config?.port || 587,
+      username: process.env.SMTP_USER || config?.username || "",
+      sender_email: process.env.SMTP_SENDER_EMAIL || config?.sender_email || "",
+      sender_name: process.env.SMTP_SENDER_NAME || config?.sender_name || "",
+      encrypted_password: process.env.SMTP_PASS ? "********" : (config?.encrypted_password || ""),
+      tls_enabled: config?.tls_enabled ?? true
+    };
+    res.json(responseConfig);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
+
 app.post("/api/admin/notifications/provider", authenticateToken, async (req: any, res: any) => {
   try {
     const data = req.body;

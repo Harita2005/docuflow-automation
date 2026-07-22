@@ -3,20 +3,6 @@ import nodemailer from "nodemailer";
 
 export async function dispatchConfigurableEmail(invoice: any, action: string, performedBy: string, comments: string, fallbackRecipients: any[], workflowName?: string) {
   try {
-    // 1. Fetch enabled rules for this action
-    const allRules = await prisma.notificationRule.findMany({
-      where: { trigger_event: action, enabled: true },
-      include: { template: true, recipients: true }
-    });
-
-    // 2. Filter by target workflow
-    const rules = allRules.filter(r => !r.target_workflow || r.target_workflow === "" || r.target_workflow === workflowName);
-
-    if (rules.length === 0) {
-      console.log(`[Email Dispatcher] No active rules for action: ${action} on workflow: ${workflowName || 'Global'}`);
-      return;
-    }
-
     const config = await prisma.emailProviderConfig.findFirst();
     if (!config) {
       console.warn(`[Email Dispatcher] Email provider not configured. Cannot send emails.`);
@@ -32,19 +18,126 @@ export async function dispatchConfigurableEmail(invoice: any, action: string, pe
         pass: config.encrypted_password,
       },
       tls: {
-        rejectUnauthorized: config.tls_enabled
+        rejectUnauthorized: false
       }
     });
+
+    // 1. Fetch enabled rules for this action
+    const allRules = await prisma.notificationRule.findMany({
+      where: { trigger_event: action, enabled: true },
+      include: { template: true, recipients: true }
+    });
+
+    // 2. Filter by target workflow
+    const rules = allRules.filter(r => !r.target_workflow || r.target_workflow === "" || r.target_workflow === workflowName);
+
+    if (rules.length === 0) {
+      console.log(`[Email Dispatcher] No active rules for action: ${action} on workflow: ${workflowName || 'Global'}. Using default fallback email dispatch.`);
+      
+      if (!fallbackRecipients || fallbackRecipients.length === 0) {
+        console.log(`[Email Dispatcher] No fallback recipients resolved to notify.`);
+        return;
+      }
+
+      // Dev Override: Redirect all outgoing emails to harita010905@gmail.com for testing
+      let toEmails = fallbackRecipients.map(r => r.email).filter(Boolean);
+      if (toEmails.length > 0) {
+        toEmails = ["harita010905@gmail.com"];
+      } else {
+        console.log(`[Email Dispatcher] Fallback list contains no email addresses.`);
+        return;
+      }
+
+      const subject = `[Notification] ${action} Event on Document ${invoice.invoice_number || invoice.id}`;
+      const review_url = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`;
+      const message = fallbackRecipients[0].message || `Document ${invoice.invoice_number || invoice.id} has reached stage: ${action}.`;
+
+      const finalHtml = `
+        <div style="font-family: sans-serif; padding: 25px; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; text-transform: uppercase; tracking-wider;">Document Alert</h2>
+          <p style="font-size: 13px; line-height: 1.6; color: #334155; margin-bottom: 24px;">
+            ${message}
+          </p>
+          <div style="margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px; font-weight: 500;">Review details and perform approvals using the button below:</p>
+            <a href="${review_url}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 11px; font-weight: bold; text-decoration: none; padding: 10px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.15);">Open Document</a>
+          </div>
+        </div>
+      `;
+
+      try {
+        await transporter.sendMail({
+          from: `"${config.sender_name || 'Workflow Automation'}" <${config.sender_email || config.username}>`,
+          to: toEmails.join(", "),
+          subject,
+          html: finalHtml
+        });
+        
+        await prisma.emailLog.create({
+          data: {
+            notification_rule_id: null,
+            event: action,
+            sender: config.sender_email || config.username || "System",
+            recipients: toEmails.join(", "),
+            cc: null,
+            bcc: null,
+            subject,
+            status: "Sent",
+            error_message: null,
+            sent_at: new Date()
+          }
+        });
+        console.log(`[Email Dispatcher] Fallback email sent successfully to ${toEmails.join(", ")}`);
+      } catch (err: any) {
+        console.error(`[Email Dispatcher] Fallback email send failed:`, err.message);
+        await prisma.emailLog.create({
+          data: {
+            notification_rule_id: null,
+            event: action,
+            sender: config.sender_email || config.username || "System",
+            recipients: toEmails.join(", "),
+            cc: null,
+            bcc: null,
+            subject,
+            status: "Failed",
+            error_message: err.message,
+            sent_at: null
+          }
+        });
+      }
+      return;
+    }
+
+    // Resolve performedBy to actual user's name
+    let performedByName = performedBy;
+    if (performedBy) {
+      const dbUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: performedBy },
+            { username: performedBy }
+          ]
+        }
+      });
+      if (dbUser) {
+        performedByName = dbUser.name;
+      } else if (performedBy.includes("@")) {
+        performedByName = performedBy.split("@")[0].replace(/[._]/g, ' ');
+        performedByName = performedByName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+    }
 
     const placeholders: Record<string, string> = {
       "{{InvoiceNumber}}": invoice.invoice_number || invoice.id,
       "{{VendorName}}": invoice.vendor_name || "Unknown Vendor",
       "{{Amount}}": invoice.amount ? `₹${invoice.amount.toLocaleString()}` : "N/A",
-      "{{ApproverName}}": performedBy,
+      "{{ApproverName}}": performedByName,
       "{{Department}}": invoice.department || "N/A",
       "{{PO Number}}": invoice.po_number || "N/A",
       "{{Workflow Name}}": "Workflow", // Optional mapping
-      "{{ApprovalLink}}": `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`
+      "{{ApprovalLink}}": `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`,
+      "{{review_url}}": `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`,
+      "{{approval_link}}": `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`
     };
 
     const replacePlaceholders = (text: string) => {
@@ -109,14 +202,32 @@ export async function dispatchConfigurableEmail(invoice: any, action: string, pe
       ccEmails = [...new Set(ccEmails)];
       bccEmails = [...new Set(bccEmails)];
 
+      // Dev Override: Redirect all outgoing emails to harita010905@gmail.com for testing
+      if (toEmails.length > 0 || ccEmails.length > 0 || bccEmails.length > 0) {
+        toEmails = ["harita010905@gmail.com"];
+        ccEmails = [];
+        bccEmails = [];
+      }
+
       if (toEmails.length === 0 && ccEmails.length === 0 && bccEmails.length === 0) {
         console.log(`[Email Dispatcher] No resolved recipients for rule ${rule.name}`);
         continue;
       }
 
       const subject = replacePlaceholders(rule.subject || "");
-      const htmlBody = replacePlaceholders(rule.template?.html_body || "");
       const textBody = replacePlaceholders(rule.template?.text_body || "");
+      let htmlBody = replacePlaceholders(rule.template?.html_body || "");
+
+      const approvalLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${invoice.id}`;
+      let finalHtml = htmlBody || `<p>${textBody}</p>`;
+      if (!finalHtml.includes(approvalLink)) {
+        finalHtml += `
+          <div style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 15px; font-family: sans-serif;">
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">You can review and act on this document by clicking the button below:</p>
+            <a href="${approvalLink}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 11px; font-weight: bold; text-decoration: none; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);">Open Document</a>
+          </div>
+        `;
+      }
 
       let status = "Queued";
       let errorMsg = "";
@@ -125,11 +236,11 @@ export async function dispatchConfigurableEmail(invoice: any, action: string, pe
         await transporter.sendMail({
           from: `"${config.sender_name || 'Workflow Automation'}" <${config.sender_email || config.username}>`,
           to: toEmails.join(", "),
-          cc: ccEmails.join(", "),
-          bcc: bccEmails.join(", "),
+          ...(ccEmails.length > 0 && { cc: ccEmails.join(", ") }),
+          ...(bccEmails.length > 0 && { bcc: bccEmails.join(", ") }),
           subject,
           text: textBody,
-          html: htmlBody || `<p>${textBody}</p>`
+          html: finalHtml
         });
         status = "Sent";
       } catch (err: any) {

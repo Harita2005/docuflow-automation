@@ -141,7 +141,7 @@ export default function Dashboard({
           </div>
 
           <div 
-          onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-emerald-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -149,18 +149,18 @@ export default function Dashboard({
               <div className="bg-emerald-50 text-emerald-600 rounded-md flex items-center justify-center p-1 border border-emerald-100/50 shadow-sm">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
-              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Approved Bills</span>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Approved</span>
             </div>
             <div className="relative z-10 flex flex-col items-center gap-0.5">
               <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-emerald-600 transition-colors">
-                {documents.filter(d => d.status === "Paid" || d.status === "Approved" || d.status === "Ready for Payment").length}
+                {documents.filter(d => !!d.has_approved).length}
               </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Passed Check</span>
+              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Documents Approved</span>
             </div>
           </div>
 
           <div 
-          onClick={() => { setListFilter('review'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); setCurrentPage(1); }}
             className="bg-white/80 backdrop-blur-xl border border-indigo-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-50/0 to-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -168,13 +168,13 @@ export default function Dashboard({
               <div className="bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center p-1 border border-indigo-100/50 shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
               </div>
-              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">In Review</span>
+              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Pending</span>
             </div>
             <div className="relative z-10 flex flex-col items-center gap-0.5">
               <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-indigo-600 transition-colors">
-                {pendingApprovalsCount}
+                {documents.filter(d => !!d.is_current_approver).length}
               </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Under check</span>
+              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Action Required</span>
             </div>
           </div>
 
@@ -228,7 +228,7 @@ export default function Dashboard({
             </div>
             <div className="relative z-10 flex flex-col items-center gap-1">
               <span className="block text-3xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-emerald-600 transition-colors">
-                {documents.filter(d => !d.is_current_approver && (d.status === "Approved" || d.status === "Paid" || d.status === "Ready for Payment" || d.status === "In Approval")).length}
+                {documents.filter(d => !!d.has_approved).length}
               </span>
               <span className="text-[10px] text-emerald-600/80 font-bold tracking-widest uppercase">Documents Approved</span>
             </div>
@@ -282,16 +282,30 @@ export default function Dashboard({
             <div className="flex flex-col gap-1 mt-1">
           {(() => {
             let filteredDocs = documents;
-            if (listFilter === 'action') {
+            if (listFilter === 'all') {
+              if (currentUserRole !== 'admin') {
+                filteredDocs = filteredDocs.filter(d => {
+                  const isInApproval = d.status.includes("Approval") || d.status.includes("Pending");
+                  if (isInApproval && !d.is_current_approver) return false;
+                  return true;
+                });
+              }
+            } else if (listFilter === 'action') {
               filteredDocs = filteredDocs.filter(d => d.status === "In Approval" || d.status === "Waiting for GRN");
+              if (currentUserRole !== 'admin') {
+                filteredDocs = filteredDocs.filter(d => d.status !== "In Approval" || !!d.is_current_approver);
+              }
             } else if (listFilter === 'approved') {
               filteredDocs = filteredDocs.filter(d => d.status === "Paid" || d.status === "Approved" || d.status === "Ready for Payment");
             } else if (listFilter === 'review') {
               filteredDocs = filteredDocs.filter(d => d.activeApprovalLog?.status === "Pending" || d.status === "Ready for Approval");
+              if (currentUserRole !== 'admin') {
+                filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
+              }
             } else if (listFilter === 'action_required') {
               filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
             } else if (listFilter === 'my_approvals') {
-              filteredDocs = filteredDocs.filter(d => !d.is_current_approver && (d.status === "Approved" || d.status === "Paid" || d.status === "Ready for Payment" || d.status === "In Approval" || d.status.includes('Pending Approval')));
+              filteredDocs = filteredDocs.filter(d => !!d.has_approved);
             } else if (listFilter === 'grn') {
               filteredDocs = filteredDocs.filter(d => d.status === "Waiting for GRN" || d.status === "Received");
             }

@@ -10,3 +10,5 @@ venv/
 backend/venv/
 backend/uploads/
 backend/flowapprove.db
+playwright-report/
+test-results/

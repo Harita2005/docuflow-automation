@@ -6,18 +6,19 @@ export function registerNotificationAdminRoutes(app: Express) {
   // Provider Config
   app.get("/api/admin/notifications/provider", async (req, res) => {
     try {
-      let config = await prisma.emailProviderConfig.findFirst();
-      if (!config) {
-        config = await prisma.emailProviderConfig.create({
-          data: {
-            provider: "Microsoft 365",
-            smtp_server: "smtp.office365.com",
-            port: 587,
-            tls_enabled: true
-          }
-        });
-      }
-      res.json(config);
+      const config = await prisma.emailProviderConfig.findFirst();
+      const responseConfig = {
+        id: config?.id || "env",
+        provider: config?.provider || "Microsoft 365",
+        smtp_server: process.env.SMTP_HOST || config?.smtp_server || "smtp.office365.com",
+        port: Number(process.env.SMTP_PORT) || config?.port || 587,
+        username: process.env.SMTP_USER || config?.username || "",
+        sender_email: process.env.SMTP_SENDER_EMAIL || config?.sender_email || "",
+        sender_name: process.env.SMTP_SENDER_NAME || config?.sender_name || "",
+        encrypted_password: process.env.SMTP_PASS ? "********" : (config?.encrypted_password || ""),
+        tls_enabled: config?.tls_enabled ?? true
+      };
+      res.json(responseConfig);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -163,25 +164,33 @@ export function registerNotificationAdminRoutes(app: Express) {
     try {
       const { to, subject, html } = req.body;
       const config = await prisma.emailProviderConfig.findFirst();
-      if (!config) {
-        return res.status(400).json({ error: "Email provider not configured" });
+      
+      const host = process.env.SMTP_HOST || config?.smtp_server;
+      const port = Number(process.env.SMTP_PORT) || config?.port || 587;
+      const user = process.env.SMTP_USER || config?.username;
+      const pass = process.env.SMTP_PASS || config?.encrypted_password;
+      const senderName = process.env.SMTP_SENDER_NAME || config?.sender_name || "Workflow Automation";
+      const senderEmail = process.env.SMTP_SENDER_EMAIL || config?.sender_email || user || "noreply@company.com";
+
+      if (!host || !user || !pass) {
+        return res.status(400).json({ error: "Email provider not configured in environment or database" });
       }
 
       const transporter = nodemailer.createTransport({
-        host: config.smtp_server,
-        port: config.port,
-        secure: config.port === 465, // true for 465, false for other ports
+        host,
+        port,
+        secure: port === 465, // true for 465, false for other ports
         auth: {
-          user: config.username,
-          pass: config.encrypted_password,
+          user,
+          pass,
         },
         tls: {
-          rejectUnauthorized: config.tls_enabled
+          rejectUnauthorized: false
         }
       });
 
       const info = await transporter.sendMail({
-        from: `"${config.sender_name || 'Workflow Automation'}" <${config.sender_email || config.username}>`,
+        from: `"${senderName}" <${senderEmail}>`,
         to,
         subject,
         html: html || "<p>This is a test email from the Workflow Automation Notification Module.</p>",

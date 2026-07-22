@@ -41,6 +41,8 @@ interface DocumentDetailsProps {
   currentUserUsername: string;
   onRefreshDocument: () => void;
   onGoBack: () => void;
+  onSelectDocument?: (id: string) => void;
+  pendingDocIds?: string[];
 }
 interface LocalLineItem {
   id: string;
@@ -59,6 +61,8 @@ export default function DocumentDetails({
   currentUserUsername,
   onRefreshDocument,
   onGoBack,
+  onSelectDocument,
+  pendingDocIds,
 }: DocumentDetailsProps) {
   const [activeTab, setActiveTab] = useState<"original" | "layout" | "rawtext">(
     "original",
@@ -88,6 +92,18 @@ export default function DocumentDetails({
   const [approvalComment, setApprovalComment] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const [showNextActionModal, setShowNextActionModal] = useState(false);
+  const [pendingNextId, setPendingNextId] = useState<string | null>(null);
+
+  const getNextPendingDocId = () => {
+    if (!document || !pendingDocIds || pendingDocIds.length === 0) return null;
+    const currentIndex = pendingDocIds.indexOf(document.id);
+    if (currentIndex !== -1 && currentIndex < pendingDocIds.length - 1) {
+      return pendingDocIds[currentIndex + 1];
+    }
+    return null;
+  };
 
   // New Comments State
   const [commentsList, setCommentsList] = useState<any[]>([]);
@@ -365,7 +381,7 @@ export default function DocumentDetails({
       }
       comments = userInput.trim();
     } else {
-      comments = prompt("Please enter approval comments (optional):") || "Approved";
+      comments = "Approved";
     }
 
     setActionLoading(true);
@@ -382,8 +398,14 @@ export default function DocumentDetails({
       if (response.ok) {
         setApprovalComment("");
         await fetchWorkflowData();
-        onRefreshDocument();
-        onGoBack();
+        const nextId = getNextPendingDocId();
+        if (nextId && onSelectDocument) {
+          setPendingNextId(nextId);
+          setShowNextActionModal(true);
+        } else {
+          onRefreshDocument();
+          onGoBack();
+        }
       } else {
         const err = await response.json();
         setActionError(err.error || "Action failed");
@@ -412,7 +434,14 @@ export default function DocumentDetails({
         throw new Error(errData.error || "Failed to verify data.");
       }
 
-      await onRefreshDocument();
+      const nextId = getNextPendingDocId();
+      if (nextId && onSelectDocument) {
+        setPendingNextId(nextId);
+        setShowNextActionModal(true);
+      } else {
+        await onRefreshDocument();
+        onGoBack();
+      }
     } catch (err: any) {
       console.error(err);
       setActionError(err.message || "An unexpected error occurred.");
@@ -1630,6 +1659,50 @@ export default function DocumentDetails({
       )}
       
       </div>
+
+      {showNextActionModal && (
+        <div className="fixed inset-0 z-[110] flex items-start justify-center bg-slate-950/30 backdrop-blur-sm p-4 pt-12 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100/80 p-5 flex flex-col items-center text-center animate-scaleIn">
+            <div className="h-10 w-10 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-2.5 border border-emerald-100 shadow-sm">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            
+            <h3 className="text-sm font-black font-display text-slate-800 tracking-tight leading-none mb-1.5">
+              Action Successful!
+            </h3>
+            
+            <p className="text-[10px] text-slate-500 font-semibold mb-4 leading-normal px-2">
+              Would you like to move to the next pending document or return to the dashboard?
+            </p>
+            
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={() => {
+                  if (pendingNextId && onSelectDocument) {
+                    onSelectDocument(pendingNextId);
+                  }
+                  setShowNextActionModal(false);
+                  onRefreshDocument();
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg text-[9px] tracking-wider uppercase transition shadow-sm"
+              >
+                Next Approval
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowNextActionModal(false);
+                  onRefreshDocument();
+                  onGoBack();
+                }}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-3 rounded-lg text-[9px] tracking-wider uppercase transition"
+              >
+                Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 </div>
   );
 }

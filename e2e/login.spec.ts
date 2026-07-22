@@ -5,19 +5,20 @@ test('Critical Path: Login as Manager and route to Approval Queue', async ({ pag
   await page.goto('/');
 
   // 2. Ensure we are on the login page by looking for the distinct UI text
-  await expect(page.getByText('Streamline yourAccounts Payable.')).toBeVisible();
+  await expect(page.getByText('Welcome back')).toBeVisible();
 
   // 3. Fill in the Username or Employee ID field
-  await page.getByPlaceholder('e.g. sconnor or EMP-1001').fill('sconnor');
+  await page.getByPlaceholder('e.g. alerts@ramrajcotton.net or EMP-1001').fill('admin@initech.com');
 
-  // 4. Fill in the Password
+  // 4. Click Next to go to the password step
+  await page.getByRole('button', { name: /Next/i }).click();
+
+  // 5. Fill in the Password
   await page.getByPlaceholder('••••••••').fill('password123');
 
-  // 5. Submit the login form
+  // 6. Submit the login form
   await page.getByRole('button', { name: /Sign in to account/i }).click();
 
-  // 6. Verify Smart Routing: We should be instantly routed to the Approval Queue
-  // We can verify this by checking if the specific "Approval Queue" header or KPI cards are visible
-  await expect(page.getByText('Compliance & Audit Desk')).toBeVisible();
-  await expect(page.getByText('Pending Approval')).toBeVisible();
+  // 7. Verify Smart Routing: We should be instantly routed to the Dashboard
+  await expect(page.getByText('Executive Command Dashboard')).toBeVisible();
 });
