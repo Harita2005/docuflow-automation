@@ -15,7 +15,7 @@ describe('Auth API Integration', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
-        identifier: 'admin',
+        identifier: 'anbu',
         password: 'password123'
       });
     expect(res.status).toBe(200);
