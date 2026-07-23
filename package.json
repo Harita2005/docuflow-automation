@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "install:all": "npm install",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "npm test -w backend && npm test -w frontend && npx playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
