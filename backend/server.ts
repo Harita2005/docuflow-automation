@@ -3781,7 +3781,16 @@ app.post("/api/notifications/send", async (req: any, res: any) => {
                 status: "Pending"
             }
         });
-        const n8nUrl = process.env.N8N_WEBHOOK_URL || "http://localhost:3000/api/mock-n8n-webhook";
+        const n8nUrl = process.env.N8N_WEBHOOK_URL;
+        if (!n8nUrl) {
+            await prisma.notification.update({
+                where: { notification_id: notification.notification_id },
+                data: { status: "Sent", sent_at: new Date(), external_response: "n8n integration skipped (not configured)" }
+            });
+            io.emit("new_notification", { recipientEmail: next_approver_email });
+            return res.json({ success: true, notification_id: notification.notification_id, status: "Sent" });
+        }
+
         console.log("[Notification Service] Forwarding notification to n8n webhook at " + n8nUrl);
         fetch(n8nUrl, {
             method: "POST",
