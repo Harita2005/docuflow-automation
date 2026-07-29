@@ -129,11 +129,9 @@ export default function AdminUsers() {
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Role / Access Level</label>
                   <select name="role" defaultValue={editingUser.role} className="w-full text-xs p-2 border border-slate-200 rounded focus:border-sky-400 focus:outline-none bg-white">
-                    <option value="employee">Employee (Uploader)</option>
-                    <option value="manager">Manager / Dept Head (Approver)</option>
-                    <option value="ap_exec">AP Executive (Reviewer)</option>
-                    <option value="executive">Executive (Approver/Viewer)</option>
-                    <option value="admin">System Administrator</option>
+                    <option value="employee">Employee</option>
+                    <option value="settings_editor">Settings Editor</option>
+                    <option value="admin">Admin</option>
                   </select>
                 </div>
                 <div>
@@ -192,21 +190,17 @@ export default function AdminUsers() {
                     </div>
                   </td>
                   <td className="px-4 py-2">
-                    <select
+                     <select
                       value={u.role}
                       onChange={(e) => handleRoleChangeInline(u, e.target.value)}
                       className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border-0 cursor-pointer outline-none bg-transparent transition-colors ${
-                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
-                        u.role === 'ap_exec' ? 'bg-blue-100 text-blue-700' : 
-                        u.role === 'manager' ? 'bg-amber-100 text-amber-700' : 
-                        u.role === 'executive' ? 'bg-rose-100 text-rose-700' : 
+                        u.role === 'admin' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200' : 
+                        u.role === 'settings_editor' ? 'bg-indigo-100 text-indigo-700 font-bold border border-indigo-200' : 
                         'bg-slate-100 text-slate-600'
                       }`}
                     >
                       <option value="employee">Employee</option>
-                      <option value="manager">Manager</option>
-                      <option value="ap_exec">AP Exec</option>
-                      <option value="executive">Executive</option>
+                      <option value="settings_editor">Settings Editor</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>

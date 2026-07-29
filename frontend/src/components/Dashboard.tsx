@@ -264,17 +264,37 @@ export default function Dashboard({
                   <option value="this_month">This Month</option>
                 </select>
               </div>
-              <select 
-                value={docTypeFilter} 
-                onChange={(e) => { setDocTypeFilter(e.target.value); setCurrentPage(1); }}
-                className="text-[10px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none"
-              >
-                <option value="All">All Types</option>
-                {Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
             </div>
+          </div>
+
+          {/* Document Type Badge Filter */}
+          <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-50/70 border border-slate-200/50 rounded-xl">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1">Filter by Doc Type:</span>
+            <button
+              onClick={() => { setDocTypeFilter('All'); setCurrentPage(1); }}
+              className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm ${docTypeFilter === 'All' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"}`}
+            >
+              <span>All Documents</span>
+              <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-md ${docTypeFilter === 'All' ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                {documents.length}
+              </span>
+            </button>
+            {Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => {
+              const count = documents.filter(d => (d.document_type || "").toUpperCase().trim() === type).length;
+              const isActive = docTypeFilter === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => { setDocTypeFilter(type); setCurrentPage(1); }}
+                  className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm ${isActive ? "bg-indigo-600 text-white border-indigo-700" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"}`}
+                >
+                  <span>{type}</span>
+                  <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-md ${isActive ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           
           <div>
@@ -351,7 +371,19 @@ export default function Dashboard({
                             {doc.vendor_name || "Evaluating details..."}
                           </span>
                           <div className="flex items-center space-x-1.5 mt-0.5 text-[9px] font-medium text-slate-500 font-sans">
-                            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-bold uppercase tracking-widest border border-slate-200/50 shadow-sm">{doc.document_type || "Invoice"}</span>
+                            <span 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (doc.document_type) {
+                                  setDocTypeFilter(doc.document_type.toUpperCase().trim());
+                                  setCurrentPage(1);
+                                }
+                              }}
+                              className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-bold uppercase tracking-widest border border-slate-200/50 shadow-sm hover:bg-indigo-600 hover:text-white hover:border-indigo-700 cursor-pointer transition-all"
+                              title="Click to filter by this type"
+                            >
+                              {doc.document_type || "Invoice"}
+                            </span>
                             <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""}</span>
                             <span className="text-slate-300">•</span>
                             <span className={`font-bold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-sm ${doc.status.includes('Approval') ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>

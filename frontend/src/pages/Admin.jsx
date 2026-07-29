@@ -7,6 +7,7 @@ import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
+import AdminRBAC from '../components/AdminRBAC.jsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -215,7 +216,7 @@ export default function Admin() {
 
   const openEditTemplate = (t) => {
     if (!t) {
-      setTemplateFields([{ id: Date.now(), name: '', type: 'string', description: '', required: false }]);
+      setTemplateFields([{ id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }]);
       setTemplateInstructions("");
       setEditingTemplate({ name: '', description: '', fields_json: '' });
       return;
@@ -236,8 +237,13 @@ export default function Admin() {
          instrs = parsed.instructions || "";
       }
     } catch(e) {}
-    if (fields.length === 0) fields = [{ id: Date.now(), name: '', type: 'string', description: '', required: false }];
-    fields = fields.map((f, i) => ({ ...f, id: f.id || Date.now() + i }));
+    if (fields.length === 0) fields = [{ id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }];
+    fields = fields.map((f, i) => ({ 
+      ...f, 
+      id: f.id || Date.now() + i,
+      rolesVisible: f.rolesVisible || [],
+      rolesEditable: f.rolesEditable || []
+    }));
     setTemplateFields(fields);
     setTemplateInstructions(instrs);
     setEditingTemplate(t);
@@ -250,9 +256,12 @@ export default function Admin() {
     const cleanFields = validFields.map(({id, ...rest}) => rest);
     
     const template = {
+      ...editingTemplate,
       id: editingTemplate.id || `tmp-${Date.now()}`,
       name: fd.get('name'),
       description: fd.get('description') || '',
+      category: editingTemplate.category || selectedTemplateCategory || 'Vendor Payment Workflows',
+      document_type: editingTemplate.document_type || fd.get('name'),
       fields_json: JSON.stringify({ fields: cleanFields, instructions: templateInstructions }, null, 2)
     };
 
@@ -405,6 +414,12 @@ export default function Admin() {
             >
               IAM & Users
             </button>
+            <button
+              onClick={() => setActiveTab("rbac")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "rbac" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Role Matrix (RBAC)
+            </button>
           </div>
 
           {/* SYSTEM ADMINISTRATION */}
@@ -453,6 +468,7 @@ export default function Admin() {
                   {activeTab === 'routing' && 'Flow Builder'}
                   {activeTab === 'templates' && 'AI Templates'}
                   {activeTab === 'users' && 'IAM & Users'}
+                  {activeTab === 'rbac' && 'Role Access Configuration'}
                   {activeTab === 'masterdata' && 'ERP Master'}
                   {activeTab === 'system' && 'System Settings'}
                   {activeTab === 'raci' && 'Email & RACI'}
@@ -476,7 +492,7 @@ export default function Admin() {
                   <Plus className="h-3 w-3" /> Add Category
                 </button>
               )}
-              {activeTab === 'templates' && !selectedTemplateCategory && (
+              {activeTab === 'templates' && (
                 <button
                   onClick={() => openEditTemplate(null)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shadow-sm border border-blue-200 mr-2"
@@ -565,7 +581,7 @@ export default function Admin() {
                 <div className="pt-2 border-t border-blue-100">
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-[10px] font-bold text-slate-600 uppercase">Document Fields</label>
-                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '' }])} className="flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-800 bg-blue-100/50 hover:bg-blue-100 px-2 py-1 rounded">
+                    <button type="button" onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }])} className="flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-800 bg-blue-100/50 hover:bg-blue-100 px-2 py-1 rounded">
                       <Plus className="h-3 w-3" /> Add Field
                     </button>
                   </div>
@@ -622,6 +638,50 @@ export default function Admin() {
                           }}
                           className="flex-1 text-xs p-1.5 border border-slate-200 rounded focus:border-blue-400 focus:outline-none"
                         />
+                        <div className="flex flex-col gap-1 border border-slate-100 p-1 rounded bg-slate-50 shrink-0">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest min-w-[24px]">View:</span>
+                            {["employee", "settings_editor", "admin"].map(r => {
+                               const hasRole = (field.rolesVisible || []).includes(r);
+                               return (
+                                 <button
+                                   key={r}
+                                   type="button"
+                                   onClick={() => {
+                                     const newFields = [...templateFields];
+                                     const roles = newFields[idx].rolesVisible || [];
+                                     newFields[idx].rolesVisible = roles.includes(r) ? roles.filter(x => x !== r) : [...roles, r];
+                                     setTemplateFields(newFields);
+                                   }}
+                                   className={`text-[8px] px-1 py-0.5 rounded font-black border transition-all uppercase tracking-tighter ${hasRole ? "bg-indigo-600 text-white border-indigo-700 font-bold" : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"}`}
+                                 >
+                                   {r === "employee" ? "Emp" : r === "settings_editor" ? "Set" : "Adm"}
+                                 </button>
+                               );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest min-w-[24px]">Edit:</span>
+                            {["employee", "settings_editor", "admin"].map(r => {
+                               const hasRole = (field.rolesEditable || []).includes(r);
+                               return (
+                                 <button
+                                   key={r}
+                                   type="button"
+                                   onClick={() => {
+                                     const newFields = [...templateFields];
+                                     const roles = newFields[idx].rolesEditable || [];
+                                     newFields[idx].rolesEditable = roles.includes(r) ? roles.filter(x => x !== r) : [...roles, r];
+                                     setTemplateFields(newFields);
+                                   }}
+                                   className={`text-[8px] px-1 py-0.5 rounded font-black border transition-all uppercase tracking-tighter ${hasRole ? "bg-emerald-600 text-white border-emerald-700 font-bold" : "bg-white text-slate-400 border-slate-200 hover:text-slate-600"}`}
+                                 >
+                                   {r === "employee" ? "Emp" : r === "settings_editor" ? "Set" : "Adm"}
+                                 </button>
+                               );
+                            })}
+                          </div>
+                        </div>
                         <button type="button" onClick={() => setTemplateFields(templateFields.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-rose-500 transition-colors">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -678,8 +738,12 @@ export default function Admin() {
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                {templates.length === 0 ? null : (
-                 templates.map(t => {
+                {templates.filter(t => t.category === selectedTemplateCategory).length === 0 ? (
+                  <div className="text-[10px] text-center p-6 border border-dashed border-slate-200 rounded bg-white text-slate-400">
+                    No templates configured in this category yet. Click "New Template" to add one.
+                  </div>
+                ) : (
+                  templates.filter(t => t.category === selectedTemplateCategory).map(t => {
                    const isDraft = t.id && String(t.id).startsWith('tmp-');
                    let parsedFields = [];
                    try { 
@@ -914,6 +978,12 @@ export default function Admin() {
     {activeTab === "users" && (
       <div className="w-full animate-fadeIn transition-all">
         <AdminUsers />
+      </div>
+    )}
+
+    {activeTab === "rbac" && (
+      <div className="w-full animate-fadeIn transition-all">
+        <AdminRBAC />
       </div>
     )}
 

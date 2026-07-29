@@ -39,7 +39,8 @@ export default function Header({
     ap_executive: "AP Reviewer",
     manager: "Finance Manager",
     executive: "Executive Approver",
-    employee: "Employee"
+    employee: "Employee",
+    settings_editor: "Settings Editor"
   };
   const displayRole = roleMapping[currentUserRole] || currentUserRole || "Approver";
 

@@ -37,6 +37,31 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   const [showExtractConfirmModal, setShowExtractConfirmModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedDocType, setSelectedDocType] = useState<string>("AP Invoice");
+
+  React.useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const res = await fetch("/api/templates", {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTemplates(data);
+          if (data.length > 0) {
+            const defaultTemplate = data.find((t: any) => t.name.toLowerCase().includes("invoice")) || data[0];
+            setSelectedDocType(defaultTemplate.name);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading templates in upload:", err);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
   // Rotate reassurance loading messages to keep user engaged
   const startReassuranceRotation = () => {
     setProgressMsgIndex(0);
@@ -120,6 +145,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("document_type", selectedDocType);
       
       const token = localStorage.getItem("authToken");
       
@@ -156,6 +182,47 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           Simply drop your document below. Our extraction engine will instantly read the layout and pull the transaction data for you.
         </p>
       </div>
+
+      {/* Document Type Selector */}
+      {!loading && !uploadedDoc && !pendingFile && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Document Type to Upload
+          </label>
+          <div className="relative">
+            <select
+              value={selectedDocType}
+              onChange={(e) => setSelectedDocType(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none"
+            >
+              {templates.length > 0 ? (
+                templates.map((t: any) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="AP Invoice">AP Invoice</option>
+                  <option value="AP DEBIT NOTE">AP DEBIT NOTE</option>
+                  <option value="NON - RETURNABLE">NON - RETURNABLE</option>
+                  <option value="JOURNAL ENTRY">JOURNAL ENTRY</option>
+                  <option value="VCC PURCHASE INVOICE">VCC PURCHASE INVOICE</option>
+                  <option value="AR CREDITNOTE">AR CREDITNOTE</option>
+                  <option value="PROJECT BUDGET">PROJECT BUDGET</option>
+                  <option value="OCR AND INHOUSE OCR">OCR AND INHOUSE OCR</option>
+                </>
+              )}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+              <Layers className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 font-medium">
+            This selects the target metadata schema and approval workflow rules for the uploaded file.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-6 shadow-sm">
@@ -299,6 +366,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               <span className="flex items-center gap-1"><Database className="h-3 w-3"/> Max 60MB</span>
             </div>
           </div>
+          
 
           <input
             ref={fileInputRef}

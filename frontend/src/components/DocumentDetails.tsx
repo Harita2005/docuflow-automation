@@ -81,6 +81,10 @@ export default function DocumentDetails({
   const [sgst, setSgst] = useState(0);
   const [igst, setIgst] = useState(0);
 
+  // Dynamic custom fields state
+  const [templatesList, setTemplatesList] = useState<any[]>([]);
+  const [dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
+
   // Custom PO fields
   const [buyerName, setBuyerName] = useState("");
   const [poDate, setPoDate] = useState("");
@@ -232,6 +236,23 @@ export default function DocumentDetails({
     setCommentsLoading(false);
   };
 
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/templates", {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          setTemplatesList(await res.json());
+        }
+      } catch(e) {
+        console.error("Failed to fetch templates:", e);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
   const customDataObj = typeof document?.custom_data === 'string' ? JSON.parse(document.custom_data) : (document?.custom_data || {});
 
 
@@ -250,7 +271,8 @@ export default function DocumentDetails({
       setSgst(document.sgst || 0);
       setIgst(document.igst || 0);
 
-      const customData = (document.custom_data as any) || {};
+      const customData = typeof document.custom_data === 'string' ? JSON.parse(document.custom_data) : (document.custom_data || {});
+      setDynamicFields(customData);
       setBuyerName(customData.buyerName || customData.customerName || "");
       setPoDate(customData.poDate || customData.orderDate || "");
       setIndentNumber(customData.indentNumber || "");
@@ -313,6 +335,7 @@ export default function DocumentDetails({
             serial_numbers: item.serial_numbers,
           })),
           customData: {
+            ...dynamicFields,
             buyerName,
             poDate,
             indentNumber,
@@ -622,160 +645,63 @@ export default function DocumentDetails({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* PANEL A: DOCUMENT VIEWER & APPROVAL BOX (6 cols) */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col min-h-[400px] shadow-sm overflow-hidden">
-            {/* Header tabs */}
+          <div className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col min-h-[400px] shadow-sm overflow-hidden">            {/* Header tabs */}
             <div className="bg-slate-50/50 border-b border-slate-200/80 px-3 py-2 flex items-center justify-between shrink-0">
               <span className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-wider text-slate-650">
-                <Cpu className="h-4 w-4 text-blue-600 animate-pulse" />
-                <span>Layout Geometry Analysis</span>
+                <FileText className="h-4 w-4 text-blue-600" />
+                <span>Original Document</span>
               </span>
-              <div className="flex bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/60 text-[9px] font-bold shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("original")}
-                  className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold rounded-md transition-all duration-200 ${activeTab === "original" ? "bg-white text-blue-700 shadow-sm ring-1 ring-black/5" : "text-slate-500 hover:text-slate-700"}`}
-                >
-                  Original Document
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("layout")}
-                  className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold rounded-md transition-all duration-200 ${activeTab === "layout" ? "bg-white text-blue-700 shadow-sm ring-1 ring-black/5" : "text-slate-500 hover:text-slate-700"}`}
-                >
-                  Coordinates
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("rawtext")}
-                  className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold rounded-md transition-all duration-200 ${activeTab === "rawtext" ? "bg-white text-blue-700 shadow-sm ring-1 ring-black/5" : "text-slate-500 hover:text-slate-700"}`}
-                >
-                  Raw Text
-                </button>
-              </div>
             </div>
 
             {/* Visualization Container */}
             <div className="overflow-auto bg-slate-50/50 p-1 flex flex-col relative">
-              {activeTab === "original" ? (
-                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col relative shadow-sm">
-                  {document.file_path ? (
-                    document.mime_type?.startsWith("image/") ? (
-                      <div className="flex-1 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={encodeURI(document.file_path)}
-                          alt={document.file_name || "Original Document"}
-                          className="max-h-full max-w-full object-contain"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex flex-col w-full h-full">
-                        <div className="w-full bg-slate-50 flex items-center justify-center overflow-hidden h-[700px] py-4">
-                          <Document
-                            file={encodeURI(document.file_path)}
-                            loading={
-                              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto" />
-                            }
-                            error={
-                              <span className="text-red-500 text-[10px] font-bold p-4">
-                                Failed to load PDF
-                              </span>
-                            }
-                          >
-                            <div className="relative inline-block shadow-md border border-slate-300">
-                              <Page
-                                pageNumber={1}
-                                renderTextLayer={false}
-                                renderAnnotationLayer={false}
-                                height={650}
-                              />
-                            </div>
-                          </Document>
-                        </div>
-                      </div>
-                    )
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col relative shadow-sm">
+                {document.file_path ? (
+                  document.mime_type?.startsWith("image/") ? (
+                    <div className="flex-1 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={encodeURI(document.file_path)}
+                        alt={document.file_name || "Original Document"}
+                        className="max-h-full max-w-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                   ) : (
-                    <div className="text-center p-8 text-slate-400">
-                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-40 text-blue-600 animate-pulse" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider block">
-                        No Original Document Attachment
-                      </span>
-                      <span className="text-[10px] text-slate-450 mt-1 block">
-                        Try rendering via layout metadata logs instead.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : activeTab === "layout" ? (
-                <div className="space-y-4 flex-1">
-                  <div className="bg-white p-4 border border-slate-150 rounded-xl text-left text-[10px] text-slate-500 leading-relaxed shadow-sm">
-                    <span className="text-slate-700 font-bold uppercase block text-[10px] tracking-wider mb-1">
-                      Layout Scanning Details:
-                    </span>
-                    <div className="flex flex-col gap-2 mt-2">
-                       <p>Layout elements found on the invoice.</p>
-                       {isEditing && (
-                         <div className={`p-2 rounded border text-xs font-bold uppercase tracking-wider flex items-center justify-center ${activeInputField ? 'bg-blue-600 text-white border-blue-700 animate-pulse' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
-                           {activeInputField ? `CLICK-TO-FILL ACTIVE: Select text to populate [${activeInputField}]` : 'Select an input field on the right to enable Click-to-Fill'}
-                         </div>
-                       )}
-                    </div>
-                  </div>
-                  {/* Simulated Document Sheet */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2.5 relative select-none shadow-sm">
-                    {dummyLayout.map((layout, idx) => {
-                      const isHighlighted = 
-                        (hoveredField === "vendorName" && idx === 1) ||
-                        (hoveredField === "invoiceNumber" && idx === 2) ||
-                        (hoveredField === "poNumber" && idx === 3) ||
-                        (hoveredField === "amount" && idx === 4) ||
-                        (hoveredField === "invoiceDate" && idx === 5);
-                      return (
-                        <div
-                          key={idx}
-                          title={`Extracted bounds: [${layout.bbox?.join(", ")}]`}
-                          onClick={() => {
-                            if (!activeInputField) {
-                              alert("Please click an input field first to activate Click-to-Fill.");
-                              return;
-                            }
-                            const val = layout.text;
-                            if (activeInputField === 'vendorName') setVendorName(val);
-                            else if (activeInputField === 'invoiceNumber') setInvoiceNumber(val);
-                            else if (activeInputField === 'poNumber') setPoNumber(val);
-                            else if (activeInputField === 'amount') setAmount(parseFloat(val.replace(/[^0-9.]/g, '')) || 0);
-                            else if (activeInputField === 'invoiceDate') setInvoiceDate(val);
-                            else if (activeInputField === 'documentType') setDocumentType(val);
-                            else if (activeInputField === 'buyerName') setBuyerName(val);
-                            else if (activeInputField === 'cgst') setCgst(parseFloat(val.replace(/[^0-9.]/g, '')) || 0);
-                            else if (activeInputField === 'sgst') setSgst(parseFloat(val.replace(/[^0-9.]/g, '')) || 0);
-                            else if (activeInputField === 'igst') setIgst(parseFloat(val.replace(/[^0-9.]/g, '')) || 0);
-                          }}
-                          className={`group relative p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between ${isHighlighted ? "border-blue-500 bg-blue-50/20 shadow-sm font-semibold scale-[1.01]" : "border-slate-100 hover:border-blue-400 hover:bg-blue-50"}`}
+                    <div className="flex-1 flex flex-col w-full h-full">
+                      <div className="w-full bg-slate-50 flex items-center justify-center overflow-hidden h-[700px] py-4">
+                        <Document
+                          file={encodeURI(document.file_path)}
+                          loading={
+                            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto" />
+                          }
+                          error={
+                            <span className="text-red-500 text-[10px] font-bold p-4">
+                              Failed to load PDF
+                            </span>
+                          }
                         >
-                          <span className="text-slate-750 truncate text-[10px]">
-                            {layout.text}
-                          </span>
-                          <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
-                            {layout.conf}%
-                          </span>
-                          {/* Bounding box marker */}
-                          <span className="hidden group-hover:block absolute bottom-full mb-1 left-3 bg-slate-900 text-[10px] text-white font-mono p-1 px-2 rounded-md shadow-lg z-20 whitespace-nowrap">
-                            Bounds: X:{layout.bbox?.[0]} Y:{layout.bbox?.[1]}
-                          </span>
-                        </div>
-                      );
-                    })}
+                          <div className="relative inline-block shadow-md border border-slate-300">
+                            <Page
+                              pageNumber={1}
+                              renderTextLayer={false}
+                              renderAnnotationLayer={false}
+                              height={650}
+                            />
+                          </div>
+                        </Document>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="text-center p-8 text-slate-400">
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-40 text-blue-600 animate-pulse" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider block">
+                      No Original Document Attachment
+                    </span>
                   </div>
-                </div>
-              ) : (
-                <div className="flex-1 font-mono text-[10px] text-slate-700 leading-relaxed bg-white p-5 rounded-2xl border border-slate-200 overflow-auto whitespace-pre-wrap shadow-inner font-mono text-[10px] text-slate-700 leading-relaxed bg-white p-5 rounded-2xl border border-slate-200 overflow-auto whitespace-pre-wrap">
-                  {document.ocr_text ||
-                    `--- RAW TEXT OCR EXTRACT ---\nVendor: ${vendorName}\nInvoice Num: ${invoiceNumber}\nPO Num Match: ${poNumber}\nAmount Total: ₹${amount}`}
-                </div>
-              )}
+                )}
+              </div>
             </div>
-            {/* Removed OCR and AI parsed badges here per user request */}
           </div>
         </div>
         {/* PANEL B: METADATA & CUSTOM FIELDS (6 cols) */}
@@ -1115,7 +1041,64 @@ export default function DocumentDetails({
                       </div>
                     </>
                   )}
-                  {/* Dynamic Custom Data Fields */}
+                  {(() => {
+                    const activeTemplate = templatesList.find(
+                      t => t.name.toLowerCase() === (documentType || "").toLowerCase()
+                    );
+                    if (!activeTemplate) return null;
+
+                    let templateFields: any[] = [];
+                    try {
+                      const parsed = JSON.parse(activeTemplate.fields_json);
+                      if (parsed && Array.isArray(parsed.fields)) {
+                        templateFields = parsed.fields;
+                      } else if (Array.isArray(parsed)) {
+                        templateFields = parsed;
+                      }
+                    } catch(e) {}
+
+                    const filteredFields = templateFields.filter(f => {
+                      const fn = f.name.toLowerCase().replace(/[^a-z]/g, "");
+                      return !["buyername", "podate", "indentnumber", "paymentterms", "invoicenumber", "vendorname", "invoicedate", "ponumber", "amount", "currency", "cgst", "sgst", "igst", "items"].includes(fn);
+                    });
+
+                    return filteredFields.map(f => {
+                      const rolesVis = f.rolesVisible || [];
+                      const isVisible = rolesVis.length === 0 || rolesVis.includes(currentUserRole);
+                      if (!isVisible) return null;
+
+                      const rolesEd = f.rolesEditable || [];
+                      const canEdit = isEditing && (rolesEd.length === 0 || rolesEd.includes(currentUserRole));
+                      const val = dynamicFields[f.name] !== undefined ? dynamicFields[f.name] : "";
+
+                      return (
+                        <div key={f.name} className="bg-slate-50/70 border border-slate-100/80 rounded-lg p-1.5 hover:bg-slate-50 transition-colors">
+                          <label htmlFor={`dyn-${f.name}`} className="text-[9px] uppercase tracking-wider text-slate-500 block font-bold mb-0.5">
+                            {f.description || f.name}
+                          </label>
+                          {canEdit ? (
+                            <input
+                              id={`dyn-${f.name}`}
+                              type={f.type === "number" ? "number" : "text"}
+                              value={val}
+                              onChange={(e) => {
+                                setDynamicFields({
+                                  ...dynamicFields,
+                                  [f.name]: f.type === "number" ? Number(e.target.value) : e.target.value
+                                });
+                              }}
+                              className="w-full text-[10px] font-semibold rounded-lg p-1.5 border bg-white border-blue-500"
+                            />
+                          ) : (
+                            <div className="text-[10px] font-bold text-slate-800">
+                              <span className="text-blue-500 font-extrabold mr-1">❖</span>
+                              {val !== null && val !== undefined && val !== "" ? String(val) : "-"}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>{" "}
               {/* End Core Details Card */}

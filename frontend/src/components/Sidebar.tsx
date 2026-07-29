@@ -19,13 +19,13 @@ import { motion } from "motion/react";
 import { useState } from "react";
 
 interface SidebarProps {
-  
   currentView: string;
   setCurrentView: (view: string) => void;
   currentUserRole: string;
   stats: any;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
+  rolePermissions?: Record<string, string[]>;
 }
 
 export default function Sidebar({
@@ -34,37 +34,40 @@ export default function Sidebar({
   currentUserRole,
   stats,
   collapsed,
-  setCollapsed
+  setCollapsed,
+  rolePermissions
 }: SidebarProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isExpanded = !collapsed || isHovered;
   
-  const isAdmin = currentUserRole === "admin";
-  const isEmployee = currentUserRole === "employee" || isAdmin;
+  const permissions = rolePermissions?.[currentUserRole] || (
+    currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin"] :
+    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin"] :
+    ["dashboard", "work-tracker"]
+  );
 
   const menuGroups = [
-    {
+    permissions.includes("dashboard") || permissions.includes("work-tracker") ? {
       group: "Main",
       items: [
-        { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-        { id: "work-tracker", label: "Work Tracker", icon: Layers },
-      ]
-    },
-    isEmployee ? {
+        permissions.includes("dashboard") ? { id: "dashboard", label: "Dashboard", icon: LayoutDashboard } : null,
+        permissions.includes("work-tracker") ? { id: "work-tracker", label: "Work Tracker", icon: Layers } : null,
+      ].filter(Boolean) as any[]
+    } : null,
+    permissions.includes("upload") ? {
       group: "Documents",
       items: [
         { id: "upload", label: "Upload Document", icon: Upload },
       ]
     } : null,
-    isEmployee ? {
+    permissions.includes("data-verification") ? {
       group: "Verification",
       items: [
         { id: "data-verification", label: "Data Verification", icon: FileCheck },
-        { id: "goods-receipt", label: "Gate Entry", icon: ClipboardList, badge: stats?.waitingForGRN || 0 },
       ]
     } : null,
 
-    isAdmin ? {
+    permissions.includes("admin") ? {
       group: "Administration",
       items: [
         { id: "admin", label: "Control Settings", icon: Settings },

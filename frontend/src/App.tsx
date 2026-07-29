@@ -37,6 +37,12 @@ export default function App() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => localStorage.getItem("currentUserEmail") || "");
   const [currentUserUsername, setCurrentUserUsername] = useState<string>(() => localStorage.getItem("currentUserUsername") || "");
 
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
+    employee: ["dashboard", "work-tracker"],
+    settings_editor: ["dashboard", "work-tracker", "admin"],
+    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin"]
+  });
+
   // Registry states
   const [documents, setDocuments] = useState<DbInvoice[]>([]);
   const [stats, setStats] = useState<any | null>(null);
@@ -202,18 +208,64 @@ export default function App() {
     }
   }, [currentView, selectedDocId]);
 
+  // Fetch dynamic role permissions from DB
+  const fetchRolePermissions = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/admin/config", {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const roleConfig = data.find((c: any) => c.key === "ROLE_PERMISSIONS");
+        if (roleConfig && roleConfig.value) {
+          setRolePermissions(JSON.parse(roleConfig.value));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch role permissions", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchRolePermissions();
+    }
+  }, [isLoggedIn, currentUserRole]);
+
+  useEffect(() => {
+    const handlePermissionsUpdated = () => {
+      fetchRolePermissions();
+    };
+    window.addEventListener("role-permissions-updated", handlePermissionsUpdated);
+    return () => window.removeEventListener("role-permissions-updated", handlePermissionsUpdated);
+  }, []);
+
   // Access Control Enforcement
   useEffect(() => {
     if (!isLoggedIn) return;
-    const isAdmin = currentUserRole === "admin";
-    const isEmployee = currentUserRole === "employee" || isAdmin;
     
-    if (currentView === "admin" && !isAdmin) {
-      setCurrentView("dashboard");
-    } else if ((currentView === "upload" || currentView === "goods-receipt") && !isEmployee) {
-      setCurrentView("dashboard");
+    const permissions = rolePermissions[currentUserRole] || (
+      currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin"] :
+      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin"] :
+      ["dashboard", "work-tracker"]
+    );
+    
+    const viewMapping: Record<string, string> = {
+      "admin": "admin",
+      "upload": "upload",
+      "goods-receipt": "upload",
+      "data-verification": "data-verification"
+    };
+
+    const requiredPermission = viewMapping[currentView];
+    if (requiredPermission && !permissions.includes(requiredPermission)) {
+      const fallback = permissions.includes("dashboard") ? "dashboard" : 
+                       permissions.includes("work-tracker") ? "work-tracker" : 
+                       permissions.includes("admin") ? "admin" : "dashboard";
+      setCurrentView(fallback);
     }
-  }, [currentView, currentUserRole, isLoggedIn]);
+  }, [currentView, currentUserRole, isLoggedIn, rolePermissions]);
 
   function handleFullRefresh() {
     fetchDocuments();
@@ -309,6 +361,7 @@ export default function App() {
         stats={stats}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
+        rolePermissions={rolePermissions}
       />
 
       {/* Main Content Area Container */}
