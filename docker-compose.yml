@@ -15,6 +15,7 @@ services:
       - JWT_SECRET=docuflow_super_secret_key_2026
       # Connect to the local SQL server container
       - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=Admin@1234;trustServerCertificate=true;
+      - GEMINI_API_KEY
     depends_on:
       - db
       - ollama

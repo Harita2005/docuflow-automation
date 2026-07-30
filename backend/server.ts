@@ -2681,6 +2681,9 @@ async function processInvoiceOCR(invoiceId: string, filename: string) {
         const fileBuffer = await fs.readFile(fullFilePath);
         const base64Data = fileBuffer.toString("base64");
 
+        const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+        const mimetype = invoice?.mime_type || "";
+
         await prisma.invoice.update({
           where: { id: invoiceId },
           data: { status: "AI Processed" }
@@ -2979,66 +2982,130 @@ ${fewShotExample}
             console.log("Could not query Ollama tags, defaulting to:", modelToUse);
           }
 
-          const isVisionModel = modelToUse.toLowerCase().includes("vision") || modelToUse.toLowerCase().includes("llava");
-          const llmPayload: any = { 
-            prompt: prompt, 
-            stream: false, 
-            format: "json", 
-            model: modelToUse,
-            options: { temperature: 0.0, seed: 123 }
-          };
-          if (isVisionModel) {
-             llmPayload.images = [base64Data];
-          }
-
-          // Agent 1: Initial Extraction
-          let llmResponse: any = null;
-          let errText = "";
+          // Determine active AI Provider
+          let aiProvider = "Ollama";
           try {
-            llmResponse = await fetch(LOCAL_LLM_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(llmPayload)
-            });
-            if (!llmResponse.ok) errText = await llmResponse.text();
-          } catch(e: any) {
-            errText = e.message;
+             const providerConfig = await prisma.systemConfig.findUnique({ where: { key: "AI_PROVIDER" } });
+             if (providerConfig && providerConfig.value) {
+                aiProvider = providerConfig.value.trim();
+             }
+          } catch(e) {
+             console.log("Could not load AI_PROVIDER setting:", e);
           }
 
-          if (!llmResponse || !llmResponse.ok) {
-            console.warn(`[LLM Fallback] Initial model ${modelToUse} failed:`, errText);
-            
-            // Fallback to standard text models if vision or original choice failed
-            let fallbackModel = "llama3.1:8b";
-            const fallbackPrefs = ["llama3.1:8b", "llama3.2:latest", "llama3:latest"];
-            for (const fb of fallbackPrefs) {
-               if (availableModels.includes(fb) || availableModels.some(m => m.startsWith(fb.split(':')[0]))) {
-                  fallbackModel = availableModels.find(m => m === fb || m.startsWith(fb.split(':')[0])) || fb;
-                  break;
+          let extractedText = "";
+          let usingGemini = false;
+          const geminiKey = process.env.GEMINI_API_KEY;
+
+          if (aiProvider.toLowerCase() === "gemini" && geminiKey) {
+             console.log("[AI Engine] Selected provider: Gemini. Attempting cloud extraction...");
+             try {
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+                const contents: any[] = [{
+                   parts: [{ text: prompt }]
+                }];
+                
+                // For images, pass direct vision input
+                if (mimetype && mimetype.startsWith("image/") && base64Data) {
+                   contents[0].parts.push({
+                      inlineData: {
+                         mimeType: mimetype,
+                         data: base64Data
+                      }
+                   });
+                }
+
+                const geminiRes = await fetch(geminiUrl, {
+                   method: "POST",
+                   headers: { "Content-Type": "application/json" },
+                   body: JSON.stringify({
+                      contents,
+                      generationConfig: {
+                         responseMimeType: "application/json",
+                         temperature: 0.1
+                      }
+                   })
+                });
+
+                if (geminiRes.ok) {
+                   const geminiData = await geminiRes.json();
+                   extractedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                   usingGemini = true;
+                   console.log("[AI Engine] Gemini extraction completed successfully.");
+                } else {
+                   const errTextGemini = await geminiRes.text();
+                   console.warn("[AI Engine] Gemini API returned error, falling back to local Ollama:", errTextGemini);
+                }
+             } catch(e: any) {
+                console.warn("[AI Engine] Gemini API call failed, falling back to local Ollama:", e.message);
+             }
+          }
+
+          if (!usingGemini) {
+             console.log("[AI Engine] Running local extraction via Ollama...");
+             const isVisionModel = modelToUse.toLowerCase().includes("vision") || modelToUse.toLowerCase().includes("llava");
+             const llmPayload: any = { 
+               prompt: prompt, 
+               stream: false, 
+               format: "json", 
+               model: modelToUse,
+               options: { temperature: 0.0, seed: 123 }
+             };
+             if (isVisionModel) {
+                llmPayload.images = [base64Data];
+             }
+
+             // Agent 1: Initial Extraction
+             let llmResponse: any = null;
+             let errText = "";
+             try {
+               llmResponse = await fetch(LOCAL_LLM_URL, {
+                 method: "POST",
+                 headers: { "Content-Type": "application/json" },
+                 body: JSON.stringify(llmPayload)
+               });
+               if (!llmResponse.ok) errText = await llmResponse.text();
+             } catch(e: any) {
+               errText = e.message;
+             }
+
+             if (!llmResponse || !llmResponse.ok) {
+               console.warn(`[LLM Fallback] Initial model ${modelToUse} failed:`, errText);
+               
+               // Fallback to standard text models if vision or original choice failed
+               let fallbackModel = "llama3.1:8b";
+               const fallbackPrefs = ["llama3.1:8b", "llama3.2:latest", "llama3:latest"];
+               for (const fb of fallbackPrefs) {
+                  if (availableModels.includes(fb) || availableModels.some(m => m.startsWith(fb.split(':')[0]))) {
+                     fallbackModel = availableModels.find(m => m === fb || m.startsWith(fb.split(':')[0])) || fb;
+                     break;
+                  }
                }
-            }
-            
-            console.log(`Attempting fallback with model: ${fallbackModel}`);
-            llmPayload.model = fallbackModel;
-            delete llmPayload.images; // Remove images for text-only models
-            
-            try {
-              llmResponse = await fetch(LOCAL_LLM_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(llmPayload)
-              });
-              if (!llmResponse.ok) {
-                const errText2 = await llmResponse.text();
-                throw new Error(`Fallback HTTP Error: ${llmResponse.status} - ${errText2}`);
-              }
-            } catch(e: any) {
-              throw new Error(`Local OCR/LLM pipeline failed, using fallback: ${e.message} | Details: ${errText}`);
-            }
+               
+               console.log(`Attempting fallback with model: ${fallbackModel}`);
+               llmPayload.model = fallbackModel;
+               delete llmPayload.images; // Remove images for text-only models
+               
+               try {
+                 llmResponse = await fetch(LOCAL_LLM_URL, {
+                   method: "POST",
+                   headers: { "Content-Type": "application/json" },
+                   body: JSON.stringify(llmPayload)
+                 });
+                 if (!llmResponse.ok) {
+                   const errText2 = await llmResponse.text();
+                   throw new Error(`Fallback HTTP Error: ${llmResponse.status} - ${errText2}`);
+                 }
+               } catch(e: any) {
+                 throw new Error(`Local OCR/LLM pipeline failed, using fallback: ${e.message} | Details: ${errText}`);
+               }
+             }
+
+             const llmData = await llmResponse.json();
+             extractedText = llmData.response || "";
           }
 
-          const llmData = await llmResponse.json();
-          let firstPassJsonStr = llmData.response || "";
+          let firstPassJsonStr = extractedText || "";
           
           firstPassJsonStr = firstPassJsonStr.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
           const firstPassMatch = firstPassJsonStr.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);

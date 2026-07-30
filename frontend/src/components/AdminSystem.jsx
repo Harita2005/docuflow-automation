@@ -8,6 +8,7 @@ export default function AdminSystem() {
 
   // Default editable keys with their human readable info
   const SYSTEM_KEYS = [
+    { key: "AI_PROVIDER", default: "Ollama", desc: "Cognitive AI provider ('Ollama' or 'Gemini'). If set to Gemini, make sure GEMINI_API_KEY is configured in your .env file.", category: "AI" },
     { key: "AI_PRIMARY_MODEL", default: "llama3.2-vision:latest", desc: "Preferred Ollama model for primary OCR extraction (Vision preferred)", category: "AI" },
     { key: "AI_FALLBACK_MODEL", default: "llama3.2:latest", desc: "Stable fallback text-only model", category: "AI" },
     { key: "AUTO_APPROVE_THRESHOLD", default: "0.95", desc: "Confidence score required for straight-through processing (0.0 to 1.0)", category: "System" },
