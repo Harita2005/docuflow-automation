@@ -208,6 +208,8 @@ export default function App() {
     }
   }, [currentView, selectedDocId]);
 
+  const [requireGRN, setRequireGRN] = useState(true);
+
   // Fetch dynamic role permissions from DB
   const fetchRolePermissions = async () => {
     try {
@@ -220,6 +222,10 @@ export default function App() {
         const roleConfig = data.find((c: any) => c.key === "ROLE_PERMISSIONS");
         if (roleConfig && roleConfig.value) {
           setRolePermissions(JSON.parse(roleConfig.value));
+        }
+        const grnConfig = data.find((c: any) => c.key === "GLOBAL_REQUIRE_GRN");
+        if (grnConfig) {
+          setRequireGRN(grnConfig.value === "true");
         }
       }
     } catch (e) {
@@ -404,6 +410,7 @@ export default function App() {
                 onViewDocument={handleViewDocument}
                 currentUserRole={currentUserRole}
                 setCurrentView={setCurrentView}
+                requireGRN={requireGRN}
               />
             )}
 
@@ -411,6 +418,7 @@ export default function App() {
               <WorkTrackerPage
                 documents={documents}
                 onViewDocument={handleViewDocument}
+                requireGRN={requireGRN}
               />
             )}
 

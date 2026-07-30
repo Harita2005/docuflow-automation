@@ -5,9 +5,14 @@ import { DbInvoice } from "../types.ts";
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
   onViewDocument: (id: string) => void;
+  requireGRN?: boolean;
 }
 
-export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrackerPageProps) {
+export default function WorkTrackerPage({ 
+  documents, 
+  onViewDocument,
+  requireGRN = true 
+}: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [viewMode, setViewMode] = useState<"global" | "personal">("global");
@@ -164,7 +169,7 @@ export default function WorkTrackerPage({ documents, onViewDocument }: WorkTrack
     if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) return false;
 
     // KPI filtering
-    if (kpiFilter === "grn" && doc.status !== "Waiting for GRN") return false;
+    if (requireGRN && kpiFilter === "grn" && doc.status !== "Waiting for GRN") return false;
     if (kpiFilter === "aging") {
       const created = new Date(doc.created_at || new Date()).getTime();
       const diffHours = (new Date().getTime() - created) / (1000 * 60 * 60);

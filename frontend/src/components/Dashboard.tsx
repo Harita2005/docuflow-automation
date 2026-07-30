@@ -31,6 +31,7 @@ interface DashboardProps {
   currentUserRole?: string;
   currentUserEmail?: string;
   setCurrentView?: (view: string) => void;
+  requireGRN?: boolean;
 }
 
 export default function Dashboard({ 
@@ -40,7 +41,8 @@ export default function Dashboard({
   onViewDocument,
   currentUserRole = "ap_executive",
   currentUserEmail = "ap.executive@company.com",
-  setCurrentView
+  setCurrentView,
+  requireGRN = true
 }: DashboardProps) {
   const [listFilter, setListFilter] = useState<'all' | 'action' | 'approved' | 'review' | 'grn' | 'action_required' | 'my_approvals'>('all');
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
@@ -90,7 +92,7 @@ export default function Dashboard({
   const totalSpentVal = documents.reduce((acc, curr) => acc + curr.amount, 0);
 
   // Role details calculations
-  const pendingGRNCount = documents.filter(d => d.status === "Waiting for GRN" || d.status === "Received").length;
+  const pendingGRNCount = requireGRN ? documents.filter(d => d.status === "Waiting for GRN" || d.status === "Received").length : 0;
   const pendingApprovalsCount = documents.filter(d => d.activeApprovalLog?.status === "Pending").length;
   const readyPaymentCount = documents.filter(d => d.status === "Ready for Payment").length;
   const totalPaidInvoicesCount = documents.filter(d => d.status === "Paid").length;
@@ -99,8 +101,8 @@ export default function Dashboard({
   const statusChartData = [
     { name: "Approved", value: documents.filter(i => i.status === "Paid" || i.status === "Approved" || i.status === "Ready for Payment").length, color: "#14b8a6" },
     { name: "In Review", value: documents.filter(i => i.status === "In Approval" || i.status === "Ready for Approval").length, color: "#8b5cf6" },
-    { name: "Awaiting GRN", value: documents.filter(i => i.status === "Waiting for GRN" || i.status === "Received").length, color: "#f43f5e" },
-  ].filter(s => s.value > 0);
+    requireGRN ? { name: "Awaiting GRN", value: documents.filter(i => i.status === "Waiting for GRN" || i.status === "Received").length, color: "#f43f5e" } : null,
+  ].filter(Boolean).filter(s => s!.value > 0) as any[];
 
   // Render role indicator bar
   const roleLabels: { [key: string]: string } = {
