@@ -71,8 +71,7 @@ services:
     image: docker.n8n.io/n8nio/n8n
     container_name: docuflow-n8n
     ports:
-      # Map to a non-standard port on host to prevent conflicts
-      - "5679:5678"
+      - "5678:5678"
     environment:
       - N8N_HOST=n8n
       - N8N_PORT=5678
