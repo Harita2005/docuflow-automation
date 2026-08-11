@@ -36,6 +36,25 @@ export interface DbInvoice {
     bbox: number[]; // [x, y, w, h]
   }[];
   custom_data?: any;
+  file_url?: string;
+  doc_key?: number;
+  doc_num?: number;
+  doc_date?: string;
+  division?: string;
+  plant?: string;
+  category?: string;
+  cost_center?: string;
+  workflow_profile_id?: string;
+  workflow_profile?: string;
+  current_stage?: number;
+  total_stages?: number;
+  assigned_approver?: string;
+  vendor_gstin?: string;
+  vendor_code?: string;
+  base_amount?: number;
+  tax_amount?: number;
+  payment_terms?: string;
+  updated_at?: string;
 
   // Extended structured fields (CGST, SGST, IGST, and itemized materials list)
   cgst?: number;
@@ -56,20 +75,6 @@ export interface DbInvoice {
     status: string;
     last_updated: string;
   };
-  // ERP & MS SQL Integration Fields
-  doc_key?: number;
-  doc_num?: number;
-  doc_date?: string;
-  vendor_code?: string;
-  vendor_gstin?: string;
-  division?: string;
-  plant?: string;
-  category?: string;
-  cost_center?: string;
-  payment_terms?: string;
-  workflow_profile?: string;
-  workflow_profile_id?: string;
-  updated_at?: string;
 
   is_current_approver?: boolean;
   has_approved?: boolean;

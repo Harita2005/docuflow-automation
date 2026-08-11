@@ -37,7 +37,8 @@ import {
   Lock,
   ExternalLink,
   RefreshCw,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Upload
 } from "lucide-react";
 import { DbInvoice, InvoiceLineItem, DbWorkflowInstance } from "../types";
 
@@ -178,6 +179,35 @@ export default function DocumentDetails({
   const [isReSyncingErp, setIsReSyncingErp] = useState<boolean>(false);
   const [erpSyncToast, setErpSyncToast] = useState<string | null>(null);
   const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
+  const [isUploadingVersion, setIsUploadingVersion] = useState<boolean>(false);
+
+  const handleUploadVersion = async (file: File) => {
+    if (!document) return;
+    setIsUploadingVersion(true);
+    setActionError(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/invoices/${document.id}/version`, {
+        method: "POST",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (res.ok) {
+        onRefreshDocument();
+      } else {
+        const errData = await res.json();
+        setActionError(errData.detail || "Failed to upload physical document.");
+      }
+    } catch (e: any) {
+      setActionError(e.message || "Failed to upload physical document.");
+    } finally {
+      setIsUploadingVersion(false);
+    }
+  };
 
   const getNextPendingDocId = () => {
     if (!document || !pendingDocIds || pendingDocIds.length === 0) return null;
@@ -296,7 +326,6 @@ export default function DocumentDetails({
   // Data Protection states
   const [versions, setVersions] = useState<any[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
-  const [isUploadingVersion, setIsUploadingVersion] = useState(false);
 
   const [erpData, setErpData] = useState<any | null>(null);
   const [erpLoading, setErpLoading] = useState(false);
