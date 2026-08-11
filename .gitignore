@@ -16,5 +16,6 @@ test-results/
 compile_errors.txt
 clean_details.js
 clean_return.js
-*.bak
+!DocuFlowDB.bak
+
 
