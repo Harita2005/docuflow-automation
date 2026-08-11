@@ -5,32 +5,19 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: docuflow-backend
-    expose:
-      - "3000"
+    ports:
+      - "8000:8000"
     environment:
-      - NODE_ENV=production
-      - LOCAL_LLM_URL=http://ollama:11434/api/generate
-      - LOCAL_LLM_MODEL=llama3:latest
-      - N8N_WEBHOOK_URL=http://n8n:5678/webhook-test/send-approval-email
-      - JWT_SECRET=docuflow_super_secret_key_2026
-      # Connect to the local SQL server container
-      - DATABASE_URL=sqlserver://db:1433;database=DocuFlowDB;user=sa;password=Admin@1234;trustServerCertificate=true;
-      - GEMINI_API_KEY
+      - DATABASE_URL=mssql+pymssql://sa:Admin%401234@db:1433/DocuFlowDB
+      - SECRET_KEY=super-secret-docuflow-jwt-key-2026-production
+      - FRONTEND_URL=http://localhost:5173
     depends_on:
       - db
-      - ollama
-      - n8n
     restart: unless-stopped
     volumes:
       - backend_uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').request('http://localhost:3000/', (res) => process.exit(0)).on('error', () => process.exit(1)).end()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
   frontend:
     build:
@@ -38,46 +25,9 @@ services:
       dockerfile: Dockerfile
     container_name: docuflow-frontend
     ports:
-      - "8085:80"
+      - "5173:80"
     depends_on:
       - backend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: docuflow-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    expose:
-      - "11434"
-#    deploy:
-#      resources:
-#        reservations:
-#          devices:
-#            - driver: nvidia
-#              count: 1
-#              capabilities: [gpu]
-    restart: unless-stopped
-
-  n8n:
-    image: docker.n8n.io/n8nio/n8n
-    container_name: docuflow-n8n
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_HOST=n8n
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - N8N_SECURE_COOKIE=false
-    volumes:
-      - n8n_data:/home/node/.n8n
     restart: unless-stopped
 
   db:
@@ -87,13 +37,12 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=Admin@1234
     ports:
-      - "1435:1433"
+      - "1433:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     restart: unless-stopped
 
 volumes:
-  ollama_data:
-  n8n_data:
   mssql_data:
   backend_uploads:
+

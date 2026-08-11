@@ -1,41 +1,27 @@
-FROM node:20-bookworm-slim
+FROM python:3.11-slim-bookworm
 
-# Set working directory
 WORKDIR /app
 
-# Install Python 3, pip, and system dependencies required for OpenCV / PaddleOCR
+# Install system dependencies for MS SQL ODBC / pymssql and OCR
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
+    curl \
+    gnupg \
+    unixodbc \
+    unixodbc-dev \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a Python virtual environment
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy python requirements and install them
+# Copy requirements and install dependencies
 COPY requirements.txt .
-# Install requirements + paddleocr (which is imported in local_ocr.py)
-RUN pip install --no-cache-dir -r requirements.txt "numpy<2.0.0" paddlepaddle==2.6.2 paddleocr==2.7.3
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy Node.js package files
-COPY package.json ./
-
-# Install Node.js dependencies
-RUN npm install
-
-# Copy Prisma schema and generate client
-COPY prisma ./prisma
-RUN npx prisma generate
-
-# Copy the rest of the application
+# Copy backend source code
 COPY . .
 
 # Expose backend port
-EXPOSE 3000
+EXPOSE 8000
 
-# Start command: Auto-create tables in SQL Server, seed data, then launch Node
-CMD ["sh", "-c", "npx prisma db push && node load_seed.cjs && npm run start"]
+# Start FastAPI server
+CMD ["python", "run.py"]
