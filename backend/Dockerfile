@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Expose backend port
-EXPOSE 8000
+EXPOSE 3000
 
 # Start FastAPI server
 CMD ["python", "run.py"]

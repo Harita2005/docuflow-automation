@@ -6,11 +6,11 @@ services:
       dockerfile: Dockerfile
     container_name: docuflow-backend
     ports:
-      - "8000:8000"
+      - "3000:3000"
     environment:
       - DATABASE_URL=mssql+pymssql://sa:Admin%401234@db:1433/DocuFlowDB
       - SECRET_KEY=super-secret-docuflow-jwt-key-2026-production
-      - FRONTEND_URL=http://localhost:5173
+      - FRONTEND_URL=http://localhost:8085
     depends_on:
       - db
     restart: unless-stopped
@@ -25,7 +25,7 @@ services:
       dockerfile: Dockerfile
     container_name: docuflow-frontend
     ports:
-      - "5173:80"
+      - "8085:80"
     depends_on:
       - backend
     restart: unless-stopped
