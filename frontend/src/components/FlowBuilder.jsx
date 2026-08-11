@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder, Users } from 'lucide-react';
 
 const getPrefixCode = (category, subCat) => {
   if (!category || !subCat) return "";
@@ -37,6 +37,7 @@ const getWorkflowPrefixCode = (category, subCat, index) => {
 export default function FlowBuilder({ users = [] }) {
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [internalUsers, setInternalUsers] = useState(users || []);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
@@ -47,6 +48,7 @@ export default function FlowBuilder({ users = [] }) {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
   const [configuringStepIndex, setConfiguringStepIndex] = useState(null);
+  const [memberSearchText, setMemberSearchText] = useState("");
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -54,6 +56,29 @@ export default function FlowBuilder({ users = [] }) {
   const handleAddCategory = () => {
     setShowAddModal(true);
   };
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/users', {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInternalUsers(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch users:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (users && users.length > 0) {
+      setInternalUsers(users);
+    } else {
+      fetchUsers();
+    }
+  }, [users]);
 
   useEffect(() => {
     const handleOpenAddCategory = () => handleAddCategory();
@@ -216,6 +241,10 @@ export default function FlowBuilder({ users = [] }) {
   };
 
   const addStep = () => {
+    if (editingWorkflow.steps && editingWorkflow.steps.length >= 10) {
+      alert("Maximum limit of 10 approval steps reached per workflow.");
+      return;
+    }
     const newSteps = [...editingWorkflow.steps, {
       stage_number: editingWorkflow.steps.length + 1,
       step_name: `Stage ${editingWorkflow.steps.length + 1}: Review`,
@@ -598,8 +627,14 @@ export default function FlowBuilder({ users = [] }) {
               <h2 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <span className="bg-blue-600 text-white h-4 w-4 rounded-full flex items-center justify-center text-[10px]">2</span> Approval Steps
               </h2>
-              <button type="button" onClick={addStep} className="flex items-center gap-1.5 px-2.5 py-1 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold text-[10px] uppercase tracking-wide rounded transition-colors shadow-sm">
-                <Plus className="h-3 w-3" /> Add Step
+              <button 
+                type="button" 
+                onClick={addStep} 
+                disabled={editingWorkflow.steps && editingWorkflow.steps.length >= 10}
+                className="flex items-center gap-1.5 px-2.5 py-1 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold text-[10px] uppercase tracking-wide rounded transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                title={editingWorkflow.steps && editingWorkflow.steps.length >= 10 ? "Maximum 10 approval steps reached" : "Add approval step"}
+              >
+                <Plus className="h-3 w-3" /> Add Step ({editingWorkflow.steps ? editingWorkflow.steps.length : 0}/10)
               </button>
             </div>
             
@@ -635,12 +670,45 @@ export default function FlowBuilder({ users = [] }) {
                         <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs px-2 py-1.5 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
                       </td>
                       <td className="py-2.5 px-2 align-middle">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">
-                            {step.approver_target ? step.approver_target : 'Not configured'}
-                          </span>
-                        </div>
+                        {(() => {
+                          const target = step.approver_target || '';
+                          const isPool = target.includes(',') || step.approver_type === 'Approval Pool';
+                          const members = target ? target.split(',').map(s => s.trim()).filter(Boolean) : [];
+                          
+                          if (isPool && members.length > 0) {
+                            return (
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1 text-xs font-bold text-slate-800">
+                                  <Users className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                  <span>Approval Pool ({members.length} Members • Any One)</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {members.map(m => {
+                                    const match = internalUsers.find(u => u.username === m || u.email === m);
+                                    const displayName = match?.name || m;
+                                    return (
+                                      <span key={m} className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                        {displayName}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
+                              <span className="text-[10px] text-slate-500 mt-0.5">
+                                {step.approver_target ? (() => {
+                                  const match = internalUsers.find(u => u.username === step.approver_target || u.email === step.approver_target);
+                                  return match ? `${match.name} (${step.approver_target})` : step.approver_target;
+                                })() : 'Not configured'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 align-top text-right pr-2">
                         <div className="flex items-center justify-end gap-1">
@@ -751,20 +819,31 @@ export default function FlowBuilder({ users = [] }) {
               {editingWorkflow.steps.length === 0 ? (
                 <div className="text-[10px] text-slate-400 italic font-medium -ml-5">No steps added.</div>
               ) : (
-                editingWorkflow.steps.map((step, idx) => (
-                  <div key={idx} className="relative">
-                    <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold ring-4 ring-white shadow-sm">
-                      {idx + 1}
-                    </div>
-                    <div className="pl-1.5">
-                      <div className="text-[11px] font-bold text-slate-800 leading-tight">{step.step_name || `Step ${idx+1}`}</div>
-                      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide leading-snug mt-0.5 flex flex-wrap gap-1">
-                        <span className="text-slate-400">•</span> 
-                        {step.approver_target || step.approver_type || 'Unassigned'}
+                editingWorkflow.steps.map((step, idx) => {
+                  const target = step.approver_target || '';
+                  const isPool = target.includes(',') || step.approver_type === 'Approval Pool';
+                  const members = target ? target.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  
+                  return (
+                    <div key={idx} className="relative">
+                      <div className="absolute -left-[23px] top-0 h-4 w-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold ring-4 ring-white shadow-sm">
+                        {idx + 1}
+                      </div>
+                      <div className="pl-1.5">
+                        <div className="text-[11px] font-bold text-slate-800 leading-tight">{step.step_name || `Step ${idx+1}`}</div>
+                        <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide leading-snug mt-0.5">
+                          {isPool && members.length > 0 ? (
+                            <span className="text-blue-600 font-extrabold">
+                              Pool ({members.length} Approvers • Any One)
+                            </span>
+                          ) : (
+                            <span>{step.approver_target || step.approver_type || 'Unassigned'}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -790,81 +869,311 @@ export default function FlowBuilder({ users = [] }) {
             <div className="space-y-6">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Assignment Strategy</label>
-                <select value={editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee'} onChange={e => {
-                  updateStep(configuringStepIndex, 'approver_type', e.target.value);
-                  updateStep(configuringStepIndex, 'approver_target', '');
-                }} className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg shadow-sm focus:border-blue-500 outline-none text-slate-800 font-bold">
-                  <option value="Specific Employee">Specific Employee (Direct Assignment)</option>
-                  <option value="Role Based">Role Based (Dynamic Routing)</option>
-                </select>
+                {(() => {
+                  const currentTarget = editingWorkflow.steps[configuringStepIndex].approver_target || '';
+                  const isCurrentPool = currentTarget.includes(',') || editingWorkflow.steps[configuringStepIndex].approver_type === 'Approval Pool';
+                  const effectiveType = isCurrentPool ? 'Approval Pool' : (editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee');
+
+                  return (
+                    <select 
+                      value={effectiveType} 
+                      onChange={e => {
+                        updateStep(configuringStepIndex, 'approver_type', e.target.value);
+                        if (e.target.value === 'Specific Employee') {
+                          // Keep first user if converting from pool
+                          const first = currentTarget.split(',')[0]?.trim() || '';
+                          updateStep(configuringStepIndex, 'approver_target', first);
+                        }
+                      }} 
+                      className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg shadow-sm focus:border-blue-500 outline-none text-slate-800 font-bold"
+                    >
+                      <option value="Approval Pool">Approval Pool / Multi-User Group (Any One Can Approve)</option>
+                      <option value="Specific Employee">Specific Employee (Single Direct Assignment)</option>
+                      <option value="Role Based">Role Based (Dynamic Routing)</option>
+                    </select>
+                  );
+                })()}
               </div>
               
               <div className="pt-2">
-                {(editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee') === 'Specific Employee' ? (
-                  <div className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Primary Assignee</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- Select Target Employee --</option>
-                        {users.map(u => <option key={u.id} value={u.username}>{u.name || (u.first_name + ' ' + u.last_name)}</option>)}
-                      </select>
+                {(() => {
+                  const currentTarget = editingWorkflow.steps[configuringStepIndex].approver_target || '';
+                  const isPool = currentTarget.includes(',') || editingWorkflow.steps[configuringStepIndex].approver_type === 'Approval Pool';
+
+                  if (isPool) {
+                    const selectedList = currentTarget ? currentTarget.split(',').map(s => s.trim()).filter(Boolean) : [];
+                    
+                    const toggleUserInPool = (uKey) => {
+                      let newList;
+                      if (selectedList.includes(uKey)) {
+                        newList = selectedList.filter(k => k !== uKey);
+                      } else {
+                        newList = [...selectedList, uKey];
+                      }
+                      updateStep(configuringStepIndex, 'approver_target', newList.join(','));
+                      updateStep(configuringStepIndex, 'approver_type', 'Approval Pool');
+                    };
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Approval Rule Banner */}
+                        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span className="text-xs font-black text-blue-900 uppercase tracking-wide">Approval Rule: Any One (First Responder)</span>
+                          </div>
+                          <p className="text-[11px] text-blue-800 leading-relaxed font-medium">
+                            When an invoice enters this stage, <strong>all {selectedList.length} assigned members</strong> will see it in their pending queue. As soon as <strong>ANY ONE</strong> of them approves it, the stage completes immediately and moves to the next step.
+                          </p>
+                        </div>
+
+                        {/* Selected Members Badges */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-blue-600">Assigned Pool Members ({selectedList.length})</label>
+                            {selectedList.length > 0 && (
+                              <button 
+                                type="button" 
+                                onClick={() => updateStep(configuringStepIndex, 'approver_target', '')}
+                                className="text-[10px] text-rose-600 hover:underline font-bold"
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                            {selectedList.length === 0 ? (
+                              <span className="text-xs text-slate-400 italic">No members selected. Check users below to add to pool.</span>
+                            ) : (
+                              selectedList.map(m => {
+                                const match = internalUsers.find(u => u.username === m || u.email === m);
+                                const label = match?.name ? `${match.name} (${m})` : m;
+                                return (
+                                  <span key={m} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+                                    <span>{label}</span>
+                                    <button type="button" onClick={() => toggleUserInPool(m)} className="text-blue-600 hover:text-rose-600">
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Search & Quick-Add New Member Input */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Search or Add New Approver
+                          </label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text"
+                              value={memberSearchText}
+                              onChange={e => setMemberSearchText(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && memberSearchText.trim()) {
+                                  e.preventDefault();
+                                  const val = memberSearchText.trim();
+                                  if (!selectedList.includes(val)) {
+                                    toggleUserInPool(val);
+                                  }
+                                  setMemberSearchText("");
+                                }
+                              }}
+                              placeholder="Type name, username or email..."
+                              className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-blue-500 outline-none font-medium"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (memberSearchText.trim()) {
+                                  const val = memberSearchText.trim();
+                                  if (!selectedList.includes(val)) {
+                                    toggleUserInPool(val);
+                                  }
+                                  setMemberSearchText("");
+                                }
+                              }}
+                              disabled={!memberSearchText.trim()}
+                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>Add to Pool</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* User Checkbox Selection List */}
+                        <div>
+                          {(() => {
+                            const q = memberSearchText.trim().toLowerCase();
+                            const filteredUsers = internalUsers.filter(u => {
+                              if (!q) return true;
+                              const nameMatch = (u.name || '').toLowerCase().includes(q);
+                              const userMatch = (u.username || '').toLowerCase().includes(q);
+                              const emailMatch = (u.email || '').toLowerCase().includes(q);
+                              return nameMatch || userMatch || emailMatch;
+                            });
+
+                            return (
+                              <>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Available Approvers List ({filteredUsers.length})
+                                  </label>
+                                  {memberSearchText.trim() && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setMemberSearchText("")} 
+                                      className="text-[10px] text-blue-600 hover:underline font-bold"
+                                    >
+                                      Clear Filter
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white custom-scrollbar">
+                                  {filteredUsers.length > 0 ? (
+                                    filteredUsers.map(u => {
+                                      const uKey = u.username || u.email;
+                                      const isChecked = selectedList.includes(uKey);
+                                      return (
+                                        <label key={u.id || uKey} className="flex items-center justify-between p-2.5 hover:bg-slate-50 cursor-pointer transition">
+                                          <div className="flex items-center gap-2.5">
+                                            <input 
+                                              type="checkbox" 
+                                              checked={isChecked} 
+                                              onChange={() => toggleUserInPool(uKey)}
+                                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                            />
+                                            <div>
+                                              <div className="text-xs font-bold text-slate-800">{u.name}</div>
+                                              <div className="text-[10px] text-slate-400 font-mono">{uKey}</div>
+                                            </div>
+                                          </div>
+                                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                            {u.role || 'Employee'}
+                                          </span>
+                                        </label>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="p-4 text-center text-xs text-slate-500">
+                                      No existing user matches "<strong>{memberSearchText}</strong>".
+                                      <div className="mt-1 font-bold text-blue-600">
+                                        Click "+ Add to Pool" button above to add directly!
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if ((editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee') === 'Specific Employee') {
+                    return (
+                      <div className="space-y-5">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Primary Assignee</label>
+                          <div className="space-y-2">
+                            <select 
+                              value={editingWorkflow.steps[configuringStepIndex].approver_target || ''} 
+                              onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} 
+                              className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
+                            >
+                              <option value="">-- Select Target Employee --</option>
+                              {(() => {
+                                const current = editingWorkflow.steps[configuringStepIndex].approver_target || '';
+                                const existsInList = internalUsers.some(u => u.username === current || u.email === current);
+                                return (
+                                  <>
+                                    {current && !existsInList && (
+                                      <option value={current}>{current}</option>
+                                    )}
+                                    {internalUsers.map(u => (
+                                      <option key={u.id || u.username} value={u.username || u.email}>
+                                        {u.name ? `${u.name} (${u.username || u.email})` : (u.username || u.email)}
+                                      </option>
+                                    ))}
+                                  </>
+                                );
+                              })()}
+                            </select>
+
+                            <div className="flex gap-2 items-center pt-1">
+                              <input 
+                                type="text"
+                                value={memberSearchText}
+                                onChange={e => setMemberSearchText(e.target.value)}
+                                placeholder="Or enter custom username / email..."
+                                className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-blue-500 outline-none font-medium"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (memberSearchText.trim()) {
+                                    updateStep(configuringStepIndex, 'approver_target', memberSearchText.trim());
+                                    setMemberSearchText("");
+                                  }
+                                }}
+                                disabled={!memberSearchText.trim()}
+                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0"
+                              >
+                                <span>Set Assignee</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Delegate / Backup</label>
+                          <select 
+                            value={editingWorkflow.steps[configuringStepIndex].delegate_approver || ''} 
+                            onChange={e => updateStep(configuringStepIndex, 'delegate_approver', e.target.value)} 
+                            className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
+                          >
+                            <option value="">-- No Backup Selected --</option>
+                            {internalUsers.map(u => (
+                              <option key={u.id || u.username} value={u.username || u.email}>
+                                {u.name ? `${u.name} (${u.username || u.email})` : (u.username || u.email)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Escalation Rule</label>
+                          <select value={editingWorkflow.steps[configuringStepIndex].escalation_rule || ''} onChange={e => updateStep(configuringStepIndex, 'escalation_rule', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                            <option value="">-- No Escalation (Wait Indefinitely) --</option>
+                            <option value="Route to Direct Manager">Route to Direct Manager</option>
+                            <option value="Route to Delegate">Route to Delegate</option>
+                            <option value="Return to Submitter">Return to Submitter</option>
+                            <option value="Auto-Approve">Auto-Approve</option>
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Target Role</label>
+                        <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                          <option value="">-- Select Target Role --</option>
+                          <option value="Finance Manager">Finance Manager</option>
+                          <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
+                          <option value="General Manager">General Manager</option>
+                          <option value="Department Head">Department Head</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Delegate / Backup</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].delegate_approver || ''} onChange={e => updateStep(configuringStepIndex, 'delegate_approver', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- No Backup Selected --</option>
-                        {users.map(u => <option key={u.id} value={u.username}>{u.name || (u.first_name + ' ' + u.last_name)}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Escalation Rule</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].escalation_rule || ''} onChange={e => updateStep(configuringStepIndex, 'escalation_rule', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- No Escalation (Wait Indefinitely) --</option>
-                        <option value="Route to Direct Manager">Route to Direct Manager</option>
-                        <option value="Route to Delegate">Route to Delegate</option>
-                        <option value="Return to Submitter">Return to Submitter</option>
-                        <option value="Auto-Approve">Auto-Approve</option>
-                      </select>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Target Role</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- Select Target Role --</option>
-                        <option value="Finance Manager">Finance Manager</option>
-                        <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
-                        <option value="General Manager">General Manager</option>
-                        <option value="Department Head">Department Head</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Division Filter</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].target_division || ''} onChange={e => updateStep(configuringStepIndex, 'target_division', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- Select Division Filter --</option>
-                        <option value="Match Document">Match Document's Division</option>
-                        <option value="Global">Global / Any Division</option>
-                        <option value="North America">North America</option>
-                        <option value="EMEA">EMEA</option>
-                        <option value="APAC">APAC</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Department Filter</label>
-                      <select value={editingWorkflow.steps[configuringStepIndex].target_department || ''} onChange={e => updateStep(configuringStepIndex, 'target_department', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
-                        <option value="">-- Select Department Filter --</option>
-                        <option value="Match Document">Match Document's Department</option>
-                        <option value="Cross-Department">Cross-Department / Any</option>
-                        <option value="Finance">Finance</option>
-                        <option value="IT">IT</option>
-                        <option value="HR">HR</option>
-                        <option value="Operations">Operations</option>
-                        <option value="Sales">Sales</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>

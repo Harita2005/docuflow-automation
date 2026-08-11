@@ -1,11 +1,11 @@
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
+import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react() as any, tailwindcss() as any],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -22,15 +22,15 @@ export default defineConfig(() => {
       },
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:3000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true
         },
         '/uploads': {
-          target: 'http://127.0.0.1:3000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true
         },
         '/socket.io': {
-          target: 'http://127.0.0.1:3000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true,
           ws: true
         }

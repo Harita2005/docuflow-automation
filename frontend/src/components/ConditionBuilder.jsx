@@ -518,21 +518,35 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         onChange={(e) => {
                           const newC = [...parsedJson.conditions];
                           newC[idx].field = e.target.value;
+                          // If switching to a field with preset, set default
+                          if (e.target.value === 'Division') {
+                            newC[idx].operator = 'Equals';
+                            newC[idx].value = 'VCC';
+                          } else if (e.target.value === 'Category') {
+                            newC[idx].operator = 'Equals';
+                            newC[idx].value = 'ASSET WITH COST CENTER';
+                          } else if (e.target.value === 'Plant' || e.target.value === 'Branch') {
+                            newC[idx].operator = 'Contains Any of';
+                            newC[idx].value = 'TN-SIVAKASI';
+                          } else if (e.target.value === 'Cost Center') {
+                            newC[idx].operator = 'Contains Any of';
+                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
+                          }
                           updateJson({ conditions: newC });
                         }}
                         className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
                       >
-                                                <option>Invoice Amount (Total)</option>
-                        <option>Amount</option>
-                        <option>Tax Amount</option>
-                        <option>Vendor Type</option>
-                        <option>Vendor Name</option>
-                        <option>Category</option>
-                        <option>Cost Center</option>
-                        <option>Department</option>
-                        <option>Division</option>
-                        <option>Plant</option>
-                        <option>Product Line Items</option>
+                        <option value="Division">Division (Company: VCC, ACC, ENES)</option>
+                        <option value="Plant">Plant / Branch (e.g. TN-SIVAKASI, Sulur, HQ)</option>
+                        <option value="Category">Category (Document Type / Expense)</option>
+                        <option value="Cost Center">Cost Center (Branch / Cost Code)</option>
+                        <option value="Invoice Amount (Total)">Invoice Amount (Total)</option>
+                        <option value="Amount">Amount</option>
+                        <option value="Tax Amount">Tax Amount</option>
+                        <option value="Vendor Type">Vendor Type</option>
+                        <option value="Vendor Name">Vendor Name</option>
+                        <option value="Department">Department</option>
+                        <option value="Product Line Items">Product Line Items</option>
                       </select>
                     </div>
                     <div className="col-span-1">
@@ -556,22 +570,109 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                           <>
                             <option value="Equals">Equals</option>
                             <option value="Contains">Contains</option>
+                            <option value="Contains Any of">Contains Any of (OR)</option>
                             <option value="Not Equals">Not Equals</option>
                           </>
                         )}
                       </select>
                     </div>
                     <div className="col-span-1">
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Value <span className="text-rose-500">*</span></label>
-                      <input 
-                        value={c.value}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].value = e.target.value;
-                          updateJson({ conditions: newC });
-                        }}
-                        className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium"
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                          Value <span className="text-rose-500">*</span>
+                        </label>
+                        {c.field === 'Cost Center' && (
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].operator = 'Contains Any of';
+                              newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
+                              updateJson({ conditions: newC });
+                            }}
+                            className="text-[8px] font-bold text-blue-600 hover:underline"
+                            title="Populate all 17 Excel SD Cost Centers"
+                          >
+                            + 17 SD Cost Centers
+                          </button>
+                        )}
+                        {(c.field === 'Plant' || c.field === 'Branch') && (
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].operator = 'Contains Any of';
+                              newC[idx].value = 'TN-SIVAKASI, TN-NAGERCOIL, TN-UDUMALPET, TN-CHN-CHROMPET';
+                              updateJson({ conditions: newC });
+                            }}
+                            className="text-[8px] font-bold text-blue-600 hover:underline"
+                            title="Populate SR10 Regional Branches"
+                          >
+                            + SR10 Branches
+                          </button>
+                        )}
+                      </div>
+
+                      {c.field === 'Division' ? (
+                        <div className="space-y-1">
+                          <select 
+                            value={c.value}
+                            onChange={(e) => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].value = e.target.value;
+                              updateJson({ conditions: newC });
+                            }}
+                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
+                          >
+                            <option value="ACC">ACC - Asset & Corporate</option>
+                            <option value="ENES">ENES - Energy & Retail</option>
+                            <option value="VCC">VCC - Regional Branches</option>
+                            <option value="EIC">EIC - Infrastructure Corp</option>
+                            <option value="RCH">RCH - Holding Company</option>
+                            <option value="RMPL">RMPL - Manufacturing Plant</option>
+                            <option value="RRTC">RRTC - Textiles & Retail</option>
+                            <option value="ALL">ALL (Global Enterprise)</option>
+                          </select>
+                        </div>
+                      ) : c.field === 'Category' ? (
+                        <div className="space-y-1">
+                          <select 
+                            value={c.value}
+                            onChange={(e) => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].value = e.target.value;
+                              updateJson({ conditions: newC });
+                            }}
+                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
+                          >
+                            <option value="ASSET WITH COST CENTER">ASSET WITH COST CENTER</option>
+                            <option value="ASSET-IT">ASSET-IT</option>
+                            <option value="ASSET-NON IT">ASSET-NON IT</option>
+                            <option value="EB DEPOSIT">EB DEPOSIT</option>
+                            <option value="SUNDRY EXPENSES">SUNDRY EXPENSES</option>
+                            <option value="REPAIRS & MAINTENANCE">REPAIRS & MAINTENANCE</option>
+                            <option value="RENT GODOWN/GUEST HOUSE/SHOWROOM">RENT GODOWN/GUEST HOUSE/SHOWROOM</option>
+                            <option value="ELECTRICITY CHARGES">ELECTRICITY CHARGES</option>
+                            <option value="FIXED ASSETS">FIXED ASSETS</option>
+                            <option value="GRN_ALL">GRN_ALL</option>
+                            <option value="EMPLOYEE_RELIEVING">EMPLOYEE_RELIEVING</option>
+                            <option value="AP INVOICE">AP INVOICE</option>
+                            <option value="CREDIT NOTE">CREDIT NOTE</option>
+                            <option value="DEBIT NOTE">DEBIT NOTE</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <input 
+                          value={c.value}
+                          onChange={(e) => {
+                            const newC = [...parsedJson.conditions];
+                            newC[idx].value = e.target.value;
+                            updateJson({ conditions: newC });
+                          }}
+                          placeholder={c.operator === 'Contains Any of' ? "e.g. BATTERY VEHICLE, IT-HARDWARE, Office Maintenance..." : "Enter value..."}
+                          className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium"
+                        />
+                      )}
                     </div>
                     <div className="col-span-1 flex gap-2">
                       {c.field && c.field.includes('Amount') && (
@@ -603,17 +704,24 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
               <button 
                 type="button" 
                 onClick={() => {
-                  const newC = [...(parsedJson.conditions || []), { field: 'Invoice Amount (Total)', operator: 'Greater Than', value: '', logicalOperator: 'AND' }];
+                  const currentConditions = parsedJson.conditions || [];
+                  if (currentConditions.length >= 10) {
+                    alert("Maximum limit of 10 conditions reached per rule.");
+                    return;
+                  }
+                  const newC = [...currentConditions, { field: 'Invoice Amount (Total)', operator: 'Greater Than', value: '', logicalOperator: 'AND' }];
                   updateJson({ conditions: newC, condition_type: 'Combination Condition' });
                 }}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded transition-colors"
+                disabled={(parsedJson.conditions || []).length >= 10}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
               >
-                <Plus className="h-3 w-3" /> Add Condition
+                <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
               </button>
               <button 
                 type="button" 
                 onClick={() => updateJson({ conditions: [] })}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm hover:bg-rose-50"
               >
                 <Trash2 className="h-3 w-3" /> Clear
               </button>

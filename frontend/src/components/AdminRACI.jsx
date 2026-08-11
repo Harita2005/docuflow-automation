@@ -146,19 +146,23 @@ export default function AdminRACI() {
   };
 
   const testSMTPConnection = async () => {
+    const userEmail = localStorage.getItem("currentUserEmail") || "";
+    const targetEmail = window.prompt("Enter recipient email address for SMTP test:", userEmail || "admin@company.com");
+    if (!targetEmail) return;
+
     setLoading(true);
     try {
       const res = await fetch('/api/admin/notifications/test', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          to: 'harita010905@gmail.com',
+          to: targetEmail.trim(),
           subject: 'DocuFlow Automation - SMTP Test',
           html: '<p>This is a test email from the Workflow Automation Notification Module. If you received this, your SMTP settings are configured correctly!</p>'
         })
       });
       if (res.ok) {
-        alert('Test email sent to harita010905@gmail.com!');
+        alert(`Test email sent successfully to ${targetEmail.trim()}!`);
       } else {
         const err = await res.json();
         alert('Error sending test email: ' + (err.error || 'Unknown error'));

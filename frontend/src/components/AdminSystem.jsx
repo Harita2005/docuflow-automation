@@ -16,6 +16,13 @@ export default function AdminSystem() {
     { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System" },
     { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System" },
     { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System" },
+    { key: "MAX_WORKFLOWS_PER_COMPANY", default: "50", desc: "Maximum number of active workflows allowed per company / organization", category: "Limits & Thresholds" },
+    { key: "MAX_APPROVAL_STEPS", default: "10", desc: "Maximum number of approval stages/steps allowed per workflow (Default: 10)", category: "Limits & Thresholds" },
+    { key: "MAX_CONDITIONS_PER_RULE", default: "10", desc: "Maximum number of combination conditions allowed per rule in Condition Builder (Default: 10)", category: "Limits & Thresholds" },
+    { key: "MAX_CHECKLIST_ITEMS_PER_STAGE", default: "15", desc: "Maximum number of checklist verification items allowed per stage", category: "Limits & Thresholds" },
+    { key: "MAX_ATTACHMENT_SIZE_MB", default: "25", desc: "Maximum file size limit per document/attachment in Megabytes", category: "Limits & Thresholds" },
+    { key: "MAX_ATTACHMENTS_PER_DOC", default: "10", desc: "Maximum number of supporting attachments allowed per invoice", category: "Limits & Thresholds" },
+    { key: "MAX_LINE_ITEMS_PER_DOC", default: "500", desc: "Maximum number of line items displayed per document table", category: "Limits & Thresholds" },
     { key: "API_ENDPOINT_INVOICES", default: "https://api.external-erp.com/v1/invoices", desc: "API Endpoint to fetch external Supplier Invoices", category: "Integrations" },
     { key: "API_ENDPOINT_DEBIT_NOTES", default: "https://api.external-erp.com/v1/debit-notes", desc: "API Endpoint to fetch external Debit Notes", category: "Integrations" },
     { key: "API_ENDPOINT_CREDIT_NOTES", default: "https://api.external-erp.com/v1/credit-notes", desc: "API Endpoint to fetch external Credit Notes", category: "Integrations" },
@@ -127,16 +134,18 @@ export default function AdminSystem() {
       <div className="space-y-6">
         
         {/* SETTINGS GROUPS */}
-        {['AI', 'System', 'Integrations'].map(category => (
+        {['AI', 'System', 'Limits & Thresholds', 'Integrations'].map(category => (
           <div key={category} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {category === 'AI' ? <BrainCircuit className="h-3.5 w-3.5 text-purple-600" /> : 
                  category === 'System' ? <Server className="h-3.5 w-3.5 text-blue-600" /> : 
+                 category === 'Limits & Thresholds' ? <Zap className="h-3.5 w-3.5 text-amber-600" /> :
                  <Network className="h-3.5 w-3.5 text-emerald-600" />}
                 <h3 className="text-[9px] font-bold text-slate-700 uppercase tracking-widest">
                   {category === 'AI' ? 'Cognitive AI Models' : 
                    category === 'System' ? 'Platform Thresholds' : 
+                   category === 'Limits & Thresholds' ? 'Configurable Limits & Safeguards' :
                    'External API Integrations'}
                 </h3>
               </div>

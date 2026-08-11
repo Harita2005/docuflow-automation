@@ -40,6 +40,61 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedDocType, setSelectedDocType] = useState<string>("AP Invoice");
 
+  // Synced Staging Upload States
+  const [isSyncedUpload, setIsSyncedUpload] = useState(false);
+  const [syncedDocs, setSyncedDocs] = useState<any[]>([]);
+  const [selectedSyncedDocId, setSelectedSyncedDocId] = useState<string>("");
+  const [syncedLoading, setSyncedLoading] = useState(false);
+  const [taxData, setTaxData] = useState({
+    cgst: "0",
+    sgst: "0",
+    igst: "0"
+  });
+
+  const handleSelectSyncedDoc = (doc: any) => {
+    setSelectedSyncedDocId(doc.id);
+    setManualData({
+      vendorName: doc.vendor_name || "",
+      invoiceNumber: doc.invoice_number || "",
+      amount: String(doc.amount || ""),
+      poNumber: doc.po_number || "",
+      invoiceDate: doc.invoice_date ? doc.invoice_date.split("T")[0] : new Date().toISOString().split("T")[0]
+    });
+    setTaxData({
+      cgst: String(doc.cgst || 0),
+      sgst: String(doc.sgst || 0),
+      igst: String(doc.igst || 0)
+    });
+    setSelectedDocType(doc.document_type || "AP Invoice");
+  };
+
+  React.useEffect(() => {
+    if (isSyncedUpload) {
+      const fetchSyncedDocs = async () => {
+        setSyncedLoading(true);
+        try {
+          const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+          const res = await fetch("/api/documents/synced-pending", {
+            headers: token ? { "Authorization": `Bearer ${token}` } : {}
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSyncedDocs(data);
+            if (data.length > 0) {
+              handleSelectSyncedDoc(data[0]);
+            } else {
+              setSelectedSyncedDocId("");
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load synced records:", e);
+        }
+        setSyncedLoading(false);
+      };
+      fetchSyncedDocs();
+    }
+  }, [isSyncedUpload]);
+
   React.useEffect(() => {
     const fetchTemplates = async () => {
       try {
@@ -147,17 +202,31 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
       formData.append("file", file);
       formData.append("document_type", selectedDocType);
       
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      
+      let fetchUrl = "/api/documents/upload";
+      if (isSyncedUpload && selectedSyncedDocId) {
+        fetchUrl = `/api/documents/upload-and-route/${selectedSyncedDocId}`;
+        formData.append("vendorName", manualData.vendorName);
+        formData.append("invoiceNumber", manualData.invoiceNumber);
+        formData.append("amount", manualData.amount);
+        formData.append("invoiceDate", manualData.invoiceDate);
+        formData.append("poNumber", manualData.poNumber);
+        formData.append("cgst", taxData.cgst);
+        formData.append("sgst", taxData.sgst);
+        formData.append("igst", taxData.igst);
+      }
       
       // Run file upload in background asynchronously
-      fetch("/api/documents/upload", {
+      fetch(fetchUrl, {
         method: "POST",
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
         body: formData,
       }).then(async (response) => {
         if (response.ok) {
           const doc = await response.json();
-          onUploadSuccess(doc);
+          const newDoc = doc.invoice || doc;
+          onUploadSuccess(newDoc);
         }
       }).catch(err => {
         console.error("Background upload failed:", err);
@@ -183,45 +252,203 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
         </p>
       </div>
 
-      {/* Document Type Selector */}
+      {/* Ingestion Type Toggles */}
       {!loading && !uploadedDoc && !pendingFile && (
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Document Type to Upload
-          </label>
-          <div className="relative">
-            <select
-              value={selectedDocType}
-              onChange={(e) => setSelectedDocType(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none"
-            >
-              {templates.length > 0 ? (
-                templates.map((t: any) => (
-                  <option key={t.id} value={t.name}>
-                    {t.name}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="AP Invoice">AP Invoice</option>
-                  <option value="AP DEBIT NOTE">AP DEBIT NOTE</option>
-                  <option value="NON - RETURNABLE">NON - RETURNABLE</option>
-                  <option value="JOURNAL ENTRY">JOURNAL ENTRY</option>
-                  <option value="VCC PURCHASE INVOICE">VCC PURCHASE INVOICE</option>
-                  <option value="AR CREDITNOTE">AR CREDITNOTE</option>
-                  <option value="PROJECT BUDGET">PROJECT BUDGET</option>
-                  <option value="OCR AND INHOUSE OCR">OCR AND INHOUSE OCR</option>
-                </>
-              )}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-              <Layers className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-[10px] text-slate-400 font-medium">
-            This selects the target metadata schema and approval workflow rules for the uploaded file.
-          </p>
+        <div className="flex bg-slate-100 p-1 rounded-xl max-w-sm mx-auto mb-2 border border-slate-200/60">
+          <button
+            onClick={() => setIsSyncedUpload(false)}
+            className={`flex-1 text-[10px] font-extrabold uppercase tracking-wider py-2 px-3 rounded-lg transition-all cursor-pointer ${
+              !isSyncedUpload 
+                ? "bg-white text-blue-600 shadow-sm border border-slate-205/30" 
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Direct File Ingest
+          </button>
+          <button
+            onClick={() => setIsSyncedUpload(true)}
+            className={`flex-1 text-[10px] font-extrabold uppercase tracking-wider py-2 px-3 rounded-lg transition-all cursor-pointer ${
+              isSyncedUpload 
+                ? "bg-white text-blue-600 shadow-sm border border-slate-205/30" 
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Attach to Staging
+          </button>
         </div>
+      )}
+
+      {/* Document Type Selector or Synced Data Selector */}
+      {!loading && !uploadedDoc && !pendingFile && (
+        !isSyncedUpload ? (
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-505">
+              Document Type to Upload
+            </label>
+            <div className="relative">
+              <select
+                value={selectedDocType}
+                onChange={(e) => setSelectedDocType(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-850 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none"
+              >
+                {templates.length > 0 ? (
+                  templates.map((t: any) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="AP Invoice">AP Invoice</option>
+                    <option value="AP DEBIT NOTE">AP DEBIT NOTE</option>
+                    <option value="NON - RETURNABLE">NON - RETURNABLE</option>
+                    <option value="JOURNAL ENTRY">JOURNAL ENTRY</option>
+                    <option value="VCC PURCHASE INVOICE">VCC PURCHASE INVOICE</option>
+                    <option value="AR CREDITNOTE">AR CREDITNOTE</option>
+                    <option value="PROJECT BUDGET">PROJECT BUDGET</option>
+                    <option value="OCR AND INHOUSE OCR">OCR AND INHOUSE OCR</option>
+                  </>
+                )}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                <Layers className="h-4 w-4" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              This selects the target metadata schema and approval workflow rules for the uploaded file.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                Select Synced Staging Record
+              </label>
+              {syncedLoading ? (
+                <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-semibold p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  <span>Pulling pending staging data...</span>
+                </div>
+              ) : syncedDocs.length === 0 ? (
+                <div className="text-[10px] text-amber-600 font-semibold p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-center space-x-2">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <span>No pending synced staging records found.</span>
+                </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={selectedSyncedDocId}
+                    onChange={(e) => {
+                      const doc = syncedDocs.find(d => d.id === e.target.value);
+                      if (doc) handleSelectSyncedDoc(doc);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none"
+                  >
+                    {syncedDocs.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.vendor_name || "Staging Ingest"} - #{doc.invoice_number || doc.id} (₹{doc.amount})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                    <Database className="h-4 w-4" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {selectedSyncedDocId && (
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-extrabold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-blue-500 animate-pulse" /> 
+                  <span>Synced Metadata Details</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 text-[10px]">
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                      Supplier/Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={manualData.vendorName}
+                      onChange={(e) => setManualData({ ...manualData, vendorName: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                      Invoice Number
+                    </label>
+                    <input
+                      type="text"
+                      value={manualData.invoiceNumber}
+                      onChange={(e) => setManualData({ ...manualData, invoiceNumber: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                      PO Number
+                    </label>
+                    <input
+                      type="text"
+                      value={manualData.poNumber}
+                      onChange={(e) => setManualData({ ...manualData, poNumber: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                      Invoice Date
+                    </label>
+                    <input
+                      type="date"
+                      value={manualData.invoiceDate}
+                      onChange={(e) => setManualData({ ...manualData, invoiceDate: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="col-span-2 border-t border-slate-100 pt-2 grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                        Amount Due (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={manualData.amount}
+                        onChange={(e) => setManualData({ ...manualData, amount: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-extrabold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                        CGST (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={taxData.cgst}
+                        onChange={(e) => setTaxData({ ...taxData, cgst: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                        SGST (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={taxData.sgst}
+                        onChange={(e) => setTaxData({ ...taxData, sgst: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-slate-800 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {loading ? (

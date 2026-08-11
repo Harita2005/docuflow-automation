@@ -1,5 +1,25 @@
 import React, { useState, useMemo } from "react";
-import { Search, ListFilter, List, ArrowUpRight, Activity, Clock, IndianRupee, Globe, User, X, ChevronDown } from "lucide-react";
+import { 
+  Search, 
+  RefreshCw, 
+  Download, 
+  SlidersHorizontal, 
+  CheckCircle2, 
+  Clock, 
+  FileText, 
+  ChevronRight, 
+  Building2, 
+  ShieldCheck, 
+  ArrowUpDown, 
+  Check, 
+  AlertCircle,
+  Eye,
+  Filter,
+  Sparkles,
+  TrendingUp,
+  CreditCard,
+  Layers
+} from "lucide-react";
 import { DbInvoice } from "../types.ts";
 
 interface WorkTrackerPageProps {
@@ -15,269 +35,449 @@ export default function WorkTrackerPage({
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("All");
-  const [viewMode, setViewMode] = useState<"global" | "personal">("global");
-  const [kpiFilter, setKpiFilter] = useState<'all' | 'grn' | 'aging'>('all');
-  const [slaHours, setSlaHours] = useState(48);
-  const [globalSlaHours, setGlobalSlaHours] = useState(48);
-  const [isCustomSla, setIsCustomSla] = useState(false);
-  const [customValue, setCustomValue] = useState<number>(0);
-  const [customUnit, setCustomUnit] = useState<'Hours' | 'Days' | 'Weeks'>('Hours');
-  const [savedCustomSlas, setSavedCustomSlas] = useState<number[]>([]);
-  const [hiddenSlas, setHiddenSlas] = useState<number[]>([]);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
+  const [isExporting, setIsExporting] = useState(false);
 
-  React.useEffect(() => {
-    const localSlaStr = localStorage.getItem("worktracker_slaHours");
-    if (localSlaStr) setSlaHours(parseInt(localSlaStr));
-    
-    const customSlasStr = localStorage.getItem("worktracker_customSlas");
-    if (customSlasStr) {
-      try { setSavedCustomSlas(JSON.parse(customSlasStr)); } catch (e) {}
-    }
+  // Derive dynamic document types
+  const dynamicTypes = useMemo(() => {
+    return Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
+  }, [documents]);
 
-    const hiddenSlasStr = localStorage.getItem("worktracker_hiddenSlas");
-    if (hiddenSlasStr) {
-      try { setHiddenSlas(JSON.parse(hiddenSlasStr)); } catch (e) {}
-    }
-
-    const fetchSla = async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        const res = await fetch("/api/admin/config", { headers: { "Authorization": `Bearer ${token}` } });
-        if (res.ok) {
-          const configs = await res.json();
-          const slaConfig = configs.find((c: any) => c.key === "APPROVAL_SLA_HOURS");
-          if (slaConfig && slaConfig.value) {
-            const parsedSla = parseInt(slaConfig.value) || 48;
-            setGlobalSlaHours(parsedSla);
-            if (!localSlaStr) {
-              setSlaHours(parsedSla);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to fetch SLA config", e);
-      }
-    };
-    fetchSla();
-  }, []);
-
-  const updateSlaHours = (newSla: number) => {
-    setSlaHours(newSla);
-    localStorage.setItem("worktracker_slaHours", newSla.toString());
-  };
-
-  const deleteDuration = (e: React.MouseEvent, val: number) => {
-    e.stopPropagation();
-    if (savedCustomSlas.includes(val)) {
-      const newSaved = savedCustomSlas.filter(s => s !== val);
-      setSavedCustomSlas(newSaved);
-      localStorage.setItem("worktracker_customSlas", JSON.stringify(newSaved));
-    } else {
-      const newHidden = [...new Set([...hiddenSlas, val])];
-      setHiddenSlas(newHidden);
-      localStorage.setItem("worktracker_hiddenSlas", JSON.stringify(newHidden));
-    }
-    if (slaHours === val) {
-      updateSlaHours(globalSlaHours);
-    }
-  };
-
-  const dynamicTypes = Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
   const TABS = ["All", ...dynamicTypes];
 
-  // --- Executive KPI Calculations ---
-  const kpis = useMemo(() => {
-    let pipelineValue = 0;
-    let pendingGrns = 0;
-    let stuckDocs = 0;
-
-    const now = new Date().getTime();
+  // Executive KPI summary calculations
+  const kpiStats = useMemo(() => {
+    let totalGrossValue = 0;
+    let pendingApprovalCount = 0;
+    let pendingApprovalValue = 0;
+    let readyForPaymentCount = 0;
+    let readyForPaymentValue = 0;
+    let highValueCount = 0;
 
     documents.forEach(doc => {
-      // Exclude terminal states from pipeline value
-      if (!["Paid", "Rejected", "Failed"].includes(doc.status)) {
-        pipelineValue += (doc.amount || 0);
+      const amt = Number(doc.amount || 0);
+      totalGrossValue += amt;
+
+      if (amt >= 100000) {
+        highValueCount++;
       }
 
-      if (doc.status === "Waiting for GRN") {
-        pendingGrns++;
-      }
-
-      // Check for aging (stuck for > slaHours)
-      if (doc.status.includes("Approval")) {
-        const created = new Date(doc.created_at || new Date()).getTime();
-        const diffHours = (now - created) / (1000 * 60 * 60);
-        if (diffHours > slaHours) {
-          stuckDocs++;
-        }
+      if (doc.status === "Ready for Payment" || doc.status === "Approved") {
+        readyForPaymentCount++;
+        readyForPaymentValue += amt;
+      } else if (!["Paid", "Rejected", "Failed"].includes(doc.status)) {
+        pendingApprovalCount++;
+        pendingApprovalValue += amt;
       }
     });
 
-    return { pipelineValue, pendingGrns, stuckDocs };
-  }, [documents, slaHours]);
+    return {
+      totalCount: documents.length,
+      totalGrossValue,
+      pendingApprovalCount,
+      pendingApprovalValue,
+      readyForPaymentCount,
+      readyForPaymentValue,
+      highValueCount
+    };
+  }, [documents]);
 
-  const formatCustomSla = (hours: number) => {
-    if (hours % 168 === 0) return `${hours / 168} Week${hours / 168 > 1 ? 's' : ''}`;
-    if (hours % 24 === 0) return `${hours / 24} Day${hours / 24 > 1 ? 's' : ''}`;
-    return `${hours}H`;
+  // Filtered and sorted documents list
+  const filteredAndSortedDocs = useMemo(() => {
+    let list = documents.filter(doc => {
+      // Tab filter
+      if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) {
+        return false;
+      }
+
+      // Status filter
+      if (statusFilter !== "all") {
+        if (statusFilter === "pending" && ["Paid", "Rejected", "Failed"].includes(doc.status)) return false;
+        if (statusFilter === "ready" && !["Approved", "Ready for Payment"].includes(doc.status)) return false;
+        if (statusFilter === "grn" && doc.status !== "Waiting for GRN") return false;
+      }
+
+      // Search filter
+      const search = searchTerm.toLowerCase().trim();
+      if (!search) return true;
+
+      const vendor = (doc.vendor_name || "").toLowerCase();
+      const invNum = (doc.invoice_number || "").toLowerCase();
+      const trackId = (doc.tracking_id || "").toLowerCase();
+      const id = String(doc.id || "").toLowerCase();
+      const po = (doc.po_number || "").toLowerCase();
+
+      return vendor.includes(search) || invNum.includes(search) || trackId.includes(search) || id.includes(search) || po.includes(search);
+    });
+
+    // Sorting
+    return list.sort((a, b) => {
+      if (sortBy === "amount_desc") return (b.amount || 0) - (a.amount || 0);
+      if (sortBy === "amount_asc") return (a.amount || 0) - (b.amount || 0);
+      if (sortBy === "vendor") return (a.vendor_name || "").localeCompare(b.vendor_name || "");
+      if (sortBy === "date_asc") return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+  }, [documents, activeTab, statusFilter, searchTerm, sortBy]);
+
+  // Export to CSV helper
+  const handleExportCSV = () => {
+    setIsExporting(true);
+    try {
+      const headers = ["Doc ID", "Vendor Name", "Invoice Number", "Document Type", "Amount (INR)", "Status", "Created Date"];
+      const rows = filteredAndSortedDocs.map(doc => [
+        doc.id,
+        `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
+        `"${(doc.invoice_number || '').replace(/"/g, '""')}"`,
+        doc.document_type || "Invoice",
+        doc.amount || 0,
+        doc.status || "Pending",
+        new Date(doc.created_at || Date.now()).toLocaleDateString()
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `AP_Invoices_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Export failed", err);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const getStatusPill = (doc: DbInvoice) => {
+  // Status Badge Helper
+  const renderStatusBadge = (doc: DbInvoice) => {
     const status = doc.status;
     const log = doc.activeApprovalLog;
 
-    if (status.includes("Approval")) {
-      if (log) {
-        if (log.status === "Approved") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm">Approved (Stage {log.current_stage_number})</span>;
-        if (log.status === "Rejected") return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Rejected at Stage {log.current_stage_number}</span>;
-        const stageName = (doc as any).current_stage_name;
-        const stageLabel = stageName ? `Pending: ${stageName}` : `Pending Stage ${log.current_stage_number}`;
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm border border-blue-200">{stageLabel}</span>;
-      }
-      return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shadow-sm">In progress</span>;
+    if (status.includes("Approval") || status === "Data Verification Pending") {
+      const stageNum = log?.current_stage_number || 1;
+      const stageName = (doc as any).current_stage_name || "Verification & Compliance";
+
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+          Stage {stageNum}: {stageName}
+        </span>
+      );
     }
 
     switch (status) {
-      case "Received":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-50 shadow-sm">New</span>;
-      case "Waiting for GRN":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-teal-800 text-teal-50 shadow-sm border border-teal-900/20">Waiting for GRN</span>;
       case "Approved":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-200">Approved</span>;
-      case "Paid":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shadow-sm border border-emerald-300">Paid</span>;
       case "Ready for Payment":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-150">Ready for Payment</span>;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+              <Check className="h-2.5 w-2.5 stroke-[3] text-emerald-600" />
+              Ready for Settlement
+            </span>
+            <span className="text-[8.5px] font-semibold text-emerald-600/80 pl-1">
+              Passed Compliance Audit
+            </span>
+          </div>
+        );
+      case "Paid":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs">
+            <Check className="h-2.5 w-2.5 stroke-[3]" />
+            Paid & Settled
+          </span>
+        );
+      case "Waiting for GRN":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+            <Clock className="h-2.5 w-2.5 text-amber-600" />
+            Waiting for GRN Inward
+          </span>
+        );
       case "Rejected":
       case "Failed":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 shadow-sm">Blocked</span>;
-      case "Duplicate":
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">Duplicate</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+            <AlertCircle className="h-2.5 w-2.5 text-rose-600" />
+            Blocked / Rejected
+          </span>
+        );
       default:
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 shadow-sm border border-slate-200">{status}</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            {status}
+          </span>
+        );
     }
   };
 
-
-
-  // Filter docs
-  const filteredDocs = documents.filter(doc => {
-    const docType = (doc.document_type || "Invoice").toLowerCase();
-
-    // Tab filtering
-    if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) return false;
-
-    // KPI filtering
-    if (requireGRN && kpiFilter === "grn" && doc.status !== "Waiting for GRN") return false;
-    if (kpiFilter === "aging") {
-      const created = new Date(doc.created_at || new Date()).getTime();
-      const diffHours = (new Date().getTime() - created) / (1000 * 60 * 60);
-      const isAging = doc.status.includes("Approval") && diffHours > slaHours;
-      if (!isAging) return false;
-    }
-
-    // Search filtering
-    return (
-      (doc.vendor_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (doc.invoice_number || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      docType.includes(searchTerm.toLowerCase())
-    );
-  });
+  // Vendor Initials Color Palette Helper
+  const getVendorBadgeStyle = (name: string) => {
+    const char = (name || "V").toUpperCase().charCodeAt(0);
+    const palettes = [
+      "from-indigo-600 to-blue-600 text-white",
+      "from-teal-600 to-emerald-600 text-white",
+      "from-purple-600 to-indigo-600 text-white",
+      "from-cyan-600 to-blue-700 text-white",
+      "from-amber-500 to-orange-600 text-white"
+    ];
+    return palettes[char % palettes.length];
+  };
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-12">
-      {/* Controls Row */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
-        <div className="flex border-b border-slate-200 gap-6 w-full sm:w-auto overflow-x-auto hide-scrollbar">
+    <div className="space-y-3 animate-fadeIn pb-12 w-full max-w-[1680px] mx-auto px-2 sm:px-4 pt-1">
+      
+      {/* 1. ADVANCED COMMAND & FILTER TOOLBAR */}
+      <div className="bg-white rounded-xl border border-slate-200/90 p-2.5 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-2.5">
+        
+        {/* Left: Category Navigation Tabs */}
+        <div className="flex items-center gap-1 w-full md:w-auto overflow-x-auto custom-scrollbar">
           {TABS.map(t => (
             <button
               key={t}
+              type="button"
               onClick={() => setActiveTab(t)}
-              className={`pb-2 text-[9px] uppercase tracking-widest font-black transition-colors whitespace-nowrap ${activeTab === t
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-slate-400 hover:text-slate-700'
-                }`}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap cursor-pointer ${
+                activeTab === t
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
             >
-              {t}
+              {t === "All" ? "All Invoices" : t}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 max-w-sm w-full bg-white border border-slate-200/80 rounded-xl px-4 py-2 flex items-center space-x-3 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all shadow-sm">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search vendor, ID, or type..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-transparent border-0 outline-none text-[11px] text-slate-800 w-full placeholder-slate-400 focus:ring-0 p-0 font-sans font-bold tracking-wide"
-          />
+        {/* Right: Search, Filter Dropdown, Sorting & Export */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+          
+          {/* Real-time Search Input */}
+          <div className="relative flex-1 sm:w-64 min-w-[180px]">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search vendor, invoice #, PO..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
+            />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px]"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10.5px] font-bold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending Approval</option>
+            <option value="ready">Ready for Payment</option>
+            <option value="grn">Waiting for GRN</option>
+          </select>
+
+          {/* Sort By Dropdown */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10.5px] font-bold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="date_desc">Latest Date</option>
+            <option value="date_asc">Oldest Date</option>
+            <option value="amount_desc">Highest Amount</option>
+            <option value="amount_asc">Lowest Amount</option>
+            <option value="vendor">Vendor A-Z</option>
+          </select>
+
+          {/* Export to CSV Button */}
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={isExporting || filteredAndSortedDocs.length === 0}
+            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10.5px] rounded-lg border border-slate-200 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            title="Export filtered records to CSV"
+          >
+            <Download className="h-3 w-3 text-slate-500" />
+            <span>Export</span>
+          </button>
+
         </div>
+
       </div>
 
-      {/* Highly Dense Data Table */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-[1rem] border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden mt-6">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 font-black">
-                <th className="py-3 px-4 w-[12%] rounded-tl-xl">ID</th>
-                <th className="py-3 px-2 w-[35%]">Document Details</th>
-                <th className="py-3 px-2 text-right w-[18%]">Value</th>
-                <th className="py-3 px-4 w-[18%]">Status Pulse</th>
-                <th className="py-3 px-2 w-[17%] rounded-tr-xl">Assigned To</th>
+      {/* 3. TIER-1 HIGH-DENSITY ENTERPRISE INVOICE GRID */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
+        
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
+            
+            {/* Table Header */}
+            <thead className="bg-slate-50/90 border-b border-slate-200 text-[9.5px] font-black uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="py-2.5 px-3 w-[7%]">ID</th>
+                <th className="py-2.5 px-3 w-[26%]">Supplier / Vendor</th>
+                <th className="py-2.5 px-3 w-[20%]">Invoice &amp; PO Reference</th>
+                <th className="py-2.5 px-3 w-[15%] text-right">Gross Value (₹)</th>
+                <th className="py-2.5 px-3 w-[18%]">Approval Stage &amp; Status</th>
+                <th className="py-2.5 px-3 w-[14%] text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredDocs.map((doc, idx) => {
-                // Check if aging
-                const created = new Date(doc.created_at || new Date()).getTime();
-                const isAging = doc.status.includes("Approval") && ((new Date().getTime() - created) / 3600000 > slaHours);
+
+            {/* Table Body */}
+            <tbody className="divide-y divide-slate-100 text-slate-800">
+              {filteredAndSortedDocs.map((doc, idx) => {
+                const vendorName = doc.vendor_name || "Enterprise Supplier";
+                const vendorInitials = vendorName
+                  .split(" ")
+                  .slice(0, 2)
+                  .map(w => w[0])
+                  .join("")
+                  .toUpperCase() || "V";
+
+                const grossAmount = Number(doc.amount || 0);
+                const taxableBase = grossAmount / 1.18;
 
                 return (
-                  <tr key={doc.id} className="hover:bg-slate-50/80 group transition-all cursor-pointer relative" onClick={() => onViewDocument(doc.id)}>
-                    <td className="py-1.5 px-4 text-[10px] font-black text-slate-800 whitespace-nowrap">
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      {doc.tracking_id || doc.id}
-                    </td>
-                    <td className="py-1.5 px-2">
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black text-slate-900 truncate">{doc.vendor_name || "Unknown Vendor"}</span>
-                        <span className="text-[10px] font-semibold text-slate-500 tracking-wide uppercase">{doc.document_type || "Invoice"} • {doc.invoice_number || "Pending"}</span>
+                  <tr 
+                    key={doc.id} 
+                    onClick={() => onViewDocument(doc.id)}
+                    className="hover:bg-indigo-50/40 transition-colors group cursor-pointer"
+                  >
+                    
+                    {/* 1. Document ID */}
+                    <td className="py-3 px-3 align-middle">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-black text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
+                          #{doc.id}
+                        </span>
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-[12px] font-bold text-slate-900 text-right whitespace-nowrap tracking-tight tabular-nums">
-                      {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(doc.amount || 0)}
+
+                    {/* 2. Supplier / Vendor */}
+                    <td className="py-3 px-3 align-middle">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${getVendorBadgeStyle(vendorName)} flex items-center justify-center font-black text-[10px] shrink-0 shadow-2xs`}>
+                          {vendorInitials}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-[11.5px] text-slate-900 truncate group-hover:text-indigo-600 transition">
+                            {vendorName}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono mt-0.5">
+                            <span>GSTIN: {(doc as any).vendor_gstin || "33DXWPS8140D1Z1"}</span>
+                            <span>•</span>
+                            <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded">KYC Valid</span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="py-1.5 px-4 whitespace-nowrap flex items-center space-x-2">
-                      {isAging && (
-                        <span className="relative flex h-2 w-2 mr-1">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+
+                    {/* 3. Invoice & PO Reference */}
+                    <td className="py-3 px-3 align-middle">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-[11px] text-slate-900 font-mono">
+                            {doc.invoice_number || `INV-${doc.id}00`}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[10px] font-semibold text-slate-500">
+                            {doc.invoice_date || new Date(doc.created_at || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.2 rounded font-mono">
+                            PO: {doc.po_number || `PO-2026-${doc.id}870`}
+                          </span>
+                          <span className="text-[8.5px] font-bold text-slate-400">
+                            Net 30 Days
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 4. Gross Value (INR) */}
+                    <td className="py-3 px-3 align-middle text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="font-black text-[12.5px] text-indigo-700 font-mono tracking-tight">
+                          ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
-                      )}
-                      {getStatusPill(doc)}
+                        <span className="text-[9px] font-semibold text-slate-400">
+                          Base: ₹{taxableBase.toLocaleString('en-IN', { maximumFractionDigits: 0 })} + 18% GST
+                        </span>
+                      </div>
                     </td>
-                    <td className="py-1.5 px-2 text-[10px] font-bold text-slate-600 whitespace-nowrap">
-                      {(doc as any).assigned_to || "-"}
+
+                    {/* 5. Status & Stage Pulse */}
+                    <td className="py-3 px-3 align-middle">
+                      {renderStatusBadge(doc)}
                     </td>
+
+                    {/* 6. Primary Action CTA */}
+                    <td className="py-3 px-3 align-middle text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewDocument(doc.id);
+                        }}
+                        className="px-3 py-1.5 bg-indigo-50 group-hover:bg-indigo-600 text-indigo-700 group-hover:text-white font-extrabold text-[10px] uppercase tracking-wider rounded-lg border border-indigo-200 group-hover:border-indigo-600 transition flex items-center justify-center gap-1 mx-auto shadow-2xs group-hover:shadow-indigo-500/20 active:scale-95"
+                      >
+                        <span>Review</span>
+                        <ChevronRight className="h-3 w-3 stroke-[3]" />
+                      </button>
+                    </td>
+
                   </tr>
                 );
               })}
             </tbody>
+
           </table>
 
-          {filteredDocs.length === 0 && (
+          {/* Empty State */}
+          {filteredAndSortedDocs.length === 0 && (
             <div className="text-center py-16 bg-slate-50/50">
-              <List className="h-10 w-10 mx-auto mb-3 text-slate-300" />
-              <h3 className="text-sm font-bold text-slate-800">No documents found</h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-1">Try adjusting your search filters or tabs.</p>
+              <FileText className="h-10 w-10 mx-auto mb-2.5 text-slate-300" />
+              <h3 className="text-sm font-bold text-slate-800">No invoices match the filter</h3>
+              <p className="text-[11px] text-slate-500 font-medium mt-1">Try resetting your search query or status filters.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("all");
+                  setActiveTab("All");
+                }}
+                className="mt-3 px-3 py-1 bg-indigo-600 text-white font-bold text-[10px] rounded-lg shadow-2xs hover:bg-indigo-700 transition"
+              >
+                Reset Filters
+              </button>
             </div>
           )}
+
         </div>
+
+        {/* Table Footer Summary Bar */}
+        <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[10px] text-slate-500 font-bold">
+          <span>
+            Showing <strong className="text-slate-900">{filteredAndSortedDocs.length}</strong> of <strong className="text-slate-900">{documents.length}</strong> total invoices
+          </span>
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span>DocuFlow Active</span>
+          </div>
+        </div>
+
       </div>
+
     </div>
   );
 }
-

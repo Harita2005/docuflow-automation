@@ -8,6 +8,8 @@ import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
+import AdminRecycleBin from '../components/AdminRecycleBin.jsx';
+import AdminBackups from '../components/AdminBackups.jsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -38,10 +40,22 @@ export default function Admin() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState("routing");
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem("adminActiveTab") || "routing");
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isRootView, setIsRootView] = useState(true);
+
+  useEffect(() => {
+    localStorage.setItem("adminActiveTab", activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleSetTab = (e) => {
+      if (e.detail) setActiveTab(e.detail);
+    };
+    window.addEventListener('set-admin-tab', handleSetTab);
+    return () => window.removeEventListener('set-admin-tab', handleSetTab);
+  }, []);
   
   // New States for Search and Diagnostics
   const [logSearchQuery, setLogSearchQuery] = useState("");
@@ -420,6 +434,12 @@ export default function Admin() {
             >
               Role Matrix (RBAC)
             </button>
+            <button
+              onClick={() => setActiveTab("recycle")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "recycle" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Recycle Bin (Trash)
+            </button>
           </div>
 
           {/* SYSTEM ADMINISTRATION */}
@@ -448,6 +468,12 @@ export default function Admin() {
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               System Settings
+            </button>
+            <button
+              onClick={() => setActiveTab("backups")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "backups" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              System Backups
             </button>
           </div>
         </div>
@@ -984,6 +1010,18 @@ export default function Admin() {
     {activeTab === "rbac" && (
       <div className="w-full animate-fadeIn transition-all">
         <AdminRBAC />
+      </div>
+    )}
+
+    {activeTab === "recycle" && (
+      <div className="w-full animate-fadeIn transition-all">
+        <AdminRecycleBin />
+      </div>
+    )}
+
+    {activeTab === "backups" && (
+      <div className="w-full animate-fadeIn transition-all">
+        <AdminBackups />
       </div>
     )}
 

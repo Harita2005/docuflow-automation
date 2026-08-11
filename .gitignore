@@ -10,5 +10,11 @@ venv/
 backend/venv/
 backend/uploads/
 backend/flowapprove.db
+backend/docuflow.db
 playwright-report/
 test-results/
+compile_errors.txt
+clean_details.js
+clean_return.js
+*.bak
+

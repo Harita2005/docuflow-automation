@@ -7,6 +7,7 @@ import {
   LineChart, 
   Receipt, 
   Settings, 
+  Settings2,
   CheckSquare, 
   Sparkles,
   Layers,
@@ -47,33 +48,21 @@ export default function Sidebar({
   );
 
   const menuGroups = [
-    permissions.includes("dashboard") || permissions.includes("work-tracker") ? {
-      group: "Main",
+    {
+      group: "Operations",
       items: [
-        permissions.includes("dashboard") ? { id: "dashboard", label: "Dashboard", icon: LayoutDashboard } : null,
-        permissions.includes("work-tracker") ? { id: "work-tracker", label: "Work Tracker", icon: Layers } : null,
-      ].filter(Boolean) as any[]
-    } : null,
-    permissions.includes("upload") ? {
-      group: "Documents",
-      items: [
+        { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { id: "work-tracker", label: "Work Tracker", icon: Layers },
         { id: "upload", label: "Upload Document", icon: Upload },
       ]
-    } : null,
-    permissions.includes("data-verification") ? {
-      group: "Verification",
-      items: [
-        { id: "data-verification", label: "Data Verification", icon: FileCheck },
-      ]
-    } : null,
-
-    permissions.includes("admin") ? {
+    },
+    {
       group: "Administration",
       items: [
         { id: "admin", label: "Control Settings", icon: Settings },
       ]
-    } : null
-  ].filter(Boolean) as any[];
+    }
+  ];
 
   return (
     <aside 
@@ -135,11 +124,11 @@ export default function Sidebar({
                       </div>
 
                       {/* Optional Badge */}
-                      {isExpanded && item.badge !== undefined && item.badge > 0 && (
+                      {isExpanded && (item as any).badge !== undefined && (item as any).badge > 0 && (
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
                           active ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'
                         }`}>
-                          {item.badge}
+                          {(item as any).badge}
                         </span>
                       )}
 

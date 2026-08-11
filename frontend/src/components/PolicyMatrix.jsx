@@ -99,70 +99,65 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
             {/* Middle: Condition Matrix */}
             <div className="p-3 flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2">
               
-              {/* Branch / Division Slot */}
+              {/* Division / Company Slot */}
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Branch (Division)</label>
+                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Division (Company)</label>
                 <select 
-                  value={getConditionValue(rule, 'division')}
-                  onChange={(e) => updateRuleCondition(rule.id, 'division', '==', e.target.value)}
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${getConditionValue(rule, 'division') ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                  value={getConditionValue(rule, 'Division') || getConditionValue(rule, 'division')}
+                  onChange={(e) => updateRuleCondition(rule.id, 'Division', 'equals', e.target.value)}
+                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Division') || getConditionValue(rule, 'division')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
                 >
-                  <option value="">Any Branch</option>
-                  <option value="North">North Region</option>
-                  <option value="South">South Region</option>
-                  <option value="East">East Region</option>
-                  <option value="West">West Region</option>
-                  <option value="HQ">Headquarters</option>
+                  <option value="">Any Division</option>
+                  <option value="VCC">VCC (V-Care / Retail Stores)</option>
+                  <option value="ACC">ACC (Ramraj Cotton Mills)</option>
+                  <option value="ENES">ENES Textile Mills</option>
+                  <option value="EIC">EIC Garments</option>
+                  <option value="RCH">RCH Fabrics</option>
+                  <option value="RMPL">RMPL Processing</option>
+                  <option value="RRTC">RRTC Logistics</option>
                 </select>
               </div>
 
-              {/* Category Slot */}
+              {/* Plant / Branch Slot */}
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Category</label>
-                <select 
-                  value={getConditionValue(rule, 'category')}
-                  onChange={(e) => updateRuleCondition(rule.id, 'category', '==', e.target.value)}
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${getConditionValue(rule, 'category') ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
-                >
-                  <option value="">Any Category</option>
-                  <option value="Hardware">Hardware</option>
-                  <option value="Software">Software</option>
-                  <option value="Services">Services</option>
-                  <option value="Travel">Travel</option>
-                  <option value="Office Supplies">Office Supplies</option>
-                </select>
+                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Plant / Branch</label>
+                <input 
+                  type="text"
+                  value={getConditionValue(rule, 'Plant') || getConditionValue(rule, 'plant') || getConditionValue(rule, 'branch')}
+                  onChange={(e) => updateRuleCondition(rule.id, 'Plant', 'Contains Any of', e.target.value)}
+                  placeholder="e.g. TN-SIVAKASI, Sulur, HQ"
+                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Plant') || getConditionValue(rule, 'plant') || getConditionValue(rule, 'branch')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                />
               </div>
 
-              {/* Cost / Amount Slot */}
+              {/* Category / Cost Center Slot */}
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Cost (Amount)</label>
-                <div className="flex">
-                  <span className="bg-slate-100 border border-r-0 border-slate-200 rounded-l px-2 py-1.5 text-xs text-slate-500 font-bold">&gt;</span>
-                  <input 
-                    type="number"
-                    value={getConditionValue(rule, 'amount')}
-                    onChange={(e) => updateRuleCondition(rule.id, 'amount', '>', e.target.value)}
-                    placeholder="Any amount"
-                    className={`w-full p-1.5 text-xs rounded-r border outline-none font-medium transition-colors ${getConditionValue(rule, 'amount') ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
-                  />
-                </div>
+                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Cost Center / Category</label>
+                <input 
+                  type="text"
+                  value={getConditionValue(rule, 'Cost Center') || getConditionValue(rule, 'Category') || getConditionValue(rule, 'cost_center')}
+                  onChange={(e) => updateRuleCondition(rule.id, 'Cost Center', 'Contains Any of', e.target.value)}
+                  placeholder="e.g. IT-HARDWARE, BATTERY VEHICLE"
+                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Cost Center') || getConditionValue(rule, 'Category') || getConditionValue(rule, 'cost_center')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                />
               </div>
 
-              {/* Document Type Slot */}
+              {/* Amount / Doc Type Slot */}
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Doc Type</label>
+                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Document Type</label>
                 <select 
-                  value={getConditionValue(rule, 'document_type') || rule.document_type}
+                  value={getConditionValue(rule, 'Document Type') || rule.document_type || 'AP INVOICE'}
                   onChange={(e) => {
-                     updateRuleCondition(rule.id, 'document_type', '==', e.target.value);
+                     updateRuleCondition(rule.id, 'Document Type', 'equals', e.target.value);
                      setRules(rules.map(r => r.id === rule.id ? { ...r, document_type: e.target.value } : r));
                   }}
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${getConditionValue(rule, 'document_type') || rule.document_type ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                  className="p-1.5 text-xs rounded border bg-slate-50 border-slate-200 text-slate-700 font-bold outline-none"
                 >
-                  <option value="Any">Any Type</option>
-                  <option value="Invoice">Invoice</option>
-                  <option value="Purchase Order">Purchase Order</option>
-                  <option value="Receipt">Receipt</option>
+                  <option value="AP INVOICE">📄 AP INVOICE</option>
+                  <option value="AP DEBIT NOTE">📑 AP DEBIT NOTE</option>
+                  <option value="AR CREDITNOTE">📋 AR CREDITNOTE</option>
+                  <option value="JOURNAL ENTRY">📓 JOURNAL ENTRY</option>
+                  <option value="VCC PURCHASE INVOICE">🛒 VCC PURCHASE INVOICE</option>
                 </select>
               </div>
 

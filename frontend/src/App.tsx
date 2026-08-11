@@ -15,6 +15,7 @@ import AdminPage from "./pages/Admin.jsx";
 import { DbInvoice } from "./types.ts";
 import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
 import { io } from "socket.io-client";
+import { formatCurrencyINR } from "./utils/formatters.ts";
 
 export default function App() {
   const getInitialRoute = () => {
@@ -279,8 +280,8 @@ export default function App() {
   }
 
   // Handles switching directly to inspect a document details panel
-  const handleViewDocument = (docId: string) => {
-    setSelectedDocId(docId);
+  const handleViewDocument = (docId: string | number) => {
+    setSelectedDocId(String(docId));
     setCurrentView("details");
     fetchDocuments(true);
   };
@@ -329,7 +330,7 @@ export default function App() {
   }, [currentView, documents, isLoggedIn, currentUserRole]);
 
   // Get active selected doc object
-  const activeDocument = documents.find((d) => d.id === selectedDocId) || null;
+  const activeDocument = documents.find((d) => String(d.id) === String(selectedDocId)) || null;
 
   // Unauthenticated viewport
   if (!isLoggedIn) {
@@ -543,7 +544,7 @@ export default function App() {
                     </div>
                     <div className="text-right shrink-0">
                       <span className="block text-[11px] font-black text-slate-900">
-                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(doc.amount || 0)}
+                        {formatCurrencyINR(doc.amount)}
                       </span>
                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-blue-600 mt-1 uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity">
                         Review <ArrowRight className="h-2 w-2" />
