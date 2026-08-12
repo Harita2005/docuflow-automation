@@ -153,7 +153,7 @@ def workflow_approve_payload(payload: dict, db: Session = Depends(get_db)):
     
     inv = find_invoice_by_identifier(db, doc_id)
     username = payload.get("user") or payload.get("username") or "Approver"
-    remarks = payload.get("comment") or payload.get("remarks") or "Compliance items verified and signed off."
+    remarks = payload.get("comments") or payload.get("comment") or payload.get("remarks") or "Compliance items verified and signed off."
     stage_name = f"Stage {inv.current_stage or 1}"
 
     next_assigned_info = "Final Settlement Completed. Ready for payment disbursement."
@@ -232,7 +232,7 @@ def workflow_reject_payload(payload: dict, db: Session = Depends(get_db)):
     
     inv = find_invoice_by_identifier(db, doc_id)
     username = payload.get("user") or payload.get("username") or "Approver"
-    remarks = payload.get("comment") or payload.get("remarks") or "Record rejected due to discrepancy."
+    remarks = payload.get("comments") or payload.get("comment") or payload.get("remarks") or "Record rejected due to discrepancy."
     
     inv.status = "Rejected"
     db.add(AuditLog(
@@ -271,9 +271,11 @@ def reject_invoice_url(
     db.refresh(inv)
     return {"success": True, "status": inv.status, "invoice": inv}
 
-# Unified Hold Routes
+# Unified Hold / Sendback Routes
 @router.post("/api/workflows/hold")
 @router.post("/api/workflow/hold")
+@router.post("/api/workflows/sendback")
+@router.post("/api/workflow/sendback")
 def workflow_hold_payload(payload: dict, db: Session = Depends(get_db)):
     doc_id = payload.get("invoiceId") or payload.get("invoice_id") or payload.get("document_id") or payload.get("id")
     if not doc_id:
@@ -281,7 +283,7 @@ def workflow_hold_payload(payload: dict, db: Session = Depends(get_db)):
     
     inv = find_invoice_by_identifier(db, doc_id)
     username = payload.get("user") or payload.get("username") or "Approver"
-    remarks = payload.get("comment") or payload.get("remarks") or "Record placed on hold."
+    remarks = payload.get("comments") or payload.get("comment") or payload.get("remarks") or "Record placed on hold."
     
     inv.status = "On Hold"
     db.add(AuditLog(

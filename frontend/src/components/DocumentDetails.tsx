@@ -199,8 +199,15 @@ export default function DocumentDetails({
       if (res.ok) {
         onRefreshDocument();
       } else {
-        const errData = await res.json();
-        setActionError(errData.detail || "Failed to upload physical document.");
+        let errDetail = "Failed to upload physical document.";
+        try {
+          const errData = await res.json();
+          errDetail = errData.detail || errData.message || errDetail;
+        } catch {
+          const txt = await res.text();
+          if (txt) errDetail = txt;
+        }
+        setActionError(errDetail);
       }
     } catch (e: any) {
       setActionError(e.message || "Failed to upload physical document.");
@@ -530,11 +537,18 @@ export default function DocumentDetails({
           onGoBack();
         }
       } else {
-        const err = await response.json();
-        setActionError(err.error || "Rejection failed");
+        let errDetail = "Rejection failed";
+        try {
+          const err = await response.json();
+          errDetail = err.detail || err.error || err.message || errDetail;
+        } catch {
+          const txt = await response.text();
+          if (txt) errDetail = txt;
+        }
+        setActionError(errDetail);
       }
     } catch (err: any) {
-      setActionError(err.message);
+      setActionError(err.message || "Rejection action failed");
     }
     setActionLoading(false);
   };
@@ -572,11 +586,18 @@ export default function DocumentDetails({
           onGoBack();
         }
       } else {
-        const err = await response.json();
-        setActionError(err.error || "Action failed");
+        let errDetail = "Hold action failed";
+        try {
+          const err = await response.json();
+          errDetail = err.detail || err.error || err.message || errDetail;
+        } catch {
+          const txt = await response.text();
+          if (txt) errDetail = txt;
+        }
+        setActionError(errDetail);
       }
     } catch (err: any) {
-      setActionError(err.message);
+      setActionError(err.message || "Hold action failed");
     }
     setActionLoading(false);
   };
@@ -611,11 +632,18 @@ export default function DocumentDetails({
           onGoBack();
         }
       } else {
-        const err = await response.json();
-        setActionError(err.error || "Approval action failed");
+        let errDetail = "Approval action failed";
+        try {
+          const err = await response.json();
+          errDetail = err.detail || err.error || err.message || errDetail;
+        } catch {
+          const txt = await response.text();
+          if (txt) errDetail = txt;
+        }
+        setActionError(errDetail);
       }
     } catch (err: any) {
-      setActionError(err.message);
+      setActionError(err.message || "Approval action failed");
     }
     setActionLoading(false);
   };
