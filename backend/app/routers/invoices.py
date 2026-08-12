@@ -412,6 +412,21 @@ def get_document_versions(id: str, db: Session = Depends(get_db)):
         })
     return versions
 
+@router.get("/api/stats")
+@router.get("/api/dashboard/stats")
+def get_dashboard_stats(db: Session = Depends(get_db)):
+    total = db.query(Invoice).count()
+    pending = db.query(Invoice).filter(Invoice.status.ilike("%Pending%") | Invoice.status.ilike("%Initiated%") | Invoice.status.ilike("%Progress%")).count()
+    approved = db.query(Invoice).filter(Invoice.status.ilike("%Settled%") | Invoice.status.ilike("%Approved%")).count()
+    total_val = sum(float(i.amount or 0.0) for i in db.query(Invoice).all())
+    return {
+        "totalDocuments": total,
+        "pendingApprovals": pending,
+        "approvedDocuments": approved,
+        "totalSpendINR": total_val,
+        "autoRoutedPercentage": 100.0 if total > 0 else 0.0
+    }
+
 @router.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db)):
     return []

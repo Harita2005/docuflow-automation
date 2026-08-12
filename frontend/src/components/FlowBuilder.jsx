@@ -478,53 +478,72 @@ export default function FlowBuilder({ users = [] }) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4">
           {(() => {
-            const filtered = (groupedWorkflows[selectedCategory] || [])
+            const allCatWorkflows = (groupedWorkflows[selectedCategory] || [])
               .filter(wf => wf.profile_name.toLowerCase().includes(searchQuery.toLowerCase()) || (wf.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
               .sort((a, b) => a.profile_name.localeCompare(b.profile_name, undefined, { numeric: true }));
 
-            const byType = filtered.reduce((acc, wf) => {
-              const type = wf.workflow_type || 'Uncategorized';
+            const byType = allCatWorkflows.reduce((acc, wf) => {
+              const type = wf.workflow_type || 'General Records';
               if (!acc[type]) acc[type] = [];
               acc[type].push(wf);
               return acc;
             }, {});
 
-            if (!selectedSubCategory) {
-              return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {Object.keys(byType).sort().map(type => (
-                    <button key={type} onClick={() => setSelectedSubCategory(type)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded bg-blue-50/80 text-blue-500 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                           <Network className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-700 text-xs tracking-wide group-hover:text-blue-700 transition-colors">{type}</h3>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">{byType[type].length}</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              );
-            }
-
-            const workflowsForType = byType[selectedSubCategory] || [];
-
-            if (workflowsForType.length === 0 && selectedSubCategory) {
-               setSelectedSubCategory(null);
-               return null;
-            }
+            const typeKeys = Object.keys(byType).sort();
+            const activeType = selectedSubCategory && selectedSubCategory !== 'ALL' ? selectedSubCategory : null;
+            const displayedWorkflows = activeType ? (byType[activeType] || []) : allCatWorkflows;
 
             return (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {workflowsForType.map((wf, index) => (
-                  <div key={wf.profile_name} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col p-3 relative">
+              <div className="flex flex-col gap-4">
+                {/* Subcategory Filter Pills */}
+                {typeKeys.length > 0 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSubCategory(null)}
+                      className={`px-3 py-1 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer ${
+                        !activeType
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      All Workflows ({allCatWorkflows.length})
+                    </button>
+                    {typeKeys.map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setSelectedSubCategory(type)}
+                        className={`px-3 py-1 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                          activeType === type
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span>{type}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                          activeType === type ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"
+                        }`}>
+                          {byType[type].length}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Direct Workflow Cards Grid */}
+                {displayedWorkflows.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center">
+                    <Network className="h-8 w-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-700">No workflows in this category yet</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Click "Create Workflow" above to add the first approval flow.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {displayedWorkflows.map((wf, index) => (
+                      <div key={wf.profile_name} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col p-3 relative">
                     <div className="absolute top-3 right-3">
                       <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                         {wf.status}
