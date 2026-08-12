@@ -1140,49 +1140,49 @@ export default function AdminRBAC({ onRefreshSignal }) {
       )}
 
       {/* ========================================================= */}
-      {/* VIEW 3: HIERARCHICAL FLAC MATRIX (50+ WORKFLOW SCALABLE) */}
+      {/* VIEW 3: FIELD LEVEL ACCESS CONTROL (FLAC) MATRIX */}
       {/* ========================================================= */}
       {activeTab === "flac" && (
         <div className="flex-1 flex flex-col overflow-hidden">
           
           {/* FLAC Scope Information & Inheritance Banner */}
-          <div className="px-3.5 py-2 bg-indigo-50/80 border-b border-indigo-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="px-3.5 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px]">
-                {selectedScope === "GLOBAL" ? <Globe className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
+              <div className="h-5 w-5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[10px]">
+                {selectedScope === "GLOBAL" ? <Globe className="h-3 w-3" /> : <Layers className="h-3 w-3" />}
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-extrabold text-slate-900 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-semibold text-slate-900 text-[11px]">
                     {FLAC_SCOPES.find(s => s.id === selectedScope)?.name}
                   </h3>
                   {selectedScope === "GLOBAL" ? (
-                    <span className="px-1.5 py-0.2 rounded bg-indigo-200 text-indigo-900 text-[8px] font-extrabold uppercase">
-                      ★ Master Policy (Default for 50+ Flows)
+                    <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8px] font-semibold uppercase">
+                      Master Baseline (Default for all flows)
                     </span>
                   ) : isCustomizedScope ? (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[8px] font-bold">
+                    <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[8px] font-medium">
                       Customized Exception
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[8px] font-bold">
-                      ✦ Inheriting from Global Master
+                    <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[8px] font-medium">
+                      Inheriting Global Master
                     </span>
                   )}
                 </div>
-                <p className="text-[9.5px] text-slate-500 leading-tight">
+                <p className="text-[9px] text-slate-400 leading-tight">
                   {FLAC_SCOPES.find(s => s.id === selectedScope)?.desc}
                 </p>
               </div>
             </div>
 
-            {/* Quick Bulk Action Buttons for 50+ Flows */}
+            {/* Quick Bulk Action Buttons */}
             {isAdmin && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setShowAddCustomFieldModal(true)}
-                  className="px-2 py-0.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-300 rounded text-[9px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  className="px-2 py-0.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded text-[9px] font-medium transition cursor-pointer flex items-center gap-1 shadow-2xs"
                 >
                   <Plus className="h-2.5 w-2.5" />
                   <span>Add Field</span>
@@ -1191,18 +1191,18 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 <button
                   type="button"
                   onClick={handleApplyToAllFlows}
-                  className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[9px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                  title="Propagate this exact policy to all 50+ workflows and categories"
+                  className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[9px] font-semibold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  title="Propagate this exact policy to all workflows and categories"
                 >
                   <Copy className="h-2.5 w-2.5" />
-                  <span>Apply to All 50+ Flows</span>
+                  <span>Apply to All Flows</span>
                 </button>
 
                 {selectedScope !== "GLOBAL" && isCustomizedScope && (
                   <button
                     type="button"
                     onClick={handleResetScopeToGlobal}
-                    className="px-2 py-0.5 bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 rounded text-[9px] font-bold transition cursor-pointer"
+                    className="px-2 py-0.5 bg-white hover:bg-amber-50 text-amber-700 border border-amber-200 rounded text-[9px] font-medium transition cursor-pointer"
                     title="Remove custom overrides and inherit from Global Master"
                   >
                     Reset to Global
@@ -1216,17 +1216,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
           <div className="flex-1 overflow-auto custom-scrollbar">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-50/95 border-b border-slate-200 sticky top-0 z-20">
-                  <th className="py-2 px-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-wider w-[260px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200">
+                <tr className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
+                  <th className="py-2 px-3 text-[9.5px] font-bold text-slate-600 uppercase tracking-wider w-[260px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200">
                     Field Attribute ({filteredFields.length})
                   </th>
                   {roles.map(r => (
                     <th key={r.id} className="py-1.5 px-2 text-center border-r border-slate-100 last:border-r-0 min-w-[120px]">
                       <div className="flex flex-col items-center">
-                        <span className={`px-1.5 py-0.2 rounded text-[8px] font-extrabold uppercase tracking-wider ${r.color} border mb-0.5`}>
+                        <span className="px-1.5 py-0.2 rounded text-[8px] font-semibold uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 mb-0.5">
                           {r.badge}
                         </span>
-                        <span className="text-[10.5px] font-bold text-slate-800 leading-tight">{r.name}</span>
+                        <span className="text-[10.5px] font-semibold text-slate-800 leading-tight">{r.name}</span>
                       </div>
                     </th>
                   ))}
@@ -1235,17 +1235,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
               <tbody className="divide-y divide-slate-100 text-[10.5px]">
                 {filteredFields.map(field => (
-                  <tr key={field.id} className="hover:bg-indigo-50/20 transition-colors">
+                  <tr key={field.id} className="hover:bg-slate-50/80 transition-colors">
                     
-                    <td className="py-2 px-3 bg-white sticky left-0 z-10 border-r border-slate-200/80 shadow-[1px_0_3px_rgba(0,0,0,0.02)]">
+                    <td className="py-1.5 px-3 bg-white sticky left-0 z-10 border-r border-slate-200 shadow-[1px_0_3px_rgba(0,0,0,0.02)]">
                       <div className="flex flex-col pl-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 text-[11px]">{field.label}</span>
-                          <span className="text-[7.5px] font-bold uppercase tracking-wider px-1 py-0.2 bg-slate-100 text-slate-600 rounded">
+                          <span className="font-semibold text-slate-900 text-[11px]">{field.label}</span>
+                          <span className="text-[7.5px] font-medium uppercase tracking-wider px-1 py-0.2 bg-slate-100 text-slate-600 rounded border border-slate-200">
                             {field.category}
                           </span>
                         </div>
-                        <span className="text-[9px] text-slate-400 leading-none mt-0.5">{field.desc}</span>
+                        <span className="text-[8.5px] text-slate-400 leading-none mt-0.5">{field.desc}</span>
                       </div>
                     </td>
 
@@ -1253,21 +1253,21 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       const currentVal = getEffectiveFieldState(r.id, field.id);
                       return (
                         <td key={r.id} className="py-1.5 px-2 text-center border-r border-slate-100 last:border-r-0">
-                          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-slate-100/90 border border-slate-200 shadow-2xs">
+                          <div className="inline-flex items-center p-0.5 rounded bg-slate-100 border border-slate-200">
                             
                             {/* Hidden */}
                             <button
                               type="button"
                               disabled={!isAdmin}
                               onClick={() => setFieldScopeRolePerm(r.id, field.id, "hidden")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer ${
+                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
                                 currentVal === "hidden"
-                                  ? "bg-rose-600 text-white font-black shadow-2xs"
-                                  : "text-slate-400 hover:text-slate-700"
+                                  ? "bg-slate-800 text-white shadow-2xs"
+                                  : "text-slate-500 hover:text-slate-800"
                               }`}
-                              title="Field is completely hidden for this role"
+                              title="Field is hidden for this role"
                             >
-                              🚫 Hidden
+                              Hidden
                             </button>
 
                             {/* View */}
@@ -1275,14 +1275,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
                               type="button"
                               disabled={!isAdmin}
                               onClick={() => setFieldScopeRolePerm(r.id, field.id, "view")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer ${
+                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
                                 currentVal === "view"
-                                  ? "bg-emerald-600 text-white font-black shadow-2xs"
-                                  : "text-slate-400 hover:text-slate-700"
+                                  ? "bg-white text-indigo-700 border border-slate-200/80 shadow-2xs font-semibold"
+                                  : "text-slate-500 hover:text-slate-800"
                               }`}
-                              title="Field is visible as read-only display text"
+                              title="Field is visible as read-only"
                             >
-                              👁️ View
+                              View
                             </button>
 
                             {/* Edit */}
@@ -1290,14 +1290,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
                               type="button"
                               disabled={!isAdmin}
                               onClick={() => setFieldScopeRolePerm(r.id, field.id, "edit")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold transition cursor-pointer ${
+                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
                                 currentVal === "edit"
-                                  ? "bg-indigo-600 text-white font-black shadow-2xs"
-                                  : "text-slate-400 hover:text-slate-700"
+                                  ? "bg-indigo-600 text-white shadow-2xs font-semibold"
+                                  : "text-slate-500 hover:text-slate-800"
                               }`}
-                              title="Field can be edited directly by this role"
+                              title="Field can be edited by this role"
                             >
-                              ✏️ Edit
+                              Edit
                             </button>
 
                           </div>
