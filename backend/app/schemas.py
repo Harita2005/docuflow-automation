@@ -4,7 +4,9 @@ import datetime
 
 # --- AUTH SCHEMAS ---
 class LoginRequest(BaseModel):
-    username: str
+    username: Optional[str] = None
+    identifier: Optional[str] = None
+    email: Optional[str] = None
     password: str
 
 class TokenResponse(BaseModel):

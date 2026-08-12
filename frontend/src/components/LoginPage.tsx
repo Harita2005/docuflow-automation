@@ -63,7 +63,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: username, password })
+        body: JSON.stringify({ username, identifier: username, password })
       });
       
       let data: any = {};
@@ -77,8 +77,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         throw new Error(res.ok ? "Invalid JSON response" : `Server error: ${res.status} ${text.substring(0, 50)}`);
       }
 
-
-      if (!res.ok) throw new Error(data.error || "Login failed");
+      if (!res.ok) throw new Error(data.detail || data.error || "Login failed");
       
       localStorage.setItem("authToken", data.token);
       localStorage.setItem("currentUserUsername", data.user.username);

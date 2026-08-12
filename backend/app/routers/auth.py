@@ -9,12 +9,21 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
+    ident = request.username or request.identifier or request.email
+    if not ident:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username or employee ID required"
+        )
+
     user = db.query(User).filter(
-        (User.username == request.username) | (User.email == request.username)
+        (User.username == ident) | 
+        (User.email == ident) |
+        (User.employee_id == ident) |
+        (User.user_uid == ident)
     ).first()
 
     if not user:
-        # Auto-create admin or test user if none exists in dev
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
