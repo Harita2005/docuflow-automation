@@ -158,17 +158,17 @@ export default function WorkTrackerPage({
 
     if (status.toLowerCase().includes("initiated") || status.toLowerCase().includes("attachment")) {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-          <span>Stage 1: Attachment Status</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <span>Stage 1: Attachment</span>
         </span>
       );
     }
 
     if (status.toLowerCase().includes("progress") || status.toLowerCase().includes("approval") || status.toLowerCase().includes("verification")) {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
           <span>Stage {stageNum}: In Progress</span>
         </span>
       );
@@ -176,77 +176,64 @@ export default function WorkTrackerPage({
 
     if (status === "Settled" || status === "Approved" || status === "Ready for Payment") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-          <Check className="h-3 w-3 stroke-[2.5] text-emerald-600" />
-          <span>Settled & Approved</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <Check className="h-2.5 w-2.5 stroke-[2.5] text-emerald-600" />
+          <span>Settled</span>
         </span>
       );
     }
 
     if (status === "Paid") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-emerald-600 text-white shadow-2xs">
-          <Check className="h-3 w-3 stroke-[2.5]" />
-          <span>Paid & Closed</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-white">
+          <Check className="h-2.5 w-2.5 stroke-[2.5]" />
+          <span>Paid</span>
         </span>
       );
     }
 
     if (status === "On Hold") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
-          <Clock className="h-3 w-3 text-amber-600" />
-          <span>Administrative Hold</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+          <Clock className="h-2.5 w-2.5 text-amber-600" />
+          <span>On Hold</span>
         </span>
       );
     }
 
     if (status === "Rejected" || status === "Failed") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
-          <AlertCircle className="h-3 w-3 text-rose-600" />
-          <span>Rejected / Discrepancy</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-800 border border-rose-200">
+          <AlertCircle className="h-2.5 w-2.5 text-rose-600" />
+          <span>Rejected</span>
         </span>
       );
     }
 
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
         {status}
       </span>
     );
   };
 
-  // Vendor Initials Color Palette Helper
-  const getVendorBadgeStyle = (name: string) => {
-    const char = (name || "V").toUpperCase().charCodeAt(0);
-    const palettes = [
-      "from-blue-600 to-indigo-600 text-white",
-      "from-teal-600 to-emerald-600 text-white",
-      "from-violet-600 to-purple-600 text-white",
-      "from-sky-600 to-blue-700 text-white",
-      "from-amber-600 to-orange-600 text-white"
-    ];
-    return palettes[char % palettes.length];
-  };
-
   return (
-    <div className="space-y-3 animate-fadeIn pb-12 w-full max-w-[1680px] mx-auto px-2 sm:px-4 pt-1">
+    <div className="space-y-2.5 animate-fadeIn pb-10 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0.5 text-slate-800">
       
-      {/* 1. ADVANCED COMMAND & FILTER TOOLBAR */}
-      <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-2.5">
+      {/* 1. COMPACT COMMAND & FILTER TOOLBAR */}
+      <div className="bg-white rounded-lg border border-slate-200 p-2 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-2">
         
         {/* Left: Category Navigation Tabs */}
-        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto custom-scrollbar">
+        <div className="flex items-center gap-1 w-full md:w-auto overflow-x-auto custom-scrollbar">
           {TABS.map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setActiveTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 py-1 rounded text-[10.5px] font-medium transition whitespace-nowrap cursor-pointer ${
                 activeTab === t
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
               {t === "All" ? "All Records" : t}
@@ -255,22 +242,22 @@ export default function WorkTrackerPage({
         </div>
 
         {/* Right: Search, Filter Dropdown, Sorting & Export */}
-        <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+        <div className="flex items-center gap-1.5 w-full md:w-auto justify-end flex-wrap">
           
           {/* Real-time Search Input */}
-          <div className="relative flex-1 sm:w-64 min-w-[180px]">
-            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 sm:w-56 min-w-[160px]">
+            <Search className="h-3 w-3 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search vendor, doc #, PO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 transition"
+              className="w-full pl-7 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-[10.5px] font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition"
             />
             {searchTerm && (
               <button 
                 onClick={() => setSearchTerm("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[9px]"
               >
                 ✕
               </button>
@@ -281,7 +268,7 @@ export default function WorkTrackerPage({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-medium text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-medium text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="pending">Pending Approval</option>
@@ -293,7 +280,7 @@ export default function WorkTrackerPage({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-medium text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-medium text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer"
           >
             <option value="date_desc">Latest Date</option>
             <option value="date_asc">Oldest Date</option>
@@ -307,7 +294,7 @@ export default function WorkTrackerPage({
             type="button"
             onClick={handleExportCSV}
             disabled={isExporting || filteredAndSortedDocs.length === 0}
-            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-[11px] rounded-lg border border-slate-200 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 font-medium text-[10.5px] rounded border border-slate-200 transition shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
             title="Export filtered records to CSV"
           >
             <Download className="h-3 w-3 text-slate-500" />
@@ -319,20 +306,20 @@ export default function WorkTrackerPage({
       </div>
 
       {/* 3. TIER-1 HIGH-DENSITY ENTERPRISE INVOICE GRID */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
         
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[950px]">
             
             {/* Table Header */}
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <thead className="bg-slate-50 border-b border-slate-200 text-[9.5px] font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-2.5 px-3.5 w-[9%]">ID</th>
-                <th className="py-2.5 px-3 w-[27%]">Supplier / Vendor</th>
-                <th className="py-2.5 px-3 w-[22%]">Document &amp; PO Ref</th>
-                <th className="py-2.5 px-3 w-[15%] text-right">Gross Value (₹)</th>
-                <th className="py-2.5 px-3 w-[17%]">Approval Stage &amp; Status</th>
-                <th className="py-2.5 px-3.5 w-[10%] text-center">Action</th>
+                <th className="py-2 px-3 w-[8%]">ID</th>
+                <th className="py-2 px-3 w-[28%]">Supplier / Vendor</th>
+                <th className="py-2 px-3 w-[23%]">Document &amp; PO Ref</th>
+                <th className="py-2 px-3 w-[15%] text-right">Gross Value (₹)</th>
+                <th className="py-2 px-3 w-[16%]">Approval Stage &amp; Status</th>
+                <th className="py-2 px-3 w-[10%] text-center">Action</th>
               </tr>
             </thead>
 
@@ -355,29 +342,27 @@ export default function WorkTrackerPage({
                   <tr 
                     key={doc.id} 
                     onClick={() => onViewDocument(doc.id)}
-                    className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
+                    className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
                   >
                     
                     {/* 1. Document ID */}
-                    <td className="py-3 px-3.5 align-middle">
-                      <div className="flex items-center">
-                        <span className="font-medium text-[11px] text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200 tracking-tight">
-                          #{cleanId}
-                        </span>
-                      </div>
+                    <td className="py-2 px-3 align-middle">
+                      <span className="font-mono text-[10px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                        #{cleanId}
+                      </span>
                     </td>
 
                     {/* 2. Supplier / Vendor */}
-                    <td className="py-3 px-3 align-middle">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${getVendorBadgeStyle(vendorName)} flex items-center justify-center font-bold text-[11px] shrink-0 shadow-xs`}>
+                    <td className="py-2 px-3 align-middle">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center font-semibold text-[9.5px] shrink-0">
                           {vendorInitials}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-[12px] text-slate-900 truncate group-hover:text-blue-600 transition">
+                          <span className="font-medium text-[11px] text-slate-900 truncate group-hover:text-blue-600 transition">
                             {vendorName}
                           </span>
-                          <div className="flex items-center gap-1.5 text-[9.5px] text-slate-400 font-normal mt-0.5">
+                          <div className="flex items-center gap-1 text-[8.5px] text-slate-400 font-normal">
                             <span>GSTIN: {(doc as any).vendor_gstin || "33DXWPS8140D1Z1"}</span>
                           </div>
                         </div>
@@ -385,22 +370,22 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 3. Invoice & PO Reference */}
-                    <td className="py-3 px-3 align-middle">
+                    <td className="py-2 px-3 align-middle">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-[11.5px] text-slate-900">
+                          <span className="font-medium text-[10.5px] text-slate-900">
                             {doc.invoice_number || `INV-${cleanId}`}
                           </span>
                           <span className="text-slate-300">•</span>
-                          <span className="text-[10px] font-normal text-slate-500">
+                          <span className="text-[9.5px] text-slate-500">
                             {doc.invoice_date || new Date(doc.created_at || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[9.5px] font-medium text-blue-700 bg-blue-50 border border-blue-200/60 px-1.5 py-0.2 rounded">
+                          <span className="text-[8.5px] text-slate-600 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
                             PO: {doc.po_number || `PO-2026-${cleanId}`}
                           </span>
-                          <span className="text-[9px] font-normal text-slate-400">
+                          <span className="text-[8.5px] text-slate-400">
                             Net 30 Days
                           </span>
                         </div>
@@ -408,34 +393,34 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 4. Gross Value (INR) */}
-                    <td className="py-3 px-3 align-middle text-right">
+                    <td className="py-2 px-3 align-middle text-right">
                       <div className="flex flex-col items-end">
-                        <span className="font-bold text-[13px] text-slate-900 tabular-nums tracking-tight">
+                        <span className="font-semibold text-[11.5px] text-slate-900 tabular-nums">
                           ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[9px] font-normal text-slate-400">
+                        <span className="text-[8.5px] text-slate-400">
                           Base: ₹{taxableBase.toLocaleString('en-IN', { maximumFractionDigits: 0 })} + 18% GST
                         </span>
                       </div>
                     </td>
 
                     {/* 5. Status & Stage Pulse */}
-                    <td className="py-3 px-3 align-middle">
+                    <td className="py-2 px-3 align-middle">
                       {renderStatusBadge(doc)}
                     </td>
 
                     {/* 6. Primary Action CTA */}
-                    <td className="py-3 px-3.5 align-middle text-center">
+                    <td className="py-2 px-3 align-middle text-center">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onViewDocument(doc.id);
                         }}
-                        className="px-3 py-1.5 bg-blue-50 group-hover:bg-blue-600 text-blue-700 group-hover:text-white font-bold text-[10.5px] rounded-lg border border-blue-200 group-hover:border-blue-600 transition flex items-center justify-center gap-1 mx-auto shadow-2xs group-hover:shadow-blue-500/20 active:scale-95 cursor-pointer"
+                        className="px-2.5 py-1 bg-white hover:bg-slate-900 text-slate-700 hover:text-white font-medium text-[9.5px] rounded border border-slate-200 transition flex items-center justify-center gap-1 mx-auto shadow-2xs cursor-pointer"
                       >
                         <span>Review</span>
-                        <ChevronRight className="h-3 w-3 stroke-[2.5]" />
+                        <ChevronRight className="h-2.5 w-2.5 stroke-[2]" />
                       </button>
                     </td>
 
