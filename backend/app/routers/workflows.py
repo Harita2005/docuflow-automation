@@ -96,7 +96,32 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
     db.commit()
     return {"success": True, "profile_name": payload.profile_name}
 
-@router.delete("/{profile_name}")
+@router.get("/api/admin/workflows/{profile_name}", response_model=WorkflowProfileSchema)
+@router.get("/api/workflows/{profile_name}", response_model=WorkflowProfileSchema)
+def get_single_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
+    p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    steps = db.query(WorkflowStepDefinition).filter(
+        WorkflowStepDefinition.profile_name == p.profile_name
+    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    return {
+        "profile_name": p.profile_name,
+        "workflow_code": p.workflow_code,
+        "workflow_category": p.workflow_category,
+        "workflow_type": p.workflow_type,
+        "description": p.description,
+        "status": p.status,
+        "approval_threshold": p.approval_threshold,
+        "rejection_handling": p.rejection_handling,
+        "reminder_interval_hours": p.reminder_interval_hours,
+        "escalation_after_hours": p.escalation_after_hours,
+        "auto_escalation": p.auto_escalation,
+        "steps": steps
+    }
+
+@router.delete("/api/admin/workflows/{profile_name}")
+@router.delete("/api/workflows/{profile_name}")
 def delete_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
     p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
     if not p:
