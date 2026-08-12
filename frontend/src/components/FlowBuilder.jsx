@@ -195,10 +195,36 @@ export default function FlowBuilder({ users = [] }) {
     try {
       const token = localStorage.getItem("authToken");
       
-      // Enforce stage_number sequence
-      editingWorkflow.steps.forEach((step, idx) => {
-        step.stage_number = idx + 1;
-      });
+      const category = editingWorkflow.workflow_category || selectedCategory || 'Vendor Payment Workflows';
+      const docType = editingWorkflow.workflow_type || selectedSubCategory || 'General Records';
+
+      // Clean and ensure steps schema compliance
+      const cleanedSteps = (editingWorkflow.steps || []).map((step, idx) => ({
+        stage_number: idx + 1,
+        step_name: step.step_name || `Stage ${idx + 1}`,
+        approver_type: step.approver_type || 'Role Based',
+        approver_target: step.approver_target || '',
+        delegate_approver: step.delegate_approver || '',
+        document_type: step.document_type || docType || 'RECORD',
+        action_required: step.action_required || 'Approve',
+        permissions: step.permissions || 'Approve / Reject',
+        sla_hours: parseInt(step.sla_hours || 48, 10)
+      }));
+
+      const payload = {
+        profile_name: (editingWorkflow.profile_name || '').trim(),
+        workflow_code: (editingWorkflow.workflow_code || '').trim() || undefined,
+        workflow_category: category,
+        workflow_type: docType,
+        description: editingWorkflow.description || '',
+        status: editingWorkflow.status || 'Active',
+        approval_threshold: parseInt(editingWorkflow.approval_threshold || 100, 10),
+        rejection_handling: editingWorkflow.rejection_handling || 'Return to Previous Step',
+        reminder_interval_hours: parseInt(editingWorkflow.reminder_interval_hours || 24, 10),
+        escalation_after_hours: parseInt(editingWorkflow.escalation_after_hours || 72, 10),
+        auto_escalation: !!editingWorkflow.auto_escalation,
+        steps: cleanedSteps
+      };
 
       const res = await fetch('/api/admin/workflows', {
         method: 'POST',
@@ -206,17 +232,21 @@ export default function FlowBuilder({ users = [] }) {
           'Content-Type': 'application/json',
           ...(token ? { "Authorization": `Bearer ${token}` } : {})
         },
-        body: JSON.stringify(editingWorkflow)
+        body: JSON.stringify(payload)
       });
+
       if (res.ok) {
         await fetchWorkflows();
+        setSelectedCategory(category);
+        setSelectedSubCategory(docType);
         setEditingWorkflow(null);
       } else {
-        alert("Failed to save workflow");
+        const errJson = await res.json().catch(() => ({ detail: "Unknown server error" }));
+        alert(`Failed to save workflow: ${errJson.detail || JSON.stringify(errJson)}`);
       }
     } catch (err) {
       console.error(err);
-      alert("Error saving workflow");
+      alert(`Error saving workflow: ${err.message}`);
     }
     setSaving(false);
   };
