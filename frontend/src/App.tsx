@@ -139,7 +139,16 @@ export default function App() {
 
   // WebSockets Connection
   useEffect(() => {
-    const socket = io("/"); // Automatically connects to the same origin host:port
+    const socket = io({
+      transports: ["websocket"],
+      reconnectionAttempts: 2,
+      timeout: 5000,
+      autoConnect: false
+    });
+
+    try {
+      socket.connect();
+    } catch (e) {}
 
     socket.on("workflow_updated", (data) => {
       console.log("WebSocket Event: workflow_updated", data);
