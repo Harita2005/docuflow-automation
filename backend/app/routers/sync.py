@@ -230,26 +230,30 @@ def sync_batch_documents(payload: BatchSyncRequest, db: Session = Depends(get_db
 async def sync_attachment_upload(
     file: UploadFile = File(..., description="Binary attachment file (PDF, PNG, JPG, TIFF)"),
     doc_key: Optional[int] = Form(None, description="ERP DocKey"),
-    invoice_id: Optional[str] = Form(None, description="Target Document ID (e.g. DOC-101)"),
+    record_id: Optional[str] = Form(None, description="Target Record ID (e.g. DOC-101)"),
+    invoice_id: Optional[str] = Form(None, description="Target Record/Invoice ID (e.g. DOC-101)"),
     attachment_type: str = Form("Original Invoice", description="Type of attachment"),
     uploaded_by: str = Form("ERP Sync Service", description="Sync source or user"),
     db: Session = Depends(get_db)
 ):
     """
     Multipart file attachment synchronization.
-    Saves document to secure storage, executes OCR extraction, and binds to the invoice record.
+    Saves document to secure storage, executes OCR extraction, and binds to the record.
     """
-    # 1. Locate matching invoice
+    target_id = record_id or invoice_id
     inv = None
     if doc_key:
         inv = db.query(Invoice).filter(Invoice.doc_key == doc_key).first()
-    if not inv and invoice_id:
-        inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv and target_id:
+        if str(target_id).isdigit():
+            inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == int(target_id))).first()
+        else:
+            inv = db.query(Invoice).filter(Invoice.id == target_id).first()
 
     if not inv:
         raise HTTPException(
             status_code=404,
-            detail=f"Target invoice not found for DocKey: {doc_key} or ID: {invoice_id}. Sync invoice data first."
+            detail=f"Target record not found for DocKey: {doc_key} or ID: {target_id}. Sync record data first."
         )
 
     # 2. Save binary file
@@ -269,7 +273,7 @@ async def sync_attachment_upload(
     if file.filename.lower().endswith(".pdf"):
         ocr_data = extract_text_from_pdf(file_path)
 
-    # 4. Bind to invoice
+    # 4. Bind to record
     inv.file_url = file_url
     db.commit()
 
@@ -285,7 +289,7 @@ async def sync_attachment_upload(
 
     return AttachmentSyncResponse(
         success=True,
-        message="Attachment synchronized and bound to document successfully",
+        message="Attachment synchronized and bound to record successfully",
         document_id=inv.id,
         file_name=file.filename,
         file_url=file_url,
@@ -299,19 +303,22 @@ async def sync_attachment_upload(
 def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session = Depends(get_db)):
     """
     Base64 encoded attachment synchronizer for JSON-only enterprise ESB pipelines (SAP PI/PO, MuleSoft, WebMethods).
-    Decodes binary, stores file, runs OCR validation, and attaches to the target invoice.
+    Decodes binary, stores file, runs OCR validation, and attaches to the target record.
     """
-    # 1. Locate matching invoice
+    target_id = getattr(payload, 'record_id', None) or payload.invoice_id
     inv = None
     if payload.doc_key:
         inv = db.query(Invoice).filter(Invoice.doc_key == payload.doc_key).first()
-    if not inv and payload.invoice_id:
-        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
+    if not inv and target_id:
+        if str(target_id).isdigit():
+            inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == int(target_id))).first()
+        else:
+            inv = db.query(Invoice).filter(Invoice.id == target_id).first()
 
     if not inv:
         raise HTTPException(
             status_code=404,
-            detail=f"Target invoice not found for DocKey: {payload.doc_key} or ID: {payload.invoice_id}."
+            detail=f"Target record not found for DocKey: {payload.doc_key} or ID: {target_id}."
         )
 
     # 2. Decode Base64
