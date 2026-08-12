@@ -667,7 +667,7 @@ export default function DocumentDetails({
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
                   <FileText className="h-2.5 w-2.5" />
-                  {document.document_type || "AP INVOICE"}
+                  {document.document_type || "DOCUMENT"}
                 </span>
 
                 {/* ERP Synced Status Pill (Visible if Role has access to ERP Sync Data) */}
@@ -1011,7 +1011,7 @@ export default function DocumentDetails({
                 onClick={handleInlineReject}
                 disabled={actionLoading}
                 className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
-                title="Reject invoice with remarks"
+                title="Reject record with remarks"
               >
                 <X className="h-3.5 w-3.5 stroke-[3]" />
                 <span>Reject</span>
@@ -1152,12 +1152,12 @@ export default function DocumentDetails({
                   </div>
                   <h3 className="text-sm font-extrabold text-slate-800 tracking-tight">Stage 1: Document Attachment Pending</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
-                    The ERP sync metadata is loaded. The assigned member (<strong>{document.assigned_approver || "Stage 1 Team"}</strong>) must attach the scanned invoice PDF to initiate the approval pipeline.
+                    The ERP sync metadata is loaded. The assigned member (<strong>{document.assigned_approver || "Stage 1 Team"}</strong>) must attach the scanned document PDF to initiate the approval pipeline.
                   </p>
                   
                   <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
                     <Plus className="h-4 w-4" />
-                    <span>{isUploadingVersion ? "Uploading & Storing..." : "Upload & Attach Invoice PDF"}</span>
+                    <span>{isUploadingVersion ? "Uploading & Storing..." : "Upload & Attach Document PDF"}</span>
                     <input 
                       type="file" 
                       accept=".pdf,.png,.jpg,.jpeg,.tiff" 

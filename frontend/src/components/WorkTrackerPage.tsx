@@ -245,7 +245,7 @@ export default function WorkTrackerPage({
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              {t === "All" ? "All Invoices" : t}
+              {t === "All" ? "All Records" : t}
             </button>
           ))}
         </div>
@@ -258,7 +258,7 @@ export default function WorkTrackerPage({
             <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search vendor, invoice #, PO..."
+              placeholder="Search vendor, doc #, PO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
@@ -325,7 +325,7 @@ export default function WorkTrackerPage({
               <tr>
                 <th className="py-2.5 px-3 w-[7%]">ID</th>
                 <th className="py-2.5 px-3 w-[26%]">Supplier / Vendor</th>
-                <th className="py-2.5 px-3 w-[20%]">Invoice &amp; PO Reference</th>
+                <th className="py-2.5 px-3 w-[20%]">Document &amp; PO Ref</th>
                 <th className="py-2.5 px-3 w-[15%] text-right">Gross Value (₹)</th>
                 <th className="py-2.5 px-3 w-[18%]">Approval Stage &amp; Status</th>
                 <th className="py-2.5 px-3 w-[14%] text-center">Action</th>
@@ -445,7 +445,7 @@ export default function WorkTrackerPage({
           {filteredAndSortedDocs.length === 0 && (
             <div className="text-center py-16 bg-slate-50/50">
               <FileText className="h-10 w-10 mx-auto mb-2.5 text-slate-300" />
-              <h3 className="text-sm font-bold text-slate-800">No invoices match the filter</h3>
+              <h3 className="text-sm font-bold text-slate-800">No records match the filter</h3>
               <p className="text-[11px] text-slate-500 font-medium mt-1">Try resetting your search query or status filters.</p>
               <button
                 type="button"
@@ -466,7 +466,7 @@ export default function WorkTrackerPage({
         {/* Table Footer Summary Bar */}
         <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[10px] text-slate-500 font-bold">
           <span>
-            Showing <strong className="text-slate-900">{filteredAndSortedDocs.length}</strong> of <strong className="text-slate-900">{documents.length}</strong> total invoices
+            Showing <strong className="text-slate-900">{filteredAndSortedDocs.length}</strong> of <strong className="text-slate-900">{documents.length}</strong> total records
           </span>
           <div className="flex items-center gap-1.5 text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
