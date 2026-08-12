@@ -354,19 +354,63 @@ async def upload_invoice_version(
 
     return {"success": True, "file_url": inv.file_url, "current_stage": inv.current_stage, "status": inv.status}
 
-@router.get("/api/stats")
-def get_dashboard_stats(db: Session = Depends(get_db)):
-    total = db.query(Invoice).count()
-    pending = db.query(Invoice).filter(Invoice.status.ilike("%Pending%") | Invoice.status.ilike("%Initiated%") | Invoice.status.ilike("%Progress%")).count()
-    approved = db.query(Invoice).filter(Invoice.status.ilike("%Settled%") | Invoice.status.ilike("%Approved%")).count()
-    total_val = sum(float(i.amount or 0.0) for i in db.query(Invoice).all())
-    return {
-        "totalDocuments": total,
-        "pendingApprovals": pending,
-        "approvedDocuments": approved,
-        "totalSpendINR": total_val,
-        "autoRoutedPercentage": 100.0 if total > 0 else 0.0
-    }
+@router.get("/api/documents/{id}/comments")
+@router.get("/api/records/{id}/comments")
+@router.get("/api/invoices/{id}/comments")
+def get_document_comments(id: str, db: Session = Depends(get_db)):
+    inv = get_invoice_or_404(db, id)
+    # Pull comments from audit logs for this invoice
+    logs = db.query(AuditLog).filter(
+        AuditLog.invoice_id == inv.id,
+        AuditLog.notes.isnot(None)
+    ).order_by(AuditLog.timestamp.desc()).all()
+    
+    comments = []
+    for l in logs:
+        if l.notes:
+            comments.append({
+                "id": str(l.id),
+                "author": l.user or "System",
+                "text": l.notes,
+                "created_at": l.timestamp.isoformat() if l.timestamp else datetime.datetime.utcnow().isoformat(),
+                "action": l.action,
+                "stage": l.stage
+            })
+    return comments
+
+@router.post("/api/documents/{id}/comments")
+@router.post("/api/records/{id}/comments")
+@router.post("/api/invoices/{id}/comments")
+def add_document_comment(id: str, payload: dict, db: Session = Depends(get_db)):
+    inv = get_invoice_or_404(db, id)
+    text = payload.get("text") or payload.get("comment") or payload.get("notes") or ""
+    author = payload.get("author") or payload.get("user") or "User"
+    if text:
+        db.add(AuditLog(
+            invoice_id=inv.id,
+            user=author,
+            action="Comment Added",
+            stage=f"Stage {inv.current_stage or 1}",
+            notes=text
+        ))
+        db.commit()
+    return {"success": True, "message": "Comment recorded"}
+
+@router.get("/api/documents/{id}/versions")
+@router.get("/api/records/{id}/versions")
+@router.get("/api/invoices/{id}/versions")
+def get_document_versions(id: str, db: Session = Depends(get_db)):
+    inv = get_invoice_or_404(db, id)
+    versions = []
+    if inv.file_url:
+        versions.append({
+            "version_number": 1,
+            "file_url": inv.file_url,
+            "uploaded_at": inv.created_at.isoformat() if inv.created_at else datetime.datetime.utcnow().isoformat(),
+            "uploaded_by": "System / Approver",
+            "is_current": True
+        })
+    return versions
 
 @router.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db)):

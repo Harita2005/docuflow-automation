@@ -8,6 +8,7 @@ from app.schemas import AuditLogResponse
 router = APIRouter(prefix="/api", tags=["Audit Logs"])
 
 @router.get("/audit-logs", response_model=List[AuditLogResponse])
+@router.get("/admin/audit-logs", response_model=List[AuditLogResponse])
 def get_audit_logs(
     invoice_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)

@@ -7,6 +7,7 @@ from app.schemas import WorkflowProfileSchema
 
 router = APIRouter(tags=["Workflow Administration"])
 
+@router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
 def get_workflow_profiles(db: Session = Depends(get_db)):
     profiles = db.query(WorkflowProfile).order_by(WorkflowProfile.id.asc()).all()
