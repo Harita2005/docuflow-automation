@@ -41,7 +41,21 @@ export default function FlowBuilder({ users = [] }) {
   const [editingWorkflow, setEditingWorkflow] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
-  const [addedCategories, setAddedCategories] = useState([]);
+  const [addedCategories, setAddedCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem("docuflow_custom_categories");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("docuflow_custom_categories", JSON.stringify(addedCategories));
+    } catch {}
+  }, [addedCategories]);
+
   const [saving, setSaving] = useState(false);
   const [draggedStepIdx, setDraggedStepIdx] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,7 +109,7 @@ export default function FlowBuilder({ users = [] }) {
     if (newCategoryName && newCategoryName.trim()) {
       const catName = newCategoryName.trim();
       if (!addedCategories.includes(catName)) {
-        setAddedCategories([...addedCategories, catName]);
+        setAddedCategories(prev => [...prev, catName]);
       }
       setSelectedCategory(catName);
       setSelectedSubCategory(null);
@@ -109,14 +123,28 @@ export default function FlowBuilder({ users = [] }) {
     const { category, wfs } = deleteCategoryTarget;
     try {
       const token = localStorage.getItem("authToken");
-      await Promise.all(wfs.map(wf => 
-        fetch(`/api/admin/workflows/${encodeURIComponent(wf.profile_name)}`, {
-          method: 'DELETE',
-          headers: token ? { "Authorization": `Bearer ${token}` } : {}
-        })
-      ));
+      // 1. Call category deletion endpoint on backend
+      await fetch(`/api/admin/categories/${encodeURIComponent(category)}`, {
+        method: 'DELETE',
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+
+      // 2. Also delete each workflow individually to ensure complete purge
+      if (wfs && wfs.length > 0) {
+        await Promise.all(wfs.map(wf => 
+          fetch(`/api/admin/workflows/${encodeURIComponent(wf.profile_name)}`, {
+            method: 'DELETE',
+            headers: token ? { "Authorization": `Bearer ${token}` } : {}
+          })
+        ));
+      }
+
       setAddedCategories(prev => prev.filter(c => c !== category));
-      fetchWorkflows();
+      if (selectedCategory === category) {
+        setSelectedCategory(null);
+        setSelectedSubCategory(null);
+      }
+      await fetchWorkflows();
       setDeleteCategoryTarget(null);
     } catch (err) {
       console.error(err);

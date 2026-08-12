@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import WorkflowProfile, WorkflowStepDefinition
+from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule
 from app.schemas import WorkflowProfileSchema
 
 router = APIRouter(tags=["Workflow Administration"])
@@ -120,14 +120,55 @@ def get_single_workflow_profile(profile_name: str, db: Session = Depends(get_db)
         "steps": steps
     }
 
+@router.delete("/api/admin/categories/{category_name}")
+@router.delete("/api/categories/{category_name}")
+def delete_category_endpoint(category_name: str, db: Session = Depends(get_db)):
+    import urllib.parse
+    raw_name = category_name.strip()
+    decoded = urllib.parse.unquote(raw_name)
+    
+    # Find all workflow profiles in this category
+    profiles = db.query(WorkflowProfile).filter(
+        (WorkflowProfile.workflow_category == raw_name) |
+        (WorkflowProfile.workflow_category == decoded) |
+        (WorkflowProfile.workflow_category.ilike(raw_name)) |
+        (WorkflowProfile.workflow_category.ilike(decoded))
+    ).all()
+    
+    for p in profiles:
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p.profile_name).delete()
+        db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).delete()
+        db.delete(p)
+        
+    db.query(BusinessRule).filter(
+        (BusinessRule.rule_category == raw_name) |
+        (BusinessRule.rule_category == decoded) |
+        (BusinessRule.rule_category.ilike(raw_name)) |
+        (BusinessRule.rule_category.ilike(decoded))
+    ).delete()
+    
+    db.commit()
+    return {"success": True, "category": decoded, "deleted_workflows": len(profiles)}
+
 @router.delete("/api/admin/workflows/{profile_name}")
 @router.delete("/api/workflows/{profile_name}")
 def delete_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
-    p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    import urllib.parse
+    raw_name = profile_name.strip()
+    decoded = urllib.parse.unquote(raw_name)
     
-    db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == profile_name).delete()
+    p = db.query(WorkflowProfile).filter(
+        (WorkflowProfile.profile_name == raw_name) |
+        (WorkflowProfile.profile_name == decoded) |
+        (WorkflowProfile.profile_name.ilike(raw_name)) |
+        (WorkflowProfile.profile_name.ilike(decoded))
+    ).first()
+    
+    if not p:
+        raise HTTPException(status_code=404, detail=f"Workflow '{profile_name}' not found")
+    
+    db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p.profile_name).delete()
+    db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).delete()
     db.delete(p)
     db.commit()
-    return {"success": True, "deleted": profile_name}
+    return {"success": True, "deleted": p.profile_name}
