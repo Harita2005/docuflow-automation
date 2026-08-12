@@ -183,7 +183,7 @@ export const FLAC_SCOPES = [
 // Baseline Field Schema Definitions
 export const SCOPE_FIELDS = {
   GLOBAL: [
-    { id: "vendor_name", label: "Supplier / Vendor Name", category: "Header Identification", desc: "Vendor entity name & KYC verification badge" },
+    { id: "vendor_name", label: "Supplier / Vendor Name", category: "Header Identification", desc: "Vendor entity name & identity" },
     { id: "invoice_num_date", label: "Bill No & Date", category: "Header Identification", desc: "Invoice reference number and document invoice date" },
     { id: "po_reference", label: "PO Reference", category: "Header Identification", desc: "Purchase order mapping reference & verified state" },
     { id: "total_gross", label: "Total Gross (₹)", category: "Financial Breakdown", desc: "Total payable gross invoice value in currency" },

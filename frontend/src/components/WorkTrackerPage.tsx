@@ -374,8 +374,6 @@ export default function WorkTrackerPage({
                           </span>
                           <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono mt-0.5">
                             <span>GSTIN: {(doc as any).vendor_gstin || "33DXWPS8140D1Z1"}</span>
-                            <span>•</span>
-                            <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded">KYC Valid</span>
                           </div>
                         </div>
                       </div>

@@ -731,9 +731,9 @@ export default function DocumentDetails({
             {/* 1. Supplier / Vendor */}
             {getFieldPerm("vendor_name") !== "hidden" && (
               <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[190px] max-w-[230px]">
-                <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 gap-2">
-                  <span className="flex items-center gap-1 shrink-0"><Check className="h-2 w-2 text-emerald-600 stroke-[3]" /> Supplier / Vendor</span>
-                  <span className="text-emerald-700 font-mono text-[7px] bg-emerald-50 border border-emerald-200/60 px-1 py-0.2 rounded shrink-0">KYC Verified</span>
+                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                  <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                  <span>Supplier / Vendor</span>
                 </div>
                 {getFieldPerm("vendor_name") === "edit" ? (
                   <input 
