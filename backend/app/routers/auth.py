@@ -16,23 +16,24 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Username or employee ID required"
         )
 
+    ident_str = ident.strip()
     user = db.query(User).filter(
-        (User.username == ident) | 
-        (User.email == ident) |
-        (User.employee_id == ident) |
-        (User.user_uid == ident)
+        (User.username.ilike(ident_str)) | 
+        (User.email.ilike(ident_str)) |
+        (User.employee_id.ilike(ident_str)) |
+        (User.user_uid.ilike(ident_str))
     ).first()
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail=f"User '{ident_str}' not found in system."
         )
 
     if not verify_password(request.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Incorrect password. Please try again."
         )
 
     access_token = create_access_token(data={"sub": user.username, "id": user.id, "role": user.role})
