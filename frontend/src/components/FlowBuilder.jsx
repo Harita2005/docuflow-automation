@@ -440,8 +440,7 @@ export default function FlowBuilder({ users = [] }) {
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          )}</div>
       );
     }
 
@@ -573,12 +572,14 @@ export default function FlowBuilder({ users = [] }) {
                         <button type="button" aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
                         <button type="button" aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
-                    </div>
+</div>
                   </div>
                 ))}
               </div>
-            );
-          })()}
+            )}
+            </div>
+          );
+        })()}
         </div>
 
         {deleteConfirmTarget && (
