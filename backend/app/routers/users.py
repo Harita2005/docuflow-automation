@@ -27,31 +27,13 @@ def get_users(
     search: Optional[str] = Query(None, description="Search by name, employee_id, or email"),
     db: Session = Depends(get_db)
 ):
-    # Auto-seed default users if table is empty
+    # Auto-seed full 223 enterprise users if table is empty
     if db.query(User).count() == 0:
-        default_seed = [
-            {"id": 1, "uid": "USR-100001", "emp_id": "ADM-001", "name": "Anbu Selvan", "username": "anbu", "email": "admin@initech.com", "role": "admin", "dept": "IT Governance"},
-            {"id": 2, "uid": "USR-100002", "emp_id": "MGR-002", "name": "Karthik Natarajan", "username": "karthik", "email": "manager@initech.com", "role": "manager", "dept": "Operations"},
-            {"id": 3, "uid": "USR-100003", "emp_id": "EXEC-003", "name": "Surya Prakash", "username": "surya", "email": "executive@initech.com", "role": "manager", "dept": "Corporate Finance"},
-            {"id": 4, "uid": "USR-100004", "emp_id": "AUD-004", "name": "Priya Sundaram", "username": "priya", "email": "auditor@initech.com", "role": "auditor", "dept": "Internal Audit"},
-            {"id": 5, "uid": "USR-100005", "emp_id": "EMP-005", "name": "Vijay Kumar", "username": "vijay", "email": "employee@initech.com", "role": "employee", "dept": "General Processing"}
-        ]
-        for u in default_seed:
-            db.add(User(
-                user_uid=u["uid"],
-                employee_id=u["emp_id"],
-                employee_name=u["name"],
-                name=u["name"],
-                username=u["username"],
-                email=u["email"],
-                role=u["role"],
-                department=u["dept"],
-                division="VCC",
-                password_hash=get_password_hash("default123"),
-                is_active=True,
-                created_by="System Initializer"
-            ))
-        db.commit()
+        try:
+            from seed_excel import seed_database
+            seed_database()
+        except Exception as e:
+            print(f"[User Master] Auto-seed warning: {e}")
 
     query = db.query(User)
     if not include_inactive:
