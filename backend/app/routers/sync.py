@@ -77,7 +77,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         new_inv = Invoice(
             id=doc_id,
             doc_key=req.doc_key,
-            doc_num=req.doc_num,
+            doc_num=str(req.doc_num) if req.doc_num is not None else None,
             doc_date=req.invoice_date,
             vendor_name=req.vendor_name or "Unknown Vendor",
             vendor_code=req.vendor_code,

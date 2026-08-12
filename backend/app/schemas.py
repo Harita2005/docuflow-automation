@@ -202,8 +202,8 @@ class AuditLogResponse(BaseModel):
 class DocumentSyncRequest(BaseModel):
     # MS SQL DocTrans & ERP Keys
     doc_key: Optional[int] = Field(None, alias="DocKey", description="Unique ERP/MS SQL Primary Key for idempotent upsert")
-    doc_num: Optional[int] = Field(None, alias="DocNum", description="ERP Document Number")
-    doc_entry: Optional[int] = Field(None, alias="DocEntry", description="ERP Entry ID")
+    doc_num: Optional[Any] = Field(None, alias="DocNum", description="ERP Document Number")
+    doc_entry: Optional[Any] = Field(None, alias="DocEntry", description="ERP Entry ID")
     company_code: Optional[str] = Field(None, alias="CompanyCode", description="Company / Division Code (e.g. VCC, ACC, ENES)")
     division: Optional[str] = Field("VCC", description="Company Division")
     

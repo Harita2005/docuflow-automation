@@ -25,6 +25,16 @@ app = FastAPI(
 def startup_event():
     try:
         Base.metadata.create_all(bind=engine)
+        
+        # Auto-migrate SQL Server schema columns if needed
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='invoices' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE invoices ALTER COLUMN doc_num VARCHAR(100) NULL;"))
+                conn.commit()
+        except Exception as mig_err:
+            pass
+
         db = SessionLocal()
         user_count = db.query(User).count()
         wf_count = db.query(WorkflowProfile).count()
