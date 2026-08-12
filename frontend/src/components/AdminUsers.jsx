@@ -713,66 +713,66 @@ export default function AdminUsers() {
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50/90 border-b border-slate-200">
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
-                PK & User UID
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[8%]">
+                ID &amp; UID
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
-                Unique Emp ID & Name
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[26%]">
+                Employee &amp; Name
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
-                Login Email & Phone
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[24%]">
+                Login Email &amp; Phone
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[14%]">
                 Assigned Role
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
-                OTP / MFA Method
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[11%]">
+                Auth / MFA
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest">
-                Created By & On
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider w-[10%]">
+                Created On
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest text-center">
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider text-center w-[7%]">
                 Status
               </th>
-              <th className="px-3.5 py-2 text-[9.5px] font-extrabold text-slate-600 uppercase tracking-widest text-right">
+              <th className="px-3 py-2 text-[9px] font-bold text-slate-600 uppercase tracking-wider text-right w-[6%]">
                 Actions
               </th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-slate-100 text-xs">
+          <tbody className="divide-y divide-slate-100 text-[11px]">
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-xs text-slate-400 italic">
+                <td colSpan={8} className="p-6 text-center text-xs text-slate-400 italic">
                   No users matching search criteria.
                 </td>
               </tr>
             ) : (
               filteredUsers.map(u => (
-                <tr key={u.id} className="hover:bg-indigo-50/20 transition-colors group">
+                <tr key={u.id} className="hover:bg-slate-50/80 transition-colors group">
                   
                   {/* PK & UID */}
-                  <td className="px-3.5 py-2.5 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap align-middle">
                     <div className="flex flex-col">
-                      <span className="font-mono font-black text-slate-900 text-xs">#{u.id}</span>
-                      <span className="font-mono text-[9px] text-slate-400">{u.user_uid || `USR-${100000 + Number(u.id)}`}</span>
+                      <span className="font-medium text-slate-800 text-[10.5px]">#{u.id}</span>
+                      <span className="text-[8.5px] text-slate-400">{u.user_uid || `USR-${100000 + Number(u.id)}`}</span>
                     </div>
                   </td>
 
                   {/* Unique Emp ID & Name */}
-                  <td className="px-3.5 py-2.5">
+                  <td className="px-3 py-2 align-middle">
                     <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-black text-[10px] shrink-0">
+                      <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
                         {u.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-indigo-700 text-xs">{u.employee_id}</span>
-                          <span className="font-bold text-slate-900 text-xs">{u.name}</span>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-semibold text-indigo-700 text-[11px]">{u.employee_id}</span>
+                          <span className="font-semibold text-slate-900 text-[11px] truncate">{u.name}</span>
                         </div>
-                        <span className="text-[9.5px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Building className="h-2.5 w-2.5 text-slate-400" />
+                        <span className="text-[8.5px] text-slate-400 flex items-center gap-1 truncate">
+                          <Building className="h-2.5 w-2.5 text-slate-400 shrink-0" />
                           {u.department} ({u.division})
                         </span>
                       </div>
@@ -780,13 +780,13 @@ export default function AdminUsers() {
                   </td>
 
                   {/* Login Email & Phone */}
-                  <td className="px-3.5 py-2.5">
+                  <td className="px-3 py-2 align-middle">
                     <div className="flex flex-col">
-                      <span className="text-[10.5px] font-medium text-slate-800 flex items-center gap-1">
-                        <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                      <span className="text-[10.5px] font-medium text-slate-800 flex items-center gap-1 truncate">
+                        <Mail className="h-2.5 w-2.5 text-slate-400 shrink-0" />
                         {u.email}
                       </span>
-                      <span className="text-[9.5px] font-mono text-slate-500 flex items-center gap-1 mt-0.5">
+                      <span className="text-[8.5px] text-slate-400 flex items-center gap-1 mt-0.5">
                         <Phone className="h-2.5 w-2.5 text-slate-400 shrink-0" />
                         {u.phone_number || "+91 98400 00000"}
                       </span>
@@ -794,78 +794,75 @@ export default function AdminUsers() {
                   </td>
 
                   {/* Role Selector */}
-                  <td className="px-3.5 py-2.5 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <select
-                        value={u.role}
-                        disabled={!isAdmin}
-                        onChange={(e) => handleRoleChangeInline(u, e.target.value)}
-                        className="px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-slate-200 cursor-pointer outline-none bg-white hover:border-indigo-400 transition-colors disabled:opacity-75"
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="manager">Manager</option>
-                        <option value="auditor">Auditor</option>
-                        <option value="ap_specialist">AP Staff</option>
-                        <option value="employee">Employee</option>
-                      </select>
-                      {getRoleBadge(u.role)}
-                    </div>
+                  <td className="px-3 py-2 whitespace-nowrap align-middle">
+                    <select
+                      value={u.role}
+                      disabled={!isAdmin}
+                      onChange={(e) => handleRoleChangeInline(u, e.target.value)}
+                      className="px-2 py-0.5 rounded text-[9.5px] font-semibold uppercase tracking-wider border border-slate-200 cursor-pointer outline-none bg-slate-50 hover:bg-slate-100 hover:border-slate-300 text-slate-700 transition-colors disabled:opacity-75"
+                    >
+                      <option value="admin">Administrator</option>
+                      <option value="manager">Manager</option>
+                      <option value="auditor">Internal Auditor</option>
+                      <option value="ap_specialist">AP Staff</option>
+                      <option value="employee">Employee</option>
+                    </select>
                   </td>
 
                   {/* OTP / MFA Details */}
-                  <td className="px-3.5 py-2.5 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap align-middle">
                     {getMfaBadge(u)}
                   </td>
 
                   {/* Created By & Date */}
-                  <td className="px-3.5 py-2.5 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap align-middle">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                      <span className="text-[9.5px] font-medium text-slate-700 flex items-center gap-1">
                         <Calendar className="h-2.5 w-2.5 text-slate-400" />
                         {new Date(u.created_on || u.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
-                      <span className="text-[8.5px] text-slate-400">by {u.created_by || 'System Admin'}</span>
+                      <span className="text-[8px] text-slate-400">by {u.created_by || 'System Admin'}</span>
                     </div>
                   </td>
 
                   {/* Status Toggle */}
-                  <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
+                  <td className="px-3 py-2 text-center whitespace-nowrap align-middle">
                     <button
                       type="button"
                       disabled={!isAdmin}
                       onClick={() => handleToggleStatus(u)}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold cursor-pointer transition ${
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-medium cursor-pointer transition ${
                         u.is_active 
-                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' 
-                          : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' 
+                          : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
                       }`}
                       title="Click to toggle active/inactive status"
                     >
-                      {u.is_active ? <UserCheck className="h-3 w-3 text-emerald-600" /> : <UserX className="h-3 w-3 text-rose-600" />}
+                      {u.is_active ? <UserCheck className="h-2.5 w-2.5 text-emerald-600" /> : <UserX className="h-2.5 w-2.5 text-rose-600" />}
                       <span>{u.is_active ? 'Active' : 'Inactive'}</span>
                     </button>
                   </td>
 
                   {/* Actions */}
-                  <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-                    <div className="flex justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                  <td className="px-3 py-2 text-right whitespace-nowrap align-middle">
+                    <div className="flex justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                       {isAdmin && (
                         <>
                           <button 
                             type="button"
                             onClick={() => setEditingUser(u)} 
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit user master profile & credentials"
+                            className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                            title="Edit user profile"
                           >
-                            <Edit2 className="h-3.5 w-3.5" />
+                            <Edit2 className="h-3 w-3" />
                           </button>
                           <button 
                             type="button"
-                            onClick={() => deleteUser(u.id, u.name, u.employee_id)} 
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="Deactivate & remove employee"
+                            onClick={() => setResetPasswordUser(u)} 
+                            className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                            title="Reset password"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Key className="h-3 w-3" />
                           </button>
                         </>
                       )}
