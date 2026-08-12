@@ -16,14 +16,16 @@ from app.services.ocr_service import extract_text_from_pdf
 
 router = APIRouter(tags=["Invoices & Documents"])
 
-@router.get("/api/invoices", response_model=List[InvoiceResponse])
+@router.get("/api/records", response_model=List[InvoiceResponse])
 @router.get("/api/documents", response_model=List[InvoiceResponse])
+@router.get("/api/invoices", response_model=List[InvoiceResponse])
 def get_all_invoices(db: Session = Depends(get_db)):
     invoices = db.query(Invoice).order_by(Invoice.created_at.desc()).all()
     return invoices
 
-@router.get("/api/invoices/{invoice_id}")
+@router.get("/api/records/{invoice_id}")
 @router.get("/api/documents/{invoice_id}")
+@router.get("/api/invoices/{invoice_id}")
 def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db)):
     if str(invoice_id).isdigit():
         inv = db.query(Invoice).filter((Invoice.id == invoice_id) | (Invoice.doc_key == int(invoice_id))).first()
@@ -75,15 +77,16 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db)):
     }
     return inv_dict
 
-@router.put("/api/invoices/{invoice_id}")
+@router.put("/api/records/{invoice_id}")
 @router.put("/api/documents/{invoice_id}")
+@router.put("/api/invoices/{invoice_id}")
 def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user)):
     if str(invoice_id).isdigit():
         inv = db.query(Invoice).filter((Invoice.id == invoice_id) | (Invoice.doc_key == int(invoice_id))).first()
     else:
         inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Record not found")
 
     update_data = payload.dict(exclude_unset=True)
     notes = update_data.pop("notes", None)
@@ -105,7 +108,7 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
     audit = AuditLog(
         invoice_id=inv.id,
         user=(user.employee_name or user.name) if user else "Reviewer",
-        action="Document Fields Edited",
+        action="Record Fields Edited",
         stage=f"Stage {inv.current_stage}",
         notes=change_desc
     )
@@ -114,12 +117,13 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
 
     return inv
 
-@router.post("/api/invoices/{invoice_id}/auto-route")
+@router.post("/api/records/{invoice_id}/auto-route")
 @router.post("/api/documents/{invoice_id}/auto-route")
+@router.post("/api/invoices/{invoice_id}/auto-route")
 def auto_route_invoice(invoice_id: str, db: Session = Depends(get_db)):
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Record not found")
 
     target_profile_name = evaluate_business_rules(db, inv)
     if not target_profile_name:
@@ -147,8 +151,9 @@ def auto_route_invoice(invoice_id: str, db: Session = Depends(get_db)):
 
     return {"success": True, "workflow": inv.workflow_profile_id, "stages": inv.total_stages}
 
-@router.post("/api/invoices/{invoice_id}/approve")
+@router.post("/api/records/{invoice_id}/approve")
 @router.post("/api/documents/{invoice_id}/approve")
+@router.post("/api/invoices/{invoice_id}/approve")
 def approve_invoice(
     invoice_id: str,
     action: Optional[InvoiceActionRequest] = None,
@@ -157,7 +162,7 @@ def approve_invoice(
 ):
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Record not found")
 
     username = (user.employee_name or user.name) if user else "Reviewer"
     remarks = action.remarks if action and action.remarks else "Compliance items verified and signed off."
@@ -194,8 +199,9 @@ def approve_invoice(
 
     return {"success": True, "status": inv.status, "current_stage": inv.current_stage, "invoice": inv}
 
-@router.post("/api/invoices/{invoice_id}/reject")
+@router.post("/api/records/{invoice_id}/reject")
 @router.post("/api/documents/{invoice_id}/reject")
+@router.post("/api/invoices/{invoice_id}/reject")
 def reject_invoice(
     invoice_id: str,
     action: Optional[InvoiceActionRequest] = None,
@@ -204,10 +210,10 @@ def reject_invoice(
 ):
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Record not found")
 
     username = user.name if user else "Reviewer"
-    remarks = action.remarks if action else "Document rejected due to discrepancy."
+    remarks = action.remarks if action else "Record rejected due to discrepancy."
 
     audit = AuditLog(
         invoice_id=inv.id,
@@ -224,8 +230,9 @@ def reject_invoice(
 
     return {"success": True, "status": inv.status, "invoice": inv}
 
-@router.post("/api/invoices/{invoice_id}/hold")
+@router.post("/api/records/{invoice_id}/hold")
 @router.post("/api/documents/{invoice_id}/hold")
+@router.post("/api/invoices/{invoice_id}/hold")
 def hold_invoice(
     invoice_id: str,
     action: Optional[InvoiceActionRequest] = None,
@@ -234,10 +241,10 @@ def hold_invoice(
 ):
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Record not found")
 
     username = user.name if user else "Reviewer"
-    remarks = action.remarks if action else "Document placed on temporary administrative hold."
+    remarks = action.remarks if action else "Record placed on temporary administrative hold."
 
     audit = AuditLog(
         invoice_id=inv.id,
@@ -254,6 +261,7 @@ def hold_invoice(
 
     return {"success": True, "status": inv.status, "invoice": inv}
 
+@router.post("/api/records/upload")
 @router.post("/api/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -297,6 +305,8 @@ async def upload_document(
 
     return {"success": True, "invoice": new_inv}
 
+@router.post("/api/records/{invoice_id}/version")
+@router.post("/api/documents/{invoice_id}/version")
 @router.post("/api/invoices/{invoice_id}/version")
 async def upload_invoice_version(
     invoice_id: str,

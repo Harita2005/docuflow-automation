@@ -151,19 +151,20 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     return target_inv
 
 
-# --- 1. SINGLE DOCUMENT SYNC ---
+# --- 1. SINGLE RECORD / DOCUMENT SYNC ---
+@router.post("/record", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post("/document", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post("/invoice", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get_db)):
     """
-    Production-grade idempotent endpoint for syncing single invoice/document records from ERP, SAP, or Tally.
+    Production-grade idempotent endpoint for syncing single records from ERP, SAP, or Tally.
     Auto-evaluates business rules, sets branch approver, and logs audit trail.
     """
     try:
         inv = _upsert_single_document(payload, db)
         return DocumentSyncResponse(
             success=True,
-            message="Document synchronized and auto-routed successfully",
+            message="Record synchronized and auto-routed successfully",
             document_id=inv.id,
             doc_key=inv.doc_key,
             invoice_number=inv.invoice_number,
@@ -182,7 +183,8 @@ def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get
         raise HTTPException(status_code=500, detail=f"Data synchronization failed: {str(e)}")
 
 
-# --- 2. BATCH / BULK DOCUMENT SYNC ---
+# --- 2. BATCH / BULK RECORD SYNC ---
+@router.post("/records/batch", response_model=BatchSyncResponse)
 @router.post("/batch", response_model=BatchSyncResponse)
 @router.post("/invoices/batch", response_model=BatchSyncResponse)
 def sync_batch_documents(payload: BatchSyncRequest, db: Session = Depends(get_db)):
