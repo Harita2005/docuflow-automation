@@ -24,6 +24,15 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         (User.user_uid.ilike(ident_str))
     ).first()
 
+    # Smart fallback: if user typed just the number (e.g. 16220 or 8349) or name (e.g. Nathiya)
+    if not user:
+        user = db.query(User).filter(
+            (User.employee_id.ilike(f"%_{ident_str}")) |
+            (User.employee_id.ilike(f"%{ident_str}%")) |
+            (User.username.ilike(f"%{ident_str}%")) |
+            (User.name.ilike(f"%{ident_str}%"))
+        ).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
