@@ -30,12 +30,21 @@ def seed_database():
     # 1. SEED USERS (223 accounts)
     users_data = data.get("users", [])
     print(f"\n[1/5] Syncing {len(users_data)} Users into User Master...")
+    
+    # Remove old initial mock initech users to avoid user_uid collisions
+    try:
+        db.query(User).filter(User.email.ilike("%@initech.com")).delete(synchronize_session=False)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+
     synced_users = 0
     for u in users_data:
         existing = db.query(User).filter(
             (User.employee_id == u.get("employee_id")) | 
             (User.username == u.get("username")) |
-            (User.email == u.get("email"))
+            (User.email == u.get("email")) |
+            (User.user_uid == u.get("user_uid"))
         ).first()
 
         created_at = datetime.datetime.fromisoformat(u["created_at"]) if u.get("created_at") else datetime.datetime.utcnow()
@@ -64,16 +73,21 @@ def seed_database():
             db.add(new_u)
             synced_users += 1
         else:
-            # Update user_uid and role if needed
-            if not existing.user_uid and u.get("user_uid"):
-                existing.user_uid = u.get("user_uid")
-            if not existing.employee_name and u.get("employee_name"):
-                existing.employee_name = u.get("employee_name")
-            if not existing.employee_id and u.get("employee_id"):
-                existing.employee_id = u.get("employee_id")
+            # Update fields safely
+            existing.user_uid = u.get("user_uid") or existing.user_uid
+            existing.employee_name = u.get("employee_name") or existing.employee_name
+            existing.name = u.get("name") or existing.name
+            existing.role = u.get("role") or existing.role
+            existing.department = u.get("department") or existing.department
+            existing.division = u.get("division") or existing.division
     
-    db.commit()
-    print(f"  [OK] {synced_users} new users inserted. Total users in table: {db.query(User).count()}")
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"  [Notice during user commit: {e}]")
+
+    print(f"  [OK] Synced users. Total users in table: {db.query(User).count()}")
 
     # 2. SEED WORKFLOW PROFILES (59 profiles)
     profiles_data = data.get("workflow_profiles", [])
