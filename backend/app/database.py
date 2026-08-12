@@ -30,6 +30,14 @@ def ensure_mssql_database_exists(url_str: str):
     except Exception as e:
         print(f"[Database] Notice during database existence check: {e}")
 
+engine_kwargs = {}
+if db_url.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_pre_ping"] = True
+
 if "mssql" in db_url:
     ensure_mssql_database_exists(db_url)
 
