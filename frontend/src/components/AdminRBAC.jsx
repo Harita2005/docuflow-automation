@@ -841,19 +841,19 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {activeTab === "roles" && (
         <div className="flex-1 overflow-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[650px]">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/95 border-b border-slate-200 sticky top-0 z-20">
-                <th className="py-2 px-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-wider w-[240px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200">
+              <tr className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
+                <th className="py-2 px-3 text-[9.5px] font-bold text-slate-600 uppercase tracking-wider w-[240px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200">
                   Feature / Action
                 </th>
                 {roles.map(r => (
                   <th key={r.id} className="py-1.5 px-2 text-center border-r border-slate-100 last:border-r-0 min-w-[110px]">
                     <div className="flex flex-col items-center">
-                      <span className={`px-1.5 py-0.2 rounded text-[8px] font-extrabold uppercase tracking-wider ${r.color} border mb-0.5`}>
+                      <span className="px-1.5 py-0.2 rounded text-[8px] font-semibold uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 mb-0.5">
                         {r.badge}
                       </span>
-                      <span className="text-[10.5px] font-bold text-slate-800 leading-tight">{r.name}</span>
+                      <span className="text-[10.5px] font-semibold text-slate-800 leading-tight">{r.name}</span>
                     </div>
                   </th>
                 ))}
@@ -869,36 +869,36 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <React.Fragment key={catKey}>
                     <tr 
                       onClick={() => toggleFolder(catKey)}
-                      className="bg-slate-100/90 hover:bg-slate-200/70 cursor-pointer select-none transition-colors border-y border-slate-200"
+                      className="bg-slate-50/90 hover:bg-slate-100 cursor-pointer select-none transition-colors border-y border-slate-200"
                     >
                       <td colSpan={roles.length + 1} className="py-1 px-3 sticky left-0 z-10">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 font-bold text-[10px] text-slate-800 uppercase tracking-wider">
+                          <div className="flex items-center gap-1.5 font-semibold text-[9.5px] text-slate-700 uppercase tracking-wider">
                             {isCollapsed ? (
-                              <Folder className="h-3 w-3 text-slate-500" />
+                              <Folder className="h-3 w-3 text-slate-400" />
                             ) : (
                               <FolderOpen className="h-3 w-3 text-indigo-600" />
                             )}
                             <span>{cat.category}</span>
-                            <span className="text-[8.5px] font-mono text-slate-400 font-normal">
+                            <span className="text-[8.5px] text-slate-400 font-normal">
                               ({cat.items.length})
                             </span>
                           </div>
                           
-                          <div className="flex items-center gap-0.5 text-[9px] font-bold text-slate-400">
+                          <div className="flex items-center gap-0.5 text-[8.5px] font-medium text-slate-400">
                             <span>{isCollapsed ? "Expand" : "Collapse"}</span>
-                            {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-indigo-600" />}
+                            {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-slate-500" />}
                           </div>
                         </div>
                       </td>
                     </tr>
 
                     {!isCollapsed && cat.items.map(item => (
-                      <tr key={item.id} className="hover:bg-indigo-50/20 transition-colors">
-                        <td className="py-1.5 px-3 bg-white sticky left-0 z-10 border-r border-slate-200/80 shadow-[1px_0_3px_rgba(0,0,0,0.02)]">
-                          <div className="flex flex-col pl-2">
-                            <span className="font-bold text-slate-900 text-[10.5px] leading-tight">{item.label}</span>
-                            <span className="text-[9px] text-slate-400 leading-none mt-0.5">{item.desc}</span>
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-1.5 px-3 bg-white sticky left-0 z-10 border-r border-slate-200 shadow-[1px_0_3px_rgba(0,0,0,0.02)]">
+                          <div className="flex flex-col pl-1">
+                            <span className="font-semibold text-slate-900 text-[10.5px] leading-tight">{item.label}</span>
+                            <span className="text-[8.5px] text-slate-400 leading-none mt-0.5">{item.desc}</span>
                           </div>
                         </td>
 
@@ -906,12 +906,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           const cell = rolePermissions[r.id]?.[item.id] || { read: false, write: false, admin: false };
                           return (
                             <td key={r.id} className="py-1 px-1.5 text-center border-r border-slate-100 last:border-r-0">
-                              <div className="inline-flex items-center gap-0.5 p-0.5 rounded bg-slate-100/90 border border-slate-200 shadow-2xs">
+                              <div className="inline-flex items-center p-0.5 rounded bg-slate-100 border border-slate-200">
                                 <button
                                   type="button"
                                   onClick={() => toggleRolePerm(r.id, item.id, "read")}
-                                  className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                    cell.read ? "bg-emerald-600 text-white font-black shadow-2xs" : "text-slate-400 hover:text-slate-600"
+                                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                    cell.read ? "bg-slate-800 text-white font-semibold shadow-2xs" : "text-slate-500 hover:text-slate-800"
                                   }`}
                                   title="View Clearance"
                                 >
@@ -920,8 +920,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 <button
                                   type="button"
                                   onClick={() => toggleRolePerm(r.id, item.id, "write")}
-                                  className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                    cell.write ? "bg-indigo-600 text-white font-black shadow-2xs" : "text-slate-400 hover:text-slate-600"
+                                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                    cell.write ? "bg-indigo-600 text-white font-semibold shadow-2xs" : "text-slate-500 hover:text-slate-800"
                                   }`}
                                   title="Edit Clearance"
                                 >
@@ -930,8 +930,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 <button
                                   type="button"
                                   onClick={() => toggleRolePerm(r.id, item.id, "admin")}
-                                  className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                    cell.admin ? "bg-amber-500 text-white font-black shadow-2xs" : "text-slate-400 hover:text-slate-600"
+                                  className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                    cell.admin ? "bg-indigo-900 text-white font-semibold shadow-2xs" : "text-slate-500 hover:text-slate-800"
                                   }`}
                                   title="Admin Signoff / Delete Clearance"
                                 >
@@ -957,7 +957,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {activeTab === "users" && (
         <div className="flex-1 flex overflow-hidden">
           <div className="w-56 border-r border-slate-200 overflow-y-auto custom-scrollbar p-2 space-y-1 shrink-0 bg-slate-50/50">
-            <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
               Select User ({users.length})
             </div>
             {users.map(u => {
@@ -981,17 +981,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       {u.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex flex-col truncate">
-                      <span className="font-bold text-[10.5px] text-slate-900 truncate leading-tight">{u.name}</span>
+                      <span className="font-semibold text-[10.5px] text-slate-900 truncate leading-tight">{u.name}</span>
                       <span className="text-[8.5px] text-slate-400 truncate leading-none">{u.email}</span>
                     </div>
                   </div>
 
                   <div className="flex flex-col items-end shrink-0">
-                    <span className={`text-[7.5px] font-extrabold px-1 py-0.2 rounded border ${roleObj.color}`}>
+                    <span className="text-[7.5px] font-semibold px-1 py-0.2 rounded border bg-slate-100 text-slate-600 border-slate-200">
                       {roleObj.badge}
                     </span>
                     {hasOverride && (
-                      <span className="text-[7.5px] font-bold text-amber-600 mt-0.5">Custom</span>
+                      <span className="text-[7.5px] font-medium text-amber-600 mt-0.5">Custom</span>
                     )}
                   </div>
                 </div>
@@ -1001,15 +1001,15 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
           {selectedUser ? (
             <div className="flex-1 flex flex-col overflow-hidden bg-white">
-              <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-6 rounded bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px]">
                     <User className="h-3.5 w-3.5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <h3 className="font-bold text-slate-900 text-[11px]">{selectedUser.name}</h3>
-                      <span className="text-[9px] text-slate-400 font-mono">({selectedUser.email})</span>
+                      <h3 className="font-semibold text-slate-900 text-[11px]">{selectedUser.name}</h3>
+                      <span className="text-[9px] text-slate-400">({selectedUser.email})</span>
                     </div>
                     <div className="text-[9px] text-slate-500 leading-none">
                       Dept: <strong className="text-slate-700">{selectedUser.dept}</strong>
@@ -1018,12 +1018,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-slate-600">Assigned Role:</span>
+                  <span className="text-[10px] font-medium text-slate-600">Assigned Role:</span>
                   <select
                     value={selectedUser.role}
                     disabled={!isAdmin}
                     onChange={e => handleUserRoleChange(e.target.value)}
-                    className="text-[10px] font-bold text-slate-800 bg-white border border-slate-300 rounded px-1.5 py-0.5 outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-60"
+                    className="text-[10px] font-medium text-slate-800 bg-white border border-slate-300 rounded px-1.5 py-0.5 outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-60"
                   >
                     {roles.map(r => (
                       <option key={r.id} value={r.id}>{r.name} ({r.badge})</option>
@@ -1032,8 +1032,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 space-y-2">
-                <div className="text-[10px] text-slate-500 leading-snug">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
+                <div className="text-[9.5px] text-slate-500 leading-snug">
                   User inherits from <strong className="text-indigo-700">{roles.find(r => r.id === selectedUser.role)?.name || selectedUser.role}</strong>. Expand folders below to customize specific overrides:
                 </div>
 
@@ -1045,18 +1045,18 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     <div key={catKey} className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
                       <div
                         onClick={() => toggleFolder(catKey)}
-                        className="bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-200/60"
+                        className="bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-200"
                       >
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-800">
-                          {isCollapsed ? <Folder className="h-3 w-3 text-slate-500" /> : <FolderOpen className="h-3 w-3 text-indigo-600" />}
+                        <div className="flex items-center gap-1.5 text-[9.5px] font-semibold text-slate-700">
+                          {isCollapsed ? <Folder className="h-3 w-3 text-slate-400" /> : <FolderOpen className="h-3 w-3 text-indigo-600" />}
                           <span>{cat.category}</span>
-                          <span className="text-[8.5px] text-slate-400 font-mono font-normal">
+                          <span className="text-[8.5px] text-slate-400 font-normal">
                             ({cat.items.length})
                           </span>
                         </div>
-                        <div className="flex items-center gap-0.5 text-[9px] font-bold text-slate-400">
+                        <div className="flex items-center gap-0.5 text-[8.5px] font-medium text-slate-400">
                           <span>{isCollapsed ? "Expand" : "Collapse"}</span>
-                          {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-indigo-600" />}
+                          {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-slate-500" />}
                         </div>
                       </div>
 
@@ -1073,19 +1073,19 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             const effectiveAdmin = override.admin !== undefined ? override.admin : roleBase.admin;
 
                             return (
-                              <div key={item.id} className="p-1.5 rounded bg-slate-50/70 border border-slate-200/70 flex items-center justify-between gap-2 hover:bg-slate-100/60 transition">
+                              <div key={item.id} className="p-1.5 rounded bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 hover:bg-slate-100/60 transition">
                                 <div className="flex flex-col">
-                                  <span className="font-bold text-slate-900 text-[10px] leading-tight">{item.label}</span>
+                                  <span className="font-semibold text-slate-900 text-[10px] leading-tight">{item.label}</span>
                                   <span className="text-[8.5px] text-slate-400 leading-none mt-0.5">{item.desc}</span>
                                 </div>
 
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                  <div className="inline-flex items-center gap-0.5 p-0.5 rounded bg-white border border-slate-200 shadow-2xs">
+                                  <div className="inline-flex items-center p-0.5 rounded bg-white border border-slate-200 shadow-2xs">
                                     <button
                                       type="button"
                                       onClick={() => toggleUserPerm(item.id, "read")}
-                                      className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                        effectiveRead ? "bg-emerald-600 text-white font-black" : "text-slate-300 hover:text-slate-500"
+                                      className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                        effectiveRead ? "bg-slate-800 text-white font-semibold" : "text-slate-400 hover:text-slate-600"
                                       }`}
                                     >
                                       View
@@ -1093,8 +1093,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     <button
                                       type="button"
                                       onClick={() => toggleUserPerm(item.id, "write")}
-                                      className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                        effectiveWrite ? "bg-indigo-600 text-white font-black" : "text-slate-300 hover:text-slate-500"
+                                      className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                        effectiveWrite ? "bg-indigo-600 text-white font-semibold" : "text-slate-400 hover:text-slate-600"
                                       }`}
                                     >
                                       Edit
@@ -1102,22 +1102,22 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     <button
                                       type="button"
                                       onClick={() => toggleUserPerm(item.id, "admin")}
-                                      className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition ${
-                                        effectiveAdmin ? "bg-amber-500 text-white font-black" : "text-slate-300 hover:text-slate-500"
+                                      className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium cursor-pointer transition ${
+                                        effectiveAdmin ? "bg-indigo-900 text-white font-semibold" : "text-slate-400 hover:text-slate-600"
                                       }`}
                                     >
                                       Admin
                                     </button>
                                   </div>
 
-                                  {hasCustom && isAdmin && (
+                                  {hasCustom && (
                                     <button
                                       type="button"
-                                      onClick={() => resetUserPerm(item.id)}
-                                      className="text-[8px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                                      title="Reset to role default"
+                                      onClick={() => handleResetUserItem(item.id)}
+                                      className="p-1 text-slate-400 hover:text-rose-600 text-[8.5px] font-semibold cursor-pointer"
+                                      title="Reset to role inheritance"
                                     >
-                                      Reset
+                                      ✕
                                     </button>
                                   )}
                                 </div>
@@ -1132,8 +1132,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-[10px] text-slate-400">
-              Select a user on the left to configure permissions.
+            <div className="flex-1 flex items-center justify-center text-slate-400 text-[11px]">
+              Select a user from the left list to customize individual clearances.
             </div>
           )}
         </div>
