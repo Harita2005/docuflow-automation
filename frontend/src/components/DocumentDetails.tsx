@@ -902,19 +902,18 @@ export default function DocumentDetails({
           </div>
         </div>
 
-        {/* MAIN BODY: 50/50 BALANCED ENTERPRISE AP WORKBENCH */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40">
+        {/* MAIN BODY: OPTIMIZED EXTENDED DOCUMENT WORKBENCH WITH UNIFIED SCROLLABLE LEFT SIDEBAR */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
           
-          {/* LEFT COLUMN: ENTERPRISE AUDIT & COMPLIANCE STATION (48% WIDTH) */}
-          <div className="w-full lg:w-[48%] flex flex-col shrink-0 overflow-hidden space-y-2">
+          {/* LEFT COLUMN: UNIFIED SCROLLABLE AUDIT & COMPLIANCE PANEL (OPTIMAL COMPACT WIDTH) */}
+          <div className="w-full lg:w-[360px] xl:w-[390px] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1.5 space-y-2.5 max-h-full">
             
-            {/* 1. Sleek Stepper Progress Strip (Ultra-Clean, Compact & Interactive Timeline Trigger) */}
+            {/* 1. Sleek Stepper Progress Strip */}
             <div 
               onClick={() => setShowTimelineModal(true)}
-              className="bg-white rounded-xl border border-slate-200/90 px-3 py-1.5 shadow-2xs shrink-0 flex items-center justify-between gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
+              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex items-center justify-between gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
               title="Click to view full Approval Timeline & Audit Trail"
             >
-              
               {/* Horizontal Stepper */}
               <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar flex-1 min-w-0">
                 {workflowStepDefinitions.length > 0 ? (
@@ -944,7 +943,7 @@ export default function DocumentDetails({
                           }`}>
                             {isPassed ? "✓" : step.stage_number}
                           </span>
-                          <span className="truncate max-w-[120px]">
+                          <span className="truncate max-w-[95px]">
                             {step.stage_name}
                           </span>
                           {isCurrent && (
@@ -973,7 +972,6 @@ export default function DocumentDetails({
                 <Clock className="h-2.5 w-2.5" />
                 <span>Timeline ↗</span>
               </div>
-
             </div>
 
             {/* 2. Executive Decision Actions Bar */}
@@ -994,14 +992,14 @@ export default function DocumentDetails({
                 title={effectiveChecklist.every((item) => checkedStates[item] === true) ? "Click to approve and forward" : "Approve with verification"}
               >
                 <Check className="h-4 w-4 stroke-[3]" />
-                <span>{actionLoading ? "Processing Approval..." : "Approve & Sign Off"}</span>
+                <span>{actionLoading ? "Processing..." : "Approve & Sign Off"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleInlineHold}
                 disabled={actionLoading}
-                className="px-3.5 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-[10.5px] uppercase tracking-wider rounded-lg border border-amber-300 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-300 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
                 title="Hold and request clarification"
               >
                 <Pause className="h-3.5 w-3.5" />
@@ -1012,7 +1010,7 @@ export default function DocumentDetails({
                 type="button"
                 onClick={handleInlineReject}
                 disabled={actionLoading}
-                className="px-3.5 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10.5px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
                 title="Reject invoice with remarks"
               >
                 <X className="h-3.5 w-3.5 stroke-[3]" />
@@ -1020,12 +1018,12 @@ export default function DocumentDetails({
               </button>
             </div>
 
-            {/* 3. 9-POINT COMPLIANCE CHECKLIST STATION */}
-            <div className="flex-1 bg-white rounded-xl border border-slate-200/90 shadow-2xs flex flex-col overflow-hidden min-h-0 p-3 space-y-2">
+            {/* 3. 9-POINT COMPLIANCE CHECKLIST STATION (SINGLE UNIFIED CONTAINER) */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 space-y-2.5 shrink-0">
               
               {/* Checklist Header Controls */}
-              <div className="flex items-center justify-between shrink-0 pb-1 border-b border-slate-100">
-                <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                   <Shield className="h-3.5 w-3.5 text-indigo-600" />
                   <span>Compliance Checklist ({Object.values(checkedStates).filter(Boolean).length}/{effectiveChecklist.length})</span>
                 </span>
@@ -1045,42 +1043,37 @@ export default function DocumentDetails({
                 </button>
               </div>
 
-              {/* 2-Column Checklist Matrix */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-0.5 space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {effectiveChecklist.map((item, idx) => {
-                    const isChecked = !!checkedStates[item];
-                    const isLastItem = idx === effectiveChecklist.length - 1 && effectiveChecklist.length % 2 !== 0;
-                    return (
+              {/* Checklist Items Matrix */}
+              <div className="space-y-1.5">
+                {effectiveChecklist.map((item, idx) => {
+                  const isChecked = !!checkedStates[item];
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setCheckedStates((prev) => ({ ...prev, [item]: !prev[item] }))}
+                      className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 select-none shadow-2xs hover:shadow-xs active:scale-[0.99] ${
+                        isChecked
+                          ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold"
+                          : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                      }`}
+                    >
                       <div
-                        key={idx}
-                        onClick={() => setCheckedStates((prev) => ({ ...prev, [item]: !prev[item] }))}
-                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 select-none shadow-2xs hover:shadow-xs active:scale-[0.99] ${
-                          isLastItem ? "col-span-1 sm:col-span-2" : ""
-                        } ${
+                        className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 border transition-all ${
                           isChecked
-                            ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold"
-                            : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                            ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                            : "bg-white border-slate-300"
                         }`}
                       >
-                        <div
-                          className={`h-4.5 w-4.5 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
-                            isChecked
-                              ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
-                              : "bg-white border-slate-300 group-hover:border-indigo-400"
-                          }`}
-                        >
-                          {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
-                        </div>
-                        <span className="text-[10.5px] leading-tight font-bold truncate" title={item}>{item}</span>
+                        {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
                       </div>
-                    );
-                  })}
-                </div>
+                      <span className="text-[10px] leading-tight font-bold" title={item}>{item}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Decision Remarks & Audit Notes Box */}
-              <div className="pt-2 border-t border-slate-100 shrink-0 space-y-1.5">
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="block text-[8.5px] uppercase font-bold text-slate-500">
                     Audit Notes / Decision Remarks
@@ -1116,19 +1109,19 @@ export default function DocumentDetails({
 
           </div>
 
-          {/* RIGHT COLUMN: DEDICATED ORIGINAL DOCUMENT VIEWER (52% WIDTH) */}
-          <div className="flex-1 flex flex-col bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-sm">
+          {/* RIGHT COLUMN: EXTENDED LARGE ORIGINAL DOCUMENT VIEWER (FILLS REMAINING SCREEN) */}
+          <div className="flex-1 flex flex-col bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-sm min-w-0 h-full">
             
             {/* Viewer Header Bar */}
-            <div className="bg-slate-900 text-white px-3 py-1.5 text-[10px] font-bold flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="text-white font-bold text-[10.5px]">
+            <div className="bg-slate-900 text-white px-3.5 py-2 text-[10px] font-bold flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 truncate">
+                <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="text-white font-bold text-[11px] truncate">
                   {document.file_url || document.file_path ? `Original Document (${document.file_name || `${document.id}.pdf`})` : "Stage 1: Attachment Status (Pending Upload)"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {(document.file_url || document.file_path) && (
                   <a
                     href={encodeURI((document.file_url || document.file_path || "").startsWith('/') || (document.file_url || document.file_path || "").startsWith('http') ? (document.file_url || document.file_path || "") : `/${document.file_url || document.file_path}`)}
@@ -1145,7 +1138,7 @@ export default function DocumentDetails({
             </div>
 
             {/* LIVE ORIGINAL PDF VIEWER OR STAGE 1 ATTACHMENT DROPZONE */}
-            <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1">
+            <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
               {(document.file_url || document.file_path) ? (
                 <iframe
                   src={encodeURI((document.file_url || document.file_path || "").startsWith('/') || (document.file_url || document.file_path || "").startsWith('http') ? (document.file_url || document.file_path || "") : `/${document.file_url || document.file_path}`)}
