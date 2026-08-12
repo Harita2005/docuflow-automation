@@ -474,6 +474,60 @@ export default function DocumentDetails({
               : [],
         })),
       );
+
+      // Dynamic tailored compliance checklist based on category/flow
+      let dynamicItems = [
+        "Documents Attached",
+        "Party Name & Total Amount Verified",
+        "Vendor GST no, Signaure Verified",
+        "Bill No ,Date & Address Verified",
+        "Tax portion verified (GST, TDS, etc..)",
+        "RO/PO Verified",
+        "Gate Inward, GRN, Debit/Credit Note Verified",
+        "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
+        "Advance, Narration, Supportive Copy (If Any)"
+      ];
+      const cat = (document.category || "").toLowerCase();
+      if (cat.includes("rent") || cat.includes("eb") || cat.includes("deposit") || cat.includes("electricity") || cat.includes("tel")) {
+        dynamicItems = [
+          "Rental Agreement / EB Bill Copy Attached",
+          "Meter Reading & Tariff Slab Verified",
+          "Premises / Branch Address Verified",
+          "Landlord / Service Provider Bank Details Verified",
+          "TDS Deduction (Sec 194I / 194C) Calculated",
+          "Prior Month Advance / Arrears Reconciled",
+          "Cost Center & Plant GL Code Validated",
+          "Authorized Signatory Sign-off Verified"
+        ];
+      } else if (cat.includes("asset") || cat.includes("capex") || cat.includes("machinery") || cat.includes("equipment")) {
+        dynamicItems = [
+          "Asset Purchase Order & Approval Attached",
+          "Physical Asset Delivery & Serial No. Verified",
+          "Vendor GSTIN & Tax Invoice Verified",
+          "Plant & Cost Center Tagging Verified",
+          "Gate Inward / GRN Verified",
+          "Asset Capitalization & Depreciation GL Validated",
+          "Advance / Retention Amount Adjusted",
+          "Authorized Signatory & HOD Approval Verified"
+        ];
+      } else if (cat.includes("freight") || cat.includes("transport") || cat.includes("logistics") || cat.includes("courier")) {
+        dynamicItems = [
+          "Consignment Note / Lorry Receipt (LR) Attached",
+          "Trip Sheet & Vehicle Number Verified",
+          "Weight, Distance & Freight Rate Verified",
+          "Vendor GSTIN & Tax Invoice Verified",
+          "RCM (Reverse Charge Mechanism) Applicability Verified",
+          "Gate Inward Verification Completed",
+          "Cost Center & Plant Accounting Verified"
+        ];
+      }
+
+      setChecklistItems(dynamicItems);
+      const initStates: Record<string, boolean> = {};
+      dynamicItems.forEach((it: string) => {
+        initStates[it] = true;
+      });
+      setCheckedStates(initStates);
     }
   }, [document, isEditing]);
 

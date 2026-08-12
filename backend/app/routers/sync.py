@@ -21,6 +21,54 @@ from app.services.ocr_service import extract_text_from_pdf
 
 router = APIRouter(prefix="/api/sync", tags=["Enterprise Data & Attachment Sync"])
 
+def generate_compliance_checklist_for_category(category: Optional[str], doc_type: Optional[str]) -> List[str]:
+    cat = (category or "").lower()
+    
+    if any(k in cat for k in ["rent", "eb", "deposit", "electricity", "tel"]):
+        return [
+            "Rental Agreement / EB Bill Copy Attached",
+            "Meter Reading & Tariff Slab Verified",
+            "Premises / Branch Address Verified",
+            "Landlord / Service Provider Bank Details Verified",
+            "TDS Deduction (Sec 194I / 194C) Calculated",
+            "Prior Month Advance / Arrears Reconciled",
+            "Cost Center & Plant GL Code Validated",
+            "Authorized Signatory Sign-off Verified"
+        ]
+    elif any(k in cat for k in ["asset", "capex", "machinery", "equipment"]):
+        return [
+            "Asset Purchase Order & Approval Attached",
+            "Physical Asset Delivery & Serial No. Verified",
+            "Vendor GSTIN & Tax Invoice Verified",
+            "Plant & Cost Center Tagging Verified",
+            "Gate Inward / GRN Verified",
+            "Asset Capitalization & Depreciation GL Validated",
+            "Advance / Retention Amount Adjusted",
+            "Authorized Signatory & HOD Approval Verified"
+        ]
+    elif any(k in cat for k in ["freight", "transport", "logistics", "courier"]):
+        return [
+            "Consignment Note / Lorry Receipt (LR) Attached",
+            "Trip Sheet & Vehicle Number Verified",
+            "Weight, Distance & Freight Rate Verified",
+            "Vendor GSTIN & Tax Invoice Verified",
+            "RCM (Reverse Charge Mechanism) Applicability Verified",
+            "Gate Inward Verification Completed",
+            "Cost Center & Plant Accounting Verified"
+        ]
+    else:
+        return [
+            "Documents Attached",
+            "Party Name & Total Amount Verified",
+            "Vendor GST no, Signaure Verified",
+            "Bill No ,Date & Address Verified",
+            "Tax portion verified (GST, TDS, etc..)",
+            "RO/PO Verified",
+            "Gate Inward, GRN, Debit/Credit Note Verified",
+            "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
+            "Advance, Narration, Supportive Copy (If Any)"
+        ]
+
 def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     """Internal helper to idempotently insert or update an invoice from sync data."""
     effective_division = req.company_code or req.division or "VCC"
@@ -128,6 +176,10 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 target_inv.status = f"Initiated ({steps[0].step_name})"
             else:
                 target_inv.status = "Initiated (Stage 1)"
+
+            # Initialize tailored compliance checklist
+            checklist_items = generate_compliance_checklist_for_category(target_inv.category, target_inv.document_type)
+            target_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
             db.commit()
             db.refresh(target_inv)
