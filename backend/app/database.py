@@ -38,15 +38,32 @@ else:
     engine_kwargs["max_overflow"] = 20
     engine_kwargs["pool_pre_ping"] = True
 
-if "mssql" in db_url:
-    ensure_mssql_database_exists(db_url)
+import time
 
-try:
-    engine = create_engine(db_url, **engine_kwargs)
-except Exception as e:
-    print(f"[Database] Warning: Could not connect to primary DATABASE_URL ({e}). Falling back to SQLite.")
-    fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
-    engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
+if "mssql" in db_url:
+    for attempt in range(1, 7):
+        try:
+            ensure_mssql_database_exists(db_url)
+            engine = create_engine(db_url, **engine_kwargs)
+            with engine.connect() as conn:
+                pass
+            print(f"[Database] Successfully connected to MS SQL Server on attempt {attempt}.")
+            break
+        except Exception as e:
+            if attempt == 6:
+                print(f"[Database] Could not connect to primary DATABASE_URL after {attempt} attempts ({e}). Falling back to SQLite.")
+                fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
+                engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
+            else:
+                print(f"[Database] SQL Server not ready yet (attempt {attempt}/6: {e}). Waiting 5 seconds...")
+                time.sleep(5)
+else:
+    try:
+        engine = create_engine(db_url, **engine_kwargs)
+    except Exception as e:
+        print(f"[Database] Warning: Could not connect to primary DATABASE_URL ({e}). Falling back to SQLite.")
+        fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
+        engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
