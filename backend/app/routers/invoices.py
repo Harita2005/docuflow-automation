@@ -519,29 +519,21 @@ async def upload_document(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Try to extract fields via OCR
-    ocr_res = {}
-    if file.filename.lower().endswith(".pdf"):
-        try:
-            ocr_res = extract_text_from_pdf(file_path)
-        except Exception:
-            pass
-
     new_id = f"DOC-{timestamp % 100000}"
     
-    amount = ocr_res.get("amount") or 45000.0
+    amount = 45000.0
     base_amount = round(amount / 1.18, 2)
     tax_amount = round(amount - base_amount, 2)
 
     new_inv = Invoice(
         id=new_id,
-        vendor_name=ocr_res.get("vendor_name") or "Sample Vendor Enterprise",
-        invoice_number=ocr_res.get("invoice_number") or f"INV-{timestamp % 10000}",
-        invoice_date=ocr_res.get("invoice_date") or datetime.date.today().strftime("%Y-%m-%d"),
+        vendor_name="Sample Vendor Enterprise",
+        invoice_number=f"INV-{timestamp % 10000}",
+        invoice_date=datetime.date.today().strftime("%Y-%m-%d"),
         amount=amount,
         base_amount=base_amount,
         tax_amount=tax_amount,
-        vendor_gstin=ocr_res.get("gstin") or "33AAACR1234F1Z5",
+        vendor_gstin="33AAACR1234F1Z5",
         division=division,
         plant=plant,
         document_type=document_type or "AP INVOICE",
