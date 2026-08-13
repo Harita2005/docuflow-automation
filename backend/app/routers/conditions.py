@@ -49,7 +49,8 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
     db.refresh(rule)
     return rule
 
-@router.delete("/{rule_id}")
+@router.delete("/api/admin/conditions/{rule_id}")
+@router.delete("/api/admin/routing-rules/{rule_id}")
 def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
     rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).first()
     if not rule:

@@ -172,3 +172,47 @@ def delete_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {"success": True, "deleted": p.profile_name}
+
+@router.post("/api/admin/workflow-steps")
+def save_workflow_step(payload: dict, db: Session = Depends(get_db)):
+    step_id = payload.get("id")
+    profile_name = payload.get("profile_name")
+    
+    if not profile_name:
+        raise HTTPException(status_code=400, detail="Missing profile_name in payload")
+        
+    step_obj = None
+    if step_id:
+        try:
+            int_id = int(step_id)
+            step_obj = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == int_id).first()
+        except ValueError:
+            pass
+            
+    if not step_obj:
+        step_obj = WorkflowStepDefinition(profile_name=profile_name)
+        db.add(step_obj)
+        
+    step_obj.stage_number = int(payload.get("stage_number") or 1)
+    step_obj.step_name = payload.get("step_name") or "New Step"
+    step_obj.approver_type = payload.get("approver_type") or "Approval Pool"
+    step_obj.approver_target = payload.get("approver_target")
+    step_obj.delegate_approver = payload.get("delegate_approver")
+    step_obj.document_type = payload.get("document_type") or "AP INVOICE"
+    step_obj.action_required = payload.get("action_required") or "Approve"
+    step_obj.permissions = payload.get("permissions") or "Approve / Reject"
+    step_obj.sla_hours = int(payload.get("sla_hours") or 48)
+    
+    db.commit()
+    db.refresh(step_obj)
+    return {"success": True, "step": step_obj}
+
+@router.delete("/api/admin/workflow-steps/{step_id}")
+def delete_workflow_step(step_id: int, db: Session = Depends(get_db)):
+    step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == step_id).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Workflow step not found")
+    db.delete(step)
+    db.commit()
+    return {"success": True, "deleted_id": step_id}
+
