@@ -15,7 +15,7 @@ services:
       - db
     restart: unless-stopped
     volumes:
-      - backend_uploads:/app/uploads
+      - ./backend/uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -44,5 +44,5 @@ services:
 
 volumes:
   mssql_data:
-  backend_uploads:
+
 
