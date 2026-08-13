@@ -634,9 +634,54 @@ def get_notifications(db: Session = Depends(get_db)):
 def get_templates(db: Session = Depends(get_db)):
     return []
 
+import json
+import os
+
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app_config.json")
+
+def load_app_configs():
+    if not os.path.exists(CONFIG_FILE_PATH):
+        return []
+    try:
+        with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_app_config(key: str, value: str, description: str = ""):
+    configs = load_app_configs()
+    found = False
+    for c in configs:
+        if c.get("key") == key:
+            c["value"] = value
+            c["description"] = description
+            found = True
+            break
+    if not found:
+        configs.append({
+            "key": key,
+            "value": value,
+            "description": description
+        })
+    try:
+        with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(configs, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Config] Error saving config: {e}")
+
 @router.get("/api/admin/config")
 def get_admin_config(db: Session = Depends(get_db)):
-    return []
+    return load_app_configs()
+
+@router.post("/api/admin/config")
+def post_admin_config(payload: dict, db: Session = Depends(get_db)):
+    key = payload.get("key")
+    value = payload.get("value")
+    desc = payload.get("description") or ""
+    if not key:
+        raise HTTPException(status_code=400, detail="Missing key in config payload")
+    save_app_config(key, value, desc)
+    return {"success": True, "key": key}
 
 @router.get("/api/admin/recycle-bin")
 def get_admin_recycle_bin(db: Session = Depends(get_db)):
