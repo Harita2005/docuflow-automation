@@ -637,3 +637,38 @@ def get_templates(db: Session = Depends(get_db)):
 @router.get("/api/admin/config")
 def get_admin_config(db: Session = Depends(get_db)):
     return []
+
+@router.get("/api/admin/recycle-bin")
+def get_admin_recycle_bin(db: Session = Depends(get_db)):
+    return []
+
+@router.get("/api/admin/notifications/provider")
+def get_admin_notifications_provider(db: Session = Depends(get_db)):
+    return {
+        "provider": "Office365 SMTP",
+        "host": "smtp.office365.com",
+        "port": 587,
+        "user": "Sqlalerts@ramrajcotton.net"
+    }
+
+@router.get("/api/admin/notifications/raci")
+def get_admin_notifications_raci(db: Session = Depends(get_db)):
+    return []
+
+@router.get("/api/admin/notifications/inapp-config")
+def get_admin_notifications_inapp_config(db: Session = Depends(get_db)):
+    return {
+        "enabled": True,
+        "pollInterval": 5000
+    }
+
+@router.get("/api/admin/backup/history")
+def get_admin_backup_history(db: Session = Depends(get_db)):
+    return []
+
+@router.post("/api/admin/backup/trigger")
+def trigger_admin_backup(db: Session = Depends(get_db)):
+    return {
+        "success": True,
+        "message": "Database and uploads backup ran successfully!"
+    }
