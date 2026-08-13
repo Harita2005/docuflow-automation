@@ -180,7 +180,7 @@ export default function Admin() {
   };
 
   const handleDeleteRuleLocal = (id) => {
-    if (!id.startsWith('tmp-')) {
+    if (!String(id).startsWith('tmp-')) {
       setDeletedRuleIds(prev => [...prev, id]);
     }
     setRules(prev => prev.filter(r => r.id !== id));
@@ -192,11 +192,11 @@ export default function Admin() {
     if (!editingFlow || !editingFlow.profile_name) return;
     
     const existingStages = steps.filter(s => s.profile_name === (editingFlow.original_profile_name || editingFlow.profile_name));
-    const newStagesIds = editingFlow.stages.map(s => s.id).filter(id => id && !id.startsWith('tmp-'));
+    const newStagesIds = editingFlow.stages.map(s => s.id).filter(id => id && !String(id).startsWith('tmp-'));
     const deletedIds = existingStages.map(s => s.id).filter(id => !newStagesIds.includes(id));
     
     if (deletedIds.length > 0) {
-       setDeletedStepIds([...deletedStepIds, ...deletedIds.filter(id => !id.startsWith('tmp-'))]);
+       setDeletedStepIds([...deletedStepIds, ...deletedIds.filter(id => !String(id).startsWith('tmp-'))]);
     }
     
     const flowSteps = editingFlow.stages.map((stg, idx) => ({
@@ -219,7 +219,7 @@ export default function Admin() {
   const handleDeleteFlowLocal = (profile_name) => {
     if (window.confirm(`Are you sure you want to delete the entire flow "${profile_name}"?`)) {
       const idsToDelete = steps.filter(s => s.profile_name === profile_name).map(s => s.id);
-      const nonTmpIds = idsToDelete.filter(id => !id.startsWith('tmp-'));
+      const nonTmpIds = idsToDelete.filter(id => !String(id).startsWith('tmp-'));
       if (nonTmpIds.length > 0) {
         setDeletedStepIds([...deletedStepIds, ...nonTmpIds]);
       }
@@ -295,7 +295,7 @@ export default function Admin() {
   const confirmDeleteTemplate = () => {
     if (!templateDeleteConfirmTarget) return;
     const id = templateDeleteConfirmTarget;
-    if (!id.startsWith('tmp-')) setDeletedTemplateIds([...deletedTemplateIds, id]);
+    if (!String(id).startsWith('tmp-')) setDeletedTemplateIds([...deletedTemplateIds, id]);
     setTemplates(templates.filter(t => t.id !== id));
     setHasChanges(true);
     setTemplateDeleteConfirmTarget(null);
@@ -322,7 +322,7 @@ export default function Admin() {
       }
       // 2. Upsert rules
       for (const rule of rules) {
-        const payload = { ...rule, id: rule.id.startsWith('tmp-') ? undefined : rule.id };
+        const payload = { ...rule, id: String(rule.id).startsWith('tmp-') ? undefined : rule.id };
         const res = await fetch('/api/admin/routing-rules', { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!res.ok) {
           const errData = await res.json();
@@ -336,7 +336,7 @@ export default function Admin() {
       }
       // 4. Upsert steps
       for (const step of steps) {
-        const payload = { ...step, id: step.id.startsWith('tmp-') ? undefined : step.id };
+        const payload = { ...step, id: String(step.id).startsWith('tmp-') ? undefined : step.id };
         await fetch('/api/admin/workflow-steps', { method: 'POST', headers, body: JSON.stringify(payload) });
       }
 
@@ -346,12 +346,12 @@ export default function Admin() {
       }
       // 6. Upsert templates
       for (const t of templates) {
-        const payload = { ...t, id: t.id && t.id.startsWith('tmp-') ? undefined : t.id };
+        const payload = { ...t, id: t.id && String(t.id).startsWith('tmp-') ? undefined : t.id };
         await fetch('/api/templates', { method: 'POST', headers, body: JSON.stringify(payload) });
       }
 
       // 7. Audit Log Publish
-      const changesCount = deletedRuleIds.length + deletedStepIds.length + deletedTemplateIds.length + rules.filter(r=>r.id.startsWith('tmp-')).length + steps.filter(s=>s.id.startsWith('tmp-')).length + templates.filter(t=>t.id && t.id.startsWith('tmp-')).length;
+      const changesCount = deletedRuleIds.length + deletedStepIds.length + deletedTemplateIds.length + rules.filter(r=>String(r.id).startsWith('tmp-')).length + steps.filter(s=>String(s.id).startsWith('tmp-')).length + templates.filter(t=>t.id && String(t.id).startsWith('tmp-')).length;
       await fetch('/api/admin/publish', {
         method: 'POST',
         headers,
