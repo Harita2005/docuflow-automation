@@ -504,6 +504,167 @@ def hold_invoice_url(
     db.refresh(inv)
     return {"success": True, "status": inv.status, "invoice": inv}
 
+@router.post("/api/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    division: Optional[str] = Form("VCC"),
+    plant: Optional[str] = Form("TN-SIVAKASI"),
+    document_type: Optional[str] = Form("AP INVOICE"),
+    db: Session = Depends(get_db)
+):
+    timestamp = int(datetime.datetime.utcnow().timestamp())
+    filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    file_path = settings.UPLOAD_DIR / filename
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Try to extract fields via OCR
+    ocr_res = {}
+    if file.filename.lower().endswith(".pdf"):
+        try:
+            ocr_res = extract_text_from_pdf(file_path)
+        except Exception:
+            pass
+
+    new_id = f"DOC-{timestamp % 100000}"
+    
+    amount = ocr_res.get("amount") or 45000.0
+    base_amount = round(amount / 1.18, 2)
+    tax_amount = round(amount - base_amount, 2)
+
+    new_inv = Invoice(
+        id=new_id,
+        vendor_name=ocr_res.get("vendor_name") or "Sample Vendor Enterprise",
+        invoice_number=ocr_res.get("invoice_number") or f"INV-{timestamp % 10000}",
+        invoice_date=ocr_res.get("invoice_date") or datetime.date.today().strftime("%Y-%m-%d"),
+        amount=amount,
+        base_amount=base_amount,
+        tax_amount=tax_amount,
+        vendor_gstin=ocr_res.get("gstin") or "33AAACR1234F1Z5",
+        division=division,
+        plant=plant,
+        document_type=document_type or "AP INVOICE",
+        file_url=f"/uploads/{filename}",
+        status="Pending Approval",
+        current_stage=1,
+        total_stages=2
+    )
+
+    db.add(new_inv)
+    db.commit()
+    db.refresh(new_inv)
+
+    # Auto-routing based on rules
+    matched_wf = evaluate_business_rules(db, new_inv)
+    if not matched_wf:
+        matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
+
+    new_inv.workflow_profile_id = matched_wf
+    steps = db.query(WorkflowStepDefinition).filter(
+        WorkflowStepDefinition.profile_name == matched_wf
+    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    
+    new_inv.total_stages = len(steps) if steps else 2
+    new_inv.current_stage = 1
+    if steps:
+        new_inv.assigned_approver = steps[0].approver_target
+        new_inv.status = f"Initiated ({steps[0].step_name})"
+    else:
+        new_inv.status = "Initiated (Stage 1)"
+
+    from app.routers.sync import generate_compliance_checklist_for_category
+    checklist_items = generate_compliance_checklist_for_category(new_inv.category, new_inv.document_type)
+    new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
+
+    db.commit()
+    db.refresh(new_inv)
+
+    # Log audit trail
+    db.add(AuditLog(
+        invoice_id=new_inv.id,
+        user="Document Uploader",
+        action="Created & Uploaded",
+        stage="Stage 1",
+        notes=f"Document uploaded manually. Matched workflow '{matched_wf}'."
+    ))
+    db.commit()
+
+    return {"success": True, "invoice": new_inv}
+
+@router.post("/api/documents/upload-and-route/{synced_doc_id}")
+async def upload_and_route(
+    synced_doc_id: str,
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form("AP INVOICE"),
+    vendorName: Optional[str] = Form(None),
+    invoiceNumber: Optional[str] = Form(None),
+    amount: Optional[float] = Form(None),
+    invoiceDate: Optional[str] = Form(None),
+    poNumber: Optional[str] = Form(None),
+    cgst: Optional[float] = Form(0.0),
+    sgst: Optional[float] = Form(0.0),
+    igst: Optional[float] = Form(0.0),
+    db: Session = Depends(get_db)
+):
+    inv = db.query(Invoice).filter(Invoice.id == synced_doc_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Synced staging document not found")
+
+    timestamp = int(datetime.datetime.utcnow().timestamp())
+    filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    file_path = settings.UPLOAD_DIR / filename
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    inv.file_url = f"/uploads/{filename}"
+    inv.file_name = file.filename
+    if document_type: inv.document_type = document_type
+    if vendorName: inv.vendor_name = vendorName
+    if invoiceNumber: inv.invoice_number = invoiceNumber
+    if amount is not None: 
+        inv.amount = amount
+        inv.base_amount = round(amount / 1.18, 2)
+        inv.tax_amount = round(amount - inv.base_amount, 2)
+    if invoiceDate: inv.invoice_date = invoiceDate
+    if poNumber: inv.po_number = poNumber
+    
+    matched_wf = evaluate_business_rules(db, inv)
+    if not matched_wf:
+        matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
+
+    inv.workflow_profile_id = matched_wf
+    steps = db.query(WorkflowStepDefinition).filter(
+        WorkflowStepDefinition.profile_name == matched_wf
+    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    
+    inv.total_stages = len(steps) if steps else 2
+    inv.current_stage = 1
+    if steps:
+        inv.assigned_approver = steps[0].approver_target
+        inv.status = f"Initiated ({steps[0].step_name})"
+    else:
+        inv.status = "Initiated (Stage 1)"
+
+    from app.routers.sync import generate_compliance_checklist_for_category
+    checklist_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
+    inv.checklist_state = json.dumps({item: False for item in checklist_items})
+
+    db.commit()
+    db.refresh(inv)
+
+    db.add(AuditLog(
+        invoice_id=inv.id,
+        user="Metadata Editor / Sync Uploader",
+        action="Metadata Completed & Routed",
+        stage="Stage 1",
+        notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."
+    ))
+    db.commit()
+
+    return {"success": True, "invoice": inv}
+
 # PDF File Upload & Version Management
 @router.post("/api/records/{invoice_id}/version")
 @router.post("/api/documents/{invoice_id}/version")
