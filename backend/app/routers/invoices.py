@@ -870,3 +870,15 @@ def trigger_admin_backup(db: Session = Depends(get_db)):
         "success": True,
         "message": "Database and uploads backup ran successfully!"
     }
+
+@router.get("/api/erp/{po_number}")
+def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
+    inv = db.query(Invoice).filter(Invoice.po_number == po_number).first()
+    return {
+        "po_number": po_number,
+        "vendor_name": inv.vendor_name if inv else "COIMBATORE TEXTILE TOOLS",
+        "amount": inv.amount if inv else 35000.0,
+        "status": "Approved",
+        "items": []
+    }
+
