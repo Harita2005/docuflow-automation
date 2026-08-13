@@ -133,12 +133,12 @@ export default function WorkTrackerPage({
   const handleExportCSV = () => {
     setIsExporting(true);
     try {
-      const headers = ["Doc ID", "Vendor Name", "Invoice Number", "Document Type", "Amount (INR)", "Status", "Created Date"];
+      const headers = ["Doc ID", "Vendor Name", "Document Number / Ref", "Document Type", "Amount (INR)", "Status", "Created Date"];
       const rows = filteredAndSortedDocs.map(doc => [
         doc.id,
         `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
         `"${(doc.invoice_number || '').replace(/"/g, '""')}"`,
-        doc.document_type || "Invoice",
+        doc.document_type || "Document",
         doc.amount || 0,
         doc.status || "Pending",
         new Date(doc.created_at || Date.now()).toLocaleDateString()
@@ -148,7 +148,7 @@ export default function WorkTrackerPage({
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `AP_Invoices_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute("download", `DocuFlow_Records_Export_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

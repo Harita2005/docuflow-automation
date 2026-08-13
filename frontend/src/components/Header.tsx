@@ -36,7 +36,7 @@ export default function Header({
 
   const roleMapping: Record<string, string> = {
     admin: "System Administrator",
-    ap_executive: "AP Reviewer",
+    ap_executive: "Document Reviewer",
     manager: "Finance Manager",
     executive: "Executive Approver",
     employee: "Employee",
@@ -120,7 +120,7 @@ export default function Header({
     switch (currentView) {
       case "getting-started": return "System Onboarding & Walkthrough";
       case "dashboard": return "Executive Command Dashboard";
-      case "upload": return "Supplier Invoice Ingest";
+      case "upload": return "Supplier Document Ingest";
       case "incoming": return "Document Ledger Repository";
       case "goods-receipt": return "Gate Entry Verification";
       case "workflow-builder": return "Compliance Route Designer";

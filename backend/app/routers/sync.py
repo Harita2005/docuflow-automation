@@ -420,3 +420,5 @@ def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session = D
         file_size_bytes=file_size,
         ocr_extracted_fields=ocr_data
     )
+
+

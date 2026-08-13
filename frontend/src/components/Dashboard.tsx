@@ -111,9 +111,9 @@ export default function Dashboard({
     md: "Managing Director (MD) - Overview Dashboard",
     gm: "General Manager (GM) - Operational Status",
     cio: "Chief Info Officer (CIO) - System Health & Verification Logs",
-    finance_manager: "Finance Manager - Bills Overview",
+    finance_manager: "Finance Manager - Documents Overview",
     department_manager: "Department Manager - Local Approvals Counter",
-    ap_executive: "AP Team Executive - Invoice Upload Desk",
+    ap_executive: "AP Team Executive - Document Upload Desk",
     admin: "System Administrator - Control Settings",
   };
 
@@ -140,7 +140,7 @@ export default function Dashboard({
               <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-blue-600 transition-colors">
                 {stats?.totalDocuments ?? documents.length}
               </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Invoices</span>
+              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Documents</span>
             </div>
           </div>
 
@@ -382,7 +382,7 @@ export default function Dashboard({
                               className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-bold uppercase tracking-widest border border-slate-200/50 shadow-sm hover:bg-indigo-600 hover:text-white hover:border-indigo-700 cursor-pointer transition-all"
                               title="Click to filter by this type"
                             >
-                              {doc.document_type || "Invoice"}
+                              {doc.document_type || "Document"}
                             </span>
                             <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""}</span>
                             <span className="text-slate-300">•</span>

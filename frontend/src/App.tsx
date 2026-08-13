@@ -509,7 +509,7 @@ export default function App() {
                         {doc.vendor_name || "Unknown Vendor"}
                       </span>
                       <span className="text-[9px] font-semibold text-slate-500 tracking-wide uppercase mt-0.5">
-                        {doc.document_type || "Invoice"} • {doc.invoice_number}
+                        {doc.document_type || "Document"} • {doc.invoice_number}
                       </span>
                     </div>
                     <div className="text-right shrink-0">
