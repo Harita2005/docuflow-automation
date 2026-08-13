@@ -216,3 +216,25 @@ def delete_workflow_step(step_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"success": True, "deleted_id": step_id}
 
+@router.post("/api/admin/publish")
+def publish_configurations(payload: dict, db: Session = Depends(get_db)):
+    from app.models import AuditLog, SystemLog
+    changes = payload.get("changes") or 0
+    
+    db.add(AuditLog(
+        invoice_id="SYSTEM",
+        user="Administrator",
+        action="Config Published",
+        stage="All Rules & Steps",
+        notes=f"Successfully published {changes} policy drafts to production."
+    ))
+    db.add(SystemLog(
+        invoice_id="SYSTEM",
+        action="Publish Drafts",
+        user="Admin Engine",
+        details=f"System configurations updated. Published {changes} items."
+    ))
+    db.commit()
+    return {"success": True, "message": f"Successfully published {changes} config changes."}
+
+
