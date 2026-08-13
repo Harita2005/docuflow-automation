@@ -158,7 +158,7 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
                 AuditLog.action.ilike("%approve%"),
                 or_(*or_filters)
             )
-            has_appr = db.query(audit_query.exists()).scalar()
+            has_appr = audit_query.first() is not None
 
     inv_dict["is_current_approver"] = is_curr
     inv_dict["has_approved"] = has_appr
