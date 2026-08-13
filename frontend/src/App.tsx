@@ -137,46 +137,6 @@ export default function App() {
     };
   }, [isLoggedIn]);
 
-  // WebSockets Connection
-  useEffect(() => {
-    const socket = io({
-      transports: ["websocket"],
-      reconnectionAttempts: 2,
-      timeout: 5000,
-      autoConnect: false
-    });
-
-    try {
-      socket.connect();
-    } catch (e) {}
-
-    socket.on("workflow_updated", (data) => {
-      console.log("WebSocket Event: workflow_updated", data);
-      fetchDocuments(true);
-      fetchStats(true);
-    });
-
-    socket.on("new_notification", (data) => {
-      console.log("WebSocket Event: new_notification", data);
-      window.dispatchEvent(new CustomEvent("new_notification", { detail: data }));
-    });
-
-    socket.on("document_ingested", (data) => {
-      console.log("WebSocket Event: document_ingested", data);
-      fetchDocuments(true);
-      fetchStats(true);
-    });
-
-    socket.on("new_comment", (data) => {
-      console.log("WebSocket Event: new_comment", data);
-      fetchDocuments(true);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
-
   // Sync state to localStorage to persist across refreshes
   useEffect(() => {
     localStorage.setItem("isLoggedIn", String(isLoggedIn));
@@ -429,6 +389,7 @@ export default function App() {
                 documents={documents}
                 onViewDocument={handleViewDocument}
                 requireGRN={requireGRN}
+                currentUserRole={currentUserRole}
               />
             )}
 

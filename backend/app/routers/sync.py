@@ -205,8 +205,11 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
 # --- 1. SINGLE RECORD / DOCUMENT SYNC ---
 @router.post("/record", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@router.post("/records", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post("/document", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@router.post("/documents", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post("/invoice", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@router.post("/invoices", response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get_db)):
     """
     Production-grade idempotent endpoint for syncing single records from ERP, SAP, or Tally.

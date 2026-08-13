@@ -26,12 +26,14 @@ interface WorkTrackerPageProps {
   documents: DbInvoice[];
   onViewDocument: (id: string) => void;
   requireGRN?: boolean;
+  currentUserRole?: string;
 }
 
 export default function WorkTrackerPage({ 
   documents, 
   onViewDocument,
-  requireGRN = true 
+  requireGRN = true,
+  currentUserRole = "employee"
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -39,10 +41,16 @@ export default function WorkTrackerPage({
   const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
   const [isExporting, setIsExporting] = useState(false);
 
+  // Filter documents base based on role: non-admin users only see docs they are current approver of or have approved
+  const visibleDocs = useMemo(() => {
+    if (currentUserRole === "admin") return documents;
+    return documents.filter(doc => !!doc.is_current_approver || !!doc.has_approved);
+  }, [documents, currentUserRole]);
+
   // Derive dynamic document types
   const dynamicTypes = useMemo(() => {
-    return Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
-  }, [documents]);
+    return Array.from(new Set(visibleDocs.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
+  }, [visibleDocs]);
 
   const TABS = ["All", ...dynamicTypes];
 
@@ -55,7 +63,7 @@ export default function WorkTrackerPage({
     let readyForPaymentValue = 0;
     let highValueCount = 0;
 
-    documents.forEach(doc => {
+    visibleDocs.forEach(doc => {
       const amt = Number(doc.amount || 0);
       totalGrossValue += amt;
 
@@ -73,7 +81,7 @@ export default function WorkTrackerPage({
     });
 
     return {
-      totalCount: documents.length,
+      totalCount: visibleDocs.length,
       totalGrossValue,
       pendingApprovalCount,
       pendingApprovalValue,
@@ -81,11 +89,11 @@ export default function WorkTrackerPage({
       readyForPaymentValue,
       highValueCount
     };
-  }, [documents]);
+  }, [visibleDocs]);
 
   // Filtered and sorted documents list
   const filteredAndSortedDocs = useMemo(() => {
-    let list = documents.filter(doc => {
+    let list = visibleDocs.filter(doc => {
       // Tab filter
       if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) {
         return false;

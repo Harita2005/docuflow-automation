@@ -6,7 +6,7 @@ import { expect, test, vi } from 'vitest';
 // Mock fetch globally
 global.fetch = vi.fn();
 
-test('LoginPage renders correctly and submits data', async () => {
+test('LoginPage renders correctly and submits direct login', async () => {
   const mockOnLoginSuccess = vi.fn();
   
   render(<LoginPage onLoginSuccess={mockOnLoginSuccess} />);
@@ -14,7 +14,7 @@ test('LoginPage renders correctly and submits data', async () => {
   // Verify step 1 UI elements exist
   expect(screen.getByText('Email, Username, or Employee ID')).toBeInTheDocument();
   
-  const identifierInput = screen.getByPlaceholderText('e.g. alerts@ramrajcotton.net or EMP-1001');
+  const identifierInput = screen.getByPlaceholderText(/alerts@ramrajcotton.net/i);
   
   // Simulate user typing identifier
   fireEvent.change(identifierInput, { target: { value: 'testuser' } });
@@ -33,7 +33,12 @@ test('LoginPage renders correctly and submits data', async () => {
   // Mock the fetch response
   (global.fetch as any).mockResolvedValueOnce({
     ok: true,
-    json: async () => ({ token: 'mock-token', user: { id: '1', role: 'manager', email: 'test@example.com', username: 'testuser' } })
+    headers: { get: () => 'application/json' },
+    json: async () => ({ 
+      token: 'mock-token', 
+      user: { id: '1', role: 'manager', email: 'test@example.com', username: 'testuser' },
+      mfa_required: false
+    })
   });
   
   // Find the submit button and submit
@@ -45,7 +50,7 @@ test('LoginPage renders correctly and submits data', async () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: 'testuser', password: 'password123' })
+      body: JSON.stringify({ username: 'testuser', identifier: 'testuser', password: 'password123' })
     });
     expect(mockOnLoginSuccess).toHaveBeenCalledWith('1', 'manager', 'test@example.com', 'testuser');
   });

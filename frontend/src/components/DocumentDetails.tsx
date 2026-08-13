@@ -657,10 +657,24 @@ export default function DocumentDetails({
   };
 
   const handleInlineApprove = async () => {
+    const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
+    const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+    const allItemsChecked = effectiveChecklist.length === 0 || effectiveChecklist.every((item) => checkedStates[item] === true);
+
+    if (isStage1Attachment && !hasDocAttachment) {
+      setActionError("⚠️ Document Attachment Required: You must attach/upload the physical invoice PDF before approving Stage 1.");
+      return;
+    }
+
+    if (!allItemsChecked) {
+      setActionError("⚠️ Compliance Checklist Incomplete: Please verify and check all required checklist items before approving.");
+      return;
+    }
+
     setActionLoading(true);
     setActionError(null);
     try {
-      const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || ''} (Checklist Verified)`;
+      const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || 1} (Document Attached & Compliance Checklist Verified)`;
       const response = await fetch(`/api/workflows/approve`, {
         method: "POST",
         headers: { 
@@ -1056,49 +1070,173 @@ export default function DocumentDetails({
               </div>
             </div>
 
-            {/* 2. Executive Decision Actions Bar */}
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleInlineApprove}
-                disabled={
-                  actionLoading ||
-                  (effectiveChecklist.length > 0 &&
-                    !effectiveChecklist.every((item) => checkedStates[item] === true))
-                }
-                className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 ${
-                  effectiveChecklist.length === 0 || effectiveChecklist.every((item) => checkedStates[item] === true)
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 cursor-pointer"
-                    : "bg-emerald-600/60 text-white/90 hover:bg-emerald-600 cursor-pointer"
-                }`}
-                title={effectiveChecklist.every((item) => checkedStates[item] === true) ? "Click to approve and forward" : "Approve with verification"}
-              >
-                <Check className="h-4 w-4 stroke-[3]" />
-                <span>{actionLoading ? "Processing..." : "Approve & Sign Off"}</span>
-              </button>
+            {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
+            {(() => {
+              const isSettled = (document?.status || '').toLowerCase().includes('settled') || (document?.status || '').toLowerCase().includes('paid') || document?.status === 'Approved';
+              const isRejected = (document?.status || '').toLowerCase().includes('reject');
+              
+              if (isSettled) {
+                return (
+                  <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 flex flex-col gap-2 shadow-2xs shrink-0 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                          ✓
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs block text-emerald-900 leading-tight">Document Fully Settled & Approved</span>
+                          <span className="text-[10px] text-emerald-700 font-medium">All workflow sign-off stages completed. Cleared for payment disbursement.</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                        Settled
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-emerald-100/60 text-emerald-900 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>View Sign-Off History & Named Approver Audit Log ➔</span>
+                    </button>
+                  </div>
+                );
+              }
 
-              <button
-                type="button"
-                onClick={handleInlineHold}
-                disabled={actionLoading}
-                className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-300 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
-                title="Hold and request clarification"
-              >
-                <Pause className="h-3.5 w-3.5" />
-                <span>Hold</span>
-              </button>
+              if (isRejected) {
+                return (
+                  <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-950 flex flex-col gap-2 shadow-2xs shrink-0 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-rose-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                          ✕
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs block text-rose-900 leading-tight">Document Rejected</span>
+                          <span className="text-[10px] text-rose-700 font-medium">This document was declined during compliance review.</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 bg-rose-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                        Rejected
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-rose-100/60 text-rose-900 border border-rose-300 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-rose-600" />
+                      <span>View Rejection Audit Log</span>
+                    </button>
+                  </div>
+                );
+              }
 
-              <button
-                type="button"
-                onClick={handleInlineReject}
-                disabled={actionLoading}
-                className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
-                title="Reject record with remarks"
-              >
-                <X className="h-3.5 w-3.5 stroke-[3]" />
-                <span>Reject</span>
-              </button>
-            </div>
+              if (currentUserRole !== 'admin' && !document.is_current_approver) {
+                return (
+                  <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-bold flex flex-col gap-2 shrink-0 animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-slate-700">
+                      <AlertCircle className="h-4 w-4 text-slate-500 shrink-0" />
+                      <span>View Only: You are not authorized to approve this document at the current stage.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-slate-100/80 text-slate-800 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-slate-500" />
+                      <span>View Approval Workflow Timeline</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
+              const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+              const checkedCount = Object.values(checkedStates).filter(Boolean).length;
+              const totalCount = effectiveChecklist.length;
+              const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
+              const canApprove = (!isStage1Attachment || hasDocAttachment) && allItemsChecked && !actionLoading;
+
+              return (
+                <div className="space-y-1.5 shrink-0">
+                  {/* Stage 1 Guidance Alert Pill */}
+                  {isStage1Attachment && !hasDocAttachment ? (
+                    <div className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <span>Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval.</span>
+                    </div>
+                  ) : !allItemsChecked ? (
+                    <div className="p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        <span>Checklist Verification: ({checkedCount}/{totalCount}) items verified</span>
+                      </div>
+                      <span className="text-[9px] uppercase tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-extrabold">Required</span>
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3] shrink-0" />
+                      <span>All Stage 1 criteria satisfied! Click Approve to forward to Stage 2.</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleInlineApprove}
+                      disabled={!canApprove}
+                      className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
+                        canApprove
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/40"
+                          : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                      }`}
+                      title={
+                        !hasDocAttachment && isStage1Attachment
+                          ? "Attach physical document PDF first"
+                          : !allItemsChecked
+                          ? "Verify all checklist items first"
+                          : "Click to approve and forward to next stage approver"
+                      }
+                    >
+                      <Check className="h-4 w-4 stroke-[3]" />
+                      <span>
+                        {actionLoading 
+                          ? "Processing..." 
+                          : isStage1Attachment && !hasDocAttachment
+                          ? "Attach PDF to Unlock"
+                          : !allItemsChecked
+                          ? `Verify Checklist (${checkedCount}/${totalCount})`
+                          : "Approve & Forward ➔"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleInlineHold}
+                      disabled={actionLoading}
+                      className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-300 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="Hold and request clarification"
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                      <span>Hold</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleInlineReject}
+                      disabled={actionLoading}
+                      className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="Reject record with remarks"
+                    >
+                      <X className="h-3.5 w-3.5 stroke-[3]" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 3. 9-POINT COMPLIANCE CHECKLIST STATION (SINGLE UNIFIED CONTAINER) */}
             <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 space-y-2.5 shrink-0">
@@ -1633,17 +1771,74 @@ export default function DocumentDetails({
                             </span>
                           )}
                         </div>
-                        <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
-                          <div className="flex items-center justify-between text-[10.5px]">
-                            <span><strong className="text-slate-700">Assigned Approver:</strong> {step.approver_target || currentUserUsername || "anbu"}</span>
-                            <span className="text-slate-400 font-mono">Stage {step.stage_number}</span>
-                          </div>
-                          {isCurrent && (
-                            <p className="text-[10px] text-indigo-600 font-semibold mt-1">
-                              Awaiting compliance checklist verification and sign-off.
-                            </p>
-                          )}
-                        </div>
+
+                        {/* Approver Details & Specific Sign-off Identity Card */}
+                        {(() => {
+                          const poolMembers = (step.approver_target || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                          const matchingLog = commentsList.find((c: any) => 
+                            (c.stage && c.stage.includes(String(step.stage_number))) || 
+                            (c.action && (c.action.includes(String(step.stage_number)) || c.action.includes(step.stage_name)))
+                          );
+
+                          return (
+                            <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
+                              {/* 1. Assigned Pool Breakdown */}
+                              <div className="flex items-start justify-between text-[10.5px]">
+                                <div className="space-y-0.5">
+                                  <span className="text-[9.5px] uppercase font-bold text-slate-400 block tracking-wider">
+                                    Assigned Approval Pool ({poolMembers.length > 0 ? poolMembers.length : 1} Members):
+                                  </span>
+                                  <div className="flex flex-wrap gap-1 pt-0.5">
+                                    {poolMembers.length > 0 ? (
+                                      poolMembers.map((mem: string, mIdx: number) => {
+                                        const isTheSigner = matchingLog && (matchingLog.author || "").toLowerCase().includes(mem.toLowerCase());
+                                        return (
+                                          <span 
+                                            key={mIdx} 
+                                            className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold ${
+                                              isTheSigner 
+                                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold" 
+                                                : "bg-white text-slate-700 border border-slate-200"
+                                            }`}
+                                          >
+                                            {mem}
+                                          </span>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="font-mono font-bold text-slate-700">{step.approver_target || currentUserUsername || "anbu"}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="text-slate-400 font-mono text-[9px] bg-slate-200/60 px-1.5 py-0.5 rounded">Stage {step.stage_number}</span>
+                              </div>
+
+                              {/* 2. Exact Sign-Off Attribution (Who specifically approved from the pool) */}
+                              {isPassed && (
+                                <div className="p-1.5 bg-emerald-50/80 rounded-lg border border-emerald-200/80 text-[10.5px] flex items-center justify-between text-emerald-900">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="h-4 w-4 rounded-full bg-emerald-600 text-white font-bold text-[9px] flex items-center justify-center">✓</span>
+                                    <span>
+                                      <strong>Approved By:</strong> {matchingLog ? (matchingLog.author || matchingLog.user_name) : (currentUserUsername || "Authorized Approver")}
+                                    </span>
+                                  </div>
+                                  {matchingLog?.created_at && (
+                                    <span className="text-[9px] font-mono text-emerald-700">
+                                      {new Date(matchingLog.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {isCurrent && (
+                                <p className="text-[10px] text-indigo-600 font-semibold pt-0.5 flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+                                  <span>Any 1 of the {poolMembers.length > 0 ? poolMembers.length : 1} assigned pool members can verify and sign off.</span>
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -1674,18 +1869,39 @@ export default function DocumentDetails({
 
               {/* Audit Remarks Log */}
               {commentsList && commentsList.length > 0 && (
-                <div className="pt-2 border-t border-slate-200">
-                  <h4 className="text-[10px] font-black uppercase text-slate-500 mb-2">Logged Audit Remarks</h4>
+                <div className="pt-3 border-t border-slate-200">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2.5 flex items-center justify-between">
+                    <span>Signed Audit Trail & Remarks ({commentsList.length})</span>
+                    <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Tamper-Evident</span>
+                  </h4>
                   <div className="space-y-2">
-                    {commentsList.map((comm: any, cIdx: number) => (
-                      <div key={cIdx} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px]">
-                        <div className="flex items-center justify-between font-bold text-slate-800 mb-0.5">
-                          <span>{comm.user_name || "Approver"}</span>
-                          <span className="text-[9.5px] font-normal text-slate-400 font-mono">{new Date(comm.created_at).toLocaleTimeString('en-IN')}</span>
+                    {commentsList.map((comm: any, cIdx: number) => {
+                      const authorName = comm.author || comm.user_name || "System Administrator";
+                      const actionLabel = comm.action || "Compliance Sign-off";
+                      const stageLabel = comm.stage || "Workflow Stage";
+
+                      return (
+                        <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between font-bold text-slate-800">
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-700 font-black text-[9px] flex items-center justify-center">
+                                {authorName.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-slate-900 text-xs">{authorName}</span>
+                              <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8.5px] font-bold uppercase tracking-wider">
+                                {actionLabel}
+                              </span>
+                            </div>
+                            <span className="text-[9.5px] font-normal text-slate-400 font-mono">
+                              {new Date(comm.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
+                            {comm.text || comm.comment || "Signed off without remarks."}
+                          </p>
                         </div>
-                        <p className="text-slate-600">{comm.comment}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

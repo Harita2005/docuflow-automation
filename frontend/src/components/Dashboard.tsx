@@ -44,7 +44,9 @@ export default function Dashboard({
   setCurrentView,
   requireGRN = true
 }: DashboardProps) {
-  const [listFilter, setListFilter] = useState<'all' | 'action' | 'approved' | 'review' | 'grn' | 'action_required' | 'my_approvals'>('all');
+  const [listFilter, setListFilter] = useState<'all' | 'action' | 'approved' | 'review' | 'grn' | 'action_required' | 'my_approvals'>(
+    currentUserRole === 'admin' ? 'all' : 'action_required'
+  );
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,11 +308,7 @@ export default function Dashboard({
             let filteredDocs = documents;
             if (listFilter === 'all') {
               if (currentUserRole !== 'admin') {
-                filteredDocs = filteredDocs.filter(d => {
-                  const isInApproval = d.status.includes("Approval") || d.status.includes("Pending");
-                  if (isInApproval && !d.is_current_approver) return false;
-                  return true;
-                });
+                filteredDocs = filteredDocs.filter(d => !!d.is_current_approver || !!d.has_approved);
               }
             } else if (listFilter === 'action') {
               filteredDocs = filteredDocs.filter(d => d.status === "In Approval" || d.status === "Waiting for GRN");

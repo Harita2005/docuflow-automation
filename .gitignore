@@ -17,5 +17,10 @@ compile_errors.txt
 clean_details.js
 clean_return.js
 !DocuFlowDB.bak
-
-
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.db
+frontend/tsconfig.tsbuildinfo

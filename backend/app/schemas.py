@@ -7,11 +7,34 @@ class LoginRequest(BaseModel):
     username: Optional[str] = None
     identifier: Optional[str] = None
     email: Optional[str] = None
-    password: str
+    password: Optional[str] = None
 
 class TokenResponse(BaseModel):
-    token: str
-    user: dict
+    token: Optional[str] = None
+    user: Optional[dict] = None
+    mfa_required: bool = False
+    mfa_ticket: Optional[str] = None
+    available_methods: Optional[List[str]] = None
+    masked_email: Optional[str] = None
+    masked_phone: Optional[str] = None
+    has_authenticator_setup: bool = False
+
+class MFASendOTPRequest(BaseModel):
+    ticket: str
+    method: str = "EMAIL" # EMAIL, SMS
+
+class MFAVerifyRequest(BaseModel):
+    ticket: str
+    method: str # EMAIL, SMS, AUTHENTICATOR
+    code: str
+
+class MFASetupTOTPRequest(BaseModel):
+    ticket: str
+
+class MFASetupTOTPResponse(BaseModel):
+    secret: str
+    qr_svg_data_url: str
+    provisioning_uri: str
 
 class UserMasterCreate(BaseModel):
     employee_id: str = Field(..., description="Unique Employee ID (e.g. 16220, E22-02094)")
@@ -128,6 +151,8 @@ class InvoiceResponse(InvoiceBase):
     doc_key: Optional[int] = None
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
+    is_current_approver: Optional[bool] = None
+    has_approved: Optional[bool] = None
 
     class Config:
         from_attributes = True
