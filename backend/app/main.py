@@ -16,25 +16,34 @@ try:
     from sqlalchemy import text, inspect
     try:
         with engine.connect() as conn:
-            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='invoices' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE invoices ALTER COLUMN doc_num VARCHAR(100) NULL;"))
+            # 1. Rename tables dynamically if they exist under old names
+            try:
+                conn.execute(text("IF OBJECT_ID('invoices', 'U') IS NOT NULL AND OBJECT_ID('documents', 'U') IS NULL EXEC sp_rename 'invoices', 'documents';"))
+                conn.execute(text("IF OBJECT_ID('invoice_line_items', 'U') IS NOT NULL AND OBJECT_ID('document_line_items', 'U') IS NULL EXEC sp_rename 'invoice_line_items', 'document_line_items';"))
+                conn.execute(text("IF OBJECT_ID('invoice_checklist_states', 'U') IS NOT NULL AND OBJECT_ID('document_checklist_states', 'U') IS NULL EXEC sp_rename 'invoice_checklist_states', 'document_checklist_states';"))
+                conn.commit()
+            except Exception as rename_err:
+                print(f"[Database] Rename tables warning: {rename_err}")
+
+            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE documents ALTER COLUMN doc_num VARCHAR(100) NULL;"))
             conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND IS_NULLABLE='NO') ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
             
-            # Add cgst, sgst, igst columns to invoices if missing
+            # Add cgst, sgst, igst columns to documents if missing
             try:
                 inspector = inspect(engine)
                 
-                # Invoices table migrations
-                existing_cols_invoices = [c['name'] for c in inspector.get_columns('invoices')]
-                if 'cgst' not in existing_cols_invoices:
-                    conn.execute(text("ALTER TABLE invoices ADD cgst FLOAT NULL;"))
-                if 'sgst' not in existing_cols_invoices:
-                    conn.execute(text("ALTER TABLE invoices ADD sgst FLOAT NULL;"))
-                if 'igst' not in existing_cols_invoices:
-                    conn.execute(text("ALTER TABLE invoices ADD igst FLOAT NULL;"))
-                if 'is_deleted' not in existing_cols_invoices:
-                    conn.execute(text("ALTER TABLE invoices ADD is_deleted BIT NOT NULL DEFAULT 0;"))
-                if 'deleted_at' not in existing_cols_invoices:
-                    conn.execute(text("ALTER TABLE invoices ADD deleted_at DATETIME NULL;"))
+                # Documents table migrations
+                existing_cols_documents = [c['name'] for c in inspector.get_columns('documents')]
+                if 'cgst' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD cgst FLOAT NULL;"))
+                if 'sgst' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD sgst FLOAT NULL;"))
+                if 'igst' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD igst FLOAT NULL;"))
+                if 'is_deleted' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD is_deleted BIT NOT NULL DEFAULT 0;"))
+                if 'deleted_at' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD deleted_at DATETIME NULL;"))
                 
                 # Users table migrations
                 existing_cols_users = [c['name'] for c in inspector.get_columns('users')]

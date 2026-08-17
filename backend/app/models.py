@@ -44,7 +44,7 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 class Invoice(Base):
-    __tablename__ = "invoices"
+    __tablename__ = "documents"
 
     id = Column(String(100), primary_key=True, index=True) # e.g. "DOC-101" or string ID
     doc_key = Column(Integer, index=True, nullable=True)     # Matching MS SQL DocTrans.DocKey
@@ -163,7 +163,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("invoices.id", ondelete="CASCADE"), index=True, nullable=True)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
     user = Column(String(150), nullable=False, index=True)
     action = Column(String(100), nullable=False)                # Approved, Rejected, Held, Sync, Created
     stage = Column(String(100), nullable=True)
@@ -176,7 +176,7 @@ class SystemLog(Base):
     __tablename__ = "system_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=True, index=True)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True)
     action = Column(String(150), nullable=False)
     user = Column(String(150), default="System Engine")
     details = Column(Text, nullable=True)
@@ -196,10 +196,10 @@ class ChecklistTemplate(Base):
     sequence_order = Column(Integer, default=1)
 
 class InvoiceChecklistState(Base):
-    __tablename__ = "invoice_checklist_states"
+    __tablename__ = "document_checklist_states"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("invoices.id", ondelete="CASCADE"), index=True, nullable=False)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
     stage_name = Column(String(200), nullable=False)
     item_text = Column(String(500), nullable=False)
     is_checked = Column(Boolean, default=False)
@@ -210,10 +210,10 @@ class InvoiceChecklistState(Base):
 
 # Normalize Invoice Line Items (Option 3 for Reporting & Scale)
 class InvoiceLineItem(Base):
-    __tablename__ = "invoice_line_items"
+    __tablename__ = "document_line_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("invoices.id", ondelete="CASCADE"), index=True, nullable=False)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
     description = Column(String(250), nullable=False)
     quantity = Column(Float, default=1.0)
     unit_price = Column(Float, default=0.0)
