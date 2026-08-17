@@ -58,6 +58,20 @@ try:
                 if 'deleted_at' not in existing_cols_workflows:
                     conn.execute(text("ALTER TABLE workflow_profiles ADD deleted_at DATETIME NULL;"))
                     
+                # Business rules table migrations
+                existing_cols_rules = [c['name'] for c in inspector.get_columns('business_rules')]
+                if 'is_deleted' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD is_deleted BIT NOT NULL DEFAULT 0;"))
+                if 'deleted_at' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD deleted_at DATETIME NULL;"))
+
+                # Audit logs & System logs type conversions for invoice_id type matching
+                try:
+                    conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
+                    conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
+                except Exception as log_err:
+                    print(f"[Database] Log columns alteration warning: {log_err}")
+                    
             except Exception as col_err:
                 print(f"[Database] Column migration warning: {col_err}")
             
