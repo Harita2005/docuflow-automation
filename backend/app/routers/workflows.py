@@ -232,14 +232,14 @@ def publish_configurations(payload: dict, db: Session = Depends(get_db)):
     changes = payload.get("changes") or 0
     
     db.add(AuditLog(
-        invoice_id="SYSTEM",
+        invoice_id=None,
         user="Administrator",
         action="Config Published",
         stage="All Rules & Steps",
         notes=f"Successfully published {changes} policy drafts to production."
     ))
     db.add(SystemLog(
-        invoice_id="SYSTEM",
+        invoice_id=None,
         action="Publish Drafts",
         user="Admin Engine",
         details=f"System configurations updated. Published {changes} items."
