@@ -74,7 +74,11 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     # Direct login if MFA is disabled
     user.last_login = datetime.datetime.utcnow()
-    access_token = create_access_token(data={"sub": user.username, "id": user.id, "role": user.role})
+    expires_delta = datetime.timedelta(minutes=request.expires_in_minutes) if request.expires_in_minutes else None
+    access_token = create_access_token(
+        data={"sub": user.username, "id": user.id, "role": user.role},
+        expires_delta=expires_delta
+    )
     
     # Log User Login Audit Entry
     try:

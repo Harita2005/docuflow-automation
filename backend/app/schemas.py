@@ -8,6 +8,7 @@ class LoginRequest(BaseModel):
     identifier: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
+    expires_in_minutes: Optional[int] = None
 
 class TokenResponse(BaseModel):
     token: Optional[str] = None
