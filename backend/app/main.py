@@ -90,6 +90,15 @@ try:
                     conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
                 except Exception as log_err:
                     print(f"[Database] Log columns alteration warning: {log_err}")
+                
+                # Ensure is_deleted defaults to 0 for any existing records where it is NULL
+                try:
+                    conn.execute(text("UPDATE documents SET is_deleted = 0 WHERE is_deleted IS NULL;"))
+                    conn.execute(text("UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;"))
+                    conn.execute(text("UPDATE workflow_profiles SET is_deleted = 0 WHERE is_deleted IS NULL;"))
+                    conn.execute(text("UPDATE business_rules SET is_deleted = 0 WHERE is_deleted IS NULL;"))
+                except Exception as update_err:
+                    print(f"[Database] Defaults update warning: {update_err}")
                     
             except Exception as col_err:
                 print(f"[Database] Column migration warning: {col_err}")
