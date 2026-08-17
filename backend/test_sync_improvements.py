@@ -26,6 +26,8 @@ payload = {
 
 res = client.post("/api/sync/record", json=payload)
 print(f"Status Code: {res.status_code}")
+if res.status_code != 200:
+    print(f"Error Details: {res.text}")
 data = res.json()
 print(f"Success Flag: {data.get('success')}")
 print(f"Response Message: {data.get('message')}")

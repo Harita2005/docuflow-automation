@@ -30,23 +30,16 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     raw_str = str(invoice_id).strip()
     id_clean = raw_str.upper().replace("DOC-", "").replace("DOC", "").strip()
     
-    # 1. Strict string comparison on varchar column Invoice.id and Invoice.invoice_number
+    # 1. Strict string comparison on varchar column Invoice.id, Invoice.invoice_number, and Invoice.doc_key
     inv = db.query(Invoice).filter(
         (Invoice.id == raw_str) | 
         (Invoice.id == f"DOC-{id_clean}") |
         (Invoice.id == id_clean) |
         (Invoice.invoice_number == raw_str) |
-        (Invoice.invoice_number == id_clean)
+        (Invoice.invoice_number == id_clean) |
+        (Invoice.doc_key == raw_str) |
+        (Invoice.doc_key == id_clean)
     ).filter(Invoice.is_deleted == False).first()
-    
-    # 2. Integer comparison ONLY on integer column Invoice.doc_key
-    if not inv and id_clean.isdigit():
-        num = int(id_clean)
-        inv = db.query(Invoice).filter(Invoice.doc_key == num).filter(Invoice.is_deleted == False).first()
-        
-    if not inv and raw_str.isdigit():
-        num = int(raw_str)
-        inv = db.query(Invoice).filter(Invoice.doc_key == num).filter(Invoice.is_deleted == False).first()
         
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")

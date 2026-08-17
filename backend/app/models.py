@@ -47,7 +47,7 @@ class Invoice(Base):
     __tablename__ = "documents"
 
     id = Column(String(100), primary_key=True, index=True) # e.g. "DOC-101" or string ID
-    doc_key = Column(Integer, index=True, nullable=True)     # Matching MS SQL DocTrans.DocKey
+    doc_key = Column(String(100), index=True, nullable=True)     # Matching MS SQL DocTrans.DocKey
     doc_num = Column(String(100), index=True, nullable=True)     # MS SQL DocTrans.DocNum
     doc_date = Column(String(50), nullable=True)             # MS SQL DocTrans.DocDate
     

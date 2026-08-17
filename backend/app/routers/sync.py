@@ -328,7 +328,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     # 1. Look for existing document by DocKey or (InvoiceNumber + Division)
     existing: Optional[Invoice] = None
     if req.doc_key:
-        existing = db.query(Invoice).filter(Invoice.doc_key == req.doc_key).first()
+        existing = db.query(Invoice).filter(Invoice.doc_key == str(req.doc_key)).first()
     
     if not existing and req.invoice_number:
         existing = db.query(Invoice).filter(
@@ -378,7 +378,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         
         new_inv = Invoice(
             id=doc_id,
-            doc_key=req.doc_key,
+            doc_key=str(req.doc_key) if req.doc_key is not None else None,
             doc_num=str(req.doc_num) if req.doc_num is not None else None,
             doc_date=req.invoice_date,
             vendor_name=req.vendor_name or "Unknown Vendor",
@@ -557,7 +557,7 @@ def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get
             effective_division = payload.company_code or payload.division or "VCC"
             existing = None
             if payload.doc_key:
-                existing = db.query(Invoice).filter(Invoice.doc_key == payload.doc_key).first()
+                existing = db.query(Invoice).filter(Invoice.doc_key == str(payload.doc_key)).first()
             if not existing and payload.invoice_number:
                 existing = db.query(Invoice).filter(
                     Invoice.invoice_number == payload.invoice_number,
@@ -603,7 +603,7 @@ def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get
                 doc_id = f"DOC-{payload.doc_key if payload.doc_key else (timestamp % 100000)}"
                 new_inv = Invoice(
                     id=doc_id,
-                    doc_key=payload.doc_key,
+                    doc_key=str(payload.doc_key) if payload.doc_key is not None else None,
                     doc_num=str(payload.doc_num) if payload.doc_num is not None else None,
                     doc_date=payload.invoice_date,
                     vendor_name=payload.vendor_name or "Unknown Vendor",
@@ -712,7 +712,7 @@ def sync_batch_documents(payload: BatchSyncRequest, db: Session = Depends(get_db
 @router.post("/attachment/upload", response_model=AttachmentSyncResponse)
 async def sync_attachment_upload(
     file: UploadFile = File(..., description="Binary attachment file (PDF, PNG, JPG, TIFF)"),
-    doc_key: Optional[int] = Form(None, description="ERP DocKey"),
+    doc_key: Optional[str] = Form(None, description="ERP DocKey"),
     record_id: Optional[str] = Form(None, description="Target Record ID (e.g. DOC-101)"),
     invoice_id: Optional[str] = Form(None, description="Target Record/Invoice ID (e.g. DOC-101)"),
     attachment_type: str = Form("Original Invoice", description="Type of attachment"),
@@ -728,10 +728,7 @@ async def sync_attachment_upload(
     if doc_key:
         inv = db.query(Invoice).filter(Invoice.doc_key == doc_key).first()
     if not inv and target_id:
-        if str(target_id).isdigit():
-            inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == int(target_id))).first()
-        else:
-            inv = db.query(Invoice).filter(Invoice.id == target_id).first()
+        inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == target_id)).first()
 
     if not inv:
         raise HTTPException(
@@ -793,10 +790,7 @@ def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session = D
     if payload.doc_key:
         inv = db.query(Invoice).filter(Invoice.doc_key == payload.doc_key).first()
     if not inv and target_id:
-        if str(target_id).isdigit():
-            inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == int(target_id))).first()
-        else:
-            inv = db.query(Invoice).filter(Invoice.id == target_id).first()
+        inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == target_id)).first()
 
     if not inv:
         raise HTTPException(

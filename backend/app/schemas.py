@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 from pydantic import BaseModel, Field, model_validator
 import datetime
 
@@ -151,7 +151,7 @@ class InvoiceActionRequest(BaseModel):
 
 class InvoiceResponse(InvoiceBase):
     id: str
-    doc_key: Optional[int] = None
+    doc_key: Optional[Union[str, int]] = None
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
     is_current_approver: Optional[bool] = None
@@ -232,7 +232,7 @@ class AuditLogResponse(BaseModel):
 # --- ENTERPRISE DATA & ATTACHMENT SYNC SCHEMAS ---
 class DocumentSyncRequest(BaseModel):
     # MS SQL DocTrans & ERP Keys
-    doc_key: Optional[int] = Field(None, alias="DocKey", description="Unique ERP/MS SQL Primary Key for idempotent upsert")
+    doc_key: Optional[Union[str, int]] = Field(None, alias="DocKey", description="Unique ERP/MS SQL Primary Key for idempotent upsert")
     doc_num: Optional[Any] = Field(None, alias="DocNum", description="ERP Document Number")
     doc_entry: Optional[Any] = Field(None, alias="DocEntry", description="ERP Entry ID")
     company_code: Optional[str] = Field(None, alias="CompanyCode", description="Company / Division Code (e.g. VCC, ACC, ENES)")
@@ -285,7 +285,7 @@ class DocumentSyncResponse(BaseModel):
     success: bool
     message: str
     document_id: str
-    doc_key: Optional[int] = None
+    doc_key: Optional[Union[str, int]] = None
     invoice_number: Optional[str] = None
     document_number: Optional[str] = None
     vendor_name: Optional[str] = None
@@ -305,7 +305,7 @@ class BatchSyncRequest(BaseModel):
 class BatchSyncItemResult(BaseModel):
     index: int
     document_id: Optional[str] = None
-    doc_key: Optional[int] = None
+    doc_key: Optional[Union[str, int]] = None
     invoice_number: Optional[str] = None
     document_number: Optional[str] = None
     status: str # "SUCCESS" or "FAILED"
@@ -318,7 +318,7 @@ class BatchSyncResponse(BaseModel):
     results: List[BatchSyncItemResult]
 
 class Base64AttachmentSyncRequest(BaseModel):
-    doc_key: Optional[int] = Field(None, alias="DocKey", description="Target ERP DocKey")
+    doc_key: Optional[Union[str, int]] = Field(None, alias="DocKey", description="Target ERP DocKey")
     invoice_id: Optional[str] = Field(None, description="Target DocuFlow Document ID (e.g. DOC-101)")
     file_name: str = Field(..., description="File name including extension (e.g. invoice_9912.pdf)")
     file_content_base64: str = Field(..., description="Base64 encoded binary file data")

@@ -28,6 +28,16 @@ try:
             conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE documents ALTER COLUMN doc_num VARCHAR(100) NULL;"))
             conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND IS_NULLABLE='NO') ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
             
+            # doc_key column migration to VARCHAR(100)
+            try:
+                conn.execute(text("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_invoices_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_invoices_doc_key ON documents;"))
+                conn.execute(text("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_documents_doc_key ON documents;"))
+                conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_key' AND DATA_TYPE <> 'varchar') ALTER TABLE documents ALTER COLUMN doc_key VARCHAR(100) NULL;"))
+                conn.execute(text("IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) CREATE INDEX ix_documents_doc_key ON documents (doc_key);"))
+                conn.commit()
+            except Exception as dockey_err:
+                print(f"[Database] doc_key migration warning: {dockey_err}")
+
             # Add cgst, sgst, igst columns to documents if missing
             try:
                 inspector = inspect(engine)
