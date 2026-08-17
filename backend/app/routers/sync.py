@@ -737,8 +737,8 @@ async def sync_attachment_upload(
         )
 
     # 2. Save binary file
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    safe_name = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+    safe_name = f"{inv.id}.{ext}"
     file_path = settings.UPLOAD_DIR / safe_name
 
     contents = await file.read()
@@ -804,8 +804,8 @@ def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session = D
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid Base64 payload: {str(e)}")
 
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    safe_name = f"{timestamp}_{payload.file_name.replace(' ', '_')}"
+    ext = payload.file_name.split('.')[-1] if '.' in payload.file_name else 'pdf'
+    safe_name = f"{inv.id}.{ext}"
     file_path = settings.UPLOAD_DIR / safe_name
 
     with open(file_path, "wb") as f:
@@ -864,8 +864,8 @@ async def sync_record_attachment_by_pk(
         )
 
     # Save binary file
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    safe_name = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+    safe_name = f"{inv.id}.{ext}"
     file_path = Path(settings.UPLOAD_DIR) / safe_name
 
     # Ensure upload directory exists
@@ -931,8 +931,8 @@ def sync_record_attachment_by_pk_base64(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid Base64 payload: {str(e)}")
 
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    safe_name = f"{timestamp}_{payload.file_name.replace(' ', '_')}"
+    ext = payload.file_name.split('.')[-1] if '.' in payload.file_name else 'pdf'
+    safe_name = f"{inv.id}.{ext}"
     file_path = Path(settings.UPLOAD_DIR) / safe_name
 
     # Ensure upload directory exists

@@ -606,13 +606,13 @@ async def upload_document(
     db: Session = Depends(get_db)
 ):
     timestamp = int(datetime.datetime.utcnow().timestamp())
-    filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    new_id = f"DOC-{timestamp % 100000}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+    filename = f"{new_id}.{ext}"
     file_path = settings.UPLOAD_DIR / filename
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
-    new_id = f"DOC-{timestamp % 100000}"
     
     amount = 45000.0
     base_amount = round(amount / 1.18, 2)
@@ -696,8 +696,8 @@ async def upload_and_route(
     if not inv:
         raise HTTPException(status_code=404, detail="Synced staging document not found")
 
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+    filename = f"{inv.id}.{ext}"
     file_path = settings.UPLOAD_DIR / filename
 
     with open(file_path, "wb") as buffer:
@@ -764,8 +764,8 @@ async def upload_invoice_version(
 ):
     inv = find_invoice_by_identifier(db, invoice_id)
 
-    timestamp = int(datetime.datetime.utcnow().timestamp())
-    filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+    filename = f"{inv.id}.{ext}"
     file_path = settings.UPLOAD_DIR / filename
 
     with open(file_path, "wb") as buffer:
