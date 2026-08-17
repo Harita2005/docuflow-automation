@@ -555,6 +555,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [selectedUser, setSelectedUser] = useState(DEFAULT_USERS[0]);
   const [userOverrides, setUserOverrides] = useState({});
 
+  const [search, setSearch] = useState("");
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
 
