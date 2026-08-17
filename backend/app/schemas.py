@@ -216,7 +216,7 @@ class BusinessRuleSchema(BaseModel):
 # --- AUDIT SCHEMAS ---
 class AuditLogResponse(BaseModel):
     id: int
-    invoice_id: str
+    invoice_id: Optional[str] = None
     user: str
     action: str
     stage: Optional[str] = None
