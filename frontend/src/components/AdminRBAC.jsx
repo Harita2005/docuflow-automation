@@ -555,9 +555,20 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [selectedUser, setSelectedUser] = useState(DEFAULT_USERS[0]);
   const [userOverrides, setUserOverrides] = useState({});
 
-  const [search, setSearch] = useState("");
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
+
+  // Add User modal states
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserEmpId, setNewUserEmpId] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("employee");
+  const [newUserDept, setNewUserDept] = useState("Finance");
+  const [newUserDivision, setNewUserDivision] = useState("VCC");
+  const [newUserPlant, setNewUserPlant] = useState("");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // States for adding dynamic permissions
   const [showAddPermissionModal, setShowAddPermissionModal] = useState(false);
@@ -1234,6 +1245,63 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserEmpId.trim() || !newUserPassword.trim()) {
+      setErrorMsg("Please fill in all required fields (Emp ID, Name, Email, Password).");
+      return;
+    }
+    setIsCreatingUser(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          employee_id: newUserEmpId.trim(),
+          employee_name: newUserName.trim(),
+          username: newUserEmpId.trim(),
+          email: newUserEmail.trim(),
+          password: newUserPassword,
+          role: newUserRole,
+          division: newUserDivision || "VCC",
+          department: newUserDept || "Finance",
+          plant: newUserPlant || null,
+          is_active: true,
+          mfa_enabled: false,
+          mfa_type: "EMAIL",
+          created_by: "System Admin"
+        })
+      });
+      if (res.ok) {
+        setSuccessMsg(`User "${newUserName}" created successfully.`);
+        await loadData();
+        setNewUserName("");
+        setNewUserEmail("");
+        setNewUserEmpId("");
+        setNewUserPassword("");
+        setNewUserRole("employee");
+        setNewUserDept("Finance");
+        setNewUserDivision("VCC");
+        setNewUserPlant("");
+        setShowAddUserModal(false);
+      } else {
+        const errData = await res.json();
+        setErrorMsg(errData.detail || "Failed to create user.");
+      }
+    } catch (err) {
+      setErrorMsg("Network error trying to create user.");
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
   const handleAddPermission = (e) => {
     e.preventDefault();
     if (!newPermId.trim() || !newPermLabel.trim()) return;
@@ -1483,6 +1551,16 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>Role</span>
+                </button>
+              )}
+              {activeTab === "users" && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(true)}
+                  className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>User</span>
                 </button>
               )}
               
@@ -2589,6 +2667,145 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   Create Permission
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: ADD NEW USER */}
+      {/* ========================================================= */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
+                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                <span>Add New Employee / User</span>
+              </h3>
+              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUser} className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Emp ID (Required)</label>
+                  <input 
+                    type="text"
+                    required
+                    value={newUserEmpId}
+                    onChange={e => setNewUserEmpId(e.target.value)}
+                    placeholder="e.g. 16220"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Full Name (Required)</label>
+                  <input 
+                    type="text"
+                    required
+                    value={newUserName}
+                    onChange={e => setNewUserName(e.target.value)}
+                    placeholder="e.g. Ram Kumar"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email (Required)</label>
+                  <input 
+                    type="email"
+                    required
+                    value={newUserEmail}
+                    onChange={e => setNewUserEmail(e.target.value)}
+                    placeholder="e.g. ram@company.com"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Password (Required)</label>
+                  <input 
+                    type="password"
+                    required
+                    value={newUserPassword}
+                    onChange={e => setNewUserPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
+                  <select
+                    value={newUserRole}
+                    onChange={e => setNewUserRole(e.target.value)}
+                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  >
+                    <option value="employee">General Employee</option>
+                    <option value="ap_specialist">AP Specialist</option>
+                    <option value="manager">Approver / Manager</option>
+                    <option value="auditor">Internal Auditor</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Division</label>
+                  <input 
+                    type="text"
+                    value={newUserDivision}
+                    onChange={e => setNewUserDivision(e.target.value)}
+                    placeholder="e.g. VCC"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
+                  <input 
+                    type="text"
+                    value={newUserDept}
+                    onChange={e => setNewUserDept(e.target.value)}
+                    placeholder="e.g. Finance"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Plant / Branch</label>
+                  <input 
+                    type="text"
+                    value={newUserPlant}
+                    onChange={e => setNewUserPlant(e.target.value)}
+                    placeholder="e.g. TN-SIVAKASI"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingUser}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1"
+                >
+                  {isCreatingUser && <Loader2 className="h-3 w-3 animate-spin" />}
+                  <span>Create User</span>
                 </button>
               </div>
             </form>
