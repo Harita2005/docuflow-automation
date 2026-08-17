@@ -216,15 +216,18 @@ class BusinessRuleSchema(BaseModel):
 # --- AUDIT SCHEMAS ---
 class AuditLogResponse(BaseModel):
     id: int
-    invoice_id: Optional[str] = None
+    invoice_id: Optional[str] = Field(None, validation_alias="invoice_id")
+    document_id: Optional[str] = Field(None, validation_alias="invoice_id")
     user: str
     action: str
     stage: Optional[str] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, validation_alias="notes")
+    details: Optional[str] = Field(None, validation_alias="notes")
     timestamp: datetime.datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 # --- ENTERPRISE DATA & ATTACHMENT SYNC SCHEMAS ---
 class DocumentSyncRequest(BaseModel):
