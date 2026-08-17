@@ -31,6 +31,10 @@ try:
                     conn.execute(text("ALTER TABLE invoices ADD sgst FLOAT NULL;"))
                 if 'igst' not in existing_cols_invoices:
                     conn.execute(text("ALTER TABLE invoices ADD igst FLOAT NULL;"))
+                if 'is_deleted' not in existing_cols_invoices:
+                    conn.execute(text("ALTER TABLE invoices ADD is_deleted BIT NOT NULL DEFAULT 0;"))
+                if 'deleted_at' not in existing_cols_invoices:
+                    conn.execute(text("ALTER TABLE invoices ADD deleted_at DATETIME NULL;"))
                 
                 # Users table migrations
                 existing_cols_users = [c['name'] for c in inspector.get_columns('users')]
@@ -46,6 +50,13 @@ try:
                     conn.execute(text("ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
                 if 'last_login' not in existing_cols_users:
                     conn.execute(text("ALTER TABLE users ADD last_login DATETIME NULL;"))
+                    
+                # Workflow profiles table migrations
+                existing_cols_workflows = [c['name'] for c in inspector.get_columns('workflow_profiles')]
+                if 'is_deleted' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD is_deleted BIT NOT NULL DEFAULT 0;"))
+                if 'deleted_at' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD deleted_at DATETIME NULL;"))
                     
             except Exception as col_err:
                 print(f"[Database] Column migration warning: {col_err}")
