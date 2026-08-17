@@ -1547,58 +1547,92 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {activeTab === "roles" && (
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[500px]">
-          {/* LEFT COMPONENT: Roles List */}
-          <div className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-slate-200 overflow-y-auto custom-scrollbar p-3 space-y-2.5 shrink-0 bg-slate-50/50">
-            <div className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
-              Select Role Group ({roles.length})
-            </div>
+          {/* LEFT COMPONENT: Roles Table Grid */}
+          <div className={`flex-1 flex flex-col overflow-y-auto min-w-0 bg-white ${selectedRoleId ? 'lg:border-r lg:border-slate-200' : ''}`}>
             
-            {roles.map(r => {
-              const isSelected = selectedRoleId === r.id;
-              const userCount = users.filter(u => u.role === r.id).length;
-              
-              return (
-                <div
-                  key={r.id}
-                  onClick={() => setSelectedRoleId(r.id)}
-                  className={`p-3 rounded-xl border cursor-pointer transition flex items-center gap-3 select-none ${
-                    isSelected 
-                      ? "bg-white border-blue-500 shadow-2xs ring-1 ring-blue-500/20" 
-                      : "bg-white border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center border shrink-0 ${
-                    r.id === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                    r.id === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                    r.id === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                    r.id === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                    "bg-slate-50 text-slate-600 border-slate-200"
-                  }`}>
-                    <Shield className="h-4 w-4" />
-                  </div>
-                  
-                  <div className="flex flex-col min-w-0 flex-1 text-left">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="font-extrabold text-[11px] text-slate-900 leading-tight truncate">{r.name}</span>
-                      <span className="text-[7.5px] font-bold px-1.5 py-0.2 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
-                        {r.badge}
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-slate-400 mt-1 flex items-center gap-1">
-                      <Users className="h-2.5 w-2.5" />
-                      <span>{userCount} employee{userCount !== 1 ? 's' : ''} assigned</span>
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            {/* Roles List Data Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[500px]">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[9.5px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                    <th className="px-3.5 py-2.5 w-[35%]">Role Group</th>
+                    <th className="px-3.5 py-2.5 w-[20%]">Status</th>
+                    <th className="px-3.5 py-2.5 w-[25%]">Assigned Employees</th>
+                    <th className="px-3.5 py-2.5 w-[20%]">Role Code</th>
+                    <th className="px-3.5 py-2.5 pr-6 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-[11px]">
+                  {roles.map(r => {
+                    const isSelected = selectedRoleId === r.id;
+                    const userCount = users.filter(u => u.role === r.id).length;
+                    
+                    return (
+                      <tr 
+                        key={r.id}
+                        onClick={() => setSelectedRoleId(r.id)}
+                        className={`hover:bg-slate-50/60 transition-colors cursor-pointer select-none ${
+                          isSelected ? 'bg-blue-50/25 font-semibold' : ''
+                        }`}
+                      >
+                        {/* Name + Shield Icon */}
+                        <td className="px-3.5 py-2.5 w-[35%] align-middle font-bold text-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center shrink-0 border ${
+                              r.id === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                              r.id === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                              r.id === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                              r.id === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                              "bg-slate-50 text-slate-600 border-slate-200"
+                            }`}>
+                              <Shield className="h-4 w-4" />
+                            </div>
+                            <span className="font-semibold text-slate-900">{r.name}</span>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-3.5 py-2.5 w-[20%] align-middle">
+                          <span className="px-2 py-0.5 rounded-full text-[8.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
+                            Active
+                          </span>
+                        </td>
+
+                        {/* Assigned Employees */}
+                        <td className="px-3.5 py-2.5 w-[25%] align-middle text-slate-650 font-medium">
+                          <div className="flex items-center gap-1.5">
+                            <Users className="h-3 w-3 text-slate-400" />
+                            <span>{userCount} employee{userCount !== 1 ? 's' : ''}</span>
+                          </div>
+                        </td>
+
+                        {/* Role Code / Badge */}
+                        <td className="px-3.5 py-2.5 w-[20%] align-middle">
+                          <span className="text-[7.5px] font-bold px-1.5 py-0.2 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
+                            {r.badge}
+                          </span>
+                        </td>
+
+                        {/* Action Link */}
+                        <td className="px-3.5 py-2.5 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
+                          <span className="text-[10px] font-semibold text-slate-400 hover:text-blue-600 transition cursor-pointer flex items-center justify-end gap-0.5" onClick={() => setSelectedRoleId(r.id)}>
+                            <span>View clearances</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* RIGHT COMPONENT: Role Permissions Matrix Toggles */}
-          {selectedRoleId ? (
-            <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          {selectedRoleId && (
+            <div className="w-full lg:w-[480px] bg-slate-50/20 border-t lg:border-t-0 border-slate-200 flex flex-col shrink-0 bg-white">
               {/* Panel Header */}
-              <div className="px-4 py-3 bg-slate-50/40 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className={`h-8 w-8 rounded-lg flex items-center justify-center border ${
                     selectedRoleId === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
@@ -1619,8 +1653,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   </div>
                 </div>
 
-                <div className="text-[9.5px] font-bold text-slate-500 uppercase">
-                  Role: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
+                <div className="flex items-center gap-2">
+                  <div className="text-[9.5px] font-bold text-slate-500 uppercase">
+                    Role: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setSelectedRoleId("")}
+                    className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1631,7 +1674,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </div>
 
               {/* Permissions list container */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar bg-white">
                 {filteredPermissions.map(cat => {
                   const catKey = cat.id || cat.category;
                   const isCollapsed = !!collapsedFolders[catKey];
@@ -1658,27 +1701,26 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
                       {/* Permissions List */}
                       {!isCollapsed && (
-                        <div className="p-2 space-y-1.5 bg-white divide-y divide-slate-100">
+                        <div className="divide-y divide-slate-100 bg-white">
                           {cat.items.map(item => {
                             const cell = rolePermissions[selectedRoleId]?.[item.id] || { read: false, write: false, admin: false };
-
                             return (
-                              <div key={item.id} className="p-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition duration-150 rounded-lg group">
-                                <div className="flex flex-col text-left min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-extrabold text-slate-900 text-[10.5px] leading-tight">{item.label}</span>
+                              <div key={item.id} className="p-3 hover:bg-slate-50/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left group">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-slate-800 text-[10.5px]">{item.label}</h4>
                                     {item.isCustom && (
-                                      <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-bold">
+                                      <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 text-[7px] font-extrabold uppercase border border-blue-100 leading-none">
                                         Custom
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[9px] text-slate-400 leading-normal mt-0.5 max-w-[320px] truncate">{item.desc}</span>
+                                  <p className="text-[9.5px] text-slate-400 font-medium">{item.desc}</p>
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
                                   {/* Delete Custom Permission */}
-                                  {isAdmin && (
+                                  {isAdmin && item.isCustom && (
                                     <button
                                       type="button"
                                       onClick={() => handleDeletePermission(item.id, item.label)}
@@ -1689,8 +1731,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     </button>
                                   )}
 
-                                  {/* View / Edit / Admin button matrix */}
-                                  <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 border border-slate-200/60 shrink-0">
+                                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
                                     <button
                                       type="button"
                                       onClick={() => toggleRolePerm(selectedRoleId, item.id, "read")}
@@ -1698,7 +1739,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                       className={`px-2 py-1 rounded text-[9px] font-bold cursor-pointer transition ${
                                         cell.read ? "bg-slate-800 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
                                       } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title="View Clearance"
+                                      title="Read-Only Clearance"
                                     >
                                       View
                                     </button>
@@ -1709,7 +1750,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                       className={`px-2 py-1 rounded text-[9px] font-bold cursor-pointer transition ${
                                         cell.write ? "bg-blue-600 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
                                       } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title="Edit Clearance"
+                                      title="Write / Modify Clearance"
                                     >
                                       Edit
                                     </button>
@@ -1735,10 +1776,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   );
                 })}
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-[11px]">
-              Select a role group from the left list to customize baseline clearances.
             </div>
           )}
         </div>
