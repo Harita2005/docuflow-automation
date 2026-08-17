@@ -22,13 +22,31 @@ try:
             # Add cgst, sgst, igst columns to invoices if missing
             try:
                 inspector = inspect(engine)
-                existing_cols = [c['name'] for c in inspector.get_columns('invoices')]
-                if 'cgst' not in existing_cols:
+                
+                # Invoices table migrations
+                existing_cols_invoices = [c['name'] for c in inspector.get_columns('invoices')]
+                if 'cgst' not in existing_cols_invoices:
                     conn.execute(text("ALTER TABLE invoices ADD cgst FLOAT NULL;"))
-                if 'sgst' not in existing_cols:
+                if 'sgst' not in existing_cols_invoices:
                     conn.execute(text("ALTER TABLE invoices ADD sgst FLOAT NULL;"))
-                if 'igst' not in existing_cols:
+                if 'igst' not in existing_cols_invoices:
                     conn.execute(text("ALTER TABLE invoices ADD igst FLOAT NULL;"))
+                
+                # Users table migrations
+                existing_cols_users = [c['name'] for c in inspector.get_columns('users')]
+                if 'is_deleted' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD is_deleted BIT NOT NULL DEFAULT 0;"))
+                if 'deleted_at' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD deleted_at DATETIME NULL;"))
+                if 'mfa_enabled' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD mfa_enabled BIT NOT NULL DEFAULT 0;"))
+                if 'mfa_type' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD mfa_type VARCHAR(50) NULL DEFAULT 'EMAIL';"))
+                if 'mfa_secret' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
+                if 'last_login' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD last_login DATETIME NULL;"))
+                    
             except Exception as col_err:
                 print(f"[Database] Column migration warning: {col_err}")
             
