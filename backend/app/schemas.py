@@ -1,5 +1,5 @@
 from typing import List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 import datetime
 
 # --- AUTH SCHEMAS ---
@@ -249,6 +249,7 @@ class DocumentSyncRequest(BaseModel):
     vendor_code: Optional[str] = Field(None, alias="CardCode", description="Vendor ERP Code")
     vendor_gstin: Optional[str] = Field(None, alias="GSTIN", description="Vendor 15-digit GSTIN")
     invoice_number: Optional[str] = Field(None, alias="DocRefNo", description="Vendor Invoice / Bill Ref No")
+    document_number: Optional[str] = Field(None, description="General Document / Record Reference Number")
     invoice_date: Optional[str] = Field(None, alias="DocDate", description="Invoice Date (YYYY-MM-DD)")
     po_number: Optional[str] = Field(None, alias="PONumber", description="Purchase Order Reference")
     
@@ -264,6 +265,19 @@ class DocumentSyncRequest(BaseModel):
     custom_data: Optional[dict] = Field(None, description="Additional arbitrary ERP custom attributes")
     auto_route: bool = Field(True, description="Immediately evaluate business rules and attach workflow")
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_numbers(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            doc_num = data.get("document_number")
+            inv_num = data.get("invoice_number") or data.get("DocRefNo")
+            if doc_num and not inv_num:
+                data["invoice_number"] = doc_num
+                data["DocRefNo"] = doc_num
+            elif inv_num and not doc_num:
+                data["document_number"] = inv_num
+        return data
+
     class Config:
         populate_by_name = True
 
@@ -273,6 +287,7 @@ class DocumentSyncResponse(BaseModel):
     document_id: str
     doc_key: Optional[int] = None
     invoice_number: Optional[str] = None
+    document_number: Optional[str] = None
     vendor_name: Optional[str] = None
     amount: float
     division: str
@@ -292,6 +307,7 @@ class BatchSyncItemResult(BaseModel):
     document_id: Optional[str] = None
     doc_key: Optional[int] = None
     invoice_number: Optional[str] = None
+    document_number: Optional[str] = None
     status: str # "SUCCESS" or "FAILED"
     error: Optional[str] = None
 
