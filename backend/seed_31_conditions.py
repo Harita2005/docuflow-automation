@@ -154,7 +154,7 @@ def seed_all_31_flows_and_conditions():
         employee_name="System Administrator",
         name="System Administrator",
         username="admin",
-        email="admin@docuflow.net",
+        email="harita010905@gmail.com",
         phone_number="+91 98421 00000",
         division="HQ",
         role="admin",

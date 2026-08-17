@@ -33,7 +33,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         (User.email.ilike(ident_str)) |
         (User.employee_id.ilike(ident_str)) |
         (User.user_uid.ilike(ident_str))
-    ).first()
+    ).filter(User.is_deleted == False).first()
 
     # Smart fallback: if user typed partial number or name
     if not user:
@@ -42,7 +42,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             (User.employee_id.ilike(f"%{ident_str}%")) |
             (User.username.ilike(f"%{ident_str}%")) |
             (User.name.ilike(f"%{ident_str}%"))
-        ).first()
+        ).filter(User.is_deleted == False).first()
 
     if not user:
         raise HTTPException(
@@ -79,7 +79,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Log User Login Audit Entry
     try:
         db.add(AuditLog(
-            invoice_id="AUTH_SESSION",
+            invoice_id=None,
             user=user.employee_name or user.name or user.username,
             action="User Logged In",
             stage="Authentication",
@@ -87,6 +87,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         ))
         db.commit()
     except Exception as e:
+        db.rollback()
         print("Audit log error on login:", e)
 
     return {
@@ -119,7 +120,7 @@ def send_otp(request: MFASendOTPRequest, db: Session = Depends(get_db)):
 
     method_upper = request.method.upper()
     if method_upper == "EMAIL":
-        success, msg = send_email_otp(user.email, user.employee_name or user.name, code)
+        success, msg = send_email_otp(user.email, user.employee_name or user.name, code, db=db)
         destination = mask_email(user.email)
     elif method_upper == "SMS":
         phone = user.phone_number or "+91 98765 43210"
@@ -215,7 +216,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
     # Log successful MFA audit trail
     try:
         db.add(AuditLog(
-            invoice_id="AUTH_SESSION",
+            invoice_id=None,
             user=user.employee_name or user.name or user.username,
             action="MFA Verified",
             stage="Authentication",
@@ -223,6 +224,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
         ))
         db.commit()
     except Exception as e:
+        db.rollback()
         print("Audit log error on MFA verify:", e)
 
     # Invalidate the MFA ticket
@@ -247,7 +249,7 @@ def logout(db: Session = Depends(get_db), current_user: User = Depends(get_curre
     if current_user:
         try:
             db.add(AuditLog(
-                invoice_id="AUTH_SESSION",
+                invoice_id=None,
                 user=current_user.employee_name or current_user.name or current_user.username,
                 action="User Logged Out",
                 stage="Authentication",
@@ -255,7 +257,7 @@ def logout(db: Session = Depends(get_db), current_user: User = Depends(get_curre
             ))
             db.commit()
         except Exception:
-            pass
+            db.rollback()
     return {"success": True, "message": "Logged out successfully"}
 
 @router.get("/me")

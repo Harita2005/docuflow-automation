@@ -35,7 +35,7 @@ def get_users(
         except Exception as e:
             print(f"[User Master] Auto-seed warning: {e}")
 
-    query = db.query(User)
+    query = db.query(User).filter(User.is_deleted == False)
     if not include_inactive:
         query = query.filter(User.is_active == True)
     if role:
@@ -55,13 +55,13 @@ def get_users(
 def get_user_by_id(user_identifier: str, db: Session = Depends(get_db)):
     user = None
     if user_identifier.isdigit():
-        user = db.query(User).filter(User.id == int(user_identifier)).first()
+        user = db.query(User).filter(User.id == int(user_identifier)).filter(User.is_deleted == False).first()
     if not user:
         user = db.query(User).filter(
             (User.employee_id == user_identifier) |
             (User.user_uid == user_identifier) |
             (User.username == user_identifier)
-        ).first()
+        ).filter(User.is_deleted == False).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="Employee not found in User Master")
@@ -139,7 +139,7 @@ def update_user_master(
     payload: UserMasterUpdate,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).filter(User.is_deleted == False).first()
     if not user:
         raise HTTPException(status_code=404, detail="Employee not found")
 
@@ -170,7 +170,7 @@ def toggle_user_status(
     payload: UserStatusToggleRequest,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).filter(User.is_deleted == False).first()
     if not user:
         raise HTTPException(status_code=404, detail="Employee not found")
 
@@ -184,9 +184,10 @@ def toggle_user_status(
 @router.delete("/{user_id}")
 @admin_router.delete("/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).filter(User.is_deleted == False).first()
     if not user:
         raise HTTPException(status_code=404, detail="Employee not found")
-    db.delete(user)
+    user.is_deleted = True
+    user.deleted_at = datetime.datetime.utcnow()
     db.commit()
     return {"success": True, "message": f"Employee {user.employee_id} deleted successfully"}

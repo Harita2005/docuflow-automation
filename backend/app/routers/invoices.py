@@ -2,6 +2,9 @@ import os
 import json
 import shutil
 import datetime
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
@@ -9,8 +12,14 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
-from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, User
-from app.schemas import InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest
+from app.models import (
+    Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, User,
+    ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig
+)
+from app.schemas import (
+    InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest,
+    NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
+)
 from app.auth import get_current_user
 from app.services.rules_engine import evaluate_business_rules
 from app.services.ocr_service import extract_text_from_pdf
@@ -28,16 +37,16 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
         (Invoice.id == id_clean) |
         (Invoice.invoice_number == raw_str) |
         (Invoice.invoice_number == id_clean)
-    ).first()
+    ).filter(Invoice.is_deleted == False).first()
     
     # 2. Integer comparison ONLY on integer column Invoice.doc_key
     if not inv and id_clean.isdigit():
         num = int(id_clean)
-        inv = db.query(Invoice).filter(Invoice.doc_key == num).first()
+        inv = db.query(Invoice).filter(Invoice.doc_key == num).filter(Invoice.is_deleted == False).first()
         
     if not inv and raw_str.isdigit():
         num = int(raw_str)
-        inv = db.query(Invoice).filter(Invoice.doc_key == num).first()
+        inv = db.query(Invoice).filter(Invoice.doc_key == num).filter(Invoice.is_deleted == False).first()
         
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
@@ -47,7 +56,7 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
 @router.get("/api/documents", response_model=List[InvoiceResponse])
 @router.get("/api/invoices", response_model=List[InvoiceResponse])
 def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user)):
-    invoices = db.query(Invoice).order_by(Invoice.created_at.desc()).all()
+    invoices = db.query(Invoice).filter(Invoice.is_deleted == False).order_by(Invoice.created_at.desc()).all()
     
     approved_invoice_ids = set()
     if current_user:
@@ -87,6 +96,24 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
         inv_res.has_approved = has_appr
         results.append(inv_res)
 
+    return results
+
+@router.get("/api/documents/synced-pending", response_model=List[InvoiceResponse])
+@router.get("/api/records/synced-pending", response_model=List[InvoiceResponse])
+@router.get("/api/invoices/synced-pending", response_model=List[InvoiceResponse])
+def get_synced_pending_documents(db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user)):
+    invoices = db.query(Invoice).filter(
+        Invoice.is_deleted == False,
+        Invoice.doc_key.isnot(None),
+        (Invoice.file_url == None) | (Invoice.file_url == "")
+    ).order_by(Invoice.created_at.desc()).all()
+    
+    results = []
+    for inv in invoices:
+        inv_res = InvoiceResponse.from_orm(inv)
+        inv_res.is_current_approver = False
+        inv_res.has_approved = False
+        results.append(inv_res)
     return results
 
 @router.get("/api/records/{invoice_id}")
@@ -258,6 +285,28 @@ def workflow_approve_payload(
     
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user)
+
+    # Verify that all checklist items for the current stage are checked
+    current_step_name = "Attachment Status"
+    if inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+        ).first()
+        if step:
+            current_step_name = step.step_name
+
+    unchecked_mandatory_items = db.query(InvoiceChecklistState).filter(
+        InvoiceChecklistState.invoice_id == inv.id,
+        InvoiceChecklistState.stage_name == current_step_name,
+        InvoiceChecklistState.is_checked == False
+    ).all()
+
+    if unchecked_mandatory_items:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Compliance Checklist Incomplete: Please verify and check all required checklist items for {current_step_name} before approving."
+        )
     
     # Capture exact approver identity (Employee Name + Username/Email)
     approver_name = payload.get("approver") or payload.get("user") or payload.get("username")
@@ -283,6 +332,57 @@ def workflow_approve_payload(
             if next_step:
                 inv.assigned_approver = next_step.approver_target
                 next_assigned_info = f"Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}."
+
+                # Auto-initialize checklist items in the database for the next stage
+                def get_wf_name(profile_id, total):
+                    p = (profile_id or "").upper()
+                    if "GRN" in p: return "ACM_GRN_Header_2stages"
+                    if "ENES" in p: return "ENES_ASSET_STAGE _6"
+                    if "VCC_PURCHASE" in p or "FIXED_ASSET" in p:
+                        if total == 2: return "VCC_DA_IA_FLOW"
+                        elif total == 3: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+                        elif total == 5: return "VCC_DocApprovalFlow_All5_W-A"
+                        elif total == 4: return "VCC_DocApprovalFlow_DA_FA_IA_FIA_W-B"
+                        else: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+                    if "EVOUCHER_INV" in p: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+                    return "All_General_Temp"
+                wf_checklist_name = get_wf_name(inv.workflow_profile_id, inv.total_stages or 2)
+                templates = db.query(ChecklistTemplate).filter(
+                    ChecklistTemplate.workflow_profile == wf_checklist_name,
+                    ChecklistTemplate.stage_name == next_step.step_name
+                ).all()
+                if not templates:
+                    templates = db.query(ChecklistTemplate).filter(
+                        ChecklistTemplate.workflow_profile == "All_General_Temp",
+                        ChecklistTemplate.stage_name == next_step.step_name
+                    ).all()
+
+                existing_next_items = db.query(InvoiceChecklistState).filter(
+                    InvoiceChecklistState.invoice_id == inv.id,
+                    InvoiceChecklistState.stage_name == next_step.step_name
+                ).all()
+                if not existing_next_items:
+                    if templates:
+                        for t in templates:
+                            db.add(InvoiceChecklistState(
+                                invoice_id=inv.id,
+                                stage_name=next_step.step_name,
+                                item_text=t.item_text,
+                                is_checked=False
+                            ))
+                        inv.checklist_state = json.dumps({t.item_text: False for t in templates})
+                    else:
+                        from app.routers.sync import generate_compliance_checklist_for_category
+                        default_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
+                        for item_text in default_items:
+                            db.add(InvoiceChecklistState(
+                                invoice_id=inv.id,
+                                stage_name=next_step.step_name,
+                                item_text=item_text,
+                                is_checked=False
+                            ))
+                        inv.checklist_state = json.dumps({item_text: False for item_text in default_items})
+
         inv.status = f"In Progress (Stage {inv.current_stage})"
     else:
         inv.status = "Settled"
@@ -621,6 +721,9 @@ async def upload_and_route(
         inv.tax_amount = round(amount - inv.base_amount, 2)
     if invoiceDate: inv.invoice_date = invoiceDate
     if poNumber: inv.po_number = poNumber
+    if cgst is not None: inv.cgst = cgst
+    if sgst is not None: inv.sgst = sgst
+    if igst is not None: inv.igst = igst
     
     matched_wf = evaluate_business_rules(db, inv)
     if not matched_wf:
@@ -767,10 +870,10 @@ def get_document_versions(id: str, db: Session = Depends(get_db)):
 @router.get("/api/stats")
 @router.get("/api/dashboard/stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
-    total = db.query(Invoice).count()
-    pending = db.query(Invoice).filter(Invoice.status.ilike("%Pending%") | Invoice.status.ilike("%Initiated%") | Invoice.status.ilike("%Progress%")).count()
-    approved = db.query(Invoice).filter(Invoice.status.ilike("%Settled%") | Invoice.status.ilike("%Approved%")).count()
-    total_val = sum(float(i.amount or 0.0) for i in db.query(Invoice).all())
+    total = db.query(Invoice).filter(Invoice.is_deleted == False).count()
+    pending = db.query(Invoice).filter(Invoice.is_deleted == False).filter(Invoice.status.ilike("%Pending%") | Invoice.status.ilike("%Initiated%") | Invoice.status.ilike("%Progress%")).count()
+    approved = db.query(Invoice).filter(Invoice.is_deleted == False).filter(Invoice.status.ilike("%Settled%") | Invoice.status.ilike("%Approved%")).count()
+    total_val = sum(float(i.amount or 0.0) for i in db.query(Invoice).filter(Invoice.is_deleted == False).all())
     return {
         "totalDocuments": total,
         "pendingApprovals": pending,
@@ -842,16 +945,123 @@ def get_admin_recycle_bin(db: Session = Depends(get_db)):
 
 @router.get("/api/admin/notifications/provider")
 def get_admin_notifications_provider(db: Session = Depends(get_db)):
+    config = db.query(NotificationProviderConfig).first()
+    if config:
+        return {
+            "smtp_server": config.smtp_server,
+            "port": config.port,
+            "username": config.username,
+            "encrypted_password": config.encrypted_password,
+            "sender_email": config.sender_email,
+            "sender_name": config.sender_name
+        }
     return {
-        "provider": "Office365 SMTP",
-        "host": "smtp.office365.com",
+        "smtp_server": "smtp.office365.com",
         "port": 587,
-        "user": "Sqlalerts@ramrajcotton.net"
+        "username": "Sqlalerts@ramrajcotton.net",
+        "encrypted_password": "",
+        "sender_email": "Sqlalerts@ramrajcotton.net",
+        "sender_name": "DocuFlow Alerts"
     }
+
+@router.post("/api/admin/notifications/provider")
+def save_admin_notifications_provider(payload: NotificationProviderSchema, db: Session = Depends(get_db)):
+    config = db.query(NotificationProviderConfig).first()
+    if not config:
+        config = NotificationProviderConfig(
+            smtp_server=payload.smtp_server,
+            port=payload.port,
+            username=payload.username,
+            encrypted_password=payload.encrypted_password,
+            sender_email=payload.sender_email,
+            sender_name=payload.sender_name
+        )
+        db.add(config)
+    else:
+        config.smtp_server = payload.smtp_server
+        config.port = payload.port
+        config.username = payload.username
+        config.encrypted_password = payload.encrypted_password
+        config.sender_email = payload.sender_email
+        config.sender_name = payload.sender_name
+    db.commit()
+    return {"success": True, "message": "SMTP provider configuration saved successfully"}
 
 @router.get("/api/admin/notifications/raci")
 def get_admin_notifications_raci(db: Session = Depends(get_db)):
-    return []
+    items = db.query(NotificationRaciMatrix).all()
+    return [
+        {
+            "workflow_profile": item.workflow_profile,
+            "event_name": item.event_name,
+            "responsible_emails": item.responsible_emails,
+            "accountable_emails": item.accountable_emails,
+            "consulted_emails": item.consulted_emails,
+            "informed_emails": item.informed_emails,
+            "title_template": item.title_template,
+            "message_template": item.message_template
+        }
+        for item in items
+    ]
+
+@router.post("/api/admin/notifications/raci")
+def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session = Depends(get_db)):
+    item = db.query(NotificationRaciMatrix).filter(
+        NotificationRaciMatrix.workflow_profile == payload.workflow_profile,
+        NotificationRaciMatrix.event_name == payload.event_name
+    ).first()
+    
+    if not item:
+        item = NotificationRaciMatrix(
+            workflow_profile=payload.workflow_profile,
+            event_name=payload.event_name
+        )
+        db.add(item)
+        
+    item.responsible_emails = payload.responsible_emails
+    item.accountable_emails = payload.accountable_emails
+    item.consulted_emails = payload.consulted_emails
+    item.informed_emails = payload.informed_emails
+    item.title_template = payload.title_template
+    item.message_template = payload.message_template
+    
+    db.commit()
+    return {"success": True, "message": f"RACI configuration saved for {payload.event_name}"}
+
+@router.post("/api/admin/notifications/test")
+def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session = Depends(get_db)):
+    config = db.query(NotificationProviderConfig).first()
+    smtp_host = config.smtp_server if config else "smtp.office365.com"
+    smtp_port = config.port if config else 587
+    smtp_user = config.username if config else "Sqlalerts@ramrajcotton.net"
+    smtp_pass = config.encrypted_password if config else ""
+    sender_email = (config.sender_email if config else None) or smtp_user or "no-reply@docuflow.net"
+    sender_name = (config.sender_name if config else None) or "DocuFlow Alerts"
+    
+    if not smtp_host or not smtp_user:
+         raise HTTPException(status_code=400, detail="Incomplete SMTP settings (Host and Username are required)")
+         
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = payload.subject
+        msg["From"] = f"{sender_name} <{sender_email}>"
+        msg["To"] = payload.to
+        
+        msg.attach(MIMEText(payload.html, "html"))
+        
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=8)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
+            server.starttls()
+            
+        if smtp_pass:
+            server.login(smtp_user, smtp_pass)
+        server.sendmail(sender_email, [payload.to], msg.as_string())
+        server.quit()
+        return {"success": True, "message": f"Test email sent to {payload.to}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/admin/notifications/inapp-config")
 def get_admin_notifications_inapp_config(db: Session = Depends(get_db)):
@@ -881,4 +1091,122 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
         "status": "Approved",
         "items": []
     }
+
+@router.get("/api/invoices/{invoice_id}/checklist")
+def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
+    inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    current_step_name = "Attachment Status"
+    if inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+        ).first()
+        if step:
+            current_step_name = step.step_name
+
+    items = db.query(InvoiceChecklistState).filter(
+        InvoiceChecklistState.invoice_id == inv.id,
+        InvoiceChecklistState.stage_name == current_step_name
+    ).order_by(InvoiceChecklistState.id.asc()).all()
+
+    if not items:
+        # Fallback to load checklist templates
+        def get_wf_name(profile_id, total):
+            p = (profile_id or "").upper()
+            if "GRN" in p: return "ACM_GRN_Header_2stages"
+            if "ENES" in p: return "ENES_ASSET_STAGE _6"
+            if "VCC_PURCHASE" in p or "FIXED_ASSET" in p:
+                if total == 2: return "VCC_DA_IA_FLOW"
+                elif total == 3: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+                elif total == 5: return "VCC_DocApprovalFlow_All5_W-A"
+                elif total == 4: return "VCC_DocApprovalFlow_DA_FA_IA_FIA_W-B"
+                else: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+            if "EVOUCHER_INV" in p: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
+            return "All_General_Temp"
+        wf_checklist_name = get_wf_name(inv.workflow_profile_id, inv.total_stages or 2)
+        templates = db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == wf_checklist_name,
+            ChecklistTemplate.stage_name == current_step_name
+        ).all()
+        if templates:
+            for t in templates:
+                item = InvoiceChecklistState(
+                    invoice_id=inv.id,
+                    stage_name=current_step_name,
+                    item_text=t.item_text,
+                    is_checked=False
+                )
+                db.add(item)
+                items.append(item)
+            db.commit()
+        else:
+            from app.routers.sync import generate_compliance_checklist_for_category
+            default_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
+            for t_text in default_items:
+                item = InvoiceChecklistState(
+                    invoice_id=inv.id,
+                    stage_name=current_step_name,
+                    item_text=t_text,
+                    is_checked=False
+                )
+                db.add(item)
+                items.append(item)
+            db.commit()
+
+    return [
+        {
+            "id": item.id,
+            "item_text": item.item_text,
+            "is_checked": item.is_checked,
+            "checked_by": item.checked_by,
+            "checked_at": item.checked_at
+        }
+        for item in items
+    ]
+
+@router.post("/api/invoices/{invoice_id}/checklist")
+def update_invoice_checklist(
+    invoice_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user)
+):
+    inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    checked_items = payload.get("checked_items", [])
+    
+    current_step_name = "Attachment Status"
+    if inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+        ).first()
+        if step:
+            current_step_name = step.step_name
+
+    items = db.query(InvoiceChecklistState).filter(
+        InvoiceChecklistState.invoice_id == inv.id,
+        InvoiceChecklistState.stage_name == current_step_name
+    ).all()
+
+    username = user.username if user else "System Admin"
+
+    for item in items:
+        old_checked = item.is_checked
+        item.is_checked = (item.item_text in checked_items)
+        if item.is_checked and not old_checked:
+            item.checked_by = username
+            item.checked_at = datetime.datetime.utcnow()
+        elif not item.is_checked:
+            item.checked_by = None
+            item.checked_at = None
+    
+    inv.checklist_state = json.dumps({item.item_text: item.is_checked for item in items})
+    db.commit()
+    return {"success": True, "checklist": [{"item_text": item.item_text, "is_checked": item.is_checked} for item in items]}
 

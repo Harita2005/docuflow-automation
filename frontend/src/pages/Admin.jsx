@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2 } from 'lucide-react';
-import AdminUsers from '../components/AdminUsers.jsx';
 import AdminMasterData from '../components/AdminMasterData.jsx';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
@@ -401,19 +400,19 @@ export default function Admin() {
             <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">Workflow & Rules</h3>
             <button
               onClick={() => setActiveTab("routing")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "routing" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "routing" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Flow Builder
             </button>
             <button
               onClick={() => setActiveTab("matrix")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Condition Builder
             </button>
             <button
               onClick={() => setActiveTab("templates")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               AI Templates
             </button>
@@ -422,21 +421,16 @@ export default function Admin() {
           {/* WORKSPACE & ACCESS */}
           <div className="space-y-0.5">
             <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">Workspace & Access</h3>
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "users" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              IAM & Users
-            </button>
+
             <button
               onClick={() => setActiveTab("rbac")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "rbac" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "rbac" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Role Matrix (RBAC)
             </button>
             <button
               onClick={() => setActiveTab("recycle")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "recycle" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "recycle" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Recycle Bin (Trash)
             </button>
@@ -447,31 +441,31 @@ export default function Admin() {
             <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">System Administration</h3>
             <button
               onClick={() => setActiveTab("raci")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "raci" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "raci" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Email & RACI
             </button>
             <button
               onClick={() => setActiveTab("inapp")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "inapp" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "inapp" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               In-App Notifications
             </button>
             <button
               onClick={() => setActiveTab("audit")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "audit" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "audit" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Audit Logs
             </button>
             <button
               onClick={() => setActiveTab("system")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               System Settings
             </button>
             <button
               onClick={() => setActiveTab("backups")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "backups" ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "backups" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               System Backups
             </button>
@@ -493,7 +487,6 @@ export default function Admin() {
                   {activeTab === 'matrix' && 'Condition Policy Matrix'}
                   {activeTab === 'routing' && 'Flow Builder'}
                   {activeTab === 'templates' && 'AI Templates'}
-                  {activeTab === 'users' && 'IAM & Users'}
                   {activeTab === 'rbac' && 'Role Access Configuration'}
                   {activeTab === 'masterdata' && 'ERP Master'}
                   {activeTab === 'system' && 'System Settings'}
@@ -1001,14 +994,10 @@ export default function Admin() {
       </div>
     )}
 
-    {activeTab === "users" && (
-      <div className="w-full animate-fadeIn transition-all">
-        <AdminUsers />
-      </div>
-    )}
+
 
     {activeTab === "rbac" && (
-      <div className="w-full animate-fadeIn transition-all">
+      <div className="w-full h-full flex flex-col min-h-0 animate-fadeIn transition-all">
         <AdminRBAC />
       </div>
     )}

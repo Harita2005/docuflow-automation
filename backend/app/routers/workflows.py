@@ -10,7 +10,7 @@ router = APIRouter(tags=["Workflow Administration"])
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
 def get_workflow_profiles(db: Session = Depends(get_db)):
-    profiles = db.query(WorkflowProfile).order_by(WorkflowProfile.id.asc()).all()
+    profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.id.asc()).all()
     result = []
     for p in profiles:
         steps = db.query(WorkflowStepDefinition).filter(
@@ -44,7 +44,7 @@ def get_workflow_steps(db: Session = Depends(get_db)):
 def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(get_db)):
     existing = db.query(WorkflowProfile).filter(
         WorkflowProfile.profile_name == payload.profile_name
-    ).first()
+    ).filter(WorkflowProfile.is_deleted == False).first()
 
     if existing:
         existing.workflow_code = payload.workflow_code
@@ -99,7 +99,7 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
 @router.get("/api/admin/workflows/{profile_name}", response_model=WorkflowProfileSchema)
 @router.get("/api/workflows/{profile_name}", response_model=WorkflowProfileSchema)
 def get_single_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
-    p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
+    p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).filter(WorkflowProfile.is_deleted == False).first()
     if not p:
         raise HTTPException(status_code=404, detail="Workflow not found")
     steps = db.query(WorkflowStepDefinition).filter(
@@ -133,19 +133,25 @@ def delete_category_endpoint(category_name: str, db: Session = Depends(get_db)):
         (WorkflowProfile.workflow_category == decoded) |
         (WorkflowProfile.workflow_category.ilike(raw_name)) |
         (WorkflowProfile.workflow_category.ilike(decoded))
-    ).all()
+    ).filter(WorkflowProfile.is_deleted == False).all()
     
     for p in profiles:
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p.profile_name).delete()
-        db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).delete()
-        db.delete(p)
+        p.is_deleted = True
+        p.deleted_at = datetime.datetime.utcnow()
+        db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).update({
+            "is_deleted": True,
+            "deleted_at": datetime.datetime.utcnow()
+        }, synchronize_session='fetch')
         
     db.query(BusinessRule).filter(
         (BusinessRule.rule_category == raw_name) |
         (BusinessRule.rule_category == decoded) |
         (BusinessRule.rule_category.ilike(raw_name)) |
         (BusinessRule.rule_category.ilike(decoded))
-    ).delete()
+    ).update({
+        "is_deleted": True,
+        "deleted_at": datetime.datetime.utcnow()
+    }, synchronize_session='fetch')
     
     db.commit()
     return {"success": True, "category": decoded, "deleted_workflows": len(profiles)}
@@ -162,14 +168,17 @@ def delete_workflow_profile(profile_name: str, db: Session = Depends(get_db)):
         (WorkflowProfile.profile_name == decoded) |
         (WorkflowProfile.profile_name.ilike(raw_name)) |
         (WorkflowProfile.profile_name.ilike(decoded))
-    ).first()
+    ).filter(WorkflowProfile.is_deleted == False).first()
     
     if not p:
         raise HTTPException(status_code=404, detail=f"Workflow '{profile_name}' not found")
     
-    db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p.profile_name).delete()
-    db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).delete()
-    db.delete(p)
+    p.is_deleted = True
+    p.deleted_at = datetime.datetime.utcnow()
+    db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).update({
+        "is_deleted": True,
+        "deleted_at": datetime.datetime.utcnow()
+    }, synchronize_session='fetch')
     db.commit()
     return {"success": True, "deleted": p.profile_name}
 

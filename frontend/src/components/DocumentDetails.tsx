@@ -319,6 +319,7 @@ export default function DocumentDetails({
   const [activeApprovalLog, setActiveApprovalLog] = useState<any>(null);
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
+  const [iframeSrc, setIframeSrc] = useState<string>("");
   const [workflowInstance, setWorkflowInstance] =
     useState<DbWorkflowInstance | null>(null);
   const [workflowSteps, setWorkflowSteps] = useState<any[]>([]);
@@ -474,68 +475,55 @@ export default function DocumentDetails({
               : [],
         })),
       );
-
-      // Dynamic tailored compliance checklist based on category/flow
-      let dynamicItems = [
-        "Documents Attached",
-        "Party Name & Total Amount Verified",
-        "Vendor GST no, Signaure Verified",
-        "Bill No ,Date & Address Verified",
-        "Tax portion verified (GST, TDS, etc..)",
-        "RO/PO Verified",
-        "Gate Inward, GRN, Debit/Credit Note Verified",
-        "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
-        "Advance, Narration, Supportive Copy (If Any)"
-      ];
-      const cat = (document.category || "").toLowerCase();
-      if (cat.includes("rent") || cat.includes("eb") || cat.includes("deposit") || cat.includes("electricity") || cat.includes("tel")) {
-        dynamicItems = [
-          "Rental Agreement / EB Bill Copy Attached",
-          "Meter Reading & Tariff Slab Verified",
-          "Premises / Branch Address Verified",
-          "Landlord / Service Provider Bank Details Verified",
-          "TDS Deduction (Sec 194I / 194C) Calculated",
-          "Prior Month Advance / Arrears Reconciled",
-          "Cost Center & Plant GL Code Validated",
-          "Authorized Signatory Sign-off Verified"
-        ];
-      } else if (cat.includes("asset") || cat.includes("capex") || cat.includes("machinery") || cat.includes("equipment")) {
-        dynamicItems = [
-          "Asset Purchase Order & Approval Attached",
-          "Physical Asset Delivery & Serial No. Verified",
-          "Vendor GSTIN & Tax Invoice Verified",
-          "Plant & Cost Center Tagging Verified",
-          "Gate Inward / GRN Verified",
-          "Asset Capitalization & Depreciation GL Validated",
-          "Advance / Retention Amount Adjusted",
-          "Authorized Signatory & HOD Approval Verified"
-        ];
-      } else if (cat.includes("freight") || cat.includes("transport") || cat.includes("logistics") || cat.includes("courier")) {
-        dynamicItems = [
-          "Consignment Note / Lorry Receipt (LR) Attached",
-          "Trip Sheet & Vehicle Number Verified",
-          "Weight, Distance & Freight Rate Verified",
-          "Vendor GSTIN & Tax Invoice Verified",
-          "RCM (Reverse Charge Mechanism) Applicability Verified",
-          "Gate Inward Verification Completed",
-          "Cost Center & Plant Accounting Verified"
-        ];
-      }
-
-      setChecklistItems(dynamicItems);
-      const initStates: Record<string, boolean> = {};
-      dynamicItems.forEach((it: string) => {
-        initStates[it] = true;
-      });
-      setCheckedStates(initStates);
     }
   }, [document, isEditing]);
+
+  useEffect(() => {
+    const fetchChecklist = async () => {
+      if (!document || !document.id) return;
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch(`/api/invoices/${document.id}/checklist`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.map((item: any) => item.item_text);
+          const states: Record<string, boolean> = {};
+          data.forEach((item: any) => {
+            states[item.item_text] = !!item.is_checked;
+          });
+          setChecklistItems(items);
+          setCheckedStates(states);
+        }
+      } catch (e) {
+        console.error("Failed to fetch checklist from backend:", e);
+      }
+    };
+
+    fetchChecklist();
+  }, [document]);
 
   useEffect(() => {
     if (!document) {
       onGoBack();
     }
   }, [document, onGoBack]);
+
+  useEffect(() => {
+    if (!document) {
+      setIframeSrc("");
+      return;
+    }
+    const rawPath = document.file_url || document.file_path || "";
+    const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
+    const path = isAbsolute ? rawPath : `/${rawPath}`;
+    const newSrc = rawPath ? encodeURI(path) : "";
+    if (newSrc !== iframeSrc) {
+      setIframeSrc(newSrc);
+    }
+  }, [document?.id, document?.file_url, document?.file_path, iframeSrc]);
 
   if (!document) return null;
 
@@ -654,6 +642,50 @@ export default function DocumentDetails({
       setActionError(err.message || "Hold action failed");
     }
     setActionLoading(false);
+  };
+
+  const handleToggleChecklist = async (itemText: string) => {
+    const updatedStates = { ...checkedStates, [itemText]: !checkedStates[itemText] };
+    setCheckedStates(updatedStates);
+    
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
+      await fetch(`/api/invoices/${document.id}/checklist`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ checked_items })
+      });
+    } catch (e) {
+      console.error("Failed to update checklist state on server:", e);
+    }
+  };
+
+  const handleToggleAllChecklist = async () => {
+    const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
+    const updatedStates: Record<string, boolean> = {};
+    effectiveChecklist.forEach((item) => {
+      updatedStates[item] = !allChecked;
+    });
+    setCheckedStates(updatedStates);
+    
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
+      await fetch(`/api/invoices/${document.id}/checklist`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ checked_items })
+      });
+    } catch (e) {
+      console.error("Failed to batch update checklist state on server:", e);
+    }
   };
 
   const handleInlineApprove = async () => {
@@ -1249,17 +1281,10 @@ export default function DocumentDetails({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
-                    const updated: Record<string, boolean> = {};
-                    effectiveChecklist.forEach((item) => {
-                      updated[item] = !allChecked;
-                    });
-                    setCheckedStates(updated);
-                  }}
+                  onClick={handleToggleAllChecklist}
                   className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
                 >
-                  {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All (9 Points)"}
+                  {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
                 </button>
               </div>
 
@@ -1270,7 +1295,7 @@ export default function DocumentDetails({
                   return (
                     <div
                       key={idx}
-                      onClick={() => setCheckedStates((prev) => ({ ...prev, [item]: !prev[item] }))}
+                      onClick={() => handleToggleChecklist(item)}
                       className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 select-none shadow-2xs hover:shadow-xs active:scale-[0.99] ${
                         isChecked
                           ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold"
@@ -1359,9 +1384,9 @@ export default function DocumentDetails({
 
             {/* LIVE ORIGINAL PDF VIEWER OR STAGE 1 ATTACHMENT DROPZONE */}
             <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
-              {(document.file_url || document.file_path) ? (
+              {(iframeSrc) ? (
                 <iframe
-                  src={encodeURI((document.file_url || document.file_path || "").startsWith('/') || (document.file_url || document.file_path || "").startsWith('http') ? (document.file_url || document.file_path || "") : `/${document.file_url || document.file_path}`)}
+                  src={iframeSrc}
                   title={document.file_name || `${document.id}.pdf`}
                   className="w-full h-full border-0 rounded-lg bg-white shadow-inner"
                 />

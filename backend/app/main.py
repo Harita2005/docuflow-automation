@@ -8,9 +8,34 @@ from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile
 from app.routers import auth, users, invoices, workflows, conditions, audit, sync
 
-# Initialize database schema tables on import
+# Initialize database schema tables and run migrations on import
 try:
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migrate SQL Server schema columns immediately on import
+    from sqlalchemy import text, inspect
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='invoices' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE invoices ALTER COLUMN doc_num VARCHAR(100) NULL;"))
+            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND IS_NULLABLE='NO') ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
+            
+            # Add cgst, sgst, igst columns to invoices if missing
+            try:
+                inspector = inspect(engine)
+                existing_cols = [c['name'] for c in inspector.get_columns('invoices')]
+                if 'cgst' not in existing_cols:
+                    conn.execute(text("ALTER TABLE invoices ADD cgst FLOAT NULL;"))
+                if 'sgst' not in existing_cols:
+                    conn.execute(text("ALTER TABLE invoices ADD sgst FLOAT NULL;"))
+                if 'igst' not in existing_cols:
+                    conn.execute(text("ALTER TABLE invoices ADD igst FLOAT NULL;"))
+            except Exception as col_err:
+                print(f"[Database] Column migration warning: {col_err}")
+            
+            conn.commit()
+        print("[Database] Schema migrations completed successfully.")
+    except Exception as mig_err:
+        print(f"[Database] Migration error: {mig_err}")
 except Exception as e:
     print(f"[Database] Warning on table creation: {e}")
 
@@ -24,16 +49,6 @@ app = FastAPI(
 @app.on_event("startup")
 def startup_event():
     try:
-        Base.metadata.create_all(bind=engine)
-        
-        # Auto-migrate SQL Server schema columns if needed
-        from sqlalchemy import text
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='invoices' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE invoices ALTER COLUMN doc_num VARCHAR(100) NULL;"))
-                conn.commit()
-        except Exception as mig_err:
-            pass
 
         db = SessionLocal()
         user_count = db.query(User).count()

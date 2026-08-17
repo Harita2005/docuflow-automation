@@ -54,7 +54,7 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter((User.username == username) | (User.email == username)).first()
+    user = db.query(User).filter((User.username == username) | (User.email == username)).filter(User.is_deleted == False).first()
     if user is None:
         raise credentials_exception
     return user

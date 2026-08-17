@@ -118,6 +118,9 @@ class InvoiceBase(BaseModel):
     checklist_state: Optional[str] = None
     line_items_json: Optional[str] = None
     file_url: Optional[str] = None
+    cgst: Optional[float] = 0.0
+    sgst: Optional[float] = 0.0
+    igst: Optional[float] = 0.0
 
 class InvoiceCreate(InvoiceBase):
     id: Optional[str] = None
@@ -314,4 +317,28 @@ class AttachmentSyncResponse(BaseModel):
     file_url: str
     file_size_bytes: int
     ocr_extracted_fields: Optional[dict] = None
+
+class NotificationProviderSchema(BaseModel):
+    smtp_server: str
+    port: int = 587
+    username: Optional[str] = None
+    encrypted_password: Optional[str] = None
+    sender_email: Optional[str] = None
+    sender_name: Optional[str] = None
+
+class NotificationRaciSchema(BaseModel):
+    workflow_profile: str
+    event_name: str
+    responsible_emails: Optional[str] = None
+    accountable_emails: Optional[str] = None
+    consulted_emails: Optional[str] = None
+    informed_emails: Optional[str] = None
+    title_template: Optional[str] = None
+    message_template: Optional[str] = None
+
+class NotificationTestSchema(BaseModel):
+    to: str
+    subject: str
+    html: str
+
 

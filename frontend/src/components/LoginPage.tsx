@@ -24,8 +24,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpError, setOtpError] = useState<string>("");
   const [otpSentNotice, setOtpSentNotice] = useState<string>("");
-  
-  // Resend Countdown Timer
+  const [previewOtp, setPreviewOtp] = useState<string>("");
+
   const [resendTimer, setResendTimer] = useState<number>(0);
   
   // TOTP QR Setup Modal State
@@ -98,6 +98,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
+    setPreviewOtp("");
 
     if (method === "EMAIL" || method === "SMS") {
       setLoading(true);
@@ -112,6 +113,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         
         setResendTimer(60);
         setOtpSentNotice(`6-digit code sent to ${data.destination}`);
+        setPreviewOtp(data.preview_otp || "");
         setStep(3); // 6-Digit Code Screen
       } catch (err: any) {
         setOtpError(err.message);
@@ -128,6 +130,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     if (resendTimer > 0 || loading) return;
     setLoading(true);
     setOtpError("");
+    setPreviewOtp("");
     try {
       const res = await fetch("/api/auth/mfa/send-otp", {
         method: "POST",
@@ -138,6 +141,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       if (!res.ok) throw new Error(data.detail || "Failed to resend code");
       setResendTimer(60);
       setOtpSentNotice(`New verification code sent to ${data.destination}`);
+      setPreviewOtp(data.preview_otp || "");
     } catch (err: any) {
       setOtpError(err.message);
     } finally {
@@ -335,6 +339,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 </p>
               </div>
 
+              {/* Error Message */}
+              {otpError && (
+                <div className="p-3 bg-rose-50 border border-rose-200/80 rounded-xl flex items-center space-x-2 text-xs font-medium text-rose-800 animate-fadeIn">
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span>{otpError}</span>
+                </div>
+              )}
+
               {/* 3 Interactive Option Cards */}
               <div className="space-y-3 pt-1">
                 
@@ -465,6 +477,22 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 <div className="p-3 bg-rose-50 border border-rose-200/80 rounded-xl flex items-center space-x-2 text-xs font-medium text-rose-800 animate-fadeIn">
                   <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
                   <span>{otpError}</span>
+                </div>
+              )}
+
+              {/* Test Environment OTP Bypass Helper */}
+              {previewOtp && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 animate-fadeIn font-medium flex flex-col space-y-1">
+                  <div className="flex items-center space-x-1.5 font-bold text-amber-900">
+                    <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" />
+                    <span>Sandbox OTP Helper</span>
+                  </div>
+                  <span>
+                    Your verification code is: <strong className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-sm text-slate-900 font-black">{previewOtp}</strong>
+                  </span>
+                  <span className="text-[10px] text-amber-600/80">
+                    SMTP Delivery may fail in local sandboxes. Use the above code to log in.
+                  </span>
                 </div>
               )}
 

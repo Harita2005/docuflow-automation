@@ -10,7 +10,7 @@ router = APIRouter(tags=["Policy Matrix & Conditions"])
 @router.get("/api/admin/conditions", response_model=List[BusinessRuleSchema])
 @router.get("/api/admin/routing-rules", response_model=List[BusinessRuleSchema])
 def get_business_rules(db: Session = Depends(get_db)):
-    rules = db.query(BusinessRule).order_by(BusinessRule.priority.asc()).all()
+    rules = db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
     return rules
 
 @router.post("/api/admin/conditions")
@@ -19,9 +19,9 @@ def get_business_rules(db: Session = Depends(get_db)):
 def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db)):
     rule = None
     if payload.id:
-        rule = db.query(BusinessRule).filter(BusinessRule.id == payload.id).first()
+        rule = db.query(BusinessRule).filter(BusinessRule.id == payload.id).filter(BusinessRule.is_deleted == False).first()
     if not rule:
-        rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).first()
+        rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
 
     if rule:
         rule.rule_name = payload.rule_name
@@ -52,9 +52,10 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
 @router.delete("/api/admin/conditions/{rule_id}")
 @router.delete("/api/admin/routing-rules/{rule_id}")
 def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
-    rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).first()
+    rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    db.delete(rule)
+    rule.is_deleted = True
+    rule.deleted_at = datetime.datetime.utcnow()
     db.commit()
     return {"success": True, "deleted_id": rule_id}

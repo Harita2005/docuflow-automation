@@ -1247,6 +1247,15 @@ export default function FlowBuilder({ users = [] }) {
                           <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
                           <option value="General Manager">General Manager</option>
                           <option value="Department Head">Department Head</option>
+                          <option value="Outbound Incharge">Outbound Incharge</option>
+                          <option value="Warehouse Ops Manager">Warehouse Ops Manager</option>
+                          <option value="Warehouse Lead">Warehouse Lead</option>
+                          <option value="Operations Lead">Operations Lead</option>
+                          <option value="Unit Head">Unit Head</option>
+                          <option value="Logistics Lead">Logistics Lead</option>
+                          <option value="Head - WH & Logistics">Head - WH & Logistics</option>
+                          <option value="CEO">CEO</option>
+                          <option value="JMD">JMD</option>
                         </select>
                       </div>
                     </div>
