@@ -53,10 +53,9 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
 @router.delete("/api/admin/conditions/{rule_id}")
 @router.delete("/api/admin/routing-rules/{rule_id}")
 def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
-    rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
+    rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    rule.is_deleted = True
-    rule.deleted_at = datetime.datetime.utcnow()
+    db.delete(rule)
     db.commit()
     return {"success": True, "deleted_id": rule_id}
