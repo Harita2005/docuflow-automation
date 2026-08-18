@@ -12,6 +12,7 @@ import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
+import WorkflowMatchPage from "./components/WorkflowMatchPage.tsx";
 import { DbInvoice } from "./types.ts";
 import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
 import { io } from "socket.io-client";
@@ -431,6 +432,10 @@ export default function App() {
 
             {currentView === "admin" && (
               <AdminPage />
+            )}
+
+            {currentView === "workflow-match" && (
+              <WorkflowMatchPage />
             )}
 
             {currentView === "details" && (
