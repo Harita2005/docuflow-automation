@@ -7,6 +7,13 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile
 from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router
+from app import drop_orphan_tables
+
+# Drop orphan/wf_* tables on startup (runs once, idempotent)
+try:
+    drop_orphan_tables.run(engine)
+except Exception as _drop_err:
+    print(f"[Database] Drop orphan tables warning: {_drop_err}")
 
 # Initialize database schema tables and run migrations on import
 try:
