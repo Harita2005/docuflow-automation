@@ -90,7 +90,17 @@ class Invoice(Base):
     cgst = Column(Float, default=0.0, nullable=True)
     sgst = Column(Float, default=0.0, nullable=True)
     igst = Column(Float, default=0.0, nullable=True)
-    
+
+    # New ERP fields
+    pi_indicator = Column(String(10), nullable=True)         # PIdicator
+    trans_type = Column(String(20), nullable=True)           # TransType
+    gstin = Column(String(15), nullable=True)                # GSTIN
+    doc_status = Column(Integer, default=0, nullable=True)   # Status (Doc Status)
+    doc_due_date = Column(String(50), nullable=True)         # DocDueDate (Due Date)
+    contact_person = Column(String(100), nullable=True)      # ContactPerson
+    pay_mode = Column(String(10), default="BANK", nullable=True)  # PayMode
+    link_column = Column(String(500), nullable=True)         # LinkColumn
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

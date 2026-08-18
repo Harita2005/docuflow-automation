@@ -52,11 +52,6 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     # 1. Direct Password Login: Bypasses MFA, strictly 10 minutes token validity, restricted to Admin
     if request.password:
-        if user.role != "admin":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Direct password authentication is restricted to administrator accounts."
-            )
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -64,8 +59,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             )
             
         user.last_login = datetime.datetime.utcnow()
-        # Strictly 10 minutes validity for direct password login
-        expires_delta = datetime.timedelta(minutes=10)
+        # 60 minutes validity for password login
+        expires_delta = datetime.timedelta(minutes=60)
         access_token = create_access_token(
             data={"sub": user.username, "id": user.id, "role": user.role},
             expires_delta=expires_delta

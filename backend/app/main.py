@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile
-from app.routers import auth, users, invoices, workflows, conditions, audit, sync
+from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -54,6 +54,22 @@ try:
                     conn.execute(text("ALTER TABLE documents ADD is_deleted BIT NOT NULL DEFAULT 0;"))
                 if 'deleted_at' not in existing_cols_documents:
                     conn.execute(text("ALTER TABLE documents ADD deleted_at DATETIME NULL;"))
+                if 'pi_indicator' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD pi_indicator NVARCHAR(10) NULL;"))
+                if 'trans_type' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD trans_type NVARCHAR(20) NULL;"))
+                if 'gstin' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD gstin NVARCHAR(15) NULL;"))
+                if 'doc_status' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD doc_status INT NULL DEFAULT 0;"))
+                if 'doc_due_date' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD doc_due_date DATE NULL;"))
+                if 'contact_person' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD contact_person NVARCHAR(100) NULL;"))
+                if 'pay_mode' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD pay_mode NVARCHAR(10) NOT NULL DEFAULT N'BANK';"))
+                if 'link_column' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD link_column NVARCHAR(500) NULL;"))
                 
                 # Users table migrations
                 existing_cols_users = [c['name'] for c in inspector.get_columns('users')]
@@ -154,6 +170,7 @@ app.include_router(workflows.router)
 app.include_router(conditions.router)
 app.include_router(audit.router)
 app.include_router(sync.router)
+app.include_router(sync_router.router)
 
 @app.get("/")
 def root():
