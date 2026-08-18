@@ -448,7 +448,17 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
             # Initialize tailored compliance checklist from templates
             def get_workflow_checklist_name(profile_id: str, total_stages: int) -> str:
-                profile_upper = (profile_id or "").upper()
+                if not profile_id:
+                    return "All_General_Temp"
+                
+                # Try direct table match for custom/renamed workflows first
+                exists = db.query(ChecklistTemplate).filter(
+                    ChecklistTemplate.workflow_profile == profile_id
+                ).first()
+                if exists:
+                    return profile_id
+
+                profile_upper = profile_id.upper()
                 if "GRN" in profile_upper:
                     return "ACM_GRN_Header_2stages"
                 elif "ENES" in profile_upper:

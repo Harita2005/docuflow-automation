@@ -3,33 +3,40 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from app.models import BusinessRule, WorkflowProfile, WorkflowStepDefinition, Invoice
 
-def evaluate_single_condition(cond: Dict[str, Any], invoice: Invoice) -> bool:
+def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
     field = cond.get("field", "").strip()
     operator = cond.get("operator", "equals").strip().lower()
     val = cond.get("value", "")
 
+    # Helper to get field from either dictionary or model object
+    def get_val(obj: Any, attr: str) -> Any:
+        if isinstance(obj, dict):
+            return obj.get(attr)
+        return getattr(obj, attr, None)
+
     # Map condition field names to Invoice attributes
     field_mapping = {
-        "Division": invoice.division or "",
-        "Company": invoice.division or "",
-        "Plant": invoice.plant or "",
-        "Branch": invoice.plant or "",
-        "Category": invoice.category or invoice.document_type or "",
-        "Cost Center": invoice.cost_center or "",
-        "Vendor Name": invoice.vendor_name or "",
+        "Division": get_val(invoice, "division") or "",
+        "Company": get_val(invoice, "division") or "",
+        "Plant": get_val(invoice, "plant") or "",
+        "Branch": get_val(invoice, "plant") or "",
+        "Category": get_val(invoice, "category") or get_val(invoice, "document_type") or "",
+        "Cost Center": get_val(invoice, "cost_center") or "",
+        "Vendor Name": get_val(invoice, "vendor_name") or "",
         "Vendor Type": "Standard",
-        "Document Type": invoice.document_type or "AP INVOICE",
-        "Invoice Amount (Total)": float(invoice.amount or 0.0),
-        "Amount": float(invoice.amount or 0.0),
-        "Tax Amount": float(invoice.tax_amount or 0.0),
+        "Document Type": get_val(invoice, "document_type") or "AP INVOICE",
+        "Invoice Amount (Total)": float(get_val(invoice, "amount") or 0.0),
+        "Amount": float(get_val(invoice, "amount") or 0.0),
+        "Tax Amount": float(get_val(invoice, "tax_amount") or 0.0),
     }
 
     field_val = field_mapping.get(field)
     if field_val is None:
         # Check custom_data if present
-        if invoice.custom_data:
+        custom_data = get_val(invoice, "custom_data")
+        if custom_data:
             try:
-                custom_dict = json.loads(invoice.custom_data) if isinstance(invoice.custom_data, str) else invoice.custom_data
+                custom_dict = json.loads(custom_data) if isinstance(custom_data, str) else custom_data
                 field_val = custom_dict.get(field, "")
             except Exception:
                 field_val = ""

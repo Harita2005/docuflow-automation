@@ -50,61 +50,65 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail=f"User '{ident_str}' not found in system."
         )
 
-    # Check password only if password was explicitly provided and MFA is disabled
-    if request.password and not user.mfa_enabled:
+    # 1. Direct Password Login: Bypasses MFA, strictly 10 minutes token validity, restricted to Admin
+    if request.password:
+        if user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Direct password authentication is restricted to administrator accounts."
+            )
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect password. Please try again."
             )
+            
+        user.last_login = datetime.datetime.utcnow()
+        # Strictly 10 minutes validity for direct password login
+        expires_delta = datetime.timedelta(minutes=10)
+        access_token = create_access_token(
+            data={"sub": user.username, "id": user.id, "role": user.role},
+            expires_delta=expires_delta
+        )
+        
+        # Log User Login Audit Entry
+        try:
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action="User Logged In (Direct Password)",
+                stage="Authentication",
+                notes=f"User {user.employee_name} ({user.employee_id}) authenticated directly via password. Token validity set to 10 minutes."
+            ))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print("Audit log error on login:", e)
 
-    # Check if Multi-Factor Authentication is enabled for this employee (or default to True)
-    if user.mfa_enabled:
-        ticket = create_mfa_ticket(user.id, user.username)
         return {
-            "token": None,
-            "user": None,
-            "mfa_required": True,
-            "mfa_ticket": ticket,
-            "available_methods": ["EMAIL", "AUTHENTICATOR", "SMS"],
-            "masked_email": mask_email(user.email),
-            "masked_phone": mask_phone(user.phone_number or "+91 98765 43210"),
-            "has_authenticator_setup": bool(user.mfa_secret)
+            "token": access_token,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "name": user.employee_name or user.name,
+                "email": user.email,
+                "role": user.role,
+                "employee_id": user.employee_id
+            },
+            "mfa_required": False
         }
 
-    # Direct login if MFA is disabled
-    user.last_login = datetime.datetime.utcnow()
-    expires_delta = datetime.timedelta(minutes=request.expires_in_minutes) if request.expires_in_minutes else None
-    access_token = create_access_token(
-        data={"sub": user.username, "id": user.id, "role": user.role},
-        expires_delta=expires_delta
-    )
-    
-    # Log User Login Audit Entry
-    try:
-        db.add(AuditLog(
-            invoice_id=None,
-            user=user.employee_name or user.name or user.username,
-            action="User Logged In",
-            stage="Authentication",
-            notes=f"User {user.employee_name} ({user.employee_id}) authenticated successfully with role '{user.role}'."
-        ))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        print("Audit log error on login:", e)
-
+    # 2. MFA Login Flow: Triggered if no password is provided in the request
+    ticket = create_mfa_ticket(user.id, user.username)
     return {
-        "token": access_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "name": user.employee_name or user.name,
-            "email": user.email,
-            "role": user.role,
-            "employee_id": user.employee_id
-        },
-        "mfa_required": False
+        "token": None,
+        "user": None,
+        "mfa_required": True,
+        "mfa_ticket": ticket,
+        "available_methods": ["EMAIL", "AUTHENTICATOR", "SMS"],
+        "masked_email": mask_email(user.email),
+        "masked_phone": mask_phone(user.phone_number or "+91 98765 43210"),
+        "has_authenticator_setup": bool(user.mfa_secret)
     }
 
 @router.post("/mfa/send-otp")

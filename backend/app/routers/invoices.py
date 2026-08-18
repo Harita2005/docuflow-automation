@@ -1108,7 +1108,17 @@ def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
     if not items:
         # Fallback to load checklist templates
         def get_wf_name(profile_id, total):
-            p = (profile_id or "").upper()
+            if not profile_id:
+                return "All_General_Temp"
+            
+            # Try direct table match for custom/renamed workflows first
+            exists = db.query(ChecklistTemplate).filter(
+                ChecklistTemplate.workflow_profile == profile_id
+            ).first()
+            if exists:
+                return profile_id
+
+            p = profile_id.upper()
             if "GRN" in p: return "ACM_GRN_Header_2stages"
             if "ENES" in p: return "ENES_ASSET_STAGE _6"
             if "VCC_PURCHASE" in p or "FIXED_ASSET" in p:
