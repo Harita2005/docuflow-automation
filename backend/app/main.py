@@ -6,8 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile
-from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router, workflow_engine
-import app.models_wf  # register wf_* tables with Base
+from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -172,7 +171,6 @@ app.include_router(conditions.router)
 app.include_router(audit.router)
 app.include_router(sync.router)
 app.include_router(sync_router.router)
-app.include_router(workflow_engine.router)
 
 @app.get("/")
 def root():

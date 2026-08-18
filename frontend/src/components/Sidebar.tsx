@@ -14,8 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Database,
-  Workflow
+  Database
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -55,7 +54,6 @@ export default function Sidebar({
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
         { id: "work-tracker", label: "Work Tracker", icon: Layers },
         { id: "upload", label: "Upload Document", icon: Upload },
-        { id: "workflow-match", label: "Workflow Matcher", icon: Workflow },
       ]
     },
     {
