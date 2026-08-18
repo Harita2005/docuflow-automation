@@ -446,38 +446,18 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             else:
                 target_inv.status = "Initiated (Stage 1)"
 
-            # Initialize tailored compliance checklist from templates
+            # Load checklist directly from checklist_templates by matched workflow name
             def get_workflow_checklist_name(profile_id: str, total_stages: int) -> str:
                 if not profile_id:
                     return "All_General_Temp"
-                
-                # Try direct table match for custom/renamed workflows first
+                # Direct match first
                 exists = db.query(ChecklistTemplate).filter(
                     ChecklistTemplate.workflow_profile == profile_id
                 ).first()
                 if exists:
                     return profile_id
-
-                profile_upper = profile_id.upper()
-                if "GRN" in profile_upper:
-                    return "ACM_GRN_Header_2stages"
-                elif "ENES" in profile_upper:
-                    return "ENES_ASSET_STAGE _6"
-                elif "VCC_PURCHASE" in profile_upper or "FIXED_ASSET" in profile_upper:
-                    if total_stages == 2:
-                        return "VCC_DA_IA_FLOW"
-                    elif total_stages == 3:
-                        return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                    elif total_stages == 5:
-                        return "VCC_DocApprovalFlow_All5_W-A"
-                    elif total_stages == 4:
-                        return "VCC_DocApprovalFlow_DA_FA_IA_FIA_W-B"
-                    else:
-                        return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                elif "EVOUCHER_INV" in profile_upper:
-                    return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                else:
-                    return "All_General_Temp"
+                # Fallback to general template
+                return "All_General_Temp"
 
             wf_checklist_name = get_workflow_checklist_name(profile.profile_name, len(steps))
             templates = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == wf_checklist_name).all()

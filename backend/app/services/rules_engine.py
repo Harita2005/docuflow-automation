@@ -107,18 +107,21 @@ def evaluate_rule_conditions(conditions: List[Dict[str, Any]], invoice: Invoice)
     return is_match
 
 def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
-    rules = db.query(BusinessRule).filter(BusinessRule.is_active == True).order_by(BusinessRule.priority.asc()).all()
+    # Sort by priority DESC — highest priority number wins
+    rules = db.query(BusinessRule).filter(
+        BusinessRule.is_active == True,
+        BusinessRule.is_deleted == False
+    ).order_by(BusinessRule.priority.desc()).all()
 
     for rule in rules:
         if not rule.conditions_json:
             continue
-
         try:
             conds = json.loads(rule.conditions_json)
             if isinstance(conds, dict) and "conditions" in conds:
                 conds = conds["conditions"]
-            
             if evaluate_rule_conditions(conds, invoice):
+                print(f"[RulesEngine] Matched rule '{rule.rule_name}' → workflow '{rule.target_workflow_id}'")
                 return rule.target_workflow_id
         except Exception as e:
             print(f"[RulesEngine] Error evaluating rule {rule.rule_name}: {e}")
