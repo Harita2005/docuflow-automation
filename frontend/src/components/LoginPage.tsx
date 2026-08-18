@@ -26,6 +26,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [mfaTicket, setMfaTicket] = useState<string>("");
   const [maskedEmail, setMaskedEmail] = useState<string>("");
   const [maskedPhone, setMaskedPhone] = useState<string>("");
+  const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<"EMAIL" | "AUTHENTICATOR" | "SMS">("EMAIL");
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpError, setOtpError] = useState<string>("");
@@ -88,6 +89,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         setMfaTicket(data.mfa_ticket);
         setMaskedEmail(data.masked_email || "your corporate email");
         setMaskedPhone(data.masked_phone || "your mobile number");
+        setHasAuthenticatorSetup(!!data.has_authenticator_setup);
         setStep(2); // 3-Option Screen
       } else {
         // Direct Login
@@ -137,7 +139,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         setLoading(false);
       }
     } else if (method === "AUTHENTICATOR") {
-      setStep(3); // 6-Digit Code Screen
+      if (!hasAuthenticatorSetup) {
+        // No secret yet — open QR setup modal first, then go to code screen
+        setStep(3);
+        handleOpenTotpSetup();
+      } else {
+        setStep(3);
+      }
     }
   };
 

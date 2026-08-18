@@ -120,7 +120,7 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, db = None) -> 
             msg["To"] = email
 
             html_body = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; rounded-2xl; background-color: #ffffff;">
+            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; background-color: #ffffff;">
                 <div style="text-align: center; margin-bottom: 20px;">
                     <h2 style="color: #0f172a; margin: 0; font-size: 22px;">DocuFlow Security Verification</h2>
                     <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Two-Step Authentication</p>
@@ -140,23 +140,30 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, db = None) -> 
             </div>
             """
             plain_body = f"Hello {employee_name},\n\nYour DocuFlow 6-digit verification code is: {otp_code}\n\nValid for 5 minutes."
-            
+
             msg.attach(MIMEText(plain_body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
 
             if smtp_port == 465:
-                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=8)
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
+                server.login(smtp_user, smtp_pass)
             else:
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                server.ehlo()
                 server.starttls()
+                server.ehlo()
+                server.login(smtp_user, smtp_pass)
 
-            server.login(smtp_user, smtp_pass)
             server.sendmail(sender_email, [email], msg.as_string())
             server.quit()
-            print(f"[SMTP SUCCESS] Real email delivered to {email}!")
+            print(f"[SMTP SUCCESS] Email delivered to {email}")
             return True, f"Code sent to {masked_email}"
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"[SMTP AUTH ERROR] Check SMTP_USER/SMTP_PASS credentials: {e}")
+        except smtplib.SMTPConnectError as e:
+            print(f"[SMTP CONNECT ERROR] Cannot reach {smtp_host}:{smtp_port} — {e}")
         except Exception as e:
-            print(f"[SMTP NOTICE] Could not deliver via SMTP ({e}). Fallback code logged to console.")
+            print(f"[SMTP ERROR] {type(e).__name__}: {e}")
 
     return True, f"Code sent to {masked_email}"
 

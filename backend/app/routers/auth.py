@@ -185,10 +185,10 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
         # Check TOTP rolling code
         secret = user.mfa_secret
         if not secret:
-            # If no secret was set yet, create one or fail
-            secret = generate_totp_secret()
-            user.mfa_secret = secret
-            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail="Authenticator not set up. Please use 'First time? Scan QR Code' to configure your app first."
+            )
         is_valid = verify_totp(secret, code_str)
     elif method_upper in ["EMAIL", "SMS"]:
         expected_otp = ticket_data.get("otp")
