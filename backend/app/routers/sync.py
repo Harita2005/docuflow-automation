@@ -21,7 +21,20 @@ from app.services.ocr_service import extract_text_from_pdf
 
 router = APIRouter(prefix="/api/sync", tags=["Enterprise Data & Attachment Sync"])
 
-def generate_compliance_checklist_for_category(category: Optional[str], doc_type: Optional[str]) -> List[str]:
+def generate_compliance_checklist_for_category(
+    category: Optional[str], 
+    doc_type: Optional[str], 
+    division: Optional[str] = None, 
+    plant: Optional[str] = None
+) -> List[str]:
+    # --- BRANCH / DIVISION SPECIFIC CHECKLIST CONDITIONS ---
+    # Define custom checklist conditions based on division or branch (plant) here.
+    # Examples:
+    # if division and division.upper() == "VCC":
+    #     return ["VCC Specific Requirement A", "VCC Specific Requirement B"]
+    # if plant and "chennai" in plant.lower():
+    #     return ["Chennai Branch Inward Gate Stamp", "Chennai Local Tax Audit Check"]
+    
     cat = (category or "").lower()
     
     if any(k in cat for k in ["rent", "eb", "deposit", "electricity", "tel"]):

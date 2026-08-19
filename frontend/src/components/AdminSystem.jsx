@@ -22,12 +22,7 @@ export default function AdminSystem() {
     { key: "MAX_CHECKLIST_ITEMS_PER_STAGE", default: "15", desc: "Maximum number of checklist verification items allowed per stage", category: "Limits & Thresholds" },
     { key: "MAX_ATTACHMENT_SIZE_MB", default: "25", desc: "Maximum file size limit per document/attachment in Megabytes", category: "Limits & Thresholds" },
     { key: "MAX_ATTACHMENTS_PER_DOC", default: "10", desc: "Maximum number of supporting attachments allowed per invoice", category: "Limits & Thresholds" },
-    { key: "MAX_LINE_ITEMS_PER_DOC", default: "500", desc: "Maximum number of line items displayed per document table", category: "Limits & Thresholds" },
-    { key: "API_ENDPOINT_INVOICES", default: "https://api.external-erp.com/v1/invoices", desc: "API Endpoint to fetch external Supplier Invoices", category: "Integrations" },
-    { key: "API_ENDPOINT_DEBIT_NOTES", default: "https://api.external-erp.com/v1/debit-notes", desc: "API Endpoint to fetch external Debit Notes", category: "Integrations" },
-    { key: "API_ENDPOINT_CREDIT_NOTES", default: "https://api.external-erp.com/v1/credit-notes", desc: "API Endpoint to fetch external Credit Notes", category: "Integrations" },
-    { key: "API_ENDPOINT_PURCHASE_ORDERS", default: "https://api.external-erp.com/v1/purchase-orders", desc: "API Endpoint to fetch external Purchase Orders (PO Sync)", category: "Integrations" },
-    { key: "EXTERNAL_DOCS_FETCH_INTERVAL", default: "60", desc: "Interval in minutes to automatically poll all external integration endpoints", category: "Integrations" }
+    { key: "MAX_LINE_ITEMS_PER_DOC", default: "500", desc: "Maximum number of line items displayed per document table", category: "Limits & Thresholds" }
   ];
 
   useEffect(() => { 
@@ -134,31 +129,19 @@ export default function AdminSystem() {
       <div className="space-y-6">
         
         {/* SETTINGS GROUPS */}
-        {['AI', 'System', 'Limits & Thresholds', 'Integrations'].map(category => (
+        {['AI', 'System', 'Limits & Thresholds'].map(category => (
           <div key={category} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {category === 'AI' ? <BrainCircuit className="h-3.5 w-3.5 text-purple-600" /> : 
                  category === 'System' ? <Server className="h-3.5 w-3.5 text-blue-600" /> : 
-                 category === 'Limits & Thresholds' ? <Zap className="h-3.5 w-3.5 text-amber-600" /> :
-                 <Network className="h-3.5 w-3.5 text-emerald-600" />}
+                 <Zap className="h-3.5 w-3.5 text-amber-600" />}
                 <h3 className="text-[9px] font-bold text-slate-700 uppercase tracking-widest">
                   {category === 'AI' ? 'Cognitive AI Models' : 
                    category === 'System' ? 'Platform Thresholds' : 
-                   category === 'Limits & Thresholds' ? 'Configurable Limits & Safeguards' :
-                   'External API Integrations'}
+                   'Configurable Limits & Safeguards'}
                 </h3>
               </div>
-              {category === 'Integrations' && (
-                <button
-                  onClick={handleSyncIntegrations}
-                  disabled={syncing}
-                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[8px] font-bold uppercase tracking-wider transition shadow-sm active:scale-95 disabled:bg-slate-400 cursor-pointer"
-                >
-                  {syncing ? <RefreshCw className="h-2.5 w-2.5 animate-spin" /> : <RefreshCw className="h-2.5 w-2.5" />}
-                  {syncing ? 'Syncing...' : 'Sync Now'}
-                </button>
-              )}
             </div>
             
             <div className="divide-y divide-slate-100">

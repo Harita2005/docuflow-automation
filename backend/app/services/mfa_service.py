@@ -87,7 +87,7 @@ def verify_totp(secret: str, code: str) -> bool:
         print(f"[MFA TOTP] Verification exception: {e}")
         return False
 
-def send_email_otp(email: str, employee_name: str, otp_code: str, db = None) -> Tuple[bool, str]:
+def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: dict = None) -> Tuple[bool, str]:
     """
     Sends real email OTP using configured SMTP server (Gmail, Office365, SendGrid, etc.)
     Falls back gracefully and logs code in terminal.
@@ -101,16 +101,15 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, db = None) -> 
     print("This code is valid for 5 minutes. Do not share it with anyone.")
     print("=" * 60)
 
-    # 2. Attempt real SMTP dispatch
-    from app.models import NotificationProviderConfig
-    config = db.query(NotificationProviderConfig).first() if db else None
+    # 2. Use configuration dictionary passed from request context
+    config = smtp_config
 
-    smtp_host = (config.smtp_server if config else None) or os.getenv("SMTP_HOST")
-    smtp_port = (config.port if config else None) or int(os.getenv("SMTP_PORT", 587))
-    smtp_user = (config.username if config else None) or os.getenv("SMTP_USER")
-    smtp_pass = (config.encrypted_password if config else None) or os.getenv("SMTP_PASS")
-    sender_email = (config.sender_email if config else None) or os.getenv("SMTP_SENDER_EMAIL") or smtp_user or "no-reply@docuflow.net"
-    sender_name = (config.sender_name if config else None) or os.getenv("SMTP_SENDER_NAME") or "DocuFlow Security"
+    smtp_host = (config.get("smtp_server") if config else None) or os.getenv("SMTP_HOST")
+    smtp_port = (config.get("port") if config else None) or int(os.getenv("SMTP_PORT", 587))
+    smtp_user = (config.get("username") if config else None) or os.getenv("SMTP_USER")
+    smtp_pass = (config.get("encrypted_password") if config else None) or os.getenv("SMTP_PASS")
+    sender_email = (config.get("sender_email") if config else None) or os.getenv("SMTP_SENDER_EMAIL") or smtp_user or "no-reply@docuflow.net"
+    sender_name = (config.get("sender_name") if config else None) or os.getenv("SMTP_SENDER_NAME") or "DocuFlow Security"
 
     if smtp_host and smtp_user and smtp_pass:
         try:

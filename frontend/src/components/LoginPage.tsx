@@ -11,13 +11,7 @@ interface LoginPageProps {
 
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginMode, setLoginMode] = useState<"MFA" | "PASSWORD">("MFA");
   const [loading, setLoading] = useState(false);
-  
-  // Modal Display Token State
-  const [adminTokenToDisplay, setAdminTokenToDisplay] = useState<string | null>(null);
-  const [pendingLoginData, setPendingLoginData] = useState<any | null>(null);
   
   // Steps: 1 = Identifier Input, 2 = 3-Option MFA Choice, 3 = 6-Digit OTP Verification
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -63,7 +57,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     }
   }, [step]);
 
-  // Step 1 Submit: Identifier & Password
+  // Step 1 Submit: Identifier only (MFA required)
   const handleIdentifierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) return;
@@ -76,8 +70,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           username: username.trim(), 
-          identifier: username.trim(),
-          password: loginMode === "PASSWORD" ? password.trim() : undefined
+          identifier: username.trim()
         })
       });
       
@@ -95,13 +88,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         // Direct Login
         localStorage.setItem("authToken", data.token);
         localStorage.setItem("currentUserUsername", data.user.username);
-        
-        if (loginMode === "PASSWORD") {
-          setAdminTokenToDisplay(data.token);
-          setPendingLoginData(data);
-        } else {
-          onLoginSuccess(data.user.id, data.user.role, data.user.email, data.user.username);
-        }
+        onLoginSuccess(data.user.id, data.user.role, data.user.email, data.user.username);
       }
     } catch (err: any) {
       alert(err.message);
@@ -324,53 +311,6 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Authentication Method</label>
-                  <div className="grid grid-cols-2 gap-3 p-1 bg-slate-100 rounded-xl border border-slate-200/50">
-                    <button
-                      type="button"
-                      onClick={() => setLoginMode("MFA")}
-                      className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                        loginMode === "MFA"
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Two-Step Verification (MFA)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLoginMode("PASSWORD")}
-                      className={`py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                        loginMode === "PASSWORD"
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Direct Password (Admin)
-                    </button>
-                  </div>
-                </div>
-
-                {loginMode === "PASSWORD" && (
-                  <div className="space-y-1.5 animate-fadeIn">
-                    <label className="text-sm font-medium text-slate-700">Password</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                        <KeyRound className="h-5 w-5 text-slate-400" />
-                      </div>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required={loginMode === "PASSWORD"}
-                        placeholder="Enter your administrator password"
-                        className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 text-sm placeholder:text-slate-400 text-slate-800 transition-all font-medium shadow-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -383,7 +323,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                     </div>
                   ) : (
                     <>
-                      <span>{loginMode === "PASSWORD" ? "Sign In Directly" : "Continue with MFA"}</span>
+                      <span>Continue with MFA</span>
                       <ArrowRight className="h-4 w-4 opacity-70 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
@@ -711,79 +651,6 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             >
               Done & Return to Login
             </button>
-          </div>
-        </div>
-      )}
-      {/* Admin Token Modal Overlay */}
-      {adminTokenToDisplay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden transform scale-100 transition-all duration-300">
-            <div className="p-6 bg-slate-50 border-b border-slate-100">
-              <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Admin Bypass Token Generated</h3>
-                  <p className="text-slate-500 text-xs font-medium">Valid for strictly 10 minutes</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Use the JWT token below in the <code className="bg-slate-100 px-1.5 py-0.5 rounded text-rose-600 font-mono text-xs font-semibold">Authorization: Bearer &lt;token&gt;</code> header to push data to your endpoints.
-              </p>
-              
-              <div className="relative">
-                <textarea
-                  readOnly
-                  value={adminTokenToDisplay}
-                  className="w-full h-32 p-3.5 bg-slate-950 text-emerald-400 font-mono text-xs rounded-xl border border-slate-850 focus:outline-none resize-none break-all select-all leading-normal"
-                />
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(adminTokenToDisplay)}
-                  className="absolute bottom-4 right-4 py-2 px-3 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/10 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer"
-                >
-                  {copiedSecret ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5 text-white" />
-                      <span className="text-white">Copy Token</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-xl space-y-1">
-                <span className="text-blue-800 text-xs font-bold block">Testing Curl Command Snippet:</span>
-                <code className="text-slate-700 text-[10px] font-mono block break-words whitespace-pre-wrap leading-relaxed select-all">
-                  {`curl -X PUT "http://localhost:8000/api/records/DOC-9999" \\\n     -H "Authorization: Bearer ${adminTokenToDisplay.substring(0, 20)}..." \\\n     -H "Content-Type: application/json" \\\n     -d '{"amount": 18500.0}'`}
-                </code>
-              </div>
-            </div>
-            
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  const data = pendingLoginData;
-                  setAdminTokenToDisplay(null);
-                  setPendingLoginData(null);
-                  if (data) {
-                    onLoginSuccess(data.user.id, data.user.role, data.user.email, data.user.username);
-                  }
-                }}
-                className="py-2.5 px-5 bg-slate-900 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl transition-all cursor-pointer shadow-md shadow-slate-900/10 hover:shadow-blue-600/20"
-              >
-                Continue to Application
-              </button>
-            </div>
           </div>
         </div>
       )}

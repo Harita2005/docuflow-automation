@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FileText,
   Cpu,
@@ -180,9 +180,27 @@ export default function DocumentDetails({
   const [erpSyncToast, setErpSyncToast] = useState<string | null>(null);
   const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
   const [isUploadingVersion, setIsUploadingVersion] = useState<boolean>(false);
+  const [showMoreMetadata, setShowMoreMetadata] = useState<boolean>(false);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const handleUploadVersion = async (file: File) => {
     if (!document) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setActionError("Only PDF files are allowed to be attached.");
+      return;
+    }
     setIsUploadingVersion(true);
     setActionError(null);
     try {
@@ -766,6 +784,39 @@ export default function DocumentDetails({
     ? workflowStepDefinitions.find((s: any) => s.stage_number === activeApprovalLog.current_stage_number)
     : null;
 
+  const getStatusBadge = () => {
+    const status = document.status;
+    const isStage1 = activeApprovalLog?.current_stage_number === 1;
+    const hasAttachment = Boolean(document?.file_url || document?.file_path);
+
+    if (["Approved", "Paid", "Ready for Payment", "Settled"].includes(status)) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider">
+          Approved
+        </span>
+      );
+    }
+    if (["Rejected", "Failed"].includes(status)) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-400/30 text-[9px] font-extrabold text-rose-300 uppercase tracking-wider">
+          Rejected
+        </span>
+      );
+    }
+    if (isStage1 && !hasAttachment) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-amber-300 uppercase tracking-wider animate-pulse">
+          Pending Attachment
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-[9px] font-extrabold text-indigo-300 uppercase tracking-wider">
+        Under Review
+      </span>
+    );
+  };
+
   return (
     <div className="animate-fadeIn">
       {/* Action Error Alert */}
@@ -797,6 +848,9 @@ export default function DocumentDetails({
                   <FileText className="h-2.5 w-2.5" />
                   {document.document_type || "DOCUMENT"}
                 </span>
+
+                {/* Subtle Status Badge */}
+                {getStatusBadge()}
 
                 {/* ERP Synced Status Pill (Visible if Role has access to ERP Sync Data) */}
                 {getFieldPerm("erp_sync_data") !== "hidden" && (
@@ -851,186 +905,279 @@ export default function DocumentDetails({
             </button>
           </div>
         </div>
-
         {/* ENTERPRISE FINANCIAL KPI STRIP (DYNAMICALLY FILTERED & ENFORCED BY FLAC ROLE PERMISSIONS) */}
-        <div className="bg-slate-50 border-b border-slate-200/80 px-3 py-1.5 shrink-0 overflow-x-auto custom-scrollbar">
-          <div className="flex items-center gap-2.5 min-w-max">
-            
-            {/* 1. Supplier / Vendor */}
-            {getFieldPerm("vendor_name") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[190px] max-w-[230px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
-                  <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
-                  <span>Supplier / Vendor</span>
-                </div>
-                {getFieldPerm("vendor_name") === "edit" ? (
-                  <input 
-                    type="text"
-                    value={vendorName || document.vendor_name || "-"}
-                    onChange={e => setVendorName(e.target.value)}
-                    className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
-                    title={vendorName || document.vendor_name || "-"}
-                  />
-                ) : (
-                  <div className="text-[11px] font-bold text-slate-900 truncate" title={vendorName || document.vendor_name || "-"}>
-                    {vendorName || document.vendor_name || "-"}
+        <div ref={containerRef} className="bg-slate-50 border-b border-slate-200/80 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Primary Metrics Group */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              
+              {/* 1. Supplier / Vendor */}
+              {getFieldPerm("vendor_name") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[190px] max-w-[230px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                    <span>Supplier / Vendor</span>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* 2. Bill No & Date */}
-            {getFieldPerm("invoice_num_date") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[155px] max-w-[185px]">
-                <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
-                </div>
-                {getFieldPerm("invoice_num_date") === "edit" ? (
-                  <div className="flex items-center gap-1.5">
+                  {getFieldPerm("vendor_name") === "edit" ? (
                     <input 
                       type="text"
-                      value={invoiceNumber || document.invoice_number || "-"}
-                      onChange={e => setInvoiceNumber(e.target.value)}
-                      className="w-5/12 text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
-                      placeholder="Bill No"
+                      value={vendorName || document.vendor_name || "-"}
+                      onChange={e => setVendorName(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
+                      title={vendorName || document.vendor_name || "-"}
                     />
-                    <span className="text-slate-300 font-bold">•</span>
+                  ) : (
+                    <div className="text-[11px] font-bold text-slate-900 truncate" title={vendorName || document.vendor_name || "-"}>
+                      {vendorName || document.vendor_name || "-"}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. Bill No & Date */}
+              {getFieldPerm("invoice_num_date") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[155px] max-w-[185px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
+                  </div>
+                  {getFieldPerm("invoice_num_date") === "edit" ? (
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="text"
+                        value={invoiceNumber || document.invoice_number || "-"}
+                        onChange={e => setInvoiceNumber(e.target.value)}
+                        className="w-5/12 text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
+                        placeholder="Bill No"
+                      />
+                      <span className="text-slate-300 font-bold">•</span>
+                      <input 
+                        type="text"
+                        value={invoiceDate || document.invoice_date || "2026-03-13"}
+                        onChange={e => setInvoiceDate(e.target.value)}
+                        className="w-7/12 text-[11px] font-bold text-slate-700 bg-transparent border-0 p-0 outline-none truncate"
+                        placeholder="Date"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 truncate">
+                      <span>{invoiceNumber || document.invoice_number || "-"}</span>
+                      <span className="text-slate-300 font-bold">•</span>
+                      <span className="text-slate-600 font-medium">{invoiceDate || document.invoice_date || "2026-03-13"}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. PO Reference */}
+              {getFieldPerm("po_reference") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                    <span>PO Reference</span>
+                  </div>
+                  {getFieldPerm("po_reference") === "edit" ? (
                     <input 
                       type="text"
-                      value={invoiceDate || document.invoice_date || "2026-03-13"}
-                      onChange={e => setInvoiceDate(e.target.value)}
-                      className="w-7/12 text-[11px] font-bold text-slate-700 bg-transparent border-0 p-0 outline-none truncate"
-                      placeholder="Date"
+                      value={poNumber || document.po_number || "-"}
+                      onChange={e => setPoNumber(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate font-mono"
                     />
+                  ) : (
+                    <div className="text-[11px] font-bold font-mono text-slate-900 truncate">
+                      {poNumber || document.po_number || "-"}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. Total Amount (Gross) */}
+              {getFieldPerm("total_gross") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
+                    <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 truncate">
-                    <span>{invoiceNumber || document.invoice_number || "-"}</span>
-                    <span className="text-slate-300 font-bold">•</span>
-                    <span className="text-slate-600 font-medium">{invoiceDate || document.invoice_date || "2026-03-13"}</span>
-                  </div>
-                )}
-              </div>
-            )}
+                  {getFieldPerm("total_gross") === "edit" ? (
+                    <input 
+                      type="text"
+                      value={Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      onChange={e => setAmount(Number(e.target.value.replace(/,/g, '')))}
+                      className="w-full text-[11px] font-black text-indigo-700 bg-transparent border-0 p-0 outline-none"
+                    />
+                  ) : (
+                    <div className="text-[11px] font-black text-indigo-700 truncate">
+                      ₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {/* 3. PO Reference */}
-            {getFieldPerm("po_reference") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
-                  <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
-                  <span>PO Reference</span>
-                </div>
-                {getFieldPerm("po_reference") === "edit" ? (
-                  <input 
-                    type="text"
-                    value={poNumber || document.po_number || "-"}
-                    onChange={e => setPoNumber(e.target.value)}
-                    className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate font-mono"
-                  />
-                ) : (
-                  <div className="text-[11px] font-bold font-mono text-slate-900 truncate">
-                    {poNumber || document.po_number || "-"}
-                  </div>
-                )}
-              </div>
-            )}
+              {/* Render 5-9 in the first row if allFit is true */}
+              {containerWidth >= 1280 && (
+                <>
+                  {/* 5. Base Taxable */}
+                  {getFieldPerm("base_taxable") !== "hidden" && (
+                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
+                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Base Taxable
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-800 truncate">
+                        ₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  )}
 
-            {/* 4. Total Amount (Gross) */}
-            {getFieldPerm("total_gross") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
-                <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
-                  <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
-                </div>
-                {getFieldPerm("total_gross") === "edit" ? (
-                  <input 
-                    type="text"
-                    value={Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    onChange={e => setAmount(Number(e.target.value.replace(/,/g, '')))}
-                    className="w-full text-[11px] font-black text-indigo-700 bg-transparent border-0 p-0 outline-none"
-                  />
-                ) : (
-                  <div className="text-[11px] font-black text-indigo-700 truncate">
-                    ₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </div>
-                )}
-              </div>
-            )}
+                  {/* 6. GST Tax (18%) */}
+                  {getFieldPerm("gst_tax") !== "hidden" && (
+                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
+                      <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                        <span>GST (18%)</span>
+                        <span className="text-slate-400 text-[7px]">9+9%</span>
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-800 truncate">
+                        ₹{(Number(amount || document.amount || 0) * (0.18 / 1.18)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  )}
 
-            {/* 5. Base Taxable */}
-            {getFieldPerm("base_taxable") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  Base Taxable
-                </div>
-                <div className="text-[11px] font-bold text-slate-800 truncate">
-                  ₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-            )}
+                  {/* 7. Vendor GSTIN */}
+                  {getFieldPerm("vendor_gstin") !== "hidden" && (
+                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[130px] max-w-[160px]">
+                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Vendor GSTIN
+                      </div>
+                      <div className="text-[10.5px] font-mono font-bold text-slate-800 truncate">
+                        {(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}
+                      </div>
+                    </div>
+                  )}
 
-            {/* 6. GST Tax (18%) */}
-            {getFieldPerm("gst_tax") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
-                <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  <span>GST (18%)</span>
-                  <span className="text-slate-400 text-[7px]">9+9%</span>
-                </div>
-                <div className="text-[11px] font-bold text-slate-800 truncate">
-                  ₹{(Number(amount || document.amount || 0) * (0.18 / 1.18)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-            )}
+                  {/* 8. Cost Center & Div */}
+                  {getFieldPerm("cost_center") !== "hidden" && (
+                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[120px] max-w-[150px]">
+                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-indigo-600 mb-0.5">
+                        Cost Center / Div
+                      </div>
+                      <div className="text-[10.5px] font-bold text-slate-800 truncate">
+                        {(document as any)?.cost_center || (document as any)?.division || "BATTERY VEHICLE"}
+                      </div>
+                    </div>
+                  )}
 
-            {/* 7. Vendor GSTIN */}
-            {getFieldPerm("vendor_gstin") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[130px] max-w-[160px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  Vendor GSTIN
-                </div>
-                <div className="text-[10.5px] font-mono font-bold text-slate-800 truncate">
-                  {(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}
-                </div>
-              </div>
-            )}
+                  {/* 9. Payment Terms */}
+                  {getFieldPerm("payment_terms") !== "hidden" && (
+                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[105px] max-w-[135px]">
+                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Payment Terms
+                      </div>
+                      {getFieldPerm("payment_terms") === "edit" ? (
+                        <input 
+                          type="text"
+                          value={paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
+                          onChange={e => setPaymentTerms(e.target.value)}
+                          className="w-full text-[10.5px] font-bold text-slate-800 bg-transparent border-0 p-0 outline-none truncate"
+                        />
+                      ) : (
+                        <div className="text-[10.5px] font-bold text-slate-800 truncate">
+                          {paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
 
-            {/* 8. Cost Center & Div */}
-            {getFieldPerm("cost_center") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[120px] max-w-[150px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-indigo-600 mb-0.5">
-                  Cost Center / Div
-                </div>
-                <div className="text-[10.5px] font-bold text-slate-800 truncate">
-                  {(document as any)?.cost_center || (document as any)?.division || "BATTERY VEHICLE"}
-                </div>
-              </div>
-            )}
+            </div>
 
-            {/* 9. Payment Terms */}
-            {getFieldPerm("payment_terms") !== "hidden" && (
-              <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[105px] max-w-[135px]">
-                <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                  Payment Terms
-                </div>
-                {getFieldPerm("payment_terms") === "edit" ? (
-                  <input 
-                    type="text"
-                    value={paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
-                    onChange={e => setPaymentTerms(e.target.value)}
-                    className="w-full text-[10.5px] font-bold text-slate-800 bg-transparent border-0 p-0 outline-none truncate"
-                  />
-                ) : (
-                  <div className="text-[10.5px] font-bold text-slate-800 truncate">
-                    {paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
-                  </div>
-                )}
-              </div>
+            {/* Expand / Collapse Toggle Button */}
+            {containerWidth < 1280 && (
+              <button
+                type="button"
+                onClick={() => setShowMoreMetadata(!showMoreMetadata)}
+                className="py-1.5 px-3.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0"
+              >
+                <span>{showMoreMetadata ? "Hide Details" : "More Details"}</span>
+                {showMoreMetadata ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+              </button>
             )}
-
           </div>
-        </div>
 
-        {/* MAIN BODY: OPTIMIZED EXTENDED DOCUMENT WORKBENCH WITH UNIFIED SCROLLABLE LEFT SIDEBAR */}
+          {/* Secondary Expandable Metrics Row */}
+          {containerWidth < 1280 && showMoreMetadata && (
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200/50 animate-fadeIn">
+              
+              {/* 5. Base Taxable */}
+              {getFieldPerm("base_taxable") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Base Taxable
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-800 truncate">
+                    ₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. GST Tax (18%) */}
+              {getFieldPerm("gst_tax") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    <span>GST (18%)</span>
+                    <span className="text-slate-400 text-[7px]">9+9%</span>
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-800 truncate">
+                    ₹{(Number(amount || document.amount || 0) * (0.18 / 1.18)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              )}
+
+              {/* 7. Vendor GSTIN */}
+              {getFieldPerm("vendor_gstin") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[130px] max-w-[160px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Vendor GSTIN
+                  </div>
+                  <div className="text-[10.5px] font-mono font-bold text-slate-800 truncate">
+                    {(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}
+                  </div>
+                </div>
+              )}
+
+              {/* 8. Cost Center & Div */}
+              {getFieldPerm("cost_center") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[120px] max-w-[150px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-indigo-600 mb-0.5">
+                    Cost Center / Div
+                  </div>
+                  <div className="text-[10.5px] font-bold text-slate-800 truncate">
+                    {(document as any)?.cost_center || (document as any)?.division || "BATTERY VEHICLE"}
+                  </div>
+                </div>
+              )}
+
+              {/* 9. Payment Terms */}
+              {getFieldPerm("payment_terms") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[105px] max-w-[135px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Payment Terms
+                  </div>
+                  {getFieldPerm("payment_terms") === "edit" ? (
+                    <input 
+                      type="text"
+                      value={paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
+                      onChange={e => setPaymentTerms(e.target.value)}
+                      className="w-full text-[10.5px] font-bold text-slate-800 bg-transparent border-0 p-0 outline-none truncate"
+                    />
+                  ) : (
+                    <div className="text-[10.5px] font-bold text-slate-800 truncate">
+                      {paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
           
           {/* LEFT COLUMN: UNIFIED SCROLLABLE AUDIT & COMPLIANCE PANEL (OPTIMAL COMPACT WIDTH) */}
@@ -1219,10 +1366,10 @@ export default function DocumentDetails({
                       type="button"
                       onClick={handleInlineApprove}
                       disabled={!canApprove}
-                      className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
+                      className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
                         canApprove
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/40"
-                          : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/35 hover:shadow-emerald-600/50 hover:shadow-md ring-1 ring-emerald-500/20"
+                          : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
                       }`}
                       title={
                         !hasDocAttachment && isStage1Attachment
@@ -1248,7 +1395,7 @@ export default function DocumentDetails({
                       type="button"
                       onClick={handleInlineHold}
                       disabled={actionLoading}
-                      className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-300 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                      className="px-3 py-2 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
                       title="Hold and request clarification"
                     >
                       <Pause className="h-3.5 w-3.5" />
@@ -1259,7 +1406,7 @@ export default function DocumentDetails({
                       type="button"
                       onClick={handleInlineReject}
                       disabled={actionLoading}
-                      className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200 transition active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-2xs cursor-pointer"
+                      className="px-3 py-2 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
                       title="Reject record with remarks"
                     >
                       <X className="h-3.5 w-3.5 stroke-[3]" />
@@ -1405,7 +1552,7 @@ export default function DocumentDetails({
                     <span>{isUploadingVersion ? "Uploading & Storing..." : "Upload & Attach Document PDF"}</span>
                     <input 
                       type="file" 
-                      accept=".pdf,.png,.jpg,.jpeg,.tiff" 
+                      accept=".pdf" 
                       disabled={isUploadingVersion}
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
@@ -1415,7 +1562,7 @@ export default function DocumentDetails({
                       className="hidden" 
                     />
                   </label>
-                  <span className="text-[10px] text-slate-400 font-mono mt-2">Accepted formats: PDF, PNG, JPG (Auto-OCR enabled)</span>
+                  <span className="text-[10px] text-slate-400 font-mono mt-2">Accepted formats: PDF only</span>
                 </div>
               )}
             </div>

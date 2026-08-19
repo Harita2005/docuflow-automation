@@ -205,6 +205,21 @@ class ChecklistTemplate(Base):
     is_active = Column(Boolean, default=True)
     sequence_order = Column(Integer, default=1)
 
+class ChecklistRule(Base):
+    __tablename__ = "checklist_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_name = Column(String(200), nullable=False)
+    division = Column(String(100), nullable=True)         # Division/Company (e.g., 'VCC', 'ACM', 'ALL')
+    category = Column(String(200), nullable=True)         # Category name (e.g., 'Freight Charges', 'ALL')
+    branch = Column(String(200), nullable=True)           # Branch/Plant name (e.g., 'TN-OOTY', 'ALL')
+    workflow_profile = Column(String(200), nullable=True)  # Workflow Profile ID (e.g., 'VCC_DA_IA_FLOW')
+    stage_name = Column(String(200), nullable=False)      # Stage Name (e.g., 'Attachment Status', 'IA Approval')
+    item_text = Column(String(500), nullable=False)       # Single checklist verification requirement text
+    is_mandatory = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    sequence_order = Column(Integer, default=1)
+
 class InvoiceChecklistState(Base):
     __tablename__ = "document_checklist_states"
 

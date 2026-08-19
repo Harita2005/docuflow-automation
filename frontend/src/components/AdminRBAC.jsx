@@ -552,7 +552,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newFieldDesc, setNewFieldDesc] = useState("");
 
   const [users, setUsers] = useState(DEFAULT_USERS);
-  const [selectedUser, setSelectedUser] = useState(DEFAULT_USERS[0]);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [userOverrides, setUserOverrides] = useState({});
 
   const [search, setSearch] = useState("");
@@ -594,7 +594,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
-  const [selectedRoleId, setSelectedRoleId] = useState("ap_specialist");
+  const [selectedRoleId, setSelectedRoleId] = useState("");
 
   // Helper functions for the redesigned Users and Roles lists
   const filteredUsers = users.filter(u => {
@@ -761,10 +761,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
           }));
           
           setUsers(dbUsers);
-          
-          if (dbUsers.length > 0) {
-            setSelectedUser(dbUsers[0]);
-          }
+          setSelectedUser(null);
         } else {
           setUsers([]);
           setSelectedUser(null);
@@ -776,7 +773,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     } catch(e) {
       console.error(e);
       setUsers(MOCKUP_USERS_RBAC);
-      setSelectedUser(MOCKUP_USERS_RBAC[1]);
+      setSelectedUser(null);
     } finally {
       setLoading(false);
     }
@@ -1625,9 +1622,9 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* VIEW 1: BY ROLES MATRIX */}
       {/* ========================================================= */}
       {activeTab === "roles" && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[500px]">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-[500px]">
           {/* LEFT COMPONENT: Roles Table Grid */}
-          <div className={`flex-1 flex flex-col overflow-y-auto min-w-0 bg-white ${selectedRoleId ? 'lg:border-r lg:border-slate-200' : ''}`}>
+          <div className="flex-1 flex flex-col overflow-y-auto min-w-0 bg-white">
             
             {/* Roles List Data Table */}
             <div className="overflow-x-auto">
@@ -1649,10 +1646,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     return (
                       <tr 
                         key={r.id}
-                        onClick={() => setSelectedRoleId(r.id)}
-                        className={`hover:bg-slate-50/60 transition-colors cursor-pointer select-none ${
-                          isSelected ? 'bg-blue-50/25 font-semibold' : ''
-                        }`}
+                        className="hover:bg-slate-50/60 transition-colors select-none"
                       >
                         {/* Name + Shield Icon */}
                         <td className="px-3.5 py-2.5 w-[35%] align-middle font-bold text-slate-800">
@@ -1707,153 +1701,167 @@ export default function AdminRBAC({ onRefreshSignal }) {
             </div>
           </div>
 
-          {/* RIGHT COMPONENT: Role Permissions Matrix Toggles */}
+          {/* DIALOG IN THE MIDDLE: Role Permissions Settings */}
           {selectedRoleId && (
-            <div className="w-full lg:w-[480px] bg-slate-50/20 border-t lg:border-t-0 border-slate-200 flex flex-col shrink-0 bg-white">
-              {/* Panel Header */}
-              <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center border ${
-                    selectedRoleId === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                    selectedRoleId === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                    selectedRoleId === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                    selectedRoleId === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                    "bg-slate-50 text-slate-600 border-slate-200"
-                  }`}>
-                    <Shield className="h-4 w-4" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-extrabold text-slate-900 text-xs tracking-tight">
-                      {roles.find(r => r.id === selectedRoleId)?.name || selectedRoleId} permissions
-                    </h3>
-                    <div className="text-[9px] text-slate-400 leading-none mt-0.5">
-                      Configure baseline permissions for all employees in this role
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
+              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-[480px] w-full max-h-[75vh] flex flex-col overflow-hidden animate-scaleIn">
+                
+                {/* Panel Header */}
+                <div className="p-3 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center border ${
+                      selectedRoleId === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                      selectedRoleId === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                      selectedRoleId === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                      selectedRoleId === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                      "bg-slate-50 text-slate-600 border-slate-200"
+                    }`}>
+                      <Shield className="h-3.5 w-3.5" />
                     </div>
+                    <div className="text-left">
+                      <h3 className="font-extrabold text-slate-900 text-[11px] tracking-tight">
+                        {roles.find(r => r.id === selectedRoleId)?.name || selectedRoleId} Clearances
+                      </h3>
+                      <div className="text-[8.5px] text-slate-400 leading-none mt-0.5">
+                        Configure baseline permissions for all employees in this role
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="text-[9px] font-bold text-slate-500 uppercase">
+                      Role: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedRoleId("")}
+                      className="p-1 hover:bg-slate-250 text-slate-400 hover:text-slate-650 rounded-md transition cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="text-[9.5px] font-bold text-slate-500 uppercase">
-                    Role: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
-                  </div>
-                  <button 
-                    type="button" 
+                {/* Alert Info Banner */}
+                <div className="p-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9px] font-semibold flex items-start gap-1.5 shrink-0 select-none">
+                  <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.2" />
+                  <span>Modifications apply to all assigned employees immediately. Save top-right to commit.</span>
+                </div>
+
+                {/* Permissions list container */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar bg-slate-50/20">
+                  {filteredPermissions.map(cat => {
+                    const catKey = cat.id || cat.category;
+                    const isCollapsed = !!collapsedFolders[catKey];
+
+                    return (
+                      <div key={catKey} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-3xs">
+                        {/* Category Header */}
+                        <div
+                          onClick={() => toggleFolder(catKey)}
+                          className="bg-slate-50/95 hover:bg-slate-100/80 px-2.5 py-1.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-200"
+                        >
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-700 uppercase tracking-wider">
+                            {isCollapsed ? <Folder className="h-3 w-3 text-slate-400" /> : <FolderOpen className="h-3 w-3 text-blue-600" />}
+                            <span>{cat.category}</span>
+                            <span className="text-[8px] text-slate-400 font-bold border border-slate-200 px-1 py-0.2 rounded-md bg-white">
+                              {cat.items.length}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-[8px] font-medium text-slate-400">
+                            <span>{isCollapsed ? "Expand" : "Collapse"}</span>
+                            {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-slate-500" />}
+                          </div>
+                        </div>
+
+                        {/* Permissions List */}
+                        {!isCollapsed && (
+                          <div className="divide-y divide-slate-100 bg-white">
+                            {cat.items.map(item => {
+                              const cell = rolePermissions[selectedRoleId]?.[item.id] || { read: false, write: false, admin: false };
+                              return (
+                                <div key={item.id} className="p-2.5 hover:bg-slate-50/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left group">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <h4 className="font-bold text-slate-800 text-[10px]">{item.label}</h4>
+                                      {item.isCustom && (
+                                        <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-600 text-[7px] font-extrabold uppercase border border-blue-100 leading-none">
+                                          Custom
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[8.5px] text-slate-400 font-medium leading-tight">{item.desc}</p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                    {/* Delete Custom Permission */}
+                                    {isAdmin && item.isCustom && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePermission(item.id, item.label)}
+                                        className="p-1 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                        title={`Delete permission "${item.label}"`}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+
+                                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "read")}
+                                        disabled={!isAdmin}
+                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
+                                          cell.read ? "bg-slate-800 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Read-Only Clearance"
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "write")}
+                                        disabled={!isAdmin}
+                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
+                                          cell.write ? "bg-blue-600 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Write / Modify Clearance"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "admin")}
+                                        disabled={!isAdmin}
+                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
+                                          cell.admin ? "bg-blue-900 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title="Admin Signoff / Delete Clearance"
+                                      >
+                                        Admin
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Modal footer */}
+                <div className="p-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-end">
+                  <button
+                    type="button"
                     onClick={() => setSelectedRoleId("")}
-                    className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md transition shadow-2xs hover:shadow-sm cursor-pointer"
                   >
-                    <X className="h-4 w-4" />
+                    Done
                   </button>
                 </div>
-              </div>
-
-              {/* Alert Info Banner */}
-              <div className="px-4 py-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9.5px] font-medium flex items-start gap-2 shrink-0 select-none">
-                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
-                <span>Modifications to this role matrix will immediately apply to all assigned employees, unless overridden individually.</span>
-              </div>
-
-              {/* Permissions list container */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar bg-white">
-                {filteredPermissions.map(cat => {
-                  const catKey = cat.id || cat.category;
-                  const isCollapsed = !!collapsedFolders[catKey];
-
-                  return (
-                    <div key={catKey} className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
-                      {/* Category Header */}
-                      <div
-                        onClick={() => toggleFolder(catKey)}
-                        className="bg-slate-50/95 hover:bg-slate-100/80 px-3.5 py-2 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-200"
-                      >
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                          {isCollapsed ? <Folder className="h-3.5 w-3.5 text-slate-400" /> : <FolderOpen className="h-3.5 w-3.5 text-blue-600" />}
-                          <span>{cat.category}</span>
-                          <span className="text-[8.5px] text-slate-400 font-bold border border-slate-200 px-1.5 py-0.2 rounded-md bg-white">
-                            {cat.items.length}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-0.5 text-[8.5px] font-medium text-slate-400">
-                          <span>{isCollapsed ? "Expand" : "Collapse"}</span>
-                          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
-                        </div>
-                      </div>
-
-                      {/* Permissions List */}
-                      {!isCollapsed && (
-                        <div className="divide-y divide-slate-100 bg-white">
-                          {cat.items.map(item => {
-                            const cell = rolePermissions[selectedRoleId]?.[item.id] || { read: false, write: false, admin: false };
-                            return (
-                              <div key={item.id} className="p-3 hover:bg-slate-50/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left group">
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-slate-800 text-[10.5px]">{item.label}</h4>
-                                    {item.isCustom && (
-                                      <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 text-[7px] font-extrabold uppercase border border-blue-100 leading-none">
-                                        Custom
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[9.5px] text-slate-400 font-medium">{item.desc}</p>
-                                </div>
-
-                                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
-                                  {/* Delete Custom Permission */}
-                                  {isAdmin && item.isCustom && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeletePermission(item.id, item.label)}
-                                      className="p-1.5 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded-lg transition opacity-0 group-hover:opacity-100 cursor-pointer"
-                                      title={`Delete permission "${item.label}"`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-
-                                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRolePerm(selectedRoleId, item.id, "read")}
-                                      disabled={!isAdmin}
-                                      className={`px-2 py-1 rounded text-[9px] font-bold cursor-pointer transition ${
-                                        cell.read ? "bg-slate-800 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
-                                      } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title="Read-Only Clearance"
-                                    >
-                                      View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRolePerm(selectedRoleId, item.id, "write")}
-                                      disabled={!isAdmin}
-                                      className={`px-2 py-1 rounded text-[9px] font-bold cursor-pointer transition ${
-                                        cell.write ? "bg-blue-600 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
-                                      } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title="Write / Modify Clearance"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRolePerm(selectedRoleId, item.id, "admin")}
-                                      disabled={!isAdmin}
-                                      className={`px-2 py-1 rounded text-[9px] font-bold cursor-pointer transition ${
-                                        cell.admin ? "bg-blue-900 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
-                                      } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title="Admin Signoff / Delete Clearance"
-                                    >
-                                      Admin
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             </div>
           )}
@@ -1864,10 +1872,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* VIEW 2: BY USERS (Master-Detail) */}
       {/* ========================================================= */}
       {activeTab === "users" && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[500px]">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-[500px]">
           
           {/* LEFT COMPONENT: Users Table */}
-          <div className={`flex-1 flex flex-col overflow-y-auto min-w-0 ${selectedUser ? 'lg:border-r lg:border-slate-200' : ''}`}>
+          <div className="flex-1 flex flex-col overflow-y-auto min-w-0">
             
             {/* Top Tabs Filtering Row */}
             <div className="p-3.5 border-b border-slate-200 bg-slate-50/40 flex flex-wrap gap-1.5 shrink-0">
@@ -1970,10 +1978,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       return (
                         <tr 
                           key={u.id}
-                          onClick={() => setSelectedUser(u)}
-                          className={`hover:bg-slate-50/60 transition-colors cursor-pointer select-none ${
-                            isSelected ? 'bg-blue-50/25' : ''
-                          }`}
+                          className="hover:bg-slate-50/60 transition-colors select-none"
                         >
                           {/* Checkbox */}
                           <td className="px-3.5 py-2.5 w-[6%] text-center align-middle" onClick={e => e.stopPropagation()}>
@@ -2124,133 +2129,143 @@ export default function AdminRBAC({ onRefreshSignal }) {
             </div>
           </div>
 
-          {/* RIGHT NESTED PANEL: User Permissions Settings */}
+          {/* DIALOG IN THE MIDDLE: User Permissions Settings */}
           {selectedUser && (
-            <div className="w-full lg:w-[420px] bg-slate-50/20 border-t lg:border-t-0 border-slate-200 flex flex-col shrink-0">
-              {/* Panel header */}
-              <div className="p-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-                <h3 className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">
-                  User Permissions
-                </h3>
-                <button 
-                  type="button" 
-                  onClick={() => setSelectedUser(null)}
-                  className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Profile details card */}
-              <div className="p-3.5 bg-white border-b border-slate-200 shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-[11px] tracking-wider shadow-2xs ${getAvatarColor(selectedUser.name)}`}>
-                      {selectedUser.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-extrabold text-slate-900 text-xs tracking-tight">{selectedUser.name}</span>
-                      <span className="text-[9.5px] text-slate-400 truncate mt-0.5">{selectedUser.email}</span>
-                    </div>
-                  </div>
-                  <span className="text-[9.5px] font-bold text-blue-600 hover:text-blue-700 transition cursor-pointer flex items-center gap-0.5">
-                    <span>View profile</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </span>
-                </div>
-              </div>
-
-              {/* Info alert banner */}
-              <div className="p-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9.5px] font-medium flex items-start gap-2 shrink-0 select-none">
-                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
-                <span>Permission list will change when select the user group</span>
-              </div>
-
-              {/* Group selection dropdown */}
-              <div className="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 text-[10.5px]">
-                <span className="font-bold text-slate-700">User Group</span>
-                <div className="relative w-44">
-                  <select
-                    id="user-group-dropdown"
-                    value={panelUserGroup}
-                    onChange={e => handlePanelGroupChange(e.target.value)}
-                    className="w-full text-[10.5px] font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1.5 pr-7 outline-none appearance-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-3xs animate-none"
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
+              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-[440px] w-full max-h-[75vh] flex flex-col overflow-hidden animate-scaleIn">
+                
+                {/* Panel header */}
+                <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+                  <h3 className="text-[10.5px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 text-blue-600" />
+                    <span>User Permissions</span>
+                  </h3>
+                  <button 
+                    type="button" 
+                    onClick={() => setSelectedUser(null)}
+                    className="p-1 hover:bg-slate-250 text-slate-400 hover:text-slate-650 rounded-md transition cursor-pointer"
                   >
-                    <option value="admin">Administrator</option>
-                    <option value="manager">Manager</option>
-                    <option value="ap_specialist">Consultant</option>
-                    <option value="auditor">Internal Auditor</option>
-                    <option value="employee">Employee</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
 
-              {/* Scrollable list of permissions toggles */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 custom-scrollbar">
-                {flatPermissions.map(perm => {
-                  const isEnabled = !!panelPermissions[perm.id];
-                  const IconComponent = perm.icon || ShieldCheck;
-                  
-                  return (
-                    <div 
-                      key={perm.id} 
-                      className="p-2.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 hover:border-slate-350 hover:shadow-2xs transition-all duration-200 select-none"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
-                          <IconComponent className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="flex flex-col text-left">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10.5px] font-extrabold text-slate-900 leading-snug">{perm.label}</span>
-                            {perm.isCustom && (
-                              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-bold">
-                                Custom
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[9px] text-slate-400 leading-tight mt-0.5">{perm.desc}</span>
-                        </div>
+                {/* Profile details card */}
+                <div className="p-3 bg-white border-b border-slate-200 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-8.5 w-8.5 rounded-full flex items-center justify-center font-bold text-[10px] tracking-wider shadow-2xs ${getAvatarColor(selectedUser.name)}`}>
+                        {selectedUser.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
                       </div>
-
-                      {/* Toggle Switch */}
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePermission(perm.id)}
-                        disabled={!isAdmin}
-                        className={`relative inline-flex h-4.5 w-8.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-blue-500/25 ${
-                          isEnabled ? 'bg-blue-600' : 'bg-slate-200'
-                        } ${!isAdmin ? 'opacity-65 cursor-not-allowed' : ''}`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                            isEnabled ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-extrabold text-slate-900 text-[11px] tracking-tight">{selectedUser.name}</span>
+                        <span className="text-[9px] text-slate-400 truncate mt-0.5">{selectedUser.email}</span>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                      ID: {selectedUser.employee_id || selectedUser.id}
+                    </span>
+                  </div>
+                </div>
 
-              {/* Save changes footer */}
-              <div className="p-3.5 bg-white border-t border-slate-200 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleSavePermissionChanges}
-                  disabled={saving || !isAdmin}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition shadow-2xs hover:shadow-sm cursor-pointer disabled:opacity-60 text-center flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Save changes</span>
-                  )}
-                </button>
+                {/* Info alert banner */}
+                <div className="p-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9px] font-semibold flex items-start gap-1.5 shrink-0 select-none">
+                  <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.2" />
+                  <span>Permissions align with User Group. Custom switches define exceptions.</span>
+                </div>
+
+                {/* Group selection dropdown */}
+                <div className="p-3 bg-white border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 text-[10px]">
+                  <span className="font-bold text-slate-700">User Group</span>
+                  <div className="relative w-40">
+                    <select
+                      id="user-group-dropdown"
+                      value={panelUserGroup}
+                      onChange={e => handlePanelGroupChange(e.target.value)}
+                      className="w-full text-[10px] font-semibold text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1 pr-6 outline-none appearance-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-3xs animate-none"
+                    >
+                      <option value="admin">Administrator</option>
+                      <option value="manager">Manager</option>
+                      <option value="ap_specialist">Consultant</option>
+                      <option value="auditor">Internal Auditor</option>
+                      <option value="employee">Employee</option>
+                    </select>
+                    <ChevronDown className="absolute right-1.5 top-1.5 h-3 w-3 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Scrollable list of permissions toggles */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-slate-50/20">
+                  {flatPermissions.map(perm => {
+                    const isEnabled = !!panelPermissions[perm.id];
+                    const IconComponent = perm.icon || ShieldCheck;
+                    
+                    return (
+                      <div 
+                        key={perm.id} 
+                        className="p-2 bg-white border border-slate-200 rounded-lg flex items-center justify-between gap-2.5 hover:border-slate-350 hover:shadow-2xs transition-all duration-200 select-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`h-7 w-7 rounded flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
+                            <IconComponent className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex flex-col text-left">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-extrabold text-slate-900 leading-tight">{perm.label}</span>
+                              {perm.isCustom && (
+                                <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[7px] font-bold">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[8.5px] text-slate-400 leading-tight mt-0.5">{perm.desc}</span>
+                          </div>
+                        </div>
+
+                        {/* Toggle Switch */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePermission(perm.id)}
+                          disabled={!isAdmin}
+                          className={`relative inline-flex h-4 w-7.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-blue-500/25 ${
+                            isEnabled ? 'bg-blue-600' : 'bg-slate-200'
+                          } ${!isAdmin ? 'opacity-65 cursor-not-allowed' : ''}`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                              isEnabled ? 'translate-x-3.5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Save changes footer */}
+                <div className="p-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUser(null)}
+                    className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-[9px] uppercase tracking-wider rounded-md transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePermissionChanges}
+                    disabled={saving || !isAdmin}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md transition shadow-2xs hover:shadow-sm cursor-pointer disabled:opacity-60 text-center flex items-center justify-center gap-1.5"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save changes</span>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           )}

@@ -14,7 +14,8 @@ from app.database import get_db
 from app.config import settings
 from app.models import (
     Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, User,
-    ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig
+    ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig,
+    ChecklistRule, BusinessRule
 )
 from app.schemas import (
     InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest,
@@ -64,6 +65,35 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
             )
             approved_invoice_ids = {row[0] for row in audit_query.all()}
 
+    # Filter documents based on role permissions (Admin sees all; standard user sees only their assigned/approved documents)
+    if current_user and current_user.role != "admin":
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+        
+        filtered_invoices = []
+        for inv in invoices:
+            # Check if user previously approved
+            if inv.id in approved_invoice_ids:
+                filtered_invoices.append(inv)
+                continue
+                
+            # Check if currently assigned as approver
+            is_assigned = False
+            if inv.assigned_approver:
+                approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
+                for handle in user_handles:
+                    if handle in approvers or any(handle in app or app in handle for app in approvers):
+                        is_assigned = True
+                        break
+            if is_assigned:
+                filtered_invoices.append(inv)
+        invoices = filtered_invoices
+
     results = []
     for inv in invoices:
         is_curr = False
@@ -72,11 +102,12 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
             if is_active_flow:
                 approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
                 user_handles = [
-                    current_user.username.lower(),
-                    current_user.employee_id.lower(),
-                    current_user.employee_name.lower(),
-                    current_user.email.lower()
+                    current_user.username.lower() if current_user.username else "",
+                    current_user.employee_id.lower() if current_user.employee_id else "",
+                    current_user.employee_name.lower() if current_user.employee_name else "",
+                    current_user.email.lower() if current_user.email else ""
                 ]
+                user_handles = [h for h in user_handles if h]
                 for handle in user_handles:
                     if handle in approvers or any(handle in app or app in handle for app in approvers):
                         is_curr = True
@@ -327,54 +358,20 @@ def workflow_approve_payload(
                 next_assigned_info = f"Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}."
 
                 # Auto-initialize checklist items in the database for the next stage
-                def get_wf_name(profile_id, total):
-                    p = (profile_id or "").upper()
-                    if "GRN" in p: return "ACM_GRN_Header_2stages"
-                    if "ENES" in p: return "ENES_ASSET_STAGE _6"
-                    if "VCC_PURCHASE" in p or "FIXED_ASSET" in p:
-                        if total == 2: return "VCC_DA_IA_FLOW"
-                        elif total == 3: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                        elif total == 5: return "VCC_DocApprovalFlow_All5_W-A"
-                        elif total == 4: return "VCC_DocApprovalFlow_DA_FA_IA_FIA_W-B"
-                        else: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                    if "EVOUCHER_INV" in p: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                    return "All_General_Temp"
-                wf_checklist_name = get_wf_name(inv.workflow_profile_id, inv.total_stages or 2)
-                templates = db.query(ChecklistTemplate).filter(
-                    ChecklistTemplate.workflow_profile == wf_checklist_name,
-                    ChecklistTemplate.stage_name == next_step.step_name
-                ).all()
-                if not templates:
-                    templates = db.query(ChecklistTemplate).filter(
-                        ChecklistTemplate.workflow_profile == "All_General_Temp",
-                        ChecklistTemplate.stage_name == next_step.step_name
-                    ).all()
-
                 existing_next_items = db.query(InvoiceChecklistState).filter(
                     InvoiceChecklistState.invoice_id == inv.id,
                     InvoiceChecklistState.stage_name == next_step.step_name
                 ).all()
                 if not existing_next_items:
-                    if templates:
-                        for t in templates:
-                            db.add(InvoiceChecklistState(
-                                invoice_id=inv.id,
-                                stage_name=next_step.step_name,
-                                item_text=t.item_text,
-                                is_checked=False
-                            ))
-                        inv.checklist_state = json.dumps({t.item_text: False for t in templates})
-                    else:
-                        from app.routers.sync import generate_compliance_checklist_for_category
-                        default_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
-                        for item_text in default_items:
-                            db.add(InvoiceChecklistState(
-                                invoice_id=inv.id,
-                                stage_name=next_step.step_name,
-                                item_text=item_text,
-                                is_checked=False
-                            ))
-                        inv.checklist_state = json.dumps({item_text: False for item_text in default_items})
+                    checklist_items = resolve_checklist_items(db, inv, next_step.step_name)
+                    for item_text in checklist_items:
+                        db.add(InvoiceChecklistState(
+                            invoice_id=inv.id,
+                            stage_name=next_step.step_name,
+                            item_text=item_text,
+                            is_checked=False
+                        ))
+                    inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
 
         inv.status = f"In Progress (Stage {inv.current_stage})"
     else:
@@ -659,7 +656,12 @@ async def upload_document(
         new_inv.status = "Initiated (Stage 1)"
 
     from app.routers.sync import generate_compliance_checklist_for_category
-    checklist_items = generate_compliance_checklist_for_category(new_inv.category, new_inv.document_type)
+    checklist_items = generate_compliance_checklist_for_category(
+        new_inv.category, 
+        new_inv.document_type, 
+        new_inv.division, 
+        new_inv.plant
+    )
     new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
     db.commit()
@@ -736,7 +738,12 @@ async def upload_and_route(
         inv.status = "Initiated (Stage 1)"
 
     from app.routers.sync import generate_compliance_checklist_for_category
-    checklist_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
+    checklist_items = generate_compliance_checklist_for_category(
+        inv.category, 
+        inv.document_type, 
+        inv.division, 
+        inv.plant
+    )
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
     db.commit()
@@ -862,17 +869,77 @@ def get_document_versions(id: str, db: Session = Depends(get_db)):
 # Stats & Analytical Dashboard Endpoints
 @router.get("/api/stats")
 @router.get("/api/dashboard/stats")
-def get_dashboard_stats(db: Session = Depends(get_db)):
-    total = db.query(Invoice).filter(Invoice.is_deleted == False).count()
-    pending = db.query(Invoice).filter(Invoice.is_deleted == False).filter(Invoice.status.ilike("%Pending%") | Invoice.status.ilike("%Initiated%") | Invoice.status.ilike("%Progress%")).count()
-    approved = db.query(Invoice).filter(Invoice.is_deleted == False).filter(Invoice.status.ilike("%Settled%") | Invoice.status.ilike("%Approved%")).count()
-    total_val = sum(float(i.amount or 0.0) for i in db.query(Invoice).filter(Invoice.is_deleted == False).all())
+def get_dashboard_stats(db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user)):
+    # Base query for all active invoices
+    invoices = db.query(Invoice).filter(Invoice.is_deleted == False).all()
+    
+    # Identify approved invoice IDs for the current user
+    approved_invoice_ids = set()
+    if current_user:
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
+        user_names = [name for name in user_names if name]
+        
+        or_filters = [AuditLog.user.ilike(f"%{name}%") for name in user_names if name]
+        if or_filters:
+            audit_query = db.query(AuditLog.invoice_id).filter(
+                AuditLog.action.ilike("%approve%"),
+                or_(*or_filters)
+            )
+            approved_invoice_ids = {row[0] for row in audit_query.all()}
+
+    # Calculate statistics based on role
+    if current_user and current_user.role != "admin":
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+        
+        scoped_invoices = []
+        approved_count = 0
+        pending_count = 0
+        total_spend = 0.0
+        
+        for inv in invoices:
+            has_approved = (inv.id in approved_invoice_ids)
+            
+            # Check if assigned
+            is_assigned = False
+            if inv.assigned_approver:
+                approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
+                for handle in user_handles:
+                    if handle in approvers or any(handle in app or app in handle for app in approvers):
+                        is_assigned = True
+                        break
+            
+            if has_approved or is_assigned:
+                scoped_invoices.append(inv)
+                total_spend += float(inv.amount or 0.0)
+                
+                # Check status and participation to determine Approved vs. Pending
+                if has_approved:
+                    approved_count += 1
+                else:
+                    is_active_flow = inv.status not in ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "Settled"]
+                    if is_active_flow and is_assigned:
+                        pending_count += 1
+        
+        total_docs = len(scoped_invoices)
+    else:
+        # Admin or fallback: Global system stats
+        total_docs = len(invoices)
+        pending_count = sum(1 for i in invoices if any(status.lower() in (i.status or "").lower() for status in ["pending", "initiated", "progress"]))
+        approved_count = sum(1 for i in invoices if any(status.lower() in (i.status or "").lower() for status in ["settled", "approved", "paid", "ready for payment"]))
+        total_spend = sum(float(i.amount or 0.0) for i in invoices)
+
     return {
-        "totalDocuments": total,
-        "pendingApprovals": pending,
-        "approvedDocuments": approved,
-        "totalSpendINR": total_val,
-        "autoRoutedPercentage": 100.0 if total > 0 else 0.0
+        "totalDocuments": total_docs,
+        "pendingApprovals": pending_count,
+        "approvedDocuments": approved_count,
+        "totalSpendINR": total_spend,
+        "autoRoutedPercentage": 100.0 if total_docs > 0 else 0.0
     }
 
 @router.get("/api/notifications")
@@ -1085,6 +1152,49 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
         "items": []
     }
 
+
+def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
+    # Match Checklist Rules from the database
+    matching_rules = db.query(ChecklistRule).filter(
+        ChecklistRule.stage_name == stage_name,
+        ChecklistRule.is_active == True
+    ).all()
+    
+    scored_rules = []
+    for r in matching_rules:
+        # Check conditions
+        if r.division and r.division != inv.division:
+            continue
+        if r.category and r.category != inv.category:
+            continue
+        if r.branch and r.branch != inv.plant:
+            continue
+        if r.workflow_profile and r.workflow_profile != inv.workflow_profile_id:
+            continue
+            
+        # Calculate specificity score
+        score = 0
+        if r.division == inv.division: score += 10
+        if r.category == inv.category: score += 10
+        if r.branch == inv.plant: score += 10
+        if r.workflow_profile == inv.workflow_profile_id: score += 5
+        scored_rules.append((score, r))
+        
+    if scored_rules:
+        max_score = max(s[0] for s in scored_rules)
+        best_rules = [r for score, r in scored_rules if score == max_score]
+        return [r.item_text for r in best_rules]
+        
+    # If no rules matched, use fallback Python category generator
+    from app.routers.sync import generate_compliance_checklist_for_category
+    return generate_compliance_checklist_for_category(
+        inv.category, 
+        inv.document_type, 
+        inv.division, 
+        inv.plant
+    )
+
+
 @router.get("/api/invoices/{invoice_id}/checklist")
 def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
     inv = find_invoice_by_identifier(db, invoice_id)
@@ -1099,65 +1209,24 @@ def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
         ).first()
         if step:
             current_step_name = step.step_name
-
+ 
     items = db.query(InvoiceChecklistState).filter(
         InvoiceChecklistState.invoice_id == inv.id,
         InvoiceChecklistState.stage_name == current_step_name
     ).order_by(InvoiceChecklistState.id.asc()).all()
-
+ 
     if not items:
-        # Fallback to load checklist templates
-        def get_wf_name(profile_id, total):
-            if not profile_id:
-                return "All_General_Temp"
-            
-            # Try direct table match for custom/renamed workflows first
-            exists = db.query(ChecklistTemplate).filter(
-                ChecklistTemplate.workflow_profile == profile_id
-            ).first()
-            if exists:
-                return profile_id
-
-            p = profile_id.upper()
-            if "GRN" in p: return "ACM_GRN_Header_2stages"
-            if "ENES" in p: return "ENES_ASSET_STAGE _6"
-            if "VCC_PURCHASE" in p or "FIXED_ASSET" in p:
-                if total == 2: return "VCC_DA_IA_FLOW"
-                elif total == 3: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-                elif total == 5: return "VCC_DocApprovalFlow_All5_W-A"
-                elif total == 4: return "VCC_DocApprovalFlow_DA_FA_IA_FIA_W-B"
-                else: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-            if "EVOUCHER_INV" in p: return "VCC_DocAppFlow_DA_IA_FA_3_W-C"
-            return "All_General_Temp"
-        wf_checklist_name = get_wf_name(inv.workflow_profile_id, inv.total_stages or 2)
-        templates = db.query(ChecklistTemplate).filter(
-            ChecklistTemplate.workflow_profile == wf_checklist_name,
-            ChecklistTemplate.stage_name == current_step_name
-        ).all()
-        if templates:
-            for t in templates:
-                item = InvoiceChecklistState(
-                    invoice_id=inv.id,
-                    stage_name=current_step_name,
-                    item_text=t.item_text,
-                    is_checked=False
-                )
-                db.add(item)
-                items.append(item)
-            db.commit()
-        else:
-            from app.routers.sync import generate_compliance_checklist_for_category
-            default_items = generate_compliance_checklist_for_category(inv.category, inv.document_type)
-            for t_text in default_items:
-                item = InvoiceChecklistState(
-                    invoice_id=inv.id,
-                    stage_name=current_step_name,
-                    item_text=t_text,
-                    is_checked=False
-                )
-                db.add(item)
-                items.append(item)
-            db.commit()
+        default_items = resolve_checklist_items(db, inv, current_step_name)
+        for t_text in default_items:
+            item = InvoiceChecklistState(
+                invoice_id=inv.id,
+                stage_name=current_step_name,
+                item_text=t_text,
+                is_checked=False
+            )
+            db.add(item)
+            items.append(item)
+        db.commit()
 
     return [
         {
@@ -1212,4 +1281,82 @@ def update_invoice_checklist(
     inv.checklist_state = json.dumps({item.item_text: item.is_checked for item in items})
     db.commit()
     return {"success": True, "checklist": [{"item_text": item.item_text, "is_checked": item.is_checked} for item in items]}
+
+
+@router.get("/api/checklist-templates")
+def get_checklist_templates(db: Session = Depends(get_db)):
+    rules = db.query(ChecklistRule).order_by(
+        ChecklistRule.rule_name.asc(),
+        ChecklistRule.sequence_order.asc()
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "rule_name": r.rule_name,
+            "division": r.division,
+            "category": r.category,
+            "branch": r.branch,
+            "workflow_profile": r.workflow_profile,
+            "stage_name": r.stage_name,
+            "item_text": r.item_text,
+            "is_mandatory": r.is_mandatory,
+            "is_active": r.is_active,
+            "sequence_order": r.sequence_order
+        }
+        for r in rules
+    ]
+
+
+@router.post("/api/checklist-templates")
+def save_checklist_template(payload: dict, db: Session = Depends(get_db)):
+    tid = payload.get("id")
+    if tid and not str(tid).startswith("tmp-"):
+        # Update existing
+        rule = db.query(ChecklistRule).filter(ChecklistRule.id == int(tid)).first()
+        if not rule:
+            raise HTTPException(status_code=404, detail="Rule not found")
+    else:
+        # Create new
+        rule = ChecklistRule()
+        db.add(rule)
+
+    rule.rule_name = payload.get("rule_name", "Checklist Rule")
+    rule.division = payload.get("division")
+    rule.category = payload.get("category")
+    rule.branch = payload.get("branch")
+    rule.workflow_profile = payload.get("workflow_profile")
+    rule.stage_name = payload.get("stage_name", "Attachment Status")
+    rule.item_text = payload.get("item_text", "")
+    rule.is_mandatory = payload.get("is_mandatory", True)
+    rule.is_active = payload.get("is_active", True)
+    rule.sequence_order = payload.get("sequence_order", 1)
+
+    db.commit()
+    db.refresh(rule)
+    return {
+        "success": True,
+        "template": {
+            "id": rule.id,
+            "rule_name": rule.rule_name,
+            "division": rule.division,
+            "category": rule.category,
+            "branch": rule.branch,
+            "workflow_profile": rule.workflow_profile,
+            "stage_name": rule.stage_name,
+            "item_text": rule.item_text,
+            "is_mandatory": rule.is_mandatory,
+            "is_active": rule.is_active,
+            "sequence_order": rule.sequence_order
+        }
+    }
+
+
+@router.delete("/api/checklist-templates/{template_id}")
+def delete_checklist_template(template_id: int, db: Session = Depends(get_db)):
+    rule = db.query(ChecklistRule).filter(ChecklistRule.id == template_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    db.delete(rule)
+    db.commit()
+    return {"success": True}
 

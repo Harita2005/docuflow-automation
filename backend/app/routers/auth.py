@@ -1,7 +1,7 @@
 import time
 import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, AuditLog
@@ -50,50 +50,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail=f"User '{ident_str}' not found in system."
         )
 
-    # 1. Direct Password Login: Bypasses MFA, strictly 10 minutes token validity, restricted to Admin
-    if request.password:
-        if not verify_password(request.password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect password. Please try again."
-            )
-            
-        user.last_login = datetime.datetime.utcnow()
-        # 60 minutes validity for password login
-        expires_delta = datetime.timedelta(minutes=60)
-        access_token = create_access_token(
-            data={"sub": user.username, "id": user.id, "role": user.role},
-            expires_delta=expires_delta
-        )
-        
-        # Log User Login Audit Entry
-        try:
-            db.add(AuditLog(
-                invoice_id=None,
-                user=user.employee_name or user.name or user.username,
-                action="User Logged In (Direct Password)",
-                stage="Authentication",
-                notes=f"User {user.employee_name} ({user.employee_id}) authenticated directly via password. Token validity set to 10 minutes."
-            ))
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            print("Audit log error on login:", e)
-
-        return {
-            "token": access_token,
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "name": user.employee_name or user.name,
-                "email": user.email,
-                "role": user.role,
-                "employee_id": user.employee_id
-            },
-            "mfa_required": False
-        }
-
-    # 2. MFA Login Flow: Triggered if no password is provided in the request
+    # Standard MFA Flow: always return MFA ticket to initiate 2FA verification
     ticket = create_mfa_ticket(user.id, user.username)
     return {
         "token": None,
@@ -107,7 +64,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/mfa/send-otp")
-def send_otp(request: MFASendOTPRequest, db: Session = Depends(get_db)):
+def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     ticket_data = get_mfa_ticket(request.ticket)
     if not ticket_data:
         raise HTTPException(status_code=400, detail="MFA session expired or invalid. Please sign in again.")
@@ -123,12 +80,25 @@ def send_otp(request: MFASendOTPRequest, db: Session = Depends(get_db)):
 
     method_upper = request.method.upper()
     if method_upper == "EMAIL":
-        success, msg = send_email_otp(user.email, user.employee_name or user.name, code, db=db)
+        from app.models import NotificationProviderConfig
+        config = db.query(NotificationProviderConfig).first()
+        config_dict = None
+        if config:
+            config_dict = {
+                "smtp_server": config.smtp_server,
+                "port": config.port,
+                "username": config.username,
+                "encrypted_password": config.encrypted_password,
+                "sender_email": config.sender_email,
+                "sender_name": config.sender_name
+            }
+        background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
         destination = mask_email(user.email)
+        msg = f"Verification code queued in background for {destination}"
     elif method_upper == "SMS":
-        phone = user.phone_number or "+91 98765 43210"
-        success, msg = send_sms_otp(phone, user.employee_name or user.name, code)
-        destination = mask_phone(phone)
+        background_tasks.add_task(send_sms_otp, user.phone_number or "+91 98765 43210", user.employee_name or user.name, code)
+        destination = mask_phone(user.phone_number or "+91 98765 43210")
+        msg = f"Verification code queued in background for {destination}"
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
 

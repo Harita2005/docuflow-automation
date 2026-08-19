@@ -96,7 +96,9 @@ export default function Sidebar({
       {/* Menu Area */}
       <div className="flex-1 overflow-y-auto py-6 px-4 space-y-7">
         {menuGroups.map((group, gIdx) => {
-          // If all items in a group are hidden based on role, hide group
+          // Filter items based on permissions
+          const visibleItems = group.items.filter(item => permissions.includes(item.id));
+          if (visibleItems.length === 0) return null;
           return (
             <div key={gIdx} className="space-y-2">
               {isExpanded && (
@@ -105,7 +107,7 @@ export default function Sidebar({
                 </span>
               )}
               <div className="space-y-1">
-                {group.items.map((item) => {
+                {visibleItems.map((item) => {
                   const active = currentView === item.id;
                   const Icon = item.icon;
                   return (

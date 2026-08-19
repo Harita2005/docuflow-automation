@@ -19,7 +19,9 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Calendar
+  Calendar,
+  PauseCircle,
+  XCircle
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -44,8 +46,8 @@ export default function Dashboard({
   setCurrentView,
   requireGRN = true
 }: DashboardProps) {
-  const [listFilter, setListFilter] = useState<'all' | 'action' | 'approved' | 'review' | 'grn' | 'action_required' | 'my_approvals'>(
-    currentUserRole === 'admin' ? 'all' : 'action_required'
+  const [listFilter, setListFilter] = useState<'all' | 'pending' | 'inprogress' | 'approved' | 'rejected' | 'onhold'>(
+    'all'
   );
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
@@ -93,12 +95,15 @@ export default function Dashboard({
 
   const totalSpentVal = documents.reduce((acc, curr) => acc + curr.amount, 0);
 
-  // Role details calculations
-  const pendingGRNCount = requireGRN ? documents.filter(d => d.status === "Waiting for GRN" || d.status === "Received").length : 0;
-  const pendingApprovalsCount = documents.filter(d => d.activeApprovalLog?.status === "Pending").length;
-  const readyPaymentCount = documents.filter(d => d.status === "Ready for Payment").length;
-  const totalPaidInvoicesCount = documents.filter(d => d.status === "Paid").length;
-  const bottleneckCount = pendingGRNCount + pendingApprovalsCount;
+  // Dynamic Dashboard KPI Calculations
+  const pendingCount = documents.filter(d => !!d.is_current_approver).length;
+  const approvedCount = documents.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status)).length;
+  const rejectedCount = documents.filter(d => ["Rejected", "Failed"].includes(d.status)).length;
+  const onHoldCount = documents.filter(d => d.status === "On Hold").length;
+  const inProgressCount = documents.filter(d => 
+    !["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "On Hold"].includes(d.status) &&
+    !d.is_current_approver
+  ).length;
 
   const statusChartData = [
     { name: "Approved", value: documents.filter(i => i.status === "Paid" || i.status === "Approved" || i.status === "Ready for Payment").length, color: "#14b8a6" },
@@ -123,122 +128,135 @@ export default function Dashboard({
 
       {/* RENDER TAILORED KPIS DEPENDING ON ROLE */}
       
-      {currentUserRole === "admin" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
-          <div 
+      {/* UNIFIED 6-CARD METRICS ROW */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
+        
+        {/* 1. Total Documents */}
+        <div 
           onClick={() => { setListFilter('all'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-blue-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/0 to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-              <div className="bg-blue-50 text-blue-600 rounded-md flex items-center justify-center p-1 border border-blue-100/50 shadow-sm">
-                <FileText className="h-4 w-4" />
-              </div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Ingested</span>
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'all' ? 'border-blue-500 bg-blue-50/5 ring-1 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
+              <FileText className="h-4.5 w-4.5" />
             </div>
-            <div className="relative z-10 flex flex-col items-center gap-0.5">
-              <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-blue-600 transition-colors">
-                {stats?.totalDocuments ?? documents.length}
-              </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Documents</span>
-            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Documents</span>
           </div>
-
-          <div 
-          onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-emerald-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-              <div className="bg-emerald-50 text-emerald-600 rounded-md flex items-center justify-center p-1 border border-emerald-100/50 shadow-sm">
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Approved</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-0.5">
-              <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-emerald-600 transition-colors">
-                {documents.filter(d => !!d.has_approved).length}
-              </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Documents Approved</span>
-            </div>
-          </div>
-
-          <div 
-          onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-indigo-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[100px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-50/0 to-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-              <div className="bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center p-1 border border-indigo-100/50 shadow-sm">
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Pending</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-0.5">
-              <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-indigo-600 transition-colors">
-                {documents.filter(d => !!d.is_current_approver).length}
-              </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Action Required</span>
-            </div>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur-xl border border-slate-300 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group min-h-[100px]">
-            <div className="absolute inset-0 bg-gradient-to-tr from-slate-100/0 to-slate-100/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-              <div className="bg-slate-100 text-slate-600 rounded-md flex items-center justify-center p-1 border border-slate-200/50 shadow-sm">
-                <IndianRupee className="h-4 w-4" />
-              </div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Processed Today</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-0.5">
-              <span className="block text-2xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-slate-600 transition-colors">
-                {formatCurrency(totalSpentVal)}
-              </span>
-              <span className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">Total Bill Amount</span>
-            </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-600 transition-colors">
+              {stats?.totalDocuments ?? documents.length}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">All time</span>
           </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mt-3">
-          <div 
-          onClick={() => { setListFilter('action_required'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-amber-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(245,158,11,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-amber-50/0 to-amber-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-3 relative z-10">
-              <div className="bg-amber-50 text-amber-600 rounded-md flex items-center justify-center p-1.5 border border-amber-100/50 shadow-sm">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <span className="text-[11px] font-bold text-amber-600 uppercase tracking-widest">Action Required</span>
-            </div>
-            <div className="relative z-10 flex flex-col items-center gap-1">
-              <span className="block text-3xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-amber-600 transition-colors">
-                {documents.filter(d => !!d.is_current_approver).length}
-              </span>
-              <span className="text-[10px] text-amber-600/80 font-bold tracking-widest uppercase">Pending Approvals</span>
-            </div>
-          </div>
 
-          <div 
-          onClick={() => { setListFilter('my_approvals'); setDocTypeFilter('All'); setCurrentPage(1); }}
-            className="bg-white/80 backdrop-blur-xl border border-emerald-200 p-3 rounded-[1rem] flex flex-col items-center justify-center text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden group min-h-[120px]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50/0 to-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="flex items-center gap-2 mb-3 relative z-10">
-              <div className="bg-emerald-50 text-emerald-600 rounded-md flex items-center justify-center p-1.5 border border-emerald-100/50 shadow-sm">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest">My Approvals</span>
+        {/* 2. Pending */}
+        <div 
+          onClick={() => { setListFilter('pending'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'pending' ? 'border-amber-500 bg-amber-50/5 ring-1 ring-amber-500/20' : 'border-slate-200 hover:border-amber-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center p-1.5 border border-amber-100/50 shadow-2xs">
+              <Clock className="h-4.5 w-4.5" />
             </div>
-            <div className="relative z-10 flex flex-col items-center gap-1">
-              <span className="block text-3xl font-black text-slate-800 tracking-tight font-display drop-shadow-sm group-hover:text-emerald-600 transition-colors">
-                {documents.filter(d => !!d.has_approved).length}
-              </span>
-              <span className="text-[10px] text-emerald-600/80 font-bold tracking-widest uppercase">Documents Approved</span>
-            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pending</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-amber-600 transition-colors">
+              {pendingCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Requires action</span>
           </div>
         </div>
-      )}
+
+        {/* 3. In Progress */}
+        <div 
+          onClick={() => { setListFilter('inprogress'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'inprogress' ? 'border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
+              <Activity className="h-4.5 w-4.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">In Progress</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-500 transition-colors">
+              {inProgressCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">In workflow</span>
+          </div>
+        </div>
+
+        {/* 4. Approved */}
+        <div 
+          onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'approved' ? 'border-emerald-500 bg-emerald-50/5 ring-1 ring-emerald-500/20' : 'border-slate-200 hover:border-emerald-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center p-1.5 border border-emerald-100/50 shadow-2xs">
+              <CheckCircle2 className="h-4.5 w-4.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Approved</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-emerald-600 transition-colors">
+              {approvedCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Successfully completed</span>
+          </div>
+        </div>
+
+        {/* 5. Rejected */}
+        <div 
+          onClick={() => { setListFilter('rejected'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'rejected' ? 'border-rose-500 bg-rose-50/5 ring-1 ring-rose-500/20' : 'border-slate-200 hover:border-rose-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center p-1.5 border border-rose-100/50 shadow-2xs">
+              <XCircle className="h-4.5 w-4.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Rejected</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-rose-600 transition-colors">
+              {rejectedCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Not approved</span>
+          </div>
+        </div>
+
+        {/* 6. On Hold */}
+        <div 
+          onClick={() => { setListFilter('onhold'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'onhold' ? 'border-purple-500 bg-purple-50/5 ring-1 ring-purple-500/20' : 'border-slate-200 hover:border-purple-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center p-1.5 border border-purple-100/50 shadow-2xs">
+              <PauseCircle className="h-4.5 w-4.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">On Hold</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-purple-600 transition-colors">
+              {onHoldCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">On hold</span>
+          </div>
+        </div>
+      </div>
 
 
 
@@ -310,24 +328,19 @@ export default function Dashboard({
               if (currentUserRole !== 'admin') {
                 filteredDocs = filteredDocs.filter(d => !!d.is_current_approver || !!d.has_approved);
               }
-            } else if (listFilter === 'action') {
-              filteredDocs = filteredDocs.filter(d => d.status === "In Approval" || d.status === "Waiting for GRN");
-              if (currentUserRole !== 'admin') {
-                filteredDocs = filteredDocs.filter(d => d.status !== "In Approval" || !!d.is_current_approver);
-              }
-            } else if (listFilter === 'approved') {
-              filteredDocs = filteredDocs.filter(d => d.status === "Paid" || d.status === "Approved" || d.status === "Ready for Payment");
-            } else if (listFilter === 'review') {
-              filteredDocs = filteredDocs.filter(d => d.activeApprovalLog?.status === "Pending" || d.status === "Ready for Approval");
-              if (currentUserRole !== 'admin') {
-                filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
-              }
-            } else if (listFilter === 'action_required') {
+            } else if (listFilter === 'pending') {
               filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
-            } else if (listFilter === 'my_approvals') {
-              filteredDocs = filteredDocs.filter(d => !!d.has_approved);
-            } else if (listFilter === 'grn') {
-              filteredDocs = filteredDocs.filter(d => d.status === "Waiting for GRN" || d.status === "Received");
+            } else if (listFilter === 'inprogress') {
+              filteredDocs = filteredDocs.filter(d => 
+                !["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "On Hold"].includes(d.status) &&
+                !d.is_current_approver
+              );
+            } else if (listFilter === 'approved') {
+              filteredDocs = filteredDocs.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status));
+            } else if (listFilter === 'rejected') {
+              filteredDocs = filteredDocs.filter(d => ["Rejected", "Failed"].includes(d.status));
+            } else if (listFilter === 'onhold') {
+              filteredDocs = filteredDocs.filter(d => d.status === "On Hold");
             }
             
             if (docTypeFilter !== 'All') {

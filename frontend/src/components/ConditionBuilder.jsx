@@ -763,7 +763,6 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
               </div>
             </div>
           </div>
-
         </div>
 
         {/* RIGHT COLUMN: Summary & Preview */}

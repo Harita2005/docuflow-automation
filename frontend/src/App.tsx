@@ -55,15 +55,15 @@ export default function App() {
     const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
     if (terminalStates.includes(doc.status)) return false;
 
-    const isInvoice = (doc.document_type || "").toLowerCase().includes("invoice");
-    if (!isInvoice) return false;
+    // Check if the user is explicitly assigned to it
+    const isAssigned = doc.is_current_approver || 
+      (doc.assigned_approver && 
+       doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim()).includes(currentUserUsername.toLowerCase()));
+
+    if (isAssigned) return true;
 
     if (doc.status === "Data Verification Pending") {
       return currentUserRole === "admin" || currentUserRole === "ap_executive";
-    }
-
-    if (doc.activeApprovalLog && doc.activeApprovalLog.status === 'Pending') {
-      return !!doc.is_current_approver;
     }
 
     return false;
