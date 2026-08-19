@@ -1680,15 +1680,15 @@ export default function DocumentDetails({
                 </div>
               </div>
 
-              {/* Card 2: Side-by-Side Live Master Reconciliation Table */}
+              {/* Card 2: Synced ERP Master Record */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
                 <div className="px-3.5 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
                   <span className="font-extrabold text-[10.5px] uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Side-by-Side Live Reconciliation (Invoice vs. ERP Master)</span>
+                    <span>Synced ERP Master Record</span>
                   </span>
                   <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[8.5px] font-extrabold uppercase">
-                    100% Reconciled
+                    Synced
                   </span>
                 </div>
 
@@ -1696,68 +1696,38 @@ export default function DocumentDetails({
                   <table className="w-full text-left border-collapse text-[10.5px]">
                     <thead>
                       <tr className="bg-slate-50 text-[9px] uppercase font-extrabold text-slate-400 border-b border-slate-200">
-                        <th className="py-2 px-3">Field Attribute</th>
-                        <th className="py-2 px-3">Scanned Document (OCR)</th>
-                        <th className="py-2 px-3">ERP Master Record</th>
-                        <th className="py-2 px-3 text-right">Status</th>
+                        <th className="py-2 px-3 w-1/3">Field Attribute</th>
+                        <th className="py-2 px-3">ERP Master Value</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Vendor / Entity</td>
                         <td className="py-2 px-3 font-medium text-slate-900">{vendorName || document.vendor_name || "GREEN ENERGY VEHICLES LTD"}</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{vendorName || document.vendor_name || "GREEN ENERGY VEHICLES LTD"}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Match</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Bill No & Date</td>
                         <td className="py-2 px-3 font-medium text-slate-900">{invoiceNumber || document.invoice_number || "INV-ACC-08"} • {invoiceDate || document.invoice_date || "2026-08-11"}</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{invoiceNumber || document.invoice_number || "INV-ACC-08"} • {invoiceDate || document.invoice_date || "2026-08-11"}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Verified</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Purchase Order</td>
                         <td className="py-2 px-3 font-mono font-medium text-slate-900">{poNumber || document.po_number || "PO-2026-8803"}</td>
-                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{poNumber || document.po_number || "PO-2026-8803"}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Matched</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Total Gross (₹)</td>
                         <td className="py-2 px-3 font-bold text-indigo-700">₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-3 font-bold text-indigo-700">₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Balanced</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Taxable Base</td>
                         <td className="py-2 px-3 font-medium text-slate-900">₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ 18% GST OK</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Vendor GSTIN</td>
                         <td className="py-2 px-3 font-mono font-medium text-slate-900">{(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}</td>
-                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Validated</span>
-                        </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Payment Terms</td>
                         <td className="py-2 px-3 font-medium text-slate-900">{paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}</td>
-                        <td className="py-2 px-3 text-right">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[8.5px] font-bold">✓ Match</span>
-                        </td>
                       </tr>
                     </tbody>
                   </table>
