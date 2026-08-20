@@ -185,14 +185,17 @@ def seed_sd_workflow_matrix():
                 )
                 db.add(new_p)
                 synced_p += 1
-            # Re-generate exact 3 approval stages: Yuvasree -> Vignesh -> Varunan
+            # Re-generate exact 3 approval stages matching screenshot:
+            # 1. Approval Pool -> YUVASHREE_39592
+            # 2. Approval Pool -> VIGNESH_E25-01583
+            # 3. Specific Employee -> VARUNAN (E22_02046)
             db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=1,
-                step_name="First Approval (Yuvasree)",
+                step_name="First Approval",
                 approver_type='Approval Pool',
-                approver_target="YUVASHREE_39592,yuvasree,Yuvasree",
+                approver_target="YUVASHREE_39592",
                 document_type=p_data['workflow_type'],
                 action_required='Approve',
                 permissions='Approve / Reject',
@@ -201,9 +204,9 @@ def seed_sd_workflow_matrix():
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=2,
-                step_name="Second Approval (Vignesh)",
+                step_name="Second Approval",
                 approver_type='Approval Pool',
-                approver_target="VIGNESH_E25-01583,vignesh,Vignesh",
+                approver_target="VIGNESH_E25-01583",
                 document_type=p_data['workflow_type'],
                 action_required='Approve',
                 permissions='Approve / Reject',
@@ -212,9 +215,9 @@ def seed_sd_workflow_matrix():
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=3,
-                step_name="Final Approval (Varunan)",
-                approver_type='Approval Pool',
-                approver_target="varunan,EMP_VARUNAN,Varunan",
+                step_name="Final Approval",
+                approver_type='Specific Employee',
+                approver_target="VARUNAN (E22_02046)",
                 document_type=p_data['workflow_type'],
                 action_required='Approve',
                 permissions='Approve / Reject',
