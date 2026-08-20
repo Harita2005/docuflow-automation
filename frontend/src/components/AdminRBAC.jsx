@@ -37,7 +37,8 @@ import {
   FileText,
   BarChart3,
   UserX,
-  UserCheck
+  UserCheck,
+  Edit2
 } from "lucide-react";
 
 // Standard Baseline Roles
