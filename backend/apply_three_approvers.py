@@ -135,6 +135,7 @@ def apply_three_approvers():
         
         for inv in invoices:
             inv.total_stages = 3
+            inv.file_url = None # Ensure no pre-existing dummy doc is attached
             stage = inv.current_stage or 1
             if stage <= 1:
                 inv.current_stage = 1
