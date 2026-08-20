@@ -214,58 +214,70 @@ def seed_sd_workflow_matrix():
         print(f"  Total Step Definitions in table: {db.query(WorkflowStepDefinition).count()}")
 
         # ----------------------------------------------------
-        # 2. Generate and Sync Business Routing Rules
+        # 2. Generate and Sync Consolidated Business Routing Rules
         # ----------------------------------------------------
-        print(f"\n[2/3] Generating multi-attribute condition rules (Division, Branch, Doc Type, Cost Center)...")
+        print(f"\n[2/3] Generating consolidated condition rules (grouping common conditions together)...")
+        
+        # Consolidate common conditions by (cat_name, parent_company)
+        consolidated_groups = defaultdict(lambda: {
+            'companies': set(),
+            'categories': set(),
+            'branches': set(),
+            'costcenters': set(),
+            'doc_type': ''
+        })
+
+        for (cat_name, company, category), data in rule_groups.items():
+            parent_comp = company.split('_')[0].split('-')[0].strip().upper()
+            grp_key = (cat_name, parent_comp)
+            consolidated_groups[grp_key]['companies'].add(company)
+            if category and category != 'ALL':
+                consolidated_groups[grp_key]['categories'].add(category)
+            for b in data['branches']:
+                if b and b != 'ALL': consolidated_groups[grp_key]['branches'].add(b)
+            for cc in data['costcenters']:
+                if cc and cc != 'ALL': consolidated_groups[grp_key]['costcenters'].add(cc)
+            consolidated_groups[grp_key]['doc_type'] = infer_document_type(cat_name, category)
+
         generated_rules = []
         rule_idx = 1000
 
-        # Create Category/Division/Branch/CostCenter level rules
-        for (cat_name, company, category), data in rule_groups.items():
+        for (cat_name, parent_comp), data in consolidated_groups.items():
             rule_idx += 1
+            companies = sorted(list(data['companies']))
+            categories = sorted(list(data['categories']))
             branches = sorted(list(data['branches']))
             costcenters = sorted(list(data['costcenters']))
-            doc_type_for_rule = infer_document_type(cat_name, category)
+            doc_type_for_rule = data['doc_type']
 
-            # Determine branch condition value
-            if not branches or 'ALL' in branches or len(branches) > 50:
-                branch_val = "ALL"
-            else:
-                branch_val = ", ".join(branches)
-
-            # Determine cost center condition value
-            if not costcenters or 'ALL' in costcenters or len(costcenters) > 30:
-                cc_val = "ALL"
-            else:
-                cc_val = ", ".join(costcenters)
+            comp_val = ", ".join(companies) if len(companies) <= 10 else parent_comp
+            cat_val = ", ".join(categories) if len(categories) <= 20 else "ALL"
+            branch_val = ", ".join(branches) if len(branches) <= 30 else "ALL"
+            cc_val = ", ".join(costcenters) if len(costcenters) <= 30 else "ALL"
 
             conditions = [
-                {"field": "Division", "operator": "equals", "value": company, "logicalOperator": "AND"}
+                {"field": "Division", "operator": "contains any of" if "," in comp_val else "equals", "value": comp_val, "logicalOperator": "AND"}
             ]
 
-            if category and category != 'ALL':
-                conditions.append({"field": "Category", "operator": "equals", "value": category, "logicalOperator": "AND"})
+            if cat_val != "ALL" and cat_val:
+                conditions.append({"field": "Category", "operator": "contains any of" if "," in cat_val else "equals", "value": cat_val, "logicalOperator": "AND"})
 
-            if branch_val != "ALL":
-                conditions.append({"field": "Branch", "operator": "contains any of", "value": branch_val, "logicalOperator": "AND"})
+            if branch_val != "ALL" and branch_val:
+                conditions.append({"field": "Branch", "operator": "contains any of" if "," in branch_val else "equals", "value": branch_val, "logicalOperator": "AND"})
 
-            if cc_val != "ALL":
-                conditions.append({"field": "Cost Center", "operator": "contains any of", "value": cc_val, "logicalOperator": "AND"})
+            if cc_val != "ALL" and cc_val:
+                conditions.append({"field": "Cost Center", "operator": "contains any of" if "," in cc_val else "equals", "value": cc_val, "logicalOperator": "AND"})
 
             # Priority calculation based on specificity
             priority = 50
-            if category and category != 'ALL':
-                priority += 20
-            if branch_val != 'ALL':
-                priority += 15
-            if cc_val != 'ALL':
-                priority += 15
+            if cat_val != 'ALL': priority += 20
+            if branch_val != 'ALL': priority += 15
+            if cc_val != 'ALL': priority += 15
 
-            rule_name = f"RULE_{company}_{category[:25]}_{cat_name[:20]}".replace(" ", "_").replace("&", "_").replace("/", "_").strip("_")
+            rule_name = f"RULE_{parent_comp}_{cat_name[:40]}".replace(" ", "_").replace("&", "_").replace("/", "_").strip("_")
             rule_name = f"{rule_name}_{rule_idx}"
-
-            parent_comp = company.split('_')[0].split('-')[0].strip().upper()
             rule_cat = f"{parent_comp} Division Workflows" if parent_comp not in ['SD ASSET', 'SD'] else 'SD Asset Workflows'
+
             generated_rules.append({
                 "rule_name": rule_name,
                 "rule_category": rule_cat,
@@ -273,34 +285,31 @@ def seed_sd_workflow_matrix():
                 "priority": priority,
                 "target_workflow_id": cat_name,
                 "conditions_json": json.dumps({"conditions": conditions}),
-                "description": f"Auto-generated rule for {company} - {category} -> {cat_name} (Branch: {branch_val[:40]}, CC: {cc_val[:40]})",
+                "description": f"Consolidated rule for {parent_comp} -> {cat_name} ({len(categories)} categories, {len(branches)} branches, {len(costcenters)} cost centers)",
                 "is_active": True
             })
 
-        print(f"  Generated {len(generated_rules)} condition rules.")
+        print(f"  Generated {len(generated_rules)} consolidated condition rules.")
 
-        # Sync into BusinessRule table
-        synced_r = 0
+        # Wipe old fragmented auto-generated rules and insert clean consolidated rules
+        db.query(BusinessRule).delete()
+        db.commit()
+
         for r_dict in generated_rules:
-            existing_r = db.query(BusinessRule).filter(BusinessRule.rule_name == r_dict['rule_name']).first()
-            if not existing_r:
-                new_r = BusinessRule(
-                    rule_name=r_dict['rule_name'],
-                    rule_category=r_dict['rule_category'],
-                    document_type=r_dict['document_type'],
-                    priority=r_dict['priority'],
-                    target_workflow_id=r_dict['target_workflow_id'],
-                    conditions_json=r_dict['conditions_json'],
-                    description=r_dict['description'],
-                    is_active=True
-                )
-                db.add(new_r)
-                synced_r += 1
-            else:
-                existing_r.document_type = r_dict['document_type']
+            new_r = BusinessRule(
+                rule_name=r_dict['rule_name'],
+                rule_category=r_dict['rule_category'],
+                document_type=r_dict['document_type'],
+                priority=r_dict['priority'],
+                target_workflow_id=r_dict['target_workflow_id'],
+                conditions_json=r_dict['conditions_json'],
+                description=r_dict['description'],
+                is_active=True
+            )
+            db.add(new_r)
 
         db.commit()
-        print(f"  [OK] Inserted {synced_r} new Business Rules.")
+        print(f"  [OK] Saved {len(generated_rules)} consolidated Business Rules.")
         print(f"  Total Business Rules in table: {db.query(BusinessRule).count()}")
 
         # ----------------------------------------------------
