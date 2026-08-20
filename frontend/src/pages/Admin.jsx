@@ -40,7 +40,10 @@ export default function Admin() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem("adminActiveTab") || "routing");
+  const [activeTab, setActiveTab] = useState(() => {
+    const stored = localStorage.getItem("adminActiveTab");
+    return (stored === "checklists" || !stored) ? "routing" : stored;
+  });
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isRootView, setIsRootView] = useState(true);
@@ -410,12 +413,6 @@ export default function Admin() {
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
               Condition Builder
-            </button>
-            <button
-              onClick={() => setActiveTab("checklists")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "checklists" ? "bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              Checklist Matrix
             </button>
             <button
               onClick={() => setActiveTab("templates")}
