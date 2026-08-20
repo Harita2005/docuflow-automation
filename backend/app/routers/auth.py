@@ -72,6 +72,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "access_token": access_token,
             "token_type": "bearer",
             "expires_in": expires_minutes * 60,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "name": user.employee_name or user.name,
+                "email": user.email,
+                "role": user.role,
+                "employee_id": user.employee_id
+            },
             "mfa_required": False
         }
 
