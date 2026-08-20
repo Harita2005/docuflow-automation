@@ -337,10 +337,23 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         </p>
                       </div>
                       
-                      <div className="mb-1.5 flex-1">
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug">
-                          {r.description || 'No description provided.'}
-                        </p>
+                      <div className="mb-2 flex-1 flex flex-wrap gap-1">
+                        {(parsed.conditions || []).map((cond, ci) => {
+                          const opDisplay = (cond.operator || '').toLowerCase() === 'equals' ? '=' : 
+                                            (cond.operator || '').toLowerCase() === 'contains any of' ? '⊇ any' : 
+                                            (cond.operator || '').toLowerCase() === 'contains' ? '⊇' : 
+                                            (cond.operator || '').toLowerCase() === 'not equals' ? '≠' : cond.operator;
+                          return (
+                            <div key={ci} className="inline-flex items-center text-[8.5px] font-bold rounded-md overflow-hidden border border-slate-200 shadow-3xs bg-slate-50">
+                              <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 border-r border-slate-200 uppercase font-extrabold">{cond.field}</span>
+                              <span className="bg-slate-100 text-slate-500 px-1 py-0.5 border-r border-slate-200 font-mono text-[8px]">{opDisplay}</span>
+                              <span className="bg-white text-slate-700 px-1.5 py-0.5 truncate max-w-[130px]" title={cond.value}>{cond.value}</span>
+                            </div>
+                          );
+                        })}
+                        {r.description && (
+                          <p className="text-[9.5px] text-slate-400 mt-1 line-clamp-1 w-full italic">{r.description}</p>
+                        )}
                       </div>
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-auto">
@@ -398,6 +411,17 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   const updateJson = (updates) => {
     const newJson = { ...parsedJson, ...updates };
     setEditingRule({ ...editingRule, conditions_json: JSON.stringify(newJson) });
+  };
+
+  const getNormalizedOp = (op) => {
+    const o = (op || '').toLowerCase().trim();
+    if (o === 'equals' || o === '=') return 'equals';
+    if (o === 'contains any of' || o === 'in' || o === 'any') return 'contains any of';
+    if (o === 'contains') return 'contains';
+    if (o === 'not equals' || o === '!=') return 'not equals';
+    if (o === 'greater than' || o === 'gt' || o === '>') return 'gt';
+    if (o === 'less than' || o === 'lt' || o === '<') return 'lt';
+    return op || 'equals';
   };
 
   return (
@@ -524,30 +548,29 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                     <div className="col-span-1">
                       <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Field <span className="text-rose-500">*</span></label>
                       <select 
-                        value={c.field}
+                        value={c.field === 'Plant' ? 'Branch' : c.field}
                         onChange={(e) => {
                           const newC = [...parsedJson.conditions];
                           newC[idx].field = e.target.value;
-                          // If switching to a field with preset, set default
                           if (e.target.value === 'Division') {
-                            newC[idx].operator = 'Equals';
+                            newC[idx].operator = 'equals';
                             newC[idx].value = 'VCC';
                           } else if (e.target.value === 'Category') {
-                            newC[idx].operator = 'Equals';
+                            newC[idx].operator = 'equals';
                             newC[idx].value = 'ASSET WITH COST CENTER';
-                          } else if (e.target.value === 'Plant' || e.target.value === 'Branch') {
-                            newC[idx].operator = 'Contains Any of';
+                          } else if (e.target.value === 'Branch' || e.target.value === 'Plant') {
+                            newC[idx].operator = 'contains any of';
                             newC[idx].value = 'TN-SIVAKASI';
                           } else if (e.target.value === 'Cost Center') {
-                            newC[idx].operator = 'Contains Any of';
-                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
+                            newC[idx].operator = 'contains any of';
+                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance';
                           }
                           updateJson({ conditions: newC });
                         }}
                         className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
                       >
                         <option value="Division">Division (Company: VCC, ACC, ENES)</option>
-                        <option value="Plant">Plant / Branch (e.g. TN-SIVAKASI, Sulur, HQ)</option>
+                        <option value="Branch">Branch / Plant (e.g. TN-SIVAKASI, Sulur, HQ)</option>
                         <option value="Category">Category (Document Type / Expense)</option>
                         <option value="Cost Center">Cost Center (Branch / Cost Code)</option>
                         <option value="Invoice Amount (Total)">Invoice Amount (Total)</option>
@@ -562,7 +585,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                     <div className="col-span-1">
                       <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Operator <span className="text-rose-500">*</span></label>
                       <select 
-                        value={c.operator}
+                        value={getNormalizedOp(c.operator)}
                         onChange={(e) => {
                           const newC = [...parsedJson.conditions];
                           newC[idx].operator = e.target.value;
@@ -570,20 +593,12 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         }}
                         className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
                       >
-                        {c.field && c.field.includes('Amount') ? (
-                          <>
-                            <option value="Greater Than">Greater Than</option>
-                            <option value="Less Than">Less Than</option>
-                            <option value="Equals">Equals</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Equals">Equals</option>
-                            <option value="Contains">Contains</option>
-                            <option value="Contains Any of">Contains Any of (OR)</option>
-                            <option value="Not Equals">Not Equals</option>
-                          </>
-                        )}
+                        <option value="equals">Equals (=)</option>
+                        <option value="contains any of">Contains Any of (OR)</option>
+                        <option value="contains">Contains (⊇)</option>
+                        <option value="not equals">Not Equals (≠)</option>
+                        <option value="gt">Greater Than (&gt;)</option>
+                        <option value="lt">Less Than (&lt;)</option>
                       </select>
                     </div>
                     <div className="col-span-1">
