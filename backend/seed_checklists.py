@@ -13,9 +13,13 @@ sys.path.insert(0, str(BASE_DIR))
 from app.database import SessionLocal, engine, Base
 from app.models import ChecklistRule, ChecklistTemplate
 
-EXCEL_PATH = BASE_DIR / "SD Checklists.xlsx"
-if not EXCEL_PATH.exists():
-    EXCEL_PATH = BASE_DIR.parent / "SD Checklists.xlsx"
+candidate_paths = [
+    BASE_DIR / "SD Checklists.xlsx",
+    BASE_DIR.parent / "SD Checklists.xlsx",
+    Path("/app/SD Checklists.xlsx"),
+    Path.cwd() / "SD Checklists.xlsx"
+]
+EXCEL_PATH = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
 
 def seed_checklists_from_excel():
     print("==================================================================")

@@ -10,9 +10,13 @@ from app.database import SessionLocal, engine, Base
 from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
 
 BASE_DIR = Path(__file__).resolve().parent
-EXCEL_PATH = BASE_DIR / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
-if not EXCEL_PATH.exists():
-    EXCEL_PATH = BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
+candidate_paths = [
+    BASE_DIR / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
+    BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
+    Path("/app/SD SCHEMA AND WORKFLOW DETAILS.xlsx"),
+    Path.cwd() / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
+]
+EXCEL_PATH = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
 
 def infer_document_type(name: str, cat: str = "") -> str:
     n = (name + " " + cat).upper()
