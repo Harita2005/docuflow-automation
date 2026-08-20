@@ -143,34 +143,41 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
       return;
     }
 
+    setLoading(true);
+    setErrorMsg(null);
+    const interval = startReassuranceRotation();
+
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("document_type", selectedDocType);
       
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      
       const fetchUrl = "/api/documents/upload";
       
-      // Run file upload in background asynchronously
-      fetch(fetchUrl, {
+      const response = await fetch(fetchUrl, {
         method: "POST",
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
         body: formData,
-      }).then(async (response) => {
-        if (response.ok) {
-          const doc = await response.json();
-          const newDoc = doc.invoice || doc;
-          onUploadSuccess(newDoc);
-        }
-      }).catch(err => {
-        console.error("Background upload failed:", err);
       });
 
-      // Redirect immediately to dashboard
-      setCurrentView("dashboard");
+      clearInterval(interval);
+
+      if (response.ok) {
+        const doc = await response.json();
+        const newDoc = doc.invoice || doc;
+        onUploadSuccess(newDoc);
+        setUploadedDoc(newDoc);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setErrorMsg(err.detail || "Upload failed. Please check file format and try again.");
+      }
     } catch (err: any) {
-      console.error("Upload initialization failed:", err);
+      clearInterval(interval);
+      console.error("Upload failed:", err);
+      setErrorMsg(err.message || "Upload failed. Please check connection.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -274,12 +281,11 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto pt-2">
             <button
               onClick={() => {
-                setSelectedDocId(uploadedDoc.id);
-                setCurrentView("dashboard");
+                setCurrentView("work-tracker");
               }}
               className="w-full sm:w-1/2 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-650 font-bold text-xs uppercase tracking-wider transition"
             >
-              Ledger Repository
+              Work Tracker
             </button>
             <button
               onClick={() => {
