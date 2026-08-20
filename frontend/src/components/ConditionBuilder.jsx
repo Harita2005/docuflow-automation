@@ -111,12 +111,21 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
 
   // Group rules by workflow_type (Category)
   const DOC_TYPE_ORDER = [
+    "CAPEX / FIXED ASSET",
+    "PURCHASE INVOICE",
+    "SERVICE & MAINTENANCE",
+    "FREIGHT & LOGISTICS",
+    "UTILITY & RENT",
+    "STAFF & HR EXPENSE",
+    "GRN / GOODS RECEIPT",
+    "ADVANCE VOUCHER",
+    "CASH VOUCHER",
+    "E-VOUCHER",
+    "JOURNAL VOUCHER",
+    "ACCOUNTS PAYABLE (AP)",
     "AP INVOICE",
     "AP DEBIT NOTE",
     "AR CREDITNOTE",
-    "VCC PURCHASE INVOICE",
-    "JOURNAL ENTRY",
-    "OCR AND INHOUSE OCR",
     "PROJECT BUDGET",
     "NON - RETURNABLE"
   ];

@@ -2,36 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder, Users } from 'lucide-react';
 
 const getPrefixCode = (category, subCat) => {
-  if (!category || !subCat) return "";
-  const cat = category.toUpperCase();
-  const sub = subCat.toUpperCase();
-  
-  if (cat.includes("VENDOR PAYMENT")) {
-    if (sub.includes("AP INVOICE")) return "VP11";
-    if (sub.includes("CREDITNOTE") || sub.includes("CREDIT NOTE")) return "VP12";
-    if (sub.includes("DEBITNOTE") || sub.includes("DEBIT NOTE")) return "VP13";
-    if (sub.includes("PURCHASE ORDER") || sub.includes("PURCHASE")) return "VP14";
-    if (sub.includes("JOURNAL ENTRY") || sub.includes("JOURNAL")) return "VP15";
-    return "VP99";
-  }
-  return "";
+  if (!category && !subCat) return "";
+  const n = `${category || ""} ${subCat || ""}`.toUpperCase();
+  if (n.includes("CAPEX") || n.includes("ASSET")) return "CPX";
+  if (n.includes("PURCHASE")) return "PUR";
+  if (n.includes("SERVICE") || n.includes("MAINTENANCE")) return "SRV";
+  if (n.includes("FREIGHT") || n.includes("LOGISTICS")) return "FRT";
+  if (n.includes("UTILITY") || n.includes("RENT")) return "UTL";
+  if (n.includes("STAFF") || n.includes("EXPENSE")) return "EXP";
+  if (n.includes("GRN") || n.includes("GOODS")) return "GRN";
+  if (n.includes("ADVANCE")) return "ADV";
+  if (n.includes("CASH")) return "CSH";
+  if (n.includes("EVOUCHER") || n.includes("E-VOUCHER")) return "EV";
+  if (n.includes("JOURNAL")) return "JRN";
+  return "WF";
 };
 
 const getWorkflowPrefixCode = (category, subCat, index) => {
-  if (!category || !subCat) return "";
-  const cat = category.toUpperCase();
-  const sub = subCat.toUpperCase();
-  const num = index + 1;
+  if (!category && !subCat) return "";
+  const n = `${category || ""} ${subCat || ""}`.toUpperCase();
+  const num = String(index + 1).padStart(3, '0');
   
-  if (cat.includes("VENDOR PAYMENT")) {
-    if (sub.includes("AP INVOICE")) return `INV-11${num}`;
-    if (sub.includes("CREDITNOTE") || sub.includes("CREDIT NOTE")) return `CN-12${num}`;
-    if (sub.includes("DEBITNOTE") || sub.includes("DEBIT NOTE")) return `DN-13${num}`;
-    if (sub.includes("PURCHASE ORDER") || sub.includes("PURCHASE")) return `PO-14${num}`;
-    if (sub.includes("JOURNAL ENTRY") || sub.includes("JOURNAL")) return `JE-15${num}`;
-    return `WF-99${num}`;
-  }
-  return "";
+  if (n.includes("CAPEX") || n.includes("ASSET")) return `CAPEX-${num}`;
+  if (n.includes("PURCHASE")) return `PUR-${num}`;
+  if (n.includes("SERVICE") || n.includes("MAINTENANCE")) return `SRV-${num}`;
+  if (n.includes("FREIGHT") || n.includes("LOGISTICS")) return `FRT-${num}`;
+  if (n.includes("UTILITY") || n.includes("RENT")) return `UTL-${num}`;
+  if (n.includes("STAFF") || n.includes("EXPENSE")) return `EXP-${num}`;
+  if (n.includes("GRN") || n.includes("GOODS")) return `GRN-${num}`;
+  if (n.includes("ADVANCE")) return `ADV-${num}`;
+  if (n.includes("CASH")) return `CSH-${num}`;
+  if (n.includes("EVOUCHER") || n.includes("E-VOUCHER")) return `EV-${num}`;
+  if (n.includes("JOURNAL") || n.includes("JRNL")) return `JRNL-${num}`;
+  if (n.includes("CREDITNOTE") || n.includes("CREDIT NOTE")) return `CN-${num}`;
+  if (n.includes("DEBITNOTE") || n.includes("DEBIT NOTE")) return `DN-${num}`;
+  return `WF-${num}`;
 };
 
 export default function FlowBuilder({ users = [] }) {
@@ -372,12 +377,21 @@ export default function FlowBuilder({ users = [] }) {
   }
 
   const DOC_TYPE_ORDER = [
+    "CAPEX / FIXED ASSET",
+    "PURCHASE INVOICE",
+    "SERVICE & MAINTENANCE",
+    "FREIGHT & LOGISTICS",
+    "UTILITY & RENT",
+    "STAFF & HR EXPENSE",
+    "GRN / GOODS RECEIPT",
+    "ADVANCE VOUCHER",
+    "CASH VOUCHER",
+    "E-VOUCHER",
+    "JOURNAL VOUCHER",
+    "ACCOUNTS PAYABLE (AP)",
     "AP INVOICE",
     "AP DEBIT NOTE",
     "AR CREDITNOTE",
-    "VCC PURCHASE INVOICE",
-    "JOURNAL ENTRY",
-    "OCR AND INHOUSE OCR",
     "PROJECT BUDGET",
     "NON - RETURNABLE"
   ];
