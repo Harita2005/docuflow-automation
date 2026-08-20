@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -123,6 +123,32 @@ def apply_three_approvers():
         db.bulk_save_objects(new_steps)
         db.commit()
         print(f"  [SUCCESS] Configured {len(new_steps)} stages across all {len(profiles)} profiles!")
+
+        print("\n>>> 3. Aligning Existing Documents/Invoices to 3-Stage Approval Sequence...")
+        from app.models import Invoice
+        invoices = db.query(Invoice).all()
+        print(f"  Found {len(invoices)} documents.")
+        
+        for inv in invoices:
+            inv.total_stages = 3
+            stage = inv.current_stage or 1
+            if stage <= 1:
+                inv.current_stage = 1
+                inv.assigned_approver = "YUVASHREE_39592"
+                if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):
+                    inv.status = "In Progress (Stage 1 - First Approval)"
+            elif stage == 2:
+                inv.assigned_approver = "VIGNESH_E25-01583"
+                if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):
+                    inv.status = "In Progress (Stage 2 - Second Approval)"
+            elif stage >= 3:
+                inv.current_stage = 3
+                inv.assigned_approver = "VARUNAN (E22_02046)"
+                if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):
+                    inv.status = "In Progress (Stage 3 - Final Approval)"
+
+        db.commit()
+        print(f"  [SUCCESS] All {len(invoices)} documents updated to 3-stage approvers!")
     except Exception as e:
         print(f"[ERROR] {e}")
         import traceback
