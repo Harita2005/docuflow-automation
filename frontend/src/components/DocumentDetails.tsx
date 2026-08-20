@@ -1531,6 +1531,22 @@ export default function DocumentDetails({
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
+                <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
+                  <Upload className="h-3 w-3" />
+                  <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
+                  <input 
+                    type="file" 
+                    accept=".pdf,application/pdf" 
+                    disabled={isUploadingVersion}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleUploadVersion(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden" 
+                  />
+                </label>
+
                 {iframeSrc && (
                   <a
                     href={iframeSrc}
