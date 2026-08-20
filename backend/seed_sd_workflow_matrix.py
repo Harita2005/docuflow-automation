@@ -181,35 +181,45 @@ def seed_sd_workflow_matrix():
                 )
                 db.add(new_p)
                 synced_p += 1
-            else:
-                existing_p.workflow_type = p_data['workflow_type']
-
-            for s_num, s_name, pool in p_data['steps']:
-                existing_s = db.query(WorkflowStepDefinition).filter(
-                    WorkflowStepDefinition.profile_name == p_name,
-                    WorkflowStepDefinition.stage_number == s_num
-                ).first()
-                if not existing_s:
-                    new_s = WorkflowStepDefinition(
-                        profile_name=p_name,
-                        stage_number=s_num,
-                        step_name=s_name,
-                        approver_type='Approval Pool',
-                        approver_target=pool,
-                        document_type=p_data['workflow_type'],
-                        action_required='Approve',
-                        permissions='Approve / Reject',
-                        sla_hours=48
-                    )
-                    db.add(new_s)
-                    synced_s += 1
-                else:
-                    existing_s.approver_target = pool
-                    existing_s.step_name = s_name
-                    existing_s.document_type = p_data['workflow_type']
+            # Re-generate exact 3 approval stages: Yuvasree -> Vignesh -> Varunan
+            db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
+            db.add(WorkflowStepDefinition(
+                profile_name=p_name,
+                stage_number=1,
+                step_name="First Approval (Yuvasree)",
+                approver_type='Approval Pool',
+                approver_target="YUVASHREE_39592,yuvasree,Yuvasree",
+                document_type=p_data['workflow_type'],
+                action_required='Approve',
+                permissions='Approve / Reject',
+                sla_hours=48
+            ))
+            db.add(WorkflowStepDefinition(
+                profile_name=p_name,
+                stage_number=2,
+                step_name="Second Approval (Vignesh)",
+                approver_type='Approval Pool',
+                approver_target="VIGNESH_E25-01583,vignesh,Vignesh",
+                document_type=p_data['workflow_type'],
+                action_required='Approve',
+                permissions='Approve / Reject',
+                sla_hours=48
+            ))
+            db.add(WorkflowStepDefinition(
+                profile_name=p_name,
+                stage_number=3,
+                step_name="Final Approval (Varunan)",
+                approver_type='Approval Pool',
+                approver_target="varunan,EMP_VARUNAN,Varunan",
+                document_type=p_data['workflow_type'],
+                action_required='Approve',
+                permissions='Approve / Reject',
+                sla_hours=48
+            ))
+            synced_s += 3
 
         db.commit()
-        print(f"  [OK] Synced {synced_p} new profiles and {synced_s} step definitions.")
+        print(f"  [OK] Synced {synced_p} new profiles and {synced_s} step definitions (3 stages each).")
         print(f"  Total Profiles in table: {db.query(WorkflowProfile).count()}")
         print(f"  Total Step Definitions in table: {db.query(WorkflowStepDefinition).count()}")
 
