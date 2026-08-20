@@ -6,6 +6,7 @@ import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
+import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
 import AdminRecycleBin from '../components/AdminRecycleBin.jsx';
 import AdminBackups from '../components/AdminBackups.jsx';
@@ -411,6 +412,12 @@ export default function Admin() {
               Condition Builder
             </button>
             <button
+              onClick={() => setActiveTab("checklists")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "checklists" ? "bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Checklist Matrix
+            </button>
+            <button
               onClick={() => setActiveTab("templates")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
@@ -458,6 +465,12 @@ export default function Admin() {
               Audit Logs
             </button>
             <button
+              onClick={() => setActiveTab("masterdata")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "masterdata" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              ERP Master
+            </button>
+            <button
               onClick={() => setActiveTab("system")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
@@ -486,6 +499,7 @@ export default function Admin() {
                 <h1 className="text-xs font-display font-bold text-slate-900 tracking-tight leading-none">
                   {activeTab === 'matrix' && 'Condition Policy Matrix'}
                   {activeTab === 'routing' && 'Flow Builder'}
+                  {activeTab === 'checklists' && 'Checklist Condition Matrix'}
                   {activeTab === 'templates' && 'AI Templates'}
                   {activeTab === 'rbac' && 'Role Access Configuration'}
                   {activeTab === 'masterdata' && 'ERP Master'}
@@ -563,6 +577,11 @@ export default function Admin() {
         {/* --- ROUTING TAB CONTENT --- */}
         {activeTab === "routing" && (
           <FlowBuilder users={allUsers} />
+        )}
+
+        {/* --- CHECKLIST CONDITIONS TAB CONTENT --- */}
+        {activeTab === "checklists" && (
+          <ChecklistConditionBuilder />
         )}
 
     {/* --- TEMPLATES TAB CONTENT --- */}

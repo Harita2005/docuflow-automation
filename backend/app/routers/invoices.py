@@ -1165,9 +1165,14 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
             ChecklistTemplate.is_active == True
         ).order_by(ChecklistTemplate.sequence_order.asc()).all()
         if tpl_items:
-            return [it.item_text for it in tpl_items]
+            res = []
+            for it in tpl_items:
+                for sub in it.item_text.split(','):
+                    c = sub.strip()
+                    if c and c not in res: res.append(c)
+            if res: return res
 
-    # 3. Match Checklist Rules from the database
+    # 2. Match Checklist Rules from the database (Precision Condition Matching)
     matching_rules = db.query(ChecklistRule).filter(
         ChecklistRule.stage_name == stage_name,
         ChecklistRule.is_active == True
@@ -1175,28 +1180,58 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
     
     scored_rules = []
     for r in matching_rules:
-        if r.division and r.division != "ALL" and r.division != inv.division:
-            continue
-        if r.category and r.category != "ALL" and r.category != inv.category:
-            continue
-        if r.branch and r.branch != "ALL" and r.branch != inv.plant:
-            continue
-        if r.workflow_profile and r.workflow_profile != inv.workflow_profile_id:
-            continue
+        # Match Division
+        if r.division and r.division != "ALL":
+            divs = [d.strip().upper() for d in r.division.split(',') if d.strip()]
+            inv_div = (inv.division or "").strip().upper()
+            if inv_div not in divs and not any(inv_div in d for d in divs):
+                continue
+
+        # Match Category / Document Type
+        if r.category and r.category != "ALL":
+            cats = [c.strip().upper() for c in r.category.split(',') if c.strip()]
+            inv_cat = (inv.category or "").strip().upper()
+            inv_doc = (inv.document_type or "").strip().upper()
+            if inv_cat not in cats and inv_doc not in cats and not any(inv_cat in c or c in inv_cat for c in cats):
+                continue
+
+        # Match Branch / Plant
+        if r.branch and r.branch != "ALL":
+            branches = [b.strip().upper() for b in r.branch.split(',') if b.strip()]
+            inv_plant = (inv.plant or "").strip().upper()
+            if inv_plant not in branches and not any(inv_plant in b for b in branches):
+                continue
+
+        # Match Workflow Profile
+        if r.workflow_profile and r.workflow_profile != "ALL":
+            if r.workflow_profile != inv.workflow_profile_id:
+                continue
             
         score = 0
-        if r.division == inv.division: score += 10
-        if r.category == inv.category: score += 10
-        if r.branch == inv.plant: score += 10
-        if r.workflow_profile == inv.workflow_profile_id: score += 5
+        if r.division and r.division != "ALL": score += 10
+        if r.category and r.category != "ALL": score += 15
+        if r.branch and r.branch != "ALL": score += 10
+        if r.workflow_profile and r.workflow_profile != "ALL": score += 5
         scored_rules.append((score, r))
         
     if scored_rules:
         max_score = max(s[0] for s in scored_rules)
         best_rules = [r for score, r in scored_rules if score == max_score]
-        return [r.item_text for r in best_rules]
+        res_items = []
+        for r in best_rules:
+            if "," in r.item_text:
+                for sub_it in r.item_text.split(","):
+                    clean = sub_it.strip()
+                    if clean and clean not in res_items:
+                        res_items.append(clean)
+            else:
+                clean = (r.item_text or "").strip()
+                if clean and clean not in res_items:
+                    res_items.append(clean)
+        if res_items:
+            return res_items
         
-    # 4. Fallback Python category generator
+    # 3. Fallback Python category generator
     from app.routers.sync import generate_compliance_checklist_for_category
     return generate_compliance_checklist_for_category(
         inv.category, 
@@ -1294,22 +1329,23 @@ def update_invoice_checklist(
     return {"success": True, "checklist": [{"item_text": item.item_text, "is_checked": item.is_checked} for item in items]}
 
 
+@router.get("/api/admin/checklist-rules")
 @router.get("/api/checklist-templates")
 def get_checklist_templates(db: Session = Depends(get_db)):
     rules = db.query(ChecklistRule).order_by(
-        ChecklistRule.rule_name.asc(),
-        ChecklistRule.sequence_order.asc()
+        ChecklistRule.sequence_order.asc(),
+        ChecklistRule.rule_name.asc()
     ).all()
     return [
         {
             "id": r.id,
             "rule_name": r.rule_name,
-            "division": r.division,
-            "category": r.category,
-            "branch": r.branch,
-            "workflow_profile": r.workflow_profile,
-            "stage_name": r.stage_name,
-            "item_text": r.item_text,
+            "division": r.division or "ALL",
+            "category": r.category or "ALL",
+            "branch": r.branch or "ALL",
+            "workflow_profile": r.workflow_profile or "ALL",
+            "stage_name": r.stage_name or "Attachment Status",
+            "item_text": r.item_text or "",
             "is_mandatory": r.is_mandatory,
             "is_active": r.is_active,
             "sequence_order": r.sequence_order
@@ -1318,35 +1354,34 @@ def get_checklist_templates(db: Session = Depends(get_db)):
     ]
 
 
+@router.post("/api/admin/checklist-rules")
 @router.post("/api/checklist-templates")
 def save_checklist_template(payload: dict, db: Session = Depends(get_db)):
     tid = payload.get("id")
     if tid and not str(tid).startswith("tmp-"):
-        # Update existing
         rule = db.query(ChecklistRule).filter(ChecklistRule.id == int(tid)).first()
         if not rule:
-            raise HTTPException(status_code=404, detail="Rule not found")
+            raise HTTPException(status_code=404, detail="Checklist rule not found")
     else:
-        # Create new
         rule = ChecklistRule()
         db.add(rule)
 
     rule.rule_name = payload.get("rule_name", "Checklist Rule")
-    rule.division = payload.get("division")
-    rule.category = payload.get("category")
-    rule.branch = payload.get("branch")
-    rule.workflow_profile = payload.get("workflow_profile")
+    rule.division = payload.get("division", "ALL")
+    rule.category = payload.get("category", "ALL")
+    rule.branch = payload.get("branch", "ALL")
+    rule.workflow_profile = payload.get("workflow_profile", "ALL")
     rule.stage_name = payload.get("stage_name", "Attachment Status")
     rule.item_text = payload.get("item_text", "")
-    rule.is_mandatory = payload.get("is_mandatory", True)
-    rule.is_active = payload.get("is_active", True)
-    rule.sequence_order = payload.get("sequence_order", 1)
+    rule.is_mandatory = bool(payload.get("is_mandatory", True))
+    rule.is_active = bool(payload.get("is_active", True))
+    rule.sequence_order = int(payload.get("sequence_order", 1))
 
     db.commit()
     db.refresh(rule)
     return {
         "success": True,
-        "template": {
+        "rule": {
             "id": rule.id,
             "rule_name": rule.rule_name,
             "division": rule.division,
@@ -1362,11 +1397,12 @@ def save_checklist_template(payload: dict, db: Session = Depends(get_db)):
     }
 
 
-@router.delete("/api/checklist-templates/{template_id}")
-def delete_checklist_template(template_id: int, db: Session = Depends(get_db)):
-    rule = db.query(ChecklistRule).filter(ChecklistRule.id == template_id).first()
+@router.delete("/api/admin/checklist-rules/{rule_id}")
+@router.delete("/api/checklist-templates/{rule_id}")
+def delete_checklist_template(rule_id: int, db: Session = Depends(get_db)):
+    rule = db.query(ChecklistRule).filter(ChecklistRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise HTTPException(status_code=404, detail="Checklist rule not found")
     db.delete(rule)
     db.commit()
     return {"success": True}
