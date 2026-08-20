@@ -535,13 +535,30 @@ export default function DocumentDetails({
       return;
     }
     const rawPath = document.file_url || document.file_path || "";
+    if (!rawPath || (!rawPath.startsWith('/uploads/') && !rawPath.startsWith('uploads/') && !rawPath.startsWith('http'))) {
+      setIframeSrc("");
+      return;
+    }
     const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
     const path = isAbsolute ? rawPath : `/${rawPath}`;
-    const newSrc = rawPath ? encodeURI(path) : "";
-    if (newSrc !== iframeSrc) {
-      setIframeSrc(newSrc);
-    }
-  }, [document?.id, document?.file_url, document?.file_path, iframeSrc]);
+    
+    let isMounted = true;
+    fetch(path, { method: 'HEAD' })
+      .then(res => {
+        if (!isMounted) return;
+        const ctype = res.headers.get('content-type') || '';
+        if (!res.ok || ctype.includes('text/html')) {
+          setIframeSrc("");
+        } else {
+          setIframeSrc(encodeURI(path));
+        }
+      })
+      .catch(() => {
+        if (isMounted) setIframeSrc("");
+      });
+
+    return () => { isMounted = false; };
+  }, [document?.id, document?.file_url, document?.file_path]);
 
   if (!document) return null;
 
@@ -1514,9 +1531,9 @@ export default function DocumentDetails({
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {(document.file_url || document.file_path) && (
+                {iframeSrc && (
                   <a
-                    href={encodeURI((document.file_url || document.file_path || "").startsWith('/') || (document.file_url || document.file_path || "").startsWith('http') ? (document.file_url || document.file_path || "") : `/${document.file_url || document.file_path}`)}
+                    href={iframeSrc}
                     target="_blank"
                     rel="noreferrer"
                     className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
@@ -1531,28 +1548,37 @@ export default function DocumentDetails({
 
             {/* LIVE ORIGINAL PDF VIEWER OR STAGE 1 ATTACHMENT DROPZONE */}
             <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
-              {(iframeSrc) ? (
+              {iframeSrc ? (
                 <iframe
                   src={iframeSrc}
                   title={document.file_name || `${document.id}.pdf`}
                   className="w-full h-full border-0 rounded-lg bg-white shadow-inner"
                 />
               ) : (
-                <div className="w-full h-full bg-slate-50 border-2 border-dashed border-indigo-300/80 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner">
-                  <div className="h-16 w-16 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-4 shadow-sm animate-bounce">
-                    <Upload className="h-8 w-8" />
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleUploadVersion(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  className="w-full h-full bg-slate-50 border-2 border-dashed border-indigo-300/80 hover:border-indigo-500 hover:bg-indigo-50/20 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
+                >
+                  <div className="h-14 w-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-3.5 shadow-sm">
+                    <Upload className="h-7 w-7 animate-bounce text-indigo-600" />
                   </div>
-                  <h3 className="text-sm font-extrabold text-slate-800 tracking-tight">Stage 1: Document Attachment Pending</h3>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
-                    The ERP sync metadata is loaded. The assigned member (<strong>{document.assigned_approver || "Stage 1 Team"}</strong>) must attach the scanned document PDF to initiate the approval pipeline.
+                    This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record.
                   </p>
                   
                   <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
                     <Plus className="h-4 w-4" />
-                    <span>{isUploadingVersion ? "Uploading & Storing..." : "Upload & Attach Document PDF"}</span>
+                    <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
                     <input 
                       type="file" 
-                      accept=".pdf" 
+                      accept=".pdf,application/pdf" 
                       disabled={isUploadingVersion}
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
@@ -1562,7 +1588,7 @@ export default function DocumentDetails({
                       className="hidden" 
                     />
                   </label>
-                  <span className="text-[10px] text-slate-400 font-mono mt-2">Accepted formats: PDF only</span>
+                  <span className="text-[10px] text-slate-400 font-mono mt-2">Drag & Drop or Click to Upload (PDF only)</span>
                 </div>
               )}
             </div>
