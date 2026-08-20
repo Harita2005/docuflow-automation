@@ -1964,32 +1964,24 @@ export default function AdminRBAC({ onRefreshSignal }) {
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/40 text-[9.5px] font-bold text-slate-500 uppercase tracking-wider select-none">
-                    <th className="px-3.5 py-2.5 w-[6%] text-center">
-                      <input 
-                        type="checkbox"
-                        onChange={handleSelectAllUsers}
-                        checked={filteredUsers.length > 0 && selectedUserIds.size === filteredUsers.length}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                      />
-                    </th>
-                    <th className="px-3.5 py-2.5 w-[32%]">Name</th>
+                    <th className="px-4 py-2.5 w-[35%]">Name</th>
                     <th className="px-3.5 py-2.5 w-[14%]">Status</th>
                     <th className="px-3.5 py-2.5 w-[18%]">Permissions</th>
-                    <th className="px-3.5 py-2.5 w-[14%]">Date Added</th>
-                    <th className="px-3.5 py-2.5 w-[16%] text-right pr-6"></th>
+                    <th className="px-3.5 py-2.5 w-[15%]">Date Added</th>
+                    <th className="px-3.5 py-2.5 w-[18%] text-right pr-6"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-xs text-slate-400 italic">
+                      <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
                         <Loader2 className="h-4 w-4 animate-spin inline mr-2 text-blue-600" />
                         Loading users...
                       </td>
                     </tr>
                   ) : filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-xs text-slate-400 italic">
+                      <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
                         No users found.
                       </td>
                     </tr>
@@ -2004,18 +1996,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           onClick={() => setSelectedUser(u)}
                           className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
                         >
-                          {/* Checkbox */}
-                          <td className="px-3.5 py-2.5 w-[6%] text-center align-middle" onClick={e => e.stopPropagation()}>
-                            <input 
-                              type="checkbox"
-                              checked={selectedUserIds.has(u.id)}
-                              onChange={(e) => handleSelectUserCheckbox(e, u.id)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                          </td>
-
                           {/* Name + Email + Avatar */}
-                          <td className="px-3.5 py-2.5 w-[32%] align-middle">
+                          <td className="px-4 py-2.5 w-[35%] align-middle">
                             <div className="flex items-center gap-2.5">
                               <div className={`h-7.5 w-7.5 rounded-full flex items-center justify-center font-bold text-[9px] tracking-wide shrink-0 shadow-3xs ${getAvatarColor(u.name)}`}>
                                 {u.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
