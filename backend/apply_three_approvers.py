@@ -12,22 +12,26 @@ def apply_three_approvers():
     db = SessionLocal()
     try:
         print(">>> 1. Ensuring 3 User Accounts in Master Database...")
-        # 1. YUVASHREE_39592
-        u1 = db.query(User).filter(User.username == 'YUVASHREE_39592').first()
+        # 1. YUVASREE (E24-04070)
+        u1 = db.query(User).filter((User.employee_id == 'E24-04070') | (User.username == 'YUVASREE (E24-04070)') | (User.username == 'YUVASHREE_39592')).first()
         if not u1:
             u1 = User(
-                user_uid='USR-YUVASHREE-39592',
-                employee_id='YUVASHREE_39592',
-                employee_name='Yuvasree',
-                name='Yuvasree',
-                username='YUVASHREE_39592',
-                email='yuvasree@docuflow.local',
+                user_uid='USR-YUVASREE-E24-04070',
+                employee_id='E24-04070',
+                employee_name='YUVASREE (E24-04070)',
+                name='YUVASREE (E24-04070)',
+                username='YUVASREE (E24-04070)',
+                email='yuvasree_e2404070@docuflow.local',
                 password_hash=get_password_hash('password123'),
                 role='manager',
                 is_active=True
             )
             db.add(u1)
         else:
+            u1.username = 'YUVASREE (E24-04070)'
+            u1.employee_name = 'YUVASREE (E24-04070)'
+            u1.name = 'YUVASREE (E24-04070)'
+            u1.employee_id = 'E24-04070'
             u1.role = 'manager'
             u1.is_active = True
 
@@ -90,8 +94,8 @@ def apply_three_approvers():
                 profile_name=p.profile_name,
                 stage_number=1,
                 step_name='First Approval',
-                approver_type='Approval Pool',
-                approver_target='YUVASHREE_39592',
+                approver_type='Specific Employee',
+                approver_target='YUVASREE (E24-04070)',
                 document_type=p.workflow_type,
                 action_required='Approve',
                 permissions='Approve / Reject',
@@ -134,7 +138,7 @@ def apply_three_approvers():
             stage = inv.current_stage or 1
             if stage <= 1:
                 inv.current_stage = 1
-                inv.assigned_approver = "YUVASHREE_39592"
+                inv.assigned_approver = "YUVASREE (E24-04070)"
                 if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):
                     inv.status = "In Progress (Stage 1 - First Approval)"
             elif stage == 2:
