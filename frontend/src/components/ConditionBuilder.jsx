@@ -709,30 +709,50 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
               ))}
             </div>
             
-            <div className="mt-4 flex items-center justify-between">
-              <button 
-                type="button" 
-                onClick={() => {
-                  const currentConditions = parsedJson.conditions || [];
-                  if (currentConditions.length >= 10) {
-                    alert("Maximum limit of 10 conditions reached per rule.");
-                    return;
-                  }
-                  const newC = [...currentConditions, { field: 'Invoice Amount (Total)', operator: 'Greater Than', value: '', logicalOperator: 'AND' }];
-                  updateJson({ conditions: newC, condition_type: 'Combination Condition' });
-                }}
-                disabled={(parsedJson.conditions || []).length >= 10}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
-              >
-                <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
-              </button>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const currentConditions = parsedJson.conditions || [];
+                    if (currentConditions.length >= 10) {
+                      alert("Maximum limit of 10 conditions reached per rule.");
+                      return;
+                    }
+                    const newC = [...currentConditions, { field: 'Category', operator: 'Equals', value: '', logicalOperator: 'AND' }];
+                    updateJson({ conditions: newC, condition_type: 'Combination Condition' });
+                  }}
+                  disabled={(parsedJson.conditions || []).length >= 10}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
+                >
+                  <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const matrixConditions = [
+                      { field: 'Division', operator: 'Equals', value: 'ACC', logicalOperator: 'AND' },
+                      { field: 'Category', operator: 'Equals', value: 'ACCESSORIES - COMPUTER', logicalOperator: 'AND' },
+                      { field: 'Cost Center', operator: 'Equals', value: 'BATTERY VEHICLE', logicalOperator: 'AND' },
+                      { field: 'Plant', operator: 'Equals', value: 'ANTS', logicalOperator: 'AND' }
+                    ];
+                    updateJson({ conditions: matrixConditions, condition_type: 'Combination Condition' });
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-300 text-blue-700 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-100 cursor-pointer"
+                  title="Generate standard 4-Point SD Condition Matrix: Division + Category + Cost Center + Branch"
+                >
+                  <Network className="h-3 w-3 text-blue-600" /> + 4-Point SD Matrix (Division + Category + Cost Center + Branch)
+                </button>
+              </div>
+
               <button 
                 type="button" 
                 onClick={() => updateJson({ conditions: [] })}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded transition-colors shadow-sm hover:bg-rose-50"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-rose-50 cursor-pointer"
               >
-                <Trash2 className="h-3 w-3" /> Clear
+                <Trash2 className="h-3 w-3" /> Clear All
               </button>
             </div>
           </div>
