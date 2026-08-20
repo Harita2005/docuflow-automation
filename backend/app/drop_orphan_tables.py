@@ -18,11 +18,7 @@ _TABLES = [
     "wf_rule_condition_value",
     "wf_rule_condition",
     "wf_rule",
-    "wf_workflow",
-    # orphan old tables
-    "invoice_checklist_states",
-    "invoice_line_items",
-    "invoices",
+    "wf_workflow"
 ]
 
 
