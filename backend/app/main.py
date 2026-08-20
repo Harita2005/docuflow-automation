@@ -164,9 +164,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount uploads directory for PDF documents and attachments
+# Mount uploads & stored_pdfs directory for PDF documents and attachments
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
+app.mount("/stored_pdfs", StaticFiles(directory=str(settings.PDF_STORAGE_DIR)), name="stored_pdfs")
 
 # Include API Routers
 app.include_router(auth.router)

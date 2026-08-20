@@ -93,7 +93,7 @@ def apply_three_approvers():
             new_steps.append(WorkflowStepDefinition(
                 profile_name=p.profile_name,
                 stage_number=1,
-                step_name='First Approval',
+                step_name='Attachment Status',
                 approver_type='Specific Employee',
                 approver_target='YUVASREE (E24-04070)',
                 document_type=p.workflow_type,
@@ -140,7 +140,7 @@ def apply_three_approvers():
                 inv.current_stage = 1
                 inv.assigned_approver = "YUVASREE (E24-04070)"
                 if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):
-                    inv.status = "In Progress (Stage 1 - First Approval)"
+                    inv.status = "In Progress (Stage 1 - Attachment Status)"
             elif stage == 2:
                 inv.assigned_approver = "VIGNESH_E25-01583"
                 if "Approved" not in (inv.status or "") and "Rejected" not in (inv.status or ""):

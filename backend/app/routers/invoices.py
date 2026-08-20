@@ -266,7 +266,33 @@ def update_invoice(
     db.refresh(inv)
     return inv
 
-def check_approval_authorization(inv: Invoice, user: Optional[User]):
+def archive_approved_pdf(inv: Invoice):
+    """Archival helper: copies approved physical PDF into stored_pdfs and stored_pdfs/approved folder."""
+    try:
+        if not inv or not inv.file_url:
+            return
+        filename = os.path.basename(inv.file_url)
+        src_path = settings.UPLOAD_DIR / filename
+        if not src_path.exists():
+            src_path = settings.PDF_STORAGE_DIR / filename
+
+        if src_path.exists():
+            # 1. Ensure copy exists in stored_pdfs
+            dest_main = settings.PDF_STORAGE_DIR / filename
+            if src_path.resolve() != dest_main.resolve() and not dest_main.exists():
+                shutil.copy2(src_path, dest_main)
+
+            # 2. Copy to stored_pdfs/approved with readable filename
+            safe_inv_no = (inv.invoice_number or inv.id or "INV").replace("/", "_").replace("\\", "_")
+            safe_vendor = (inv.vendor_name or "Vendor").replace("/", "_").replace("\\", "_")[:40]
+            approved_filename = f"{inv.id}_{safe_inv_no}_{safe_vendor}.pdf"
+            dest_approved = settings.APPROVED_PDF_DIR / approved_filename
+            shutil.copy2(src_path, dest_approved)
+            print(f"[Archive] Successfully archived approved PDF to: {dest_approved}")
+    except Exception as e:
+        print(f"[Archive Warning] Could not archive approved PDF: {e}")
+
+def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session] = None, require_compliance: bool = True):
     # 1. Enforce terminal/settled states
     if inv.status in ["Settled", "Approved", "Paid", "Ready for Payment", "Rejected", "Failed"]:
         raise HTTPException(
@@ -296,6 +322,39 @@ def check_approval_authorization(inv: Invoice, user: Optional[User]):
                 detail=f"You are not authorized to approve this document at Stage {inv.current_stage or 1}. It is currently assigned to: {inv.assigned_approver}. Either another pool member has already signed off, or the workflow has advanced."
             )
 
+    if require_compliance and db:
+        # 3. If Stage 1 (Attachment Status), strictly require physical document attachment
+        is_stage_1 = (inv.current_stage or 1) == 1
+        has_attachment = bool(inv.file_url and inv.file_url.strip())
+        if is_stage_1 and not has_attachment:
+            raise HTTPException(
+                status_code=400,
+                detail="Document Attachment Required: A physical invoice PDF must be attached and uploaded before approving Stage 1 (Attachment Status)."
+            )
+
+        # 4. Mandatory checklist verification: All checklist boxes for current stage MUST be checked
+        current_step_name = "Attachment Status" if is_stage_1 else f"Stage {inv.current_stage or 1}"
+        if inv.workflow_profile_id:
+            step = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+                WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+            ).first()
+            if step:
+                current_step_name = step.step_name
+
+        checklist_items = db.query(InvoiceChecklistState).filter(
+            InvoiceChecklistState.invoice_id == inv.id,
+            InvoiceChecklistState.stage_name == current_step_name
+        ).all()
+
+        if checklist_items:
+            unchecked = [item for item in checklist_items if not item.is_checked]
+            if unchecked:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Compliance Checklist Incomplete: Please verify and check all {len(checklist_items)} checklist items for '{current_step_name}' ({len(unchecked)} remaining) before approving."
+                )
+
 @router.post("/api/workflows/approve")
 @router.post("/api/workflow/approve")
 def workflow_approve_payload(
@@ -308,9 +367,8 @@ def workflow_approve_payload(
         raise HTTPException(status_code=400, detail="Missing invoiceId in approval payload")
     
     inv = find_invoice_by_identifier(db, doc_id)
-    check_approval_authorization(inv, user)
+    check_approval_authorization(inv, user, db=db, require_compliance=True)
 
-    # Verify that all checklist items for the current stage are checked
     current_step_name = "Attachment Status"
     if inv.workflow_profile_id:
         step = db.query(WorkflowStepDefinition).filter(
@@ -319,18 +377,6 @@ def workflow_approve_payload(
         ).first()
         if step:
             current_step_name = step.step_name
-
-    unchecked_mandatory_items = db.query(InvoiceChecklistState).filter(
-        InvoiceChecklistState.invoice_id == inv.id,
-        InvoiceChecklistState.stage_name == current_step_name,
-        InvoiceChecklistState.is_checked == False
-    ).all()
-
-    if unchecked_mandatory_items:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Compliance Checklist Incomplete: Please verify and check all required checklist items for {current_step_name} before approving."
-        )
     
     # Capture exact approver identity (Employee Name + Username/Email)
     approver_name = payload.get("approver") or payload.get("user") or payload.get("username")
@@ -376,6 +422,7 @@ def workflow_approve_payload(
         inv.status = f"In Progress (Stage {inv.current_stage})"
     else:
         inv.status = "Settled"
+        archive_approved_pdf(inv)
 
     db.add(AuditLog(
         invoice_id=str(inv.id),
@@ -398,7 +445,7 @@ def approve_invoice_url(
     user: Optional[User] = Depends(get_current_user)
 ):
     inv = find_invoice_by_identifier(db, invoice_id)
-    check_approval_authorization(inv, user)
+    check_approval_authorization(inv, user, db=db, require_compliance=True)
     username = (user.employee_name or user.name) if user else "Reviewer"
     remarks = action.remarks if action and action.remarks else "Compliance items verified and signed off."
     stage_name = action.stage_name if action and action.stage_name else f"Stage {inv.current_stage or 1}"
@@ -417,6 +464,7 @@ def approve_invoice_url(
         inv.status = f"In Progress (Stage {inv.current_stage})"
     else:
         inv.status = "Settled"
+        archive_approved_pdf(inv)
 
     db.add(AuditLog(
         invoice_id=str(inv.id),
@@ -440,12 +488,12 @@ def invoice_step_action(
     user: Optional[User] = Depends(get_current_user)
 ):
     inv = find_invoice_by_identifier(db, invoice_id)
-    check_approval_authorization(inv, user)
     action_type = str(payload.get("action") or "Approve").strip()
+    act_lower = action_type.lower()
+    is_approving = ("approve" in act_lower or "pass" in act_lower)
+    check_approval_authorization(inv, user, db=db, require_compliance=is_approving)
     comments = str(payload.get("comments") or payload.get("comment") or "Action processed by desk operator.").strip()
     approver_name = payload.get("approver") or (user.employee_name or user.name if user else "Desk Operator")
-    
-    act_lower = action_type.lower()
     stage_name = f"Stage {inv.current_stage or 1}"
 
     if "approve" in act_lower or "pass" in act_lower:
@@ -463,6 +511,7 @@ def invoice_step_action(
             inv.status = f"In Progress (Stage {inv.current_stage})"
         else:
             inv.status = "Settled"
+            archive_approved_pdf(inv)
 
         db.add(AuditLog(
             invoice_id=str(inv.id),

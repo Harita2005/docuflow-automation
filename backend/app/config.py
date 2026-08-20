@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
-    # Uploads
+    # Uploads & Physical PDF Storage inside project folder
+    PDF_STORAGE_DIR: Path = Path(os.getenv("PDF_STORAGE_PATH", str(BASE_DIR.parent / "stored_pdfs")))
+    APPROVED_PDF_DIR: Path = Path(os.getenv("APPROVED_PDF_PATH", str(BASE_DIR.parent / "stored_pdfs" / "approved")))
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     EXCEL_PATH: Path = BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
 
@@ -35,3 +37,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+settings.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)

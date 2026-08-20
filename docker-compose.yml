@@ -16,6 +16,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./stored_pdfs:/app/stored_pdfs
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
