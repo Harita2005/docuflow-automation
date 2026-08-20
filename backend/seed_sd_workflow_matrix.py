@@ -136,10 +136,12 @@ def seed_sd_workflow_matrix():
 
                     if cat_name not in all_profiles and active_steps:
                         doc_type_inferred = infer_document_type(cat_name, category)
+                        parent_company = company.split('_')[0].split('-')[0].strip().upper()
+                        cat_label = f"{parent_company} Division Workflows" if parent_company not in ['SD ASSET', 'SD'] else 'SD Asset Workflows'
                         all_profiles[cat_name] = {
                             'profile_name': cat_name,
                             'workflow_code': cat_name[:50],
-                            'workflow_category': f"{company} Workflow Matrix",
+                            'workflow_category': cat_label,
                             'workflow_type': doc_type_inferred,
                             'description': f"Automated matrix workflow for {cat_name} ({company})",
                             'steps': [(idx + 1, st_name, pool) for idx, (st_name, pool) in enumerate(active_steps)]
@@ -262,9 +264,11 @@ def seed_sd_workflow_matrix():
             rule_name = f"RULE_{company}_{category[:25]}_{cat_name[:20]}".replace(" ", "_").replace("&", "_").replace("/", "_").strip("_")
             rule_name = f"{rule_name}_{rule_idx}"
 
+            parent_comp = company.split('_')[0].split('-')[0].strip().upper()
+            rule_cat = f"{parent_comp} Division Workflows" if parent_comp not in ['SD ASSET', 'SD'] else 'SD Asset Workflows'
             generated_rules.append({
                 "rule_name": rule_name,
-                "rule_category": f"{company} Workflow Matrix",
+                "rule_category": rule_cat,
                 "document_type": doc_type_for_rule,
                 "priority": priority,
                 "target_workflow_id": cat_name,
