@@ -6,7 +6,6 @@ import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
-import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
 import AdminRecycleBin from '../components/AdminRecycleBin.jsx';
 import AdminBackups from '../components/AdminBackups.jsx';
@@ -574,11 +573,6 @@ export default function Admin() {
         {/* --- ROUTING TAB CONTENT --- */}
         {activeTab === "routing" && (
           <FlowBuilder users={allUsers} />
-        )}
-
-        {/* --- CHECKLIST CONDITIONS TAB CONTENT --- */}
-        {activeTab === "checklists" && (
-          <ChecklistConditionBuilder />
         )}
 
     {/* --- TEMPLATES TAB CONTENT --- */}
