@@ -1608,17 +1608,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
           {isAdmin && (
             <button
               type="button"
-              onClick={handleResetDefaults}
-              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-250 cursor-pointer transition-colors"
-              title="Reset to baseline"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
               onClick={handleSaveAll}
               disabled={saving}
               className="h-8 flex items-center gap-1 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
@@ -1970,8 +1959,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
             </div>
 
             {/* Users List Data Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[500px]">
+            <div className="overflow-visible min-w-full">
+              <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/40 text-[9.5px] font-bold text-slate-500 uppercase tracking-wider select-none">
                     <th className="px-3.5 py-2.5 w-[6%] text-center">
@@ -2081,8 +2070,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           </td>
 
                           {/* Actions */}
-                          <td className="px-3.5 py-2.5 w-[16%] text-right pr-6 align-middle relative" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1.5">
+                          <td className="px-3.5 py-2.5 w-[20%] text-right pr-4 align-middle relative" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5 relative">
                               <button 
                                 type="button" 
                                 onClick={() => {
@@ -2122,11 +2111,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
                               >
                                 <MoreVertical className="h-3 w-3" />
                               </button>
-                            </div>
 
-                            {/* Context action menu dropdown */}
-                            {menuOpenUserId === u.id && (
-                              <div className="absolute right-3.5 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 text-left">
+                              {/* Context action menu dropdown */}
+                              {menuOpenUserId === u.id && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-left">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2206,6 +2194,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 </button>
                               </div>
                             )}
+                            </div>
                           </td>
                         </tr>
                       );
