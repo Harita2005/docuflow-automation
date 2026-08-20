@@ -145,14 +145,36 @@ def update_user_master(
 
     update_data = payload.dict(exclude_unset=True)
     
+    # Check employee_id uniqueness if updated
+    if "employee_id" in update_data and update_data["employee_id"] and update_data["employee_id"] != user.employee_id:
+        existing_emp = db.query(User).filter(User.employee_id == update_data["employee_id"], User.id != user_id).first()
+        if existing_emp:
+            raise HTTPException(status_code=400, detail=f"Employee ID '{update_data['employee_id']}' is already assigned to another user")
+
+    # Check email uniqueness if updated
+    if "email" in update_data and update_data["email"] and update_data["email"] != user.email:
+        existing_email = db.query(User).filter(User.email == update_data["email"], User.id != user_id).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail=f"Email '{update_data['email']}' is already registered to another user")
+
+    # Check username uniqueness if updated
+    if "username" in update_data and update_data["username"] and update_data["username"] != user.username:
+        existing_uname = db.query(User).filter(User.username == update_data["username"], User.id != user_id).first()
+        if existing_uname:
+            raise HTTPException(status_code=400, detail=f"Username '{update_data['username']}' is already taken")
+
     # If updating password, hash with bcrypt
     if "password" in update_data and update_data["password"]:
         user.password_hash = get_password_hash(update_data.pop("password"))
     else:
         update_data.pop("password", None)
 
-    if "employee_name" in update_data and update_data["employee_name"]:
-        user.name = update_data["employee_name"]
+    emp_name = update_data.get("employee_name") or update_data.get("name")
+    if emp_name:
+        user.employee_name = emp_name
+        user.name = emp_name
+        update_data.pop("employee_name", None)
+        update_data.pop("name", None)
 
     for field, value in update_data.items():
         setattr(user, field, value)

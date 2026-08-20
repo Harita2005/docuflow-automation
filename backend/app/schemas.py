@@ -57,7 +57,10 @@ class UserMasterCreate(BaseModel):
     created_by: Optional[str] = Field("System Admin", description="Admin who created this user")
 
 class UserMasterUpdate(BaseModel):
+    employee_id: Optional[str] = None
     employee_name: Optional[str] = None
+    name: Optional[str] = None
+    username: Optional[str] = None
     email: Optional[str] = None
     phone_number: Optional[str] = None
     password: Optional[str] = None # If provided, will be bcrypt re-hashed

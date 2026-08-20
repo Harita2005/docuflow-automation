@@ -571,6 +571,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newUserPlant, setNewUserPlant] = useState("");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
+  // Edit User modal states
+  const [editingUserModal, setEditingUserModal] = useState(null);
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+
   // States for adding dynamic permissions
   const [showAddPermissionModal, setShowAddPermissionModal] = useState(false);
   const [newPermId, setNewPermId] = useState("");
@@ -1297,6 +1301,58 @@ export default function AdminRBAC({ onRefreshSignal }) {
       setErrorMsg("Network error trying to create user.");
     } finally {
       setIsCreatingUser(false);
+    }
+  };
+
+  const handleSaveUserEdit = async (e) => {
+    e.preventDefault();
+    if (!editingUserModal) return;
+    setIsUpdatingUser(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
+      
+      const payload = {
+        employee_id: editingUserModal.employee_id,
+        employee_name: editingUserModal.employee_name || editingUserModal.name,
+        name: editingUserModal.employee_name || editingUserModal.name,
+        username: editingUserModal.username || editingUserModal.employee_id,
+        email: editingUserModal.email,
+        phone_number: editingUserModal.phone_number,
+        role: editingUserModal.role,
+        division: editingUserModal.division || "VCC",
+        department: editingUserModal.department || editingUserModal.dept,
+        plant: editingUserModal.plant
+      };
+      if (editingUserModal.password && editingUserModal.password.trim()) {
+        payload.password = editingUserModal.password.trim();
+      }
+
+      if (String(editingUserModal.id).startsWith("mock")) {
+        setUsers(prev => prev.map(u => u.id === editingUserModal.id ? { ...u, ...payload, name: payload.employee_name } : u));
+      } else {
+        const res = await fetch(`/api/users/${editingUserModal.id}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Failed to update employee details");
+        }
+        const updated = await res.json();
+        setUsers(prev => prev.map(u => u.id === editingUserModal.id ? { ...u, ...updated, name: updated.name || updated.employee_name } : u));
+      }
+
+      setSuccessMsg(`✓ Profile for "${editingUserModal.employee_name || editingUserModal.name}" updated successfully!`);
+      setEditingUserModal(null);
+      setTimeout(() => setSuccessMsg(""), 3500);
+    } catch (err) {
+      console.error("Error updating user:", err);
+      setErrorMsg(err.message || "Failed to update employee details");
+      setTimeout(() => setErrorMsg(""), 4000);
+    } finally {
+      setIsUpdatingUser(false);
     }
   };
 
@@ -2029,10 +2085,34 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             <div className="flex items-center justify-end gap-1.5">
                               <button 
                                 type="button" 
+                                onClick={() => {
+                                  setEditingUserModal({
+                                    id: u.id,
+                                    employee_id: u.employee_id || u.username || "",
+                                    employee_name: u.employee_name || u.name || "",
+                                    name: u.name || u.employee_name || "",
+                                    username: u.username || "",
+                                    email: u.email || "",
+                                    phone_number: u.phone_number || "",
+                                    division: u.division || "VCC",
+                                    department: u.department || u.dept || "Finance",
+                                    plant: u.plant || "",
+                                    role: u.role || "employee",
+                                    password: ""
+                                  });
+                                }}
+                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50/70 hover:bg-blue-100 px-2 py-0.5 rounded transition cursor-pointer inline-flex items-center gap-1"
+                                title="Edit Employee ID & Profile"
+                              >
+                                <Edit2 className="h-2.5 w-2.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button 
+                                type="button" 
                                 onClick={() => setSelectedUser(u)}
                                 className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 mr-1 transition cursor-pointer inline-flex items-center gap-0.5"
                               >
-                                <span>View profile</span>
+                                <span>Permissions</span>
                                 <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
                               </button>
                               <button
@@ -2047,6 +2127,31 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             {/* Context action menu dropdown */}
                             {menuOpenUserId === u.id && (
                               <div className="absolute right-3.5 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 text-left">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingUserModal({
+                                      id: u.id,
+                                      employee_id: u.employee_id || u.username || "",
+                                      employee_name: u.employee_name || u.name || "",
+                                      name: u.name || u.employee_name || "",
+                                      username: u.username || "",
+                                      email: u.email || "",
+                                      phone_number: u.phone_number || "",
+                                      division: u.division || "VCC",
+                                      department: u.department || u.dept || "Finance",
+                                      plant: u.plant || "",
+                                      role: u.role || "employee",
+                                      password: ""
+                                    });
+                                    setMenuOpenUserId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 hover:bg-slate-50 text-[10.5px] font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                                  <span>Edit Profile & ID</span>
+                                </button>
+
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2559,6 +2664,165 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 >
                   {isCreatingUser && <Loader2 className="h-3 w-3 animate-spin" />}
                   <span>Create User</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
+      {/* ========================================================= */}
+      {editingUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
+                <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                <span>Edit Employee Profile & Details</span>
+              </h3>
+              <button onClick={() => setEditingUserModal(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEdit} className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Emp ID (Editable) <span className="text-rose-500">*</span></label>
+                  <input 
+                    type="text"
+                    required
+                    value={editingUserModal.employee_id || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, employee_id: e.target.value })}
+                    placeholder="e.g. 16220 or E22-02094"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Full Name (Editable) <span className="text-rose-500">*</span></label>
+                  <input 
+                    type="text"
+                    required
+                    value={editingUserModal.employee_name || editingUserModal.name || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, employee_name: e.target.value, name: e.target.value })}
+                    placeholder="e.g. Ram Kumar"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email Address <span className="text-rose-500">*</span></label>
+                  <input 
+                    type="email"
+                    required
+                    value={editingUserModal.email || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, email: e.target.value })}
+                    placeholder="e.g. ram@company.com"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Username</label>
+                  <input 
+                    type="text"
+                    value={editingUserModal.username || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, username: e.target.value })}
+                    placeholder="e.g. ramk"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Phone Number</label>
+                  <input 
+                    type="text"
+                    value={editingUserModal.phone_number || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, phone_number: e.target.value })}
+                    placeholder="e.g. +91 98765 43210"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
+                  <select
+                    value={editingUserModal.role || 'employee'}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, role: e.target.value })}
+                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  >
+                    <option value="employee">General Employee</option>
+                    <option value="ap_specialist">AP Specialist</option>
+                    <option value="manager">Approver / Manager</option>
+                    <option value="auditor">Internal Auditor</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Division</label>
+                  <input 
+                    type="text"
+                    value={editingUserModal.division || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, division: e.target.value })}
+                    placeholder="e.g. VCC, ACC"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
+                  <input 
+                    type="text"
+                    value={editingUserModal.department || editingUserModal.dept || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, department: e.target.value })}
+                    placeholder="e.g. Finance"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Plant / Branch</label>
+                  <input 
+                    type="text"
+                    value={editingUserModal.plant || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, plant: e.target.value })}
+                    placeholder="e.g. TN-SIVAKASI"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Reset Password (Optional - leave blank to keep unchanged)</label>
+                <input 
+                  type="password"
+                  value={editingUserModal.password || ''}
+                  onChange={e => setEditingUserModal({ ...editingUserModal, password: e.target.value })}
+                  placeholder="New password (optional)"
+                  className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                />
+              </div>
+
+              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingUserModal(null)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingUser}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  {isUpdatingUser && <Loader2 className="h-3 w-3 animate-spin" />}
+                  <span>Save Profile</span>
                 </button>
               </div>
             </form>
