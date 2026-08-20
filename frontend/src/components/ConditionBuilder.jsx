@@ -496,272 +496,251 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             </div>
           </div>
 
-          {/* SECTION 2 */}
+          {/* SECTION 2: UNIFIED 4-IN-1 SD ROUTING MATRIX */}
           <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)]">
-            <h3 className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">2. Set Condition</h3>
-            
-            <div className="flex flex-col gap-3">
-              {(parsedJson.conditions || []).map((c, idx) => (
-                <div key={idx} className="flex flex-col gap-2 relative border border-slate-100 p-3 rounded-lg bg-slate-50/50 group">
-                  {idx > 0 && (
-                    <div className="absolute -top-3 left-4 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs font-black uppercase flex items-center gap-1 shadow-sm">
-                      <select 
-                        value={c.logicalOperator || 'AND'}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].logicalOperator = e.target.value;
-                          updateJson({ conditions: newC });
-                        }}
-                        className="outline-none bg-transparent text-blue-600 cursor-pointer"
-                      >
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                      </select>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-4 gap-3 items-end">
-                    <div className="col-span-1">
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Field <span className="text-rose-500">*</span></label>
-                      <select 
-                        value={c.field}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].field = e.target.value;
-                          // If switching to a field with preset, set default
-                          if (e.target.value === 'Division') {
-                            newC[idx].operator = 'Equals';
-                            newC[idx].value = 'VCC';
-                          } else if (e.target.value === 'Category') {
-                            newC[idx].operator = 'Equals';
-                            newC[idx].value = 'ASSET WITH COST CENTER';
-                          } else if (e.target.value === 'Plant' || e.target.value === 'Branch') {
-                            newC[idx].operator = 'Contains Any of';
-                            newC[idx].value = 'TN-SIVAKASI';
-                          } else if (e.target.value === 'Cost Center') {
-                            newC[idx].operator = 'Contains Any of';
-                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
-                          }
-                          updateJson({ conditions: newC });
-                        }}
-                        className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
-                      >
-                        <option value="Division">Division (Company: VCC, ACC, ENES)</option>
-                        <option value="Plant">Plant / Branch (e.g. TN-SIVAKASI, Sulur, HQ)</option>
-                        <option value="Category">Category (Document Type / Expense)</option>
-                        <option value="Cost Center">Cost Center (Branch / Cost Code)</option>
-                        <option value="Invoice Amount (Total)">Invoice Amount (Total)</option>
-                        <option value="Amount">Amount</option>
-                        <option value="Tax Amount">Tax Amount</option>
-                        <option value="Vendor Type">Vendor Type</option>
-                        <option value="Vendor Name">Vendor Name</option>
-                        <option value="Department">Department</option>
-                        <option value="Product Line Items">Product Line Items</option>
-                      </select>
-                    </div>
-                    <div className="col-span-1">
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Operator <span className="text-rose-500">*</span></label>
-                      <select 
-                        value={c.operator}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].operator = e.target.value;
-                          updateJson({ conditions: newC });
-                        }}
-                        className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
-                      >
-                        {c.field && c.field.includes('Amount') ? (
-                          <>
-                            <option value="Greater Than">Greater Than</option>
-                            <option value="Less Than">Less Than</option>
-                            <option value="Equals">Equals</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Equals">Equals</option>
-                            <option value="Contains">Contains</option>
-                            <option value="Contains Any of">Contains Any of (OR)</option>
-                            <option value="Not Equals">Not Equals</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <div className="col-span-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          Value <span className="text-rose-500">*</span>
-                        </label>
-                        {c.field === 'Cost Center' && (
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].operator = 'Contains Any of';
-                              newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
-                              updateJson({ conditions: newC });
-                            }}
-                            className="text-[8px] font-bold text-blue-600 hover:underline"
-                            title="Populate all 17 Excel SD Cost Centers"
-                          >
-                            + 17 SD Cost Centers
-                          </button>
-                        )}
-                        {(c.field === 'Plant' || c.field === 'Branch') && (
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].operator = 'Contains Any of';
-                              newC[idx].value = 'TN-SIVAKASI, TN-NAGERCOIL, TN-UDUMALPET, TN-CHN-CHROMPET';
-                              updateJson({ conditions: newC });
-                            }}
-                            className="text-[8px] font-bold text-blue-600 hover:underline"
-                            title="Populate SR10 Regional Branches"
-                          >
-                            + SR10 Branches
-                          </button>
-                        )}
-                      </div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-xs font-black text-blue-600 flex items-center gap-2">
+                  <Network className="h-4 w-4 text-blue-600" />
+                  <span>2. SD Workflow Routing Criteria (Unified Matrix)</span>
+                </h3>
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                  The document will automatically route to this workflow when matching the joined criteria below.
+                </p>
+              </div>
+              <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-extrabold text-[9px] uppercase tracking-wider rounded-md border border-blue-200">
+                4-in-1 Joined Matrix
+              </span>
+            </div>
 
-                      {c.field === 'Division' ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="divisions-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder="Select or type Division (e.g. VCC, ACC, ACM, ATC, ALL)..."
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : c.field === 'Category' ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="categories-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder="Select or type Category (e.g. ACCESSORIES - COMPUTER, COMPUTER, MOBILE PHONE)..."
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : (c.field === 'Plant' || c.field === 'Branch') ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="branches-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder={c.operator === 'Contains Any of' ? "e.g. ANTS, ATITHYA-EXCISE, MKT_MDU, TN-SIVAKASI..." : "Select or type Branch (e.g. ANTS, MKT_MDU, ALL)..."}
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : c.field === 'Cost Center' ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="cost-centers-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder={c.operator === 'Contains Any of' ? "e.g. BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance..." : "Select or type Cost Center..."}
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : (
+            {/* UNIFIED 4-FIELD MATRIX GRID */}
+            <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 mb-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                
+                {/* 1. DIVISION */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-3xs flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[9.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>1. Division</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      list="divisions-list"
+                      value={(() => {
+                        const cond = (parsedJson.conditions || []).find(c => c.field === 'Division');
+                        return cond ? cond.value : '';
+                      })()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        let cur = [...(parsedJson.conditions || [])];
+                        const idx = cur.findIndex(c => c.field === 'Division');
+                        const op = val.includes(',') ? 'Contains Any of' : 'Equals';
+                        if (idx >= 0) {
+                          cur[idx] = { ...cur[idx], field: 'Division', value: val, operator: op };
+                        } else {
+                          cur.push({ field: 'Division', operator: op, value: val, logicalOperator: 'AND' });
+                        }
+                        updateJson({ conditions: cur, condition_type: 'Combination Condition' });
+                      }}
+                      placeholder="e.g. ACC, VCC, ACM, ALL..."
+                      className="w-full text-xs p-2 border border-slate-200 rounded-md font-bold text-slate-900 bg-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-semibold mt-1.5">Company code (53 divisions)</span>
+                </div>
+
+                {/* 2. CATEGORY */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-3xs flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[9.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>2. Category</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      list="categories-list"
+                      value={(() => {
+                        const cond = (parsedJson.conditions || []).find(c => c.field === 'Category');
+                        return cond ? cond.value : '';
+                      })()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        let cur = [...(parsedJson.conditions || [])];
+                        const idx = cur.findIndex(c => c.field === 'Category');
+                        const op = val.includes(',') ? 'Contains Any of' : 'Equals';
+                        if (idx >= 0) {
+                          cur[idx] = { ...cur[idx], field: 'Category', value: val, operator: op };
+                        } else {
+                          cur.push({ field: 'Category', operator: op, value: val, logicalOperator: 'AND' });
+                        }
+                        updateJson({ conditions: cur, condition_type: 'Combination Condition' });
+                      }}
+                      placeholder="e.g. ACCESSORIES - COMPUTER..."
+                      className="w-full text-xs p-2 border border-slate-200 rounded-md font-bold text-slate-900 bg-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-semibold mt-1.5">Document / Expense Type</span>
+                </div>
+
+                {/* 3. COST CENTER */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-3xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[9.5px] font-black text-slate-700 uppercase tracking-wider">
+                        3. Cost Center <span className="text-rose-500">*</span>
+                      </label>
+                    </div>
+                    <input 
+                      list="cost-centers-list"
+                      value={(() => {
+                        const cond = (parsedJson.conditions || []).find(c => c.field === 'Cost Center');
+                        return cond ? cond.value : '';
+                      })()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        let cur = [...(parsedJson.conditions || [])];
+                        const idx = cur.findIndex(c => c.field === 'Cost Center');
+                        const op = val.includes(',') ? 'Contains Any of' : 'Equals';
+                        if (idx >= 0) {
+                          cur[idx] = { ...cur[idx], field: 'Cost Center', value: val, operator: op };
+                        } else {
+                          cur.push({ field: 'Cost Center', operator: op, value: val, logicalOperator: 'AND' });
+                        }
+                        updateJson({ conditions: cur, condition_type: 'Combination Condition' });
+                      }}
+                      placeholder="e.g. BATTERY VEHICLE, ALL..."
+                      className="w-full text-xs p-2 border border-slate-200 rounded-md font-bold text-slate-900 bg-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-semibold mt-1.5">Cost Center (802 centers)</span>
+                </div>
+
+                {/* 4. BRANCH / PLANT */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-3xs flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[9.5px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>4. Branch / Plant</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      list="branches-list"
+                      value={(() => {
+                        const cond = (parsedJson.conditions || []).find(c => c.field === 'Plant' || c.field === 'Branch');
+                        return cond ? cond.value : '';
+                      })()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        let cur = [...(parsedJson.conditions || [])];
+                        const idx = cur.findIndex(c => c.field === 'Plant' || c.field === 'Branch');
+                        const op = val.includes(',') ? 'Contains Any of' : 'Equals';
+                        if (idx >= 0) {
+                          cur[idx] = { ...cur[idx], field: 'Plant', value: val, operator: op };
+                        } else {
+                          cur.push({ field: 'Plant', operator: op, value: val, logicalOperator: 'AND' });
+                        }
+                        updateJson({ conditions: cur, condition_type: 'Combination Condition' });
+                      }}
+                      placeholder="e.g. ANTS, MKT_MDU, ALL..."
+                      className="w-full text-xs p-2 border border-slate-200 rounded-md font-bold text-slate-900 bg-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 font-semibold mt-1.5">Location code (341 branches)</span>
+                </div>
+
+              </div>
+            </div>
+
+            {/* ADDITIONAL EXTRA CONDITIONS (Amount Threshold, Vendor, etc.) */}
+            {(() => {
+              const standardFields = new Set(['Division', 'Category', 'Cost Center', 'Plant', 'Branch']);
+              const extraConditions = (parsedJson.conditions || []).filter(c => !standardFields.has(c.field));
+              
+              if (extraConditions.length === 0) return null;
+
+              return (
+                <div className="space-y-2.5 mt-3 pt-3 border-t border-slate-200">
+                  <span className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider block">Additional Conditions</span>
+                  {extraConditions.map((c, idx) => (
+                    <div key={idx} className="grid grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 items-end">
+                      <div>
+                        <label className="block text-[8.5px] font-bold text-slate-500 uppercase mb-0.5">Field</label>
+                        <input value={c.field} readOnly className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded font-medium" />
+                      </div>
+                      <div>
+                        <label className="block text-[8.5px] font-bold text-slate-500 uppercase mb-0.5">Operator</label>
+                        <select 
+                          value={c.operator}
+                          onChange={(e) => {
+                            const newC = [...parsedJson.conditions];
+                            const realIdx = newC.findIndex(item => item === c);
+                            if (realIdx >= 0) newC[realIdx].operator = e.target.value;
+                            updateJson({ conditions: newC });
+                          }}
+                          className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded font-medium"
+                        >
+                          <option value="Greater Than">Greater Than</option>
+                          <option value="Less Than">Less Than</option>
+                          <option value="Equals">Equals</option>
+                          <option value="Contains">Contains</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[8.5px] font-bold text-slate-500 uppercase mb-0.5">Value</label>
                         <input 
                           value={c.value}
                           onChange={(e) => {
                             const newC = [...parsedJson.conditions];
-                            newC[idx].value = e.target.value;
+                            const realIdx = newC.findIndex(item => item === c);
+                            if (realIdx >= 0) newC[realIdx].value = e.target.value;
                             updateJson({ conditions: newC });
                           }}
-                          placeholder={c.operator === 'Contains Any of' ? "Enter comma-separated values..." : "Enter value..."}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium"
+                          className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded font-medium"
                         />
-                      )}
+                      </div>
+                      <div className="flex justify-end">
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const newC = (parsedJson.conditions || []).filter(item => item !== c);
+                            updateJson({ conditions: newC });
+                          }}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="col-span-1 flex gap-2">
-                      {c.field && c.field.includes('Amount') && (
-                        <div className="flex-1">
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Currency</label>
-                          <select className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium">
-                            <option>INR - Indian Rupee</option>
-                            <option>USD - US Dollar</option>
-                          </select>
-                        </div>
-                      )}
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          const newC = parsedJson.conditions.filter((_, i) => i !== idx);
-                          updateJson({ conditions: newC });
-                        }}
-                        className="p-2 border border-rose-200 text-rose-500 rounded-md hover:bg-rose-50 mt-4 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const currentConditions = parsedJson.conditions || [];
-                    if (currentConditions.length >= 10) {
-                      alert("Maximum limit of 10 conditions reached per rule.");
-                      return;
-                    }
-                    const newC = [...currentConditions, { field: 'Category', operator: 'Equals', value: '', logicalOperator: 'AND' }];
-                    updateJson({ conditions: newC, condition_type: 'Combination Condition' });
-                  }}
-                  disabled={(parsedJson.conditions || []).length >= 10}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
-                >
-                  <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
-                </button>
+              );
+            })()}
 
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const matrixConditions = [
-                      { field: 'Division', operator: 'Equals', value: 'ACC', logicalOperator: 'AND' },
-                      { field: 'Category', operator: 'Equals', value: 'ACCESSORIES - COMPUTER', logicalOperator: 'AND' },
-                      { field: 'Cost Center', operator: 'Equals', value: 'BATTERY VEHICLE', logicalOperator: 'AND' },
-                      { field: 'Plant', operator: 'Equals', value: 'ANTS', logicalOperator: 'AND' }
-                    ];
-                    updateJson({ conditions: matrixConditions, condition_type: 'Combination Condition' });
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-300 text-blue-700 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-100 cursor-pointer"
-                  title="Generate standard 4-Point SD Condition Matrix: Division + Category + Cost Center + Branch"
-                >
-                  <Network className="h-3 w-3 text-blue-600" /> + 4-Point SD Matrix (Division + Category + Cost Center + Branch)
-                </button>
-              </div>
+            <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <button 
+                type="button" 
+                onClick={() => {
+                  const current = [...(parsedJson.conditions || [])];
+                  current.push({ field: 'Invoice Amount (Total)', operator: 'Greater Than', value: '50000', logicalOperator: 'AND' });
+                  updateJson({ conditions: current, condition_type: 'Combination Condition' });
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-3xs cursor-pointer"
+              >
+                <Plus className="h-3 w-3 text-blue-600" /> + Add Amount / Extra Filter
+              </button>
 
               <button 
                 type="button" 
-                onClick={() => updateJson({ conditions: [] })}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-rose-50 cursor-pointer"
+                onClick={() => {
+                  const standardMatrix = [
+                    { field: 'Division', operator: 'Equals', value: 'ACC', logicalOperator: 'AND' },
+                    { field: 'Category', operator: 'Equals', value: 'ACCESSORIES - COMPUTER', logicalOperator: 'AND' },
+                    { field: 'Cost Center', operator: 'Equals', value: 'BATTERY VEHICLE', logicalOperator: 'AND' },
+                    { field: 'Plant', operator: 'Equals', value: 'ANTS', logicalOperator: 'AND' }
+                  ];
+                  updateJson({ conditions: standardMatrix, condition_type: 'Combination Condition' });
+                }}
+                className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
               >
-                <Trash2 className="h-3 w-3" /> Clear All
+                Populate Sample SD Matrix
               </button>
             </div>
           </div>
