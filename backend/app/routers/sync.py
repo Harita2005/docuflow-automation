@@ -446,7 +446,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
         profile = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == target_wf).first()
         if profile:
+            from app.services.rules_engine import infer_document_type
             target_inv.workflow_profile_id = profile.profile_name
+            target_inv.document_type = profile.workflow_type or infer_document_type(category=target_inv.category, wf_name=target_wf, doc_type=target_inv.document_type)
             steps = db.query(WorkflowStepDefinition).filter(
                 WorkflowStepDefinition.profile_name == profile.profile_name
             ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
@@ -459,42 +461,21 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             else:
                 target_inv.status = "Initiated (Stage 1)"
 
-            # Load checklist directly from checklist_templates by matched workflow name
-            def get_workflow_checklist_name(profile_id: str, total_stages: int) -> str:
-                if not profile_id:
-                    return "All_General_Temp"
-                # Direct match first
-                exists = db.query(ChecklistTemplate).filter(
-                    ChecklistTemplate.workflow_profile == profile_id
-                ).first()
-                if exists:
-                    return profile_id
-                # Fallback to general template
-                return "All_General_Temp"
-
-            wf_checklist_name = get_workflow_checklist_name(profile.profile_name, len(steps))
-            templates = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == wf_checklist_name).all()
-            if not templates:
-                templates = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == "All_General_Temp").all()
-
+            from app.routers.invoices import resolve_checklist_items
             current_step_name = steps[0].step_name if steps else "Attachment Status"
-            stage_templates = [t for t in templates if t.stage_name.lower() == current_step_name.lower()]
-            if not stage_templates and templates:
-                stages_in_templates = list(set(t.stage_name for t in templates))
-                if stages_in_templates:
-                    stage_templates = [t for t in templates if t.stage_name == stages_in_templates[0]]
+            stage_items = resolve_checklist_items(db, target_inv, current_step_name)
 
             # Delete any legacy states if retrying sync
             db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == target_inv.id).delete()
-            for t in stage_templates:
+            for it_text in stage_items:
                 db.add(InvoiceChecklistState(
                     invoice_id=target_inv.id,
                     stage_name=current_step_name,
-                    item_text=t.item_text,
+                    item_text=it_text,
                     is_checked=False
                 ))
             
-            target_inv.checklist_state = json.dumps({t.item_text: False for t in stage_templates})
+            target_inv.checklist_state = json.dumps({it_text: False for it_text in stage_items})
 
             db.commit()
             db.refresh(target_inv)

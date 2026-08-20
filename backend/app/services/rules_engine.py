@@ -3,6 +3,34 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from app.models import BusinessRule, WorkflowProfile, WorkflowStepDefinition, Invoice
 
+def infer_document_type(category: str = "", trans_type: str = "", wf_name: str = "", doc_type: str = "") -> str:
+    if doc_type and doc_type.upper() not in ["AP INVOICE", ""]:
+        return doc_type
+    n = f"{category} {trans_type} {wf_name}".upper()
+    if "EVOUCHER" in n or "E-VOUCHER" in n or "E_VOUCHER" in n:
+        return "E-VOUCHER"
+    elif "ASSET" in n or "CAPEX" in n or "MACHINERY" in n or "MACHINE" in n:
+        return "CAPEX / FIXED ASSET"
+    elif "GRN" in n or "STOCK" in n or "GOODS" in n:
+        return "GRN / GOODS RECEIPT"
+    elif "CASHFLOW" in n or "CASH_FLOW" in n or "PETTY" in n or "CASH FLOW" in n:
+        return "CASH VOUCHER"
+    elif "FREIGHT" in n or "TRANSPORT" in n or "COURIER" in n or "POSTAGE" in n:
+        return "FREIGHT & LOGISTICS"
+    elif "RENT" in n or "EB" in n or "ELECTRICITY" in n or "POWER" in n:
+        return "UTILITY & RENT"
+    elif "TRAVEL" in n or "WELFARE" in n or "INCENTIVE" in n or "SALARY" in n:
+        return "STAFF & HR EXPENSE"
+    elif "PURCHASE" in n or "PO_" in n:
+        return "PURCHASE INVOICE"
+    elif "MAINTENANCE" in n or "REPAIRS" in n or "SERVICE" in n:
+        return "SERVICE & MAINTENANCE"
+    elif "ADVANCE" in n:
+        return "ADVANCE VOUCHER"
+    elif "JRNL" in n or "JOURNAL" in n:
+        return "JOURNAL VOUCHER"
+    return doc_type or "PURCHASE INVOICE"
+
 def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
     field = cond.get("field", "").strip()
     operator = cond.get("operator", "equals").strip().lower()
@@ -14,17 +42,22 @@ def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
             return obj.get(attr)
         return getattr(obj, attr, None)
 
+    raw_doc_type = get_val(invoice, "document_type") or ""
+    cat_val = get_val(invoice, "category") or ""
+    wf_val = get_val(invoice, "workflow_profile_id") or ""
+    inferred_doc_type = infer_document_type(category=cat_val, wf_name=wf_val, doc_type=raw_doc_type)
+
     # Map condition field names to Invoice attributes
     field_mapping = {
         "Division": get_val(invoice, "division") or "",
         "Company": get_val(invoice, "division") or "",
         "Plant": get_val(invoice, "plant") or "",
         "Branch": get_val(invoice, "plant") or "",
-        "Category": get_val(invoice, "category") or get_val(invoice, "document_type") or "",
+        "Category": cat_val or inferred_doc_type,
         "Cost Center": get_val(invoice, "cost_center") or "",
         "Vendor Name": get_val(invoice, "vendor_name") or "",
         "Vendor Type": "Standard",
-        "Document Type": get_val(invoice, "document_type") or "AP INVOICE",
+        "Document Type": inferred_doc_type,
         "Invoice Amount (Total)": float(get_val(invoice, "amount") or 0.0),
         "Amount": float(get_val(invoice, "amount") or 0.0),
         "Tax Amount": float(get_val(invoice, "tax_amount") or 0.0),
@@ -60,24 +93,22 @@ def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
     str_field = str(field_val or "").strip().lower()
     str_val = str(val or "").strip().lower()
 
+    # If condition value is "all", it matches anything
+    if str_val == "all" or str_val == "*":
+        return True
+
+    items = [s.strip().lower() for s in str_val.split(",") if s.strip()] if "," in str_val else [str_val]
+    if "all" in items or "*" in items:
+        return True
+
     if operator in ["equals", "==", "="]:
-        if "," in str_val:
-            items = [s.strip() for s in str_val.split(",") if s.strip()]
-            return str_field in items
-        return str_field == str_val
+        return str_field in items or any(str_field == it for it in items)
 
     if operator in ["not equals", "!=", "!=="]:
-        if "," in str_val:
-            items = [s.strip() for s in str_val.split(",") if s.strip()]
-            return str_field not in items
-        return str_field != str_val
+        return str_field not in items and not any(str_field == it for it in items)
 
-    if operator in ["contains any of", "contains any of (or)"]:
-        items = [s.strip() for s in str_val.split(",") if s.strip()]
-        return any(item in str_field or str_field == item for item in items)
-
-    if operator in ["contains"]:
-        return str_val in str_field
+    if operator in ["contains any of", "contains any of (or)", "contains"]:
+        return any(it in str_field or str_field in it for it in items)
 
     return True
 
@@ -121,7 +152,7 @@ def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
             if isinstance(conds, dict) and "conditions" in conds:
                 conds = conds["conditions"]
             if evaluate_rule_conditions(conds, invoice):
-                print(f"[RulesEngine] Matched rule '{rule.rule_name}' → workflow '{rule.target_workflow_id}'")
+                print(f"[RulesEngine] Matched rule '{rule.rule_name}' -> workflow '{rule.target_workflow_id}'")
                 return rule.target_workflow_id
         except Exception as e:
             print(f"[RulesEngine] Error evaluating rule {rule.rule_name}: {e}")

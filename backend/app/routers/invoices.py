@@ -637,12 +637,13 @@ async def upload_document(
     db.commit()
     db.refresh(new_inv)
 
-    # Auto-routing based on rules
+    from app.services.rules_engine import infer_document_type
     matched_wf = evaluate_business_rules(db, new_inv)
     if not matched_wf:
         matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
 
     new_inv.workflow_profile_id = matched_wf
+    new_inv.document_type = infer_document_type(category=category, wf_name=matched_wf, doc_type=document_type)
     steps = db.query(WorkflowStepDefinition).filter(
         WorkflowStepDefinition.profile_name == matched_wf
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
@@ -720,11 +721,13 @@ async def upload_and_route(
     if sgst is not None: inv.sgst = sgst
     if igst is not None: inv.igst = igst
     
+    from app.services.rules_engine import infer_document_type
     matched_wf = evaluate_business_rules(db, inv)
     if not matched_wf:
         matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
 
     inv.workflow_profile_id = matched_wf
+    inv.document_type = infer_document_type(category=inv.category, wf_name=matched_wf, doc_type=document_type)
     steps = db.query(WorkflowStepDefinition).filter(
         WorkflowStepDefinition.profile_name == matched_wf
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
@@ -1154,7 +1157,17 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
 
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
-    # Match Checklist Rules from the database
+    # 1. Match ChecklistTemplate directly by workflow profile and stage
+    if inv.workflow_profile_id:
+        tpl_items = db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
+            ChecklistTemplate.stage_name == stage_name,
+            ChecklistTemplate.is_active == True
+        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
+        if tpl_items:
+            return [it.item_text for it in tpl_items]
+
+    # 3. Match Checklist Rules from the database
     matching_rules = db.query(ChecklistRule).filter(
         ChecklistRule.stage_name == stage_name,
         ChecklistRule.is_active == True
@@ -1162,17 +1175,15 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
     
     scored_rules = []
     for r in matching_rules:
-        # Check conditions
-        if r.division and r.division != inv.division:
+        if r.division and r.division != "ALL" and r.division != inv.division:
             continue
-        if r.category and r.category != inv.category:
+        if r.category and r.category != "ALL" and r.category != inv.category:
             continue
-        if r.branch and r.branch != inv.plant:
+        if r.branch and r.branch != "ALL" and r.branch != inv.plant:
             continue
         if r.workflow_profile and r.workflow_profile != inv.workflow_profile_id:
             continue
             
-        # Calculate specificity score
         score = 0
         if r.division == inv.division: score += 10
         if r.category == inv.category: score += 10
@@ -1185,7 +1196,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         best_rules = [r for score, r in scored_rules if score == max_score]
         return [r.item_text for r in best_rules]
         
-    # If no rules matched, use fallback Python category generator
+    # 4. Fallback Python category generator
     from app.routers.sync import generate_compliance_checklist_for_category
     return generate_compliance_checklist_for_category(
         inv.category, 

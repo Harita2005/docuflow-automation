@@ -1463,7 +1463,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* 1. COMPACT TOP TOOLBAR */}
       <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
         
-        {/* Left: View Switcher (By Roles vs By Users vs Field Visibility) */}
+        {/* Left: View Switcher (By Roles vs By Users) */}
         <div className="flex items-center gap-2.5">
           <div className="inline-flex p-1 bg-slate-200/60 rounded-lg border border-slate-300/40 text-xs">
             <button
@@ -1486,36 +1486,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
               <Users className="h-3.5 w-3.5" />
               <span>By Users ({users.length})</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("flac")}
-              className={`px-3 py-1 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === "flac" ? "bg-white text-blue-700 shadow-2xs font-extrabold" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Sliders className="h-3.5 w-3.5 text-blue-600" />
-              <span>Field Visibility (FLAC)</span>
-            </button>
           </div>
-
-          {/* Scope Selector when on FLAC tab */}
-          {activeTab === "flac" && (
-            <div className="flex items-center gap-1.5 bg-white px-2.5 h-8 rounded-lg border border-blue-200 shadow-2xs">
-              <Layers className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              <span className="text-[9.5px] font-extrabold text-blue-950 uppercase">Scope:</span>
-              <select
-                value={selectedScope}
-                onChange={e => setSelectedScope(e.target.value)}
-                className="text-[11px] font-bold text-blue-900 bg-transparent border-0 outline-none cursor-pointer pr-1"
-              >
-                {FLAC_SCOPES.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.isGlobal ? `★ ${s.name}` : `📁 ${s.name}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           {/* Admin Edit Protection Badge */}
           {!isAdmin && (
@@ -1646,12 +1617,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     return (
                       <tr 
                         key={r.id}
-                        className="hover:bg-slate-50/60 transition-colors select-none"
+                        onClick={() => setSelectedRoleId(r.id)}
+                        className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
                       >
                         {/* Name + Shield Icon */}
-                        <td className="px-3.5 py-2.5 w-[35%] align-middle font-bold text-slate-800">
+                        <td className="px-4 py-3 w-[35%] align-middle font-bold text-slate-800">
                           <div className="flex items-center gap-2.5">
-                            <div className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center shrink-0 border ${
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border ${
                               r.id === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
                               r.id === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
                               r.id === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
@@ -1660,38 +1632,42 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             }`}>
                               <Shield className="h-4 w-4" />
                             </div>
-                            <span className="font-semibold text-slate-900">{r.name}</span>
+                            <span className="font-semibold text-slate-900 text-xs">{r.name}</span>
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td className="px-3.5 py-2.5 w-[20%] align-middle">
-                          <span className="px-2 py-0.5 rounded-full text-[8.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
+                        <td className="px-4 py-3 w-[20%] align-middle">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
                             Active
                           </span>
                         </td>
 
                         {/* Assigned Employees */}
-                        <td className="px-3.5 py-2.5 w-[25%] align-middle text-slate-650 font-medium">
+                        <td className="px-4 py-3 w-[25%] align-middle text-slate-600 font-medium text-xs">
                           <div className="flex items-center gap-1.5">
-                            <Users className="h-3 w-3 text-slate-400" />
+                            <Users className="h-3.5 w-3.5 text-slate-400" />
                             <span>{userCount} employee{userCount !== 1 ? 's' : ''}</span>
                           </div>
                         </td>
 
                         {/* Role Code / Badge */}
-                        <td className="px-3.5 py-2.5 w-[20%] align-middle">
-                          <span className="text-[7.5px] font-bold px-1.5 py-0.2 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
+                        <td className="px-4 py-3 w-[20%] align-middle">
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
                             {r.badge}
                           </span>
                         </td>
 
                         {/* Action Link */}
-                        <td className="px-3.5 py-2.5 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
-                          <span className="text-[10px] font-semibold text-slate-400 hover:text-blue-600 transition cursor-pointer flex items-center justify-end gap-0.5" onClick={() => setSelectedRoleId(r.id)}>
+                        <td className="px-4 py-3 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
+                          <button 
+                            type="button" 
+                            onClick={() => setSelectedRoleId(r.id)}
+                            className="text-[11px] font-semibold text-slate-400 group-hover:text-blue-600 transition cursor-pointer inline-flex items-center justify-end gap-0.5"
+                          >
                             <span>View clearances</span>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </span>
+                            <ExternalLink className="h-3 w-3 ml-0.5" />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1701,74 +1677,68 @@ export default function AdminRBAC({ onRefreshSignal }) {
             </div>
           </div>
 
-          {/* DIALOG IN THE MIDDLE: Role Permissions Settings */}
+          {/* DIALOG: Role Permissions / Clearances Modal */}
           {selectedRoleId && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
-              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-[480px] w-full max-h-[75vh] flex flex-col overflow-hidden animate-scaleIn">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-[540px] w-full max-h-[80vh] flex flex-col overflow-hidden animate-scaleIn">
                 
                 {/* Panel Header */}
-                <div className="p-3 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center border ${
-                      selectedRoleId === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                      selectedRoleId === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                      selectedRoleId === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                      selectedRoleId === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                      "bg-slate-50 text-slate-600 border-slate-200"
-                    }`}>
-                      <Shield className="h-3.5 w-3.5" />
+                <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-blue-50 text-blue-600 border-blue-100 shadow-3xs">
+                      <Shield className="h-4.5 w-4.5" />
                     </div>
                     <div className="text-left">
-                      <h3 className="font-extrabold text-slate-900 text-[11px] tracking-tight">
+                      <h3 className="font-bold text-slate-900 text-sm tracking-tight">
                         {roles.find(r => r.id === selectedRoleId)?.name || selectedRoleId} Clearances
                       </h3>
-                      <div className="text-[8.5px] text-slate-400 leading-none mt-0.5">
+                      <div className="text-xs text-slate-400 mt-0.5 font-medium">
                         Configure baseline permissions for all employees in this role
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="text-[9px] font-bold text-slate-500 uppercase">
-                      Role: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                      ROLE: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
                     </div>
                     <button 
                       type="button" 
                       onClick={() => setSelectedRoleId("")}
-                      className="p-1 hover:bg-slate-250 text-slate-400 hover:text-slate-650 rounded-md transition cursor-pointer"
+                      className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
                 {/* Alert Info Banner */}
-                <div className="p-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9px] font-semibold flex items-start gap-1.5 shrink-0 select-none">
-                  <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.2" />
+                <div className="px-4 py-2.5 bg-blue-50/70 border-b border-blue-100/70 text-blue-700 text-xs font-semibold flex items-center gap-2 shrink-0 select-none">
+                  <Info className="h-4 w-4 text-blue-500 shrink-0" />
                   <span>Modifications apply to all assigned employees immediately. Save top-right to commit.</span>
                 </div>
 
                 {/* Permissions list container */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar bg-slate-50/20">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
                   {filteredPermissions.map(cat => {
                     const catKey = cat.id || cat.category;
                     const isCollapsed = !!collapsedFolders[catKey];
 
                     return (
-                      <div key={catKey} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-3xs">
+                      <div key={catKey} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                         {/* Category Header */}
                         <div
                           onClick={() => toggleFolder(catKey)}
-                          className="bg-slate-50/95 hover:bg-slate-100/80 px-2.5 py-1.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-200"
+                          className="bg-slate-50/90 hover:bg-slate-100/80 px-3.5 py-2.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-150"
                         >
-                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-700 uppercase tracking-wider">
-                            {isCollapsed ? <Folder className="h-3 w-3 text-slate-400" /> : <FolderOpen className="h-3 w-3 text-blue-600" />}
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            {isCollapsed ? <Folder className="h-3.5 w-3.5 text-slate-400" /> : <FolderOpen className="h-3.5 w-3.5 text-blue-600" />}
                             <span>{cat.category}</span>
-                            <span className="text-[8px] text-slate-400 font-bold border border-slate-200 px-1 py-0.2 rounded-md bg-white">
+                            <span className="text-[9px] text-slate-400 font-bold border border-slate-200 px-1.5 py-0.2 rounded-md bg-white">
                               {cat.items.length}
                             </span>
                           </div>
-                          <div className="flex items-center gap-0.5 text-[8px] font-medium text-slate-400">
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-400">
                             <span>{isCollapsed ? "Expand" : "Collapse"}</span>
                             {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-slate-500" />}
                           </div>
@@ -1780,39 +1750,42 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             {cat.items.map(item => {
                               const cell = rolePermissions[selectedRoleId]?.[item.id] || { read: false, write: false, admin: false };
                               return (
-                                <div key={item.id} className="p-2.5 hover:bg-slate-50/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left group">
-                                  <div className="space-y-0.5">
+                                <div key={item.id} className="p-3 hover:bg-slate-50/40 transition-colors flex items-center justify-between gap-3 text-left group">
+                                  <div className="space-y-0.5 min-w-0 pr-2">
                                     <div className="flex items-center gap-1.5">
-                                      <h4 className="font-bold text-slate-800 text-[10px]">{item.label}</h4>
+                                      <h4 className="font-bold text-slate-900 text-xs">{item.label}</h4>
                                       {item.isCustom && (
-                                        <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-600 text-[7px] font-extrabold uppercase border border-blue-100 leading-none">
+                                        <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 text-[8px] font-extrabold uppercase border border-blue-100 leading-none">
                                           Custom
                                         </span>
                                       )}
                                     </div>
-                                    <p className="text-[8.5px] text-slate-400 font-medium leading-tight">{item.desc}</p>
+                                    <p className="text-[11px] text-slate-400 font-medium leading-relaxed truncate max-w-xs">{item.desc}</p>
                                   </div>
 
-                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                  <div className="flex items-center gap-1.5 shrink-0">
                                     {/* Delete Custom Permission */}
                                     {isAdmin && item.isCustom && (
                                       <button
                                         type="button"
                                         onClick={() => handleDeletePermission(item.id, item.label)}
-                                        className="p-1 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                        className="p-1 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer mr-1"
                                         title={`Delete permission "${item.label}"`}
                                       >
-                                        <Trash2 className="h-3 w-3" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                       </button>
                                     )}
 
-                                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+                                    {/* 3 Buttons View, Edit, Admin */}
+                                    <div className="flex items-center gap-1.5">
                                       <button
                                         type="button"
                                         onClick={() => toggleRolePerm(selectedRoleId, item.id, "read")}
                                         disabled={!isAdmin}
-                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
-                                          cell.read ? "bg-slate-800 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                                          cell.read 
+                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
+                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
                                         } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         title="Read-Only Clearance"
                                       >
@@ -1822,8 +1795,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                         type="button"
                                         onClick={() => toggleRolePerm(selectedRoleId, item.id, "write")}
                                         disabled={!isAdmin}
-                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
-                                          cell.write ? "bg-blue-600 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                                          cell.write 
+                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
+                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
                                         } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         title="Write / Modify Clearance"
                                       >
@@ -1833,8 +1808,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                         type="button"
                                         onClick={() => toggleRolePerm(selectedRoleId, item.id, "admin")}
                                         disabled={!isAdmin}
-                                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold cursor-pointer transition ${
-                                          cell.admin ? "bg-blue-900 text-white shadow-2xs font-extrabold" : "text-slate-500 hover:text-slate-800"
+                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                                          cell.admin 
+                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
+                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
                                         } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         title="Admin Signoff / Delete Clearance"
                                       >
@@ -1853,11 +1830,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
 
                 {/* Modal footer */}
-                <div className="p-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-end">
+                <div className="p-3.5 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedRoleId("")}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md transition shadow-2xs hover:shadow-sm cursor-pointer"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer"
                   >
                     Done
                   </button>
@@ -1978,7 +1955,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       return (
                         <tr 
                           key={u.id}
-                          className="hover:bg-slate-50/60 transition-colors select-none"
+                          onClick={() => setSelectedUser(u)}
+                          className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
                         >
                           {/* Checkbox */}
                           <td className="px-3.5 py-2.5 w-[6%] text-center align-middle" onClick={e => e.stopPropagation()}>
@@ -2049,10 +2027,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           {/* Actions */}
                           <td className="px-3.5 py-2.5 w-[16%] text-right pr-6 align-middle relative" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
-                              <span className="text-[10px] font-semibold text-slate-400 hover:text-blue-600 mr-1 transition cursor-pointer flex items-center gap-0.5" onClick={() => setSelectedUser(u)}>
+                              <button 
+                                type="button" 
+                                onClick={() => setSelectedUser(u)}
+                                className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 mr-1 transition cursor-pointer inline-flex items-center gap-0.5"
+                              >
                                 <span>View profile</span>
-                                <ExternalLink className="h-2.5 w-2.5" />
-                              </span>
+                                <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={(e) => toggleMenu(e, u.id)}
@@ -2129,59 +2111,59 @@ export default function AdminRBAC({ onRefreshSignal }) {
             </div>
           </div>
 
-          {/* DIALOG IN THE MIDDLE: User Permissions Settings */}
+          {/* DIALOG: User Permissions Modal */}
           {selectedUser && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
-              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-[440px] w-full max-h-[75vh] flex flex-col overflow-hidden animate-scaleIn">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-[480px] w-full max-h-[80vh] flex flex-col overflow-hidden animate-scaleIn">
                 
                 {/* Panel header */}
-                <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-                  <h3 className="text-[10.5px] font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5 text-blue-600" />
-                    <span>User Permissions</span>
-                  </h3>
+                <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider">
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    <span className="text-slate-900 font-black">USER PERMISSIONS</span>
+                  </div>
                   <button 
                     type="button" 
                     onClick={() => setSelectedUser(null)}
-                    className="p-1 hover:bg-slate-250 text-slate-400 hover:text-slate-650 rounded-md transition cursor-pointer"
+                    className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
 
                 {/* Profile details card */}
-                <div className="p-3 bg-white border-b border-slate-200 shrink-0">
+                <div className="p-4 bg-white border-b border-slate-100 shrink-0">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`h-8.5 w-8.5 rounded-full flex items-center justify-center font-bold text-[10px] tracking-wider shadow-2xs ${getAvatarColor(selectedUser.name)}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs tracking-wider bg-sky-100 text-sky-700 border border-sky-200">
                         {selectedUser.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="font-extrabold text-slate-900 text-[11px] tracking-tight">{selectedUser.name}</span>
-                        <span className="text-[9px] text-slate-400 truncate mt-0.5">{selectedUser.email}</span>
+                        <span className="font-bold text-slate-900 text-sm tracking-tight">{selectedUser.name}</span>
+                        <span className="text-xs text-slate-400 truncate mt-0.5 font-medium">{selectedUser.email}</span>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                    <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                       ID: {selectedUser.employee_id || selectedUser.id}
                     </span>
                   </div>
                 </div>
 
                 {/* Info alert banner */}
-                <div className="p-2.5 bg-blue-50/60 border-b border-blue-100 text-blue-700 text-[9px] font-semibold flex items-start gap-1.5 shrink-0 select-none">
-                  <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.2" />
+                <div className="px-4 py-2.5 bg-blue-50/70 border-b border-blue-100/70 text-blue-700 text-xs font-semibold flex items-center gap-2 shrink-0 select-none">
+                  <Info className="h-4 w-4 text-blue-500 shrink-0" />
                   <span>Permissions align with User Group. Custom switches define exceptions.</span>
                 </div>
 
                 {/* Group selection dropdown */}
-                <div className="p-3 bg-white border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 text-[10px]">
-                  <span className="font-bold text-slate-700">User Group</span>
-                  <div className="relative w-40">
+                <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between gap-4 shrink-0">
+                  <span className="font-bold text-slate-800 text-xs">User Group</span>
+                  <div className="relative w-48">
                     <select
                       id="user-group-dropdown"
                       value={panelUserGroup}
                       onChange={e => handlePanelGroupChange(e.target.value)}
-                      className="w-full text-[10px] font-semibold text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1 pr-6 outline-none appearance-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-3xs animate-none"
+                      className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 pr-7 outline-none appearance-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-3xs"
                     >
                       <option value="admin">Administrator</option>
                       <option value="manager">Manager</option>
@@ -2189,12 +2171,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       <option value="auditor">Internal Auditor</option>
                       <option value="employee">Employee</option>
                     </select>
-                    <ChevronDown className="absolute right-1.5 top-1.5 h-3 w-3 text-slate-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-2.5 top-3 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Scrollable list of permissions toggles */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-slate-50/20">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar bg-slate-50/30">
                   {flatPermissions.map(perm => {
                     const isEnabled = !!panelPermissions[perm.id];
                     const IconComponent = perm.icon || ShieldCheck;
@@ -2202,37 +2184,37 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     return (
                       <div 
                         key={perm.id} 
-                        className="p-2 bg-white border border-slate-200 rounded-lg flex items-center justify-between gap-2.5 hover:border-slate-350 hover:shadow-2xs transition-all duration-200 select-none"
+                        className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between gap-3 hover:border-slate-300 hover:shadow-2xs transition-all select-none"
                       >
-                        <div className="flex items-center gap-2">
-                          <div className={`h-7 w-7 rounded flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
-                            <IconComponent className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-3 min-w-0 pr-2">
+                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
+                            <IconComponent className="h-4 w-4" />
                           </div>
-                          <div className="flex flex-col text-left">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-extrabold text-slate-900 leading-tight">{perm.label}</span>
+                          <div className="flex flex-col text-left min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900 leading-tight truncate">{perm.label}</span>
                               {perm.isCustom && (
-                                <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[7px] font-bold">
+                                <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-bold">
                                   Custom
                                 </span>
                               )}
                             </div>
-                            <span className="text-[8.5px] text-slate-400 leading-tight mt-0.5">{perm.desc}</span>
+                            <span className="text-[11px] text-slate-400 font-medium leading-relaxed truncate max-w-xs mt-0.5">{perm.desc}</span>
                           </div>
                         </div>
 
-                        {/* Toggle Switch */}
+                        {/* iOS-Style Toggle Switch */}
                         <button
                           type="button"
                           onClick={() => handleTogglePermission(perm.id)}
                           disabled={!isAdmin}
-                          className={`relative inline-flex h-4 w-7.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-blue-500/25 ${
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-blue-500/25 ${
                             isEnabled ? 'bg-blue-600' : 'bg-slate-200'
                           } ${!isAdmin ? 'opacity-65 cursor-not-allowed' : ''}`}
                         >
                           <span
-                            className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                              isEnabled ? 'translate-x-3.5' : 'translate-x-0'
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                              isEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`}
                           />
                         </button>
@@ -2242,11 +2224,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
 
                 {/* Save changes footer */}
-                <div className="p-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-end gap-2">
+                <div className="p-4 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => setSelectedUser(null)}
-                    className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-[9px] uppercase tracking-wider rounded-md transition cursor-pointer"
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -2254,15 +2236,15 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     type="button"
                     onClick={handleSavePermissionChanges}
                     disabled={saving || !isAdmin}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md transition shadow-2xs hover:shadow-sm cursor-pointer disabled:opacity-60 text-center flex items-center justify-center gap-1.5"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer disabled:opacity-60 text-center flex items-center justify-center gap-1.5"
                   >
                     {saving ? (
                       <>
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         <span>Saving...</span>
                       </>
                     ) : (
-                      <span>Save changes</span>
+                      <span>Save Changes</span>
                     )}
                   </button>
                 </div>
@@ -2272,252 +2254,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* VIEW 3: FIELD LEVEL ACCESS CONTROL (FLAC) MATRIX */}
-      {/* ========================================================= */}
-      {activeTab === "flac" && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          
-          {/* FLAC Scope Information & Inheritance Banner */}
-          <div className="px-3.5 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-5 rounded bg-blue-50 text-blue-700 border border-blue-100 flex items-center justify-center font-bold text-[10px]">
-                {selectedScope === "GLOBAL" ? <Globe className="h-3 w-3" /> : <Layers className="h-3 w-3" />}
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-semibold text-slate-900 text-[11px]">
-                    {FLAC_SCOPES.find(s => s.id === selectedScope)?.name}
-                  </h3>
-                  {selectedScope === "GLOBAL" ? (
-                    <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[8px] font-semibold uppercase">
-                      Master Baseline (Default for all flows)
-                    </span>
-                  ) : isCustomizedScope ? (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[8px] font-medium">
-                      Customized Exception
-                    </span>
-                  ) : (
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[8px] font-medium">
-                      Inheriting Global Master
-                    </span>
-                  )}
-                </div>
-                <p className="text-[9px] text-slate-400 leading-tight">
-                  {FLAC_SCOPES.find(s => s.id === selectedScope)?.desc}
-                </p>
-              </div>
-            </div>
 
-            {/* Quick Bulk Action Buttons */}
-            {isAdmin && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAddCustomFieldModal(true)}
-                  className="px-2 py-0.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded text-[9px] font-medium transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                >
-                  <Plus className="h-2.5 w-2.5" />
-                  <span>Add Field</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleApplyToAllFlows}
-                  className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[9px] font-semibold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                  title="Propagate this exact policy to all workflows and categories"
-                >
-                  <Copy className="h-2.5 w-2.5" />
-                  <span>Apply to All Flows</span>
-                </button>
-
-                {selectedScope !== "GLOBAL" && isCustomizedScope && (
-                  <button
-                    type="button"
-                    onClick={handleResetScopeToGlobal}
-                    className="px-2 py-0.5 bg-white hover:bg-amber-50 text-amber-700 border border-amber-200 rounded text-[9px] font-medium transition cursor-pointer"
-                    title="Remove custom overrides and inherit from Global Master"
-                  >
-                    Reset to Global
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* FLAC Permissions Matrix Table */}
-          <div className="flex-1 overflow-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[700px]">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
-                  <th className="py-2 px-3 text-[9.5px] font-bold text-slate-600 uppercase tracking-wider w-[260px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200">
-                    Field Attribute ({filteredFields.length})
-                  </th>
-                  {roles.map(r => (
-                    <th key={r.id} className="py-1.5 px-2 text-center border-r border-slate-100 last:border-r-0 min-w-[120px]">
-                      <div className="flex flex-col items-center">
-                        <span className="px-1.5 py-0.2 rounded text-[8px] font-semibold uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 mb-0.5">
-                          {r.badge}
-                        </span>
-                        <span className="text-[10.5px] font-semibold text-slate-800 leading-tight">{r.name}</span>
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100 text-[10.5px]">
-                {filteredFields.map(field => (
-                  <tr key={field.id} className="hover:bg-slate-50/80 transition-colors">
-                    
-                    <td className="py-1.5 px-3 bg-white sticky left-0 z-10 border-r border-slate-200 shadow-[1px_0_3px_rgba(0,0,0,0.02)]">
-                      <div className="flex flex-col pl-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-slate-900 text-[11px]">{field.label}</span>
-                          <span className="text-[7.5px] font-medium uppercase tracking-wider px-1 py-0.2 bg-slate-100 text-slate-600 rounded border border-slate-200">
-                            {field.category}
-                          </span>
-                        </div>
-                        <span className="text-[8.5px] text-slate-400 leading-none mt-0.5">{field.desc}</span>
-                      </div>
-                    </td>
-
-                    {roles.map(r => {
-                      const currentVal = getEffectiveFieldState(r.id, field.id);
-                      return (
-                        <td key={r.id} className="py-1.5 px-2 text-center border-r border-slate-100 last:border-r-0">
-                          <div className="inline-flex items-center p-0.5 rounded bg-slate-100 border border-slate-200">
-                            
-                            {/* Hidden */}
-                            <button
-                              type="button"
-                              disabled={!isAdmin}
-                              onClick={() => setFieldScopeRolePerm(r.id, field.id, "hidden")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
-                                currentVal === "hidden"
-                                  ? "bg-slate-800 text-white shadow-2xs"
-                                  : "text-slate-500 hover:text-slate-800"
-                              }`}
-                              title="Field is hidden for this role"
-                            >
-                              Hidden
-                            </button>
-
-                            {/* View */}
-                            <button
-                              type="button"
-                              disabled={!isAdmin}
-                              onClick={() => setFieldScopeRolePerm(r.id, field.id, "view")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
-                                currentVal === "view"
-                                  ? "bg-white text-blue-700 border border-slate-200/80 shadow-2xs font-semibold"
-                                  : "text-slate-500 hover:text-slate-800"
-                              }`}
-                              title="Field is visible as read-only"
-                            >
-                              View
-                            </button>
-
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              disabled={!isAdmin}
-                              onClick={() => setFieldScopeRolePerm(r.id, field.id, "edit")}
-                              className={`px-1.5 py-0.5 rounded text-[8.5px] font-medium transition cursor-pointer ${
-                                currentVal === "edit"
-                                  ? "bg-blue-600 text-white shadow-2xs font-semibold"
-                                  : "text-slate-500 hover:text-slate-800"
-                              }`}
-                              title="Field can be edited by this role"
-                            >
-                              Edit
-                            </button>
-
-                          </div>
-                        </td>
-                      );
-                    })}
-
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL: ADD CUSTOM FIELD DYNAMICALLY */}
-      {/* ========================================================= */}
-      {showAddCustomFieldModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5 text-blue-650" />
-                <span>Add Dynamic Field ({selectedScope})</span>
-              </h3>
-              <button onClick={() => setShowAddCustomFieldModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddCustomField} className="space-y-2.5">
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Field Name / Label</label>
-                <input 
-                  type="text"
-                  required
-                  value={newFieldName}
-                  onChange={e => setNewFieldName(e.target.value)}
-                  placeholder="e.g. TDS Section Code (194C / 194J)"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Category Group</label>
-                <input 
-                  type="text"
-                  value={newFieldCategory}
-                  onChange={e => setNewFieldCategory(e.target.value)}
-                  placeholder="e.g. Tax & Compliance, Logistics, Capex"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Description & Purpose</label>
-                <input 
-                  type="text"
-                  value={newFieldDesc}
-                  onChange={e => setNewFieldDesc(e.target.value)}
-                  placeholder="e.g. Mandatory withholding tax rate code"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-              </div>
-
-              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddCustomFieldModal(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newFieldName.trim()}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
-                >
-                  Add Field to Matrix
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================= */}
       {/* MODAL: ADD CUSTOM ROLE */}

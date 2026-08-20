@@ -141,9 +141,9 @@ def seed_database():
     db.commit()
     print(f"  [OK] {synced_steps} new steps inserted. Total steps in table: {db.query(WorkflowStepDefinition).count()}")
 
-    # 4. SEED BUSINESS RULES (59 rules)
-    rules_data = data.get("business_rules", [])
-    print(f"\n[4/5] Syncing {len(rules_data)} Business Rules...")
+    # 4. SEED BUSINESS RULES (from production_data.json - skipping legacy superseded categories)
+    rules_data = [r for r in data.get("business_rules", []) if r.get("rule_category") not in ["SD Asset Workflows", "VCC Voucher Workflows"]]
+    print(f"\n[4/5] Syncing {len(rules_data)} Base Business Rules...")
     synced_rules = 0
     for r in rules_data:
         existing = db.query(BusinessRule).filter(BusinessRule.rule_name == r.get("rule_name")).first()
@@ -210,6 +210,15 @@ def seed_database():
     print("\n==================================================================")
     print(">>> 100% SUCCESS: ALL 223 USERS & WORKFLOW MATRIX SEEDED!")
     print("==================================================================")
+
+    # Invoke enterprise matrix seeding & stage checklist mapping
+    try:
+        from seed_sd_workflow_matrix import seed_sd_workflow_matrix
+        seed_sd_workflow_matrix()
+        from seed_perfect_stage_checklists import seed_perfect_stage_checklists
+        seed_perfect_stage_checklists()
+    except Exception as e:
+        print(f"[Notice] Matrix / Checklist seeding: {e}")
 
 if __name__ == "__main__":
     seed_database()

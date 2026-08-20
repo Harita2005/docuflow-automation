@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, CornerDownRight, Search, AlertTriangle } from 'lucide-react';
+import matrixOptions from '../matrix_options.json';
 
 export default function ConditionBuilder({ rules, setRules, setHasChanges, handleDeleteRuleLocal }) {
   const [editingRule, setEditingRule] = useState(null);
@@ -615,51 +616,59 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
 
                       {c.field === 'Division' ? (
                         <div className="space-y-1">
-                          <select 
+                          <input 
+                            list="divisions-list"
                             value={c.value}
                             onChange={(e) => {
                               const newC = [...parsedJson.conditions];
                               newC[idx].value = e.target.value;
                               updateJson({ conditions: newC });
                             }}
+                            placeholder="Select or type Division (e.g. VCC, ACC, ACM, ATC, ALL)..."
                             className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
-                          >
-                            <option value="ACC">ACC - Asset & Corporate</option>
-                            <option value="ENES">ENES - Energy & Retail</option>
-                            <option value="VCC">VCC - Regional Branches</option>
-                            <option value="EIC">EIC - Infrastructure Corp</option>
-                            <option value="RCH">RCH - Holding Company</option>
-                            <option value="RMPL">RMPL - Manufacturing Plant</option>
-                            <option value="RRTC">RRTC - Textiles & Retail</option>
-                            <option value="ALL">ALL (Global Enterprise)</option>
-                          </select>
+                          />
                         </div>
                       ) : c.field === 'Category' ? (
                         <div className="space-y-1">
-                          <select 
+                          <input 
+                            list="categories-list"
                             value={c.value}
                             onChange={(e) => {
                               const newC = [...parsedJson.conditions];
                               newC[idx].value = e.target.value;
                               updateJson({ conditions: newC });
                             }}
+                            placeholder="Select or type Category (e.g. ACCESSORIES - COMPUTER, COMPUTER, MOBILE PHONE)..."
                             className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
-                          >
-                            <option value="ASSET WITH COST CENTER">ASSET WITH COST CENTER</option>
-                            <option value="ASSET-IT">ASSET-IT</option>
-                            <option value="ASSET-NON IT">ASSET-NON IT</option>
-                            <option value="EB DEPOSIT">EB DEPOSIT</option>
-                            <option value="SUNDRY EXPENSES">SUNDRY EXPENSES</option>
-                            <option value="REPAIRS & MAINTENANCE">REPAIRS & MAINTENANCE</option>
-                            <option value="RENT GODOWN/GUEST HOUSE/SHOWROOM">RENT GODOWN/GUEST HOUSE/SHOWROOM</option>
-                            <option value="ELECTRICITY CHARGES">ELECTRICITY CHARGES</option>
-                            <option value="FIXED ASSETS">FIXED ASSETS</option>
-                            <option value="GRN_ALL">GRN_ALL</option>
-                            <option value="EMPLOYEE_RELIEVING">EMPLOYEE_RELIEVING</option>
-                            <option value="AP INVOICE">AP INVOICE</option>
-                            <option value="CREDIT NOTE">CREDIT NOTE</option>
-                            <option value="DEBIT NOTE">DEBIT NOTE</option>
-                          </select>
+                          />
+                        </div>
+                      ) : (c.field === 'Plant' || c.field === 'Branch') ? (
+                        <div className="space-y-1">
+                          <input 
+                            list="branches-list"
+                            value={c.value}
+                            onChange={(e) => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].value = e.target.value;
+                              updateJson({ conditions: newC });
+                            }}
+                            placeholder={c.operator === 'Contains Any of' ? "e.g. ANTS, ATITHYA-EXCISE, MKT_MDU, TN-SIVAKASI..." : "Select or type Branch (e.g. ANTS, MKT_MDU, ALL)..."}
+                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
+                          />
+                        </div>
+                      ) : c.field === 'Cost Center' ? (
+                        <div className="space-y-1">
+                          <input 
+                            list="cost-centers-list"
+                            value={c.value}
+                            onChange={(e) => {
+                              const newC = [...parsedJson.conditions];
+                              newC[idx].value = e.target.value;
+                              updateJson({ conditions: newC });
+                            }}
+                            placeholder={c.operator === 'Contains Any of' ? "e.g. BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance..." : "Select or type Cost Center..."}
+                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
+                          />
                         </div>
                       ) : (
                         <input 
@@ -669,7 +678,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                             newC[idx].value = e.target.value;
                             updateJson({ conditions: newC });
                           }}
-                          placeholder={c.operator === 'Contains Any of' ? "e.g. BATTERY VEHICLE, IT-HARDWARE, Office Maintenance..." : "Enter value..."}
+                          placeholder={c.operator === 'Contains Any of' ? "Enter comma-separated values..." : "Enter value..."}
                           className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium"
                         />
                       )}
@@ -837,6 +846,35 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             </div>
           </div>
         </div>
-    </form>
+
+        {/* Datalists for Excel Matrix Auto-completion */}
+        <datalist id="divisions-list">
+          <option value="ALL">ALL (Global Enterprise)</option>
+          {matrixOptions?.divisions?.map((div, i) => (
+            <option key={i} value={div} />
+          ))}
+        </datalist>
+
+        <datalist id="categories-list">
+          <option value="ALL">ALL Categories</option>
+          {matrixOptions?.categories?.map((cat, i) => (
+            <option key={i} value={cat} />
+          ))}
+        </datalist>
+
+        <datalist id="cost-centers-list">
+          <option value="ALL">ALL Cost Centers</option>
+          {matrixOptions?.cost_centers?.map((cc, i) => (
+            <option key={i} value={cc} />
+          ))}
+        </datalist>
+
+        <datalist id="branches-list">
+          <option value="ALL">ALL Branches</option>
+          {matrixOptions?.branches?.map((br, i) => (
+            <option key={i} value={br} />
+          ))}
+        </datalist>
+      </form>
   );
 }

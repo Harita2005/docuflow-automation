@@ -181,14 +181,16 @@ def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[
 def mask_email(email: str) -> str:
     if not email or "@" not in email:
         return email or ""
-    parts = email.split("@")
+    parts = email.split("@", 1)
     name = parts[0]
-    domain = parts[1]
-    if len(name) <= 2:
+    domain = parts[1] if len(parts) > 1 else ""
+    if len(name) == 0:
+        masked_name = "***"
+    elif len(name) <= 2:
         masked_name = name[0] + "***"
     else:
         masked_name = name[:2] + "***" + name[-1]
-    return f"{masked_name}@{domain}"
+    return f"{masked_name}@{domain}" if domain else masked_name
 
 def mask_phone(phone: str) -> str:
     if not phone:

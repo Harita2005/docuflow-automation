@@ -12,6 +12,9 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     token: Optional[str] = None
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
+    expires_in: Optional[int] = 3600
     user: Optional[dict] = None
     mfa_required: bool = False
     mfa_ticket: Optional[str] = None

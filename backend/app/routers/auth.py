@@ -2,6 +2,7 @@ import time
 import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, AuditLog
@@ -18,7 +19,8 @@ from app.services.mfa_service import (
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, response_model_exclude_none=True)
+@router.post("/token", response_model=TokenResponse, response_model_exclude_none=True)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     ident = request.username or request.identifier or request.email
     if not ident:
@@ -33,7 +35,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         (User.email.ilike(ident_str)) |
         (User.employee_id.ilike(ident_str)) |
         (User.user_uid.ilike(ident_str))
-    ).filter(User.is_deleted == False).first()
+    ).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
 
     # Smart fallback: if user typed partial number or name
     if not user:
@@ -42,7 +44,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             (User.employee_id.ilike(f"%{ident_str}%")) |
             (User.username.ilike(f"%{ident_str}%")) |
             (User.name.ilike(f"%{ident_str}%"))
-        ).filter(User.is_deleted == False).first()
+        ).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
 
     if not user:
         raise HTTPException(
@@ -50,10 +52,36 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail=f"User '{ident_str}' not found in system."
         )
 
-    # Standard MFA Flow: always return MFA ticket to initiate 2FA verification
+    # 1. Direct API / Programmatic Authentication (when password is provided)
+    if request.password:
+        is_valid = verify_password(request.password, user.password_hash or "")
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
+        
+        # Issue standard 60-minute JWT token (returns ONLY token fields, no sensitive personal details)
+        expires_minutes = request.expires_in_minutes or 60
+        access_token = create_access_token(
+            data={"sub": user.username, "user_id": user.id, "role": user.role},
+            expires_delta=datetime.timedelta(minutes=expires_minutes)
+        )
+        return {
+            "token": access_token,
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": expires_minutes * 60,
+            "mfa_required": False
+        }
+
+    # 2. Interactive Browser 2FA Flow (when password omitted in step 1)
     ticket = create_mfa_ticket(user.id, user.username)
     return {
         "token": None,
+        "access_token": None,
+        "token_type": "bearer",
+        "expires_in": 3600,
         "user": None,
         "mfa_required": True,
         "mfa_ticket": ticket,
