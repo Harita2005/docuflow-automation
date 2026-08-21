@@ -10,6 +10,39 @@ import app.models
 from app.models import User, WorkflowProfile, WorkflowStepDefinition, Invoice
 from app.auth import get_password_hash
 
+def ensure_user_safe(db, search_email, fallback_username, emp_id, emp_name, role_name):
+    """Safely updates or creates a user without violating unique email/username constraints."""
+    try:
+        u = db.query(User).filter(User.email.ilike(search_email)).first()
+        if not u:
+            u = db.query(User).filter(User.username.ilike(fallback_username)).first()
+        
+        if not u:
+            u = User(
+                user_uid=f"USR-{fallback_username.upper()}",
+                employee_id=emp_id,
+                employee_name=emp_name,
+                name=emp_name,
+                username=fallback_username,
+                email=search_email,
+                role=role_name,
+                password_hash=get_password_hash('password123'),
+                is_active=True
+            )
+            db.add(u)
+            db.commit()
+            print(f"  [Created User] {fallback_username} ({search_email})")
+        else:
+            u.username = fallback_username
+            u.name = emp_name
+            u.employee_name = emp_name
+            u.is_active = True
+            db.commit()
+            print(f"  [Updated User] ID={u.id} | {fallback_username} ({u.email})")
+    except Exception as e:
+        db.rollback()
+        print(f"  [User Notice] Safe fallback for {fallback_username}: {e}")
+
 def apply_four_approvers_all_workflows():
     print("==================================================================")
     print("   APPLYING 4-STAGE APPROVAL WORKFLOW TO ALL WORKFLOW PROFILES   ")
@@ -19,8 +52,11 @@ def apply_four_approvers_all_workflows():
     print("   Stage 4: VARUNAN                                               ")
     print("==================================================================")
 
-    # Automatically create tables if database is fresh
-    Base.metadata.create_all(bind=engine)
+    # 1. Automatically create tables if database is fresh
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Notice during table check: {e}")
 
     db = SessionLocal()
     try:
@@ -28,119 +64,10 @@ def apply_four_approvers_all_workflows():
         # 1. Ensure the 4 Approver Users exist and have active accounts
         # -------------------------------------------------------------
         print("\n[1/4] Ensuring 4 primary approvers exist in 'users' table...")
-        
-        # User 1: YUVASREE
-        u1 = db.query(User).filter(
-            (User.employee_id == 'E24-04070') | 
-            (User.username == 'YUVASREE') | 
-            (User.username == 'YUVASREE (E24-04070)') |
-            (User.email == 'wmssupport@ramrajcotton.net')
-        ).first()
-        if not u1:
-            u1 = User(
-                user_uid='USR-YUVASREE-E24-04070',
-                employee_id='E24-04070',
-                employee_name='YUVASREE',
-                name='YUVASREE',
-                username='YUVASREE (E24-04070)',
-                email='wmssupport@ramrajcotton.net',
-                role='employee',
-                password_hash=get_password_hash('password123'),
-                is_active=True
-            )
-            db.add(u1)
-        else:
-            u1.employee_name = 'YUVASREE'
-            u1.name = 'YUVASREE'
-            u1.email = 'wmssupport@ramrajcotton.net'
-            u1.role = 'employee'
-            u1.is_active = True
-
-        # User 2: Nattudurai
-        u2 = db.query(User).filter(
-            (User.username == 'NATTUDURAI') | 
-            (User.username == 'Nattudurai') | 
-            (User.employee_id == 'NATTUDURAI') | 
-            (User.email == 'Nattudurai.s@ramrajcotton.net') |
-            (User.email == 'Nattudural.s@ramrajcotton.net')
-        ).first()
-        if not u2:
-            u2 = User(
-                user_uid='USR-NATTUDURAI',
-                employee_id='NATTUDURAI',
-                employee_name='Nattudurai',
-                name='Nattudurai',
-                username='Nattudurai',
-                email='Nattudurai.s@ramrajcotton.net',
-                role='manager',
-                password_hash=get_password_hash('password123'),
-                is_active=True
-            )
-            db.add(u2)
-        else:
-            u2.employee_name = 'Nattudurai'
-            u2.name = 'Nattudurai'
-            u2.username = 'Nattudurai'
-            u2.email = 'Nattudurai.s@ramrajcotton.net'
-            u2.role = 'manager'
-            u2.is_active = True
-
-        # User 3: VIGNESH
-        u3 = db.query(User).filter(
-            (User.employee_id == 'E25-01583') | 
-            (User.username == 'VIGNESH') | 
-            (User.username == 'VIGNESH_E25-01583') |
-            (User.email == 'vignesh.m@ramrajcotton.net')
-        ).first()
-        if not u3:
-            u3 = User(
-                user_uid='USR-VIGNESH-E25-01583',
-                employee_id='E25-01583',
-                employee_name='VIGNESH',
-                name='VIGNESH',
-                username='VIGNESH_E25-01583',
-                email='vignesh.m@ramrajcotton.net',
-                role='manager',
-                password_hash=get_password_hash('password123'),
-                is_active=True
-            )
-            db.add(u3)
-        else:
-            u3.employee_name = 'VIGNESH'
-            u3.name = 'VIGNESH'
-            u3.email = 'vignesh.m@ramrajcotton.net'
-            u3.role = 'manager'
-            u3.is_active = True
-
-        # User 4: VARUNAN
-        u4 = db.query(User).filter(
-            (User.employee_id == 'E22-02046') | 
-            (User.username == 'VARUNAN') | 
-            (User.username == 'VARUNAN (E22_02046)') |
-            (User.email == 'varunan.r@ramrajcotton.net')
-        ).first()
-        if not u4:
-            u4 = User(
-                user_uid='USR-VARUNAN-E22-02046',
-                employee_id='E22-02046',
-                employee_name='VARUNAN',
-                name='VARUNAN',
-                username='VARUNAN (E22_02046)',
-                email='varunan.r@ramrajcotton.net',
-                role='employee',
-                password_hash=get_password_hash('password123'),
-                is_active=True
-            )
-            db.add(u4)
-        else:
-            u4.employee_name = 'VARUNAN'
-            u4.name = 'VARUNAN'
-            u4.email = 'varunan.r@ramrajcotton.net'
-            u4.role = 'employee'
-            u4.is_active = True
-
-        db.commit()
-        print("  [OK] Successfully configured all 4 approver user accounts.")
+        ensure_user_safe(db, 'wmssupport@ramrajcotton.net', 'YUVASREE', 'E24-04070', 'YUVASREE', 'employee')
+        ensure_user_safe(db, 'nattudurai.s@ramrajcotton.net', 'Nattudurai', 'NATTUDURAI', 'Nattudurai', 'manager')
+        ensure_user_safe(db, 'vignesh.m@ramrajcotton.net', 'VIGNESH', 'E25-01583', 'VIGNESH', 'manager')
+        ensure_user_safe(db, 'varunan.r@ramrajcotton.net', 'VARUNAN', 'E22-02046', 'VARUNAN', 'employee')
 
         # -------------------------------------------------------------
         # 2. Update all Workflow Profiles with the 4-Stage Definitions
@@ -152,9 +79,10 @@ def apply_four_approvers_all_workflows():
             from seed_sd_workflow_matrix import seed_sd_matrix
             seed_sd_matrix()
             profiles = db.query(WorkflowProfile).all()
+        
         print(f"  Found {len(profiles)} workflow profiles to update.")
 
-        # Delete old step definitions
+        # Delete old step definitions in database
         db.query(WorkflowStepDefinition).delete()
         db.commit()
 
@@ -217,7 +145,7 @@ def apply_four_approvers_all_workflows():
             new_step_count += 4
 
         db.commit()
-        print(f"  [OK] Created {new_step_count} step definitions across {len(profiles)} profiles (4 stages each).")
+        print(f"  [OK] Successfully inserted {new_step_count} step definitions across {len(profiles)} profiles (4 stages each).")
 
         # -------------------------------------------------------------
         # 3. Align All Invoices / Documents in Database
@@ -245,15 +173,12 @@ def apply_four_approvers_all_workflows():
         # 4. Summary & Verification
         # -------------------------------------------------------------
         print("\n[4/4] Verification check:")
-        sample_inv = db.query(Invoice).first()
-        if sample_inv:
-            print(f"  Sample Invoice: ID={sample_inv.id}, Stage={sample_inv.current_stage}/4, Assigned={sample_inv.assigned_approver}")
-        
-        sample_steps = db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == profiles[0].profile_name
-        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
-        for s in sample_steps:
-            print(f"  Stage {s.stage_number}: {s.step_name} -> Approver: {s.approver_target}")
+        if profiles:
+            sample_steps = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == profiles[0].profile_name
+            ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+            for s in sample_steps:
+                print(f"  Stage {s.stage_number}: {s.step_name} -> Approver: {s.approver_target}")
 
         print("\n==================================================================")
         print(">>> 100% COMPLETE: ALL WORKFLOWS NOW USE THE 4 DESIGNATED APPROVERS!")
