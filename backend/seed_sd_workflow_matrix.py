@@ -183,15 +183,20 @@ def seed_sd_workflow_matrix():
                     escalation_after_hours=48,
                     auto_escalation=False
                 )
-            # Populate exact actual workflow stages from Excel workflow matrix
+            # Populate exact 4-stage sequential workflow: Yuvasree -> Nattudurai -> Vignesh -> Varunan
             db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
-            for stage_num, st_name, pool in p_data['steps']:
-                appr_type = 'Approval Pool' if (',' in pool or ';' in pool) else 'Specific Employee'
+            four_steps = [
+                (1, "Attachment Status", "YUVASREE"),
+                (2, "Second Approval", "Nattudurai"),
+                (3, "Third Approval", "VIGNESH"),
+                (4, "Final Approval", "VARUNAN")
+            ]
+            for stage_num, st_name, pool in four_steps:
                 db.add(WorkflowStepDefinition(
                     profile_name=p_name,
                     stage_number=stage_num,
                     step_name=st_name,
-                    approver_type=appr_type,
+                    approver_type='Specific Employee',
                     approver_target=pool,
                     document_type=p_data['workflow_type'],
                     action_required='Approve',
