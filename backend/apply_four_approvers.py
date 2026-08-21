@@ -5,18 +5,22 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-from app.database import SessionLocal
+from app.database import SessionLocal, engine, Base
+import app.models
 from app.models import User, WorkflowProfile, WorkflowStepDefinition, Invoice
 from app.auth import get_password_hash
 
 def apply_four_approvers_all_workflows():
     print("==================================================================")
     print("   APPLYING 4-STAGE APPROVAL WORKFLOW TO ALL WORKFLOW PROFILES   ")
-    print("   Stage 1: YUVASREE (E24-04070)                                  ")
+    print("   Stage 1: YUVASREE                                              ")
     print("   Stage 2: Nattudurai                                            ")
-    print("   Stage 3: VIGNESH_E25-01583                                     ")
-    print("   Stage 4: VARUNAN (E22_02046)                                   ")
+    print("   Stage 3: VIGNESH                                               ")
+    print("   Stage 4: VARUNAN                                               ")
     print("==================================================================")
+
+    # Automatically create tables if database is fresh
+    Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:
@@ -143,6 +147,11 @@ def apply_four_approvers_all_workflows():
         # -------------------------------------------------------------
         print("\n[2/4] Updating all Workflow Profiles with 4 sequential stages...")
         profiles = db.query(WorkflowProfile).all()
+        if not profiles:
+            print("  No workflow profiles found in DB. Seeding matrix from Excel first...")
+            from seed_sd_workflow_matrix import seed_sd_matrix
+            seed_sd_matrix()
+            profiles = db.query(WorkflowProfile).all()
         print(f"  Found {len(profiles)} workflow profiles to update.")
 
         # Delete old step definitions
