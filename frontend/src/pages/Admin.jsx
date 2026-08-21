@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2 } from 'lucide-react';
-import AdminMasterData from '../components/AdminMasterData.jsx';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -41,7 +40,7 @@ export default function Admin() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem("adminActiveTab");
-    return (stored === "checklists" || !stored) ? "routing" : stored;
+    return (stored === "checklists" || stored === "masterdata" || !stored) ? "routing" : stored;
   });
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -461,12 +460,6 @@ export default function Admin() {
               Audit Logs
             </button>
             <button
-              onClick={() => setActiveTab("masterdata")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "masterdata" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              ERP Master
-            </button>
-            <button
               onClick={() => setActiveTab("system")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
@@ -498,7 +491,6 @@ export default function Admin() {
                   {activeTab === 'checklists' && 'Checklist Condition Matrix'}
                   {activeTab === 'templates' && 'AI Templates'}
                   {activeTab === 'rbac' && 'Role Access Configuration'}
-                  {activeTab === 'masterdata' && 'ERP Master'}
                   {activeTab === 'system' && 'System Settings'}
                   {activeTab === 'raci' && 'Email & RACI'}
                   {activeTab === 'inapp' && 'In-App Notifications'}
@@ -1021,12 +1013,6 @@ export default function Admin() {
     {activeTab === "backups" && (
       <div className="w-full animate-fadeIn transition-all">
         <AdminBackups />
-      </div>
-    )}
-
-    {activeTab === "masterdata" && (
-      <div className="w-full animate-fadeIn transition-all">
-        <AdminMasterData />
       </div>
     )}
 
