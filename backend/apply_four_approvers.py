@@ -148,9 +148,19 @@ def apply_four_approvers_all_workflows():
         print(f"  [OK] Successfully inserted {new_step_count} step definitions across {len(profiles)} profiles (4 stages each).")
 
         # -------------------------------------------------------------
-        # 3. Align All Invoices / Documents in Database
+        # 3. Migrate and Sync All Checklist Condition Rules
         # -------------------------------------------------------------
-        print("\n[3/4] Aligning all existing invoices with 4 stages and current assigned approvers...")
+        print("\n[3/5] Migrating Checklist Rules from Excel...")
+        try:
+            from seed_checklists import seed_checklists_from_excel
+            seed_checklists_from_excel()
+        except Exception as e:
+            print(f"  [Checklist Warning] Could not run seed_checklists: {e}")
+
+        # -------------------------------------------------------------
+        # 4. Align All Invoices / Documents in Database
+        # -------------------------------------------------------------
+        print("\n[4/5] Aligning all existing invoices with 4 stages and current assigned approvers...")
         invoices = db.query(Invoice).all()
         for inv in invoices:
             inv.total_stages = 4
@@ -170,9 +180,9 @@ def apply_four_approvers_all_workflows():
         print(f"  [OK] Updated {len(invoices)} invoices in database.")
 
         # -------------------------------------------------------------
-        # 4. Summary & Verification
+        # 5. Summary & Verification
         # -------------------------------------------------------------
-        print("\n[4/4] Verification check:")
+        print("\n[5/5] Verification check:")
         if profiles:
             sample_steps = db.query(WorkflowStepDefinition).filter(
                 WorkflowStepDefinition.profile_name == profiles[0].profile_name
