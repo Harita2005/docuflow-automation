@@ -1331,18 +1331,23 @@ export default function DocumentDetails({
 
               if (currentUserRole !== 'admin' && !document.is_current_approver) {
                 return (
-                  <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-bold flex flex-col gap-2 shrink-0 animate-fadeIn">
-                    <div className="flex items-center gap-1.5 text-slate-700">
-                      <AlertCircle className="h-4 w-4 text-slate-500 shrink-0" />
-                      <span>View Only: You are not authorized to approve this document at the current stage.</span>
+                  <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-medium flex flex-col gap-2 shrink-0 animate-fadeIn shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+                      <AlertCircle className="h-4 w-4 text-blue-600 shrink-0" />
+                      <span>
+                        Read-Only View: Assigned to {document.assigned_approver || 'next stage approver'}
+                      </span>
                     </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      You have viewing access as a recognized pool member / audit participant. Approvals are restricted to the actively assigned stage.
+                    </p>
                     <button
                       type="button"
                       onClick={() => setShowTimelineModal(true)}
-                      className="w-full py-1.5 px-3 bg-white hover:bg-slate-100/80 text-slate-800 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="w-full py-1.5 px-3 bg-white hover:bg-slate-100/90 text-slate-800 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Clock className="h-3.5 w-3.5 text-slate-500" />
-                      <span>View Approval Workflow Timeline</span>
+                      <span>View Stage Approval Timeline & Audit Trail</span>
                     </button>
                   </div>
                 );

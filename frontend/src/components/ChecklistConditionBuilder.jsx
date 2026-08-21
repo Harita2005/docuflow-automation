@@ -211,7 +211,7 @@ export default function ChecklistConditionBuilder() {
               </span>
             </h2>
             <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
-              Defines dynamic stage verification requirements: <code className="text-blue-600 font-bold">Doc Type == X AND Branch == Y AND Stage == Z → Checklist Items</code>
+              Defines dynamic stage verification requirements: <code className="text-blue-600 font-bold">Company == X AND Doc Type == Y AND Stage == Z → Checklist Items</code> (Cascading Priority over Workflow Defaults)
             </p>
           </div>
         </div>

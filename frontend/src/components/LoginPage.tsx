@@ -226,14 +226,11 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     executeVerification(otpCode);
   };
 
-  // Auto-submit when user reaches 6 digits
+  // Controlled input: update OTP value without auto-submitting
   const handleOtpInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
     setOtpCode(val);
     if (otpError) setOtpError("");
-    if (val.length === 6) {
-      executeVerification(val);
-    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -553,14 +550,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   <span className="text-slate-400 font-mono text-[11px]">Valid for 5 mins</span>
                 </div>
 
-                {/* Verify & Login Button (Always clickable if code entered) */}
+                {/* Verify & Proceed Button */}
                 <button
                   type="submit"
-                  disabled={loading}
-                  className={`w-full py-3.5 mt-2 text-white font-semibold text-sm rounded-xl transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-500/30 ${
+                  disabled={loading || otpCode.length < 6}
+                  className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-500/30 ${
                     otpCode.length === 6
                       ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/30 ring-2 ring-blue-400/50"
-                      : "bg-slate-900 hover:bg-slate-800 shadow-slate-900/20"
+                      : "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
                   }`}
                 >
                   {loading ? (
@@ -570,8 +567,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                     </div>
                   ) : (
                     <>
-                      <ShieldCheck className="h-4 w-4" />
-                      <span>Verify & Continue</span>
+                      <span>Proceed to Dashboard</span>
+                      <ArrowRight className="h-4 w-4" />
                     </>
                   )}
                 </button>

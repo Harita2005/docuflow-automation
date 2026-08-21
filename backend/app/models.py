@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Numeric
 )
@@ -271,4 +272,19 @@ class NotificationProviderConfig(Base):
     encrypted_password = Column(String(200), nullable=True)
     sender_email = Column(String(200), nullable=True)
     sender_name = Column(String(200), nullable=True)
+
+
+class InAppNotification(Base):
+    __tablename__ = "in_app_notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    notification_id = Column(String(100), unique=True, index=True, default=lambda: f"NOTIF-{uuid.uuid4().hex[:8].upper()}")
+    document_id = Column(String(100), index=True, nullable=False)
+    recipient_handle = Column(String(200), index=True, nullable=False) # username, employee_id, or email
+    notification_type = Column(String(50), default="PENDING_APPROVAL") # PENDING_APPROVAL, COMPLETED, REJECTED, SENT_BACK, CLARIFICATION
+    title = Column(String(300), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 

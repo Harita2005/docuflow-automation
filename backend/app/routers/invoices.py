@@ -15,7 +15,7 @@ from app.config import settings
 from app.models import (
     Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, User,
     ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig,
-    ChecklistRule, BusinessRule
+    ChecklistRule, BusinessRule, InAppNotification
 )
 from app.schemas import (
     InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest,
@@ -65,7 +65,7 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
             )
             approved_invoice_ids = {row[0] for row in audit_query.all()}
 
-    # Filter documents based on role permissions (Admin sees all; standard user sees only their assigned/approved documents)
+    # Filter documents based on role permissions (Admin sees all; standard user sees assigned, approved, or prior pool documents)
     if current_user and current_user.role != "admin":
         user_handles = [
             current_user.username.lower() if current_user.username else "",
@@ -74,15 +74,24 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
             current_user.email.lower() if current_user.email else ""
         ]
         user_handles = [h for h in user_handles if h]
+
+        # Index all workflow steps where current user was an approver
+        user_steps = db.query(WorkflowStepDefinition).all()
+        user_pool_stages = set()
+        for st in user_steps:
+            if st.approver_target:
+                targets = [s.strip().lower() for s in st.approver_target.split(",") if s.strip()]
+                if any(h in targets or any(h in t or t in h for t in targets) for h in user_handles):
+                    user_pool_stages.add((st.profile_name, st.stage_number))
         
         filtered_invoices = []
         for inv in invoices:
-            # Check if user previously approved
+            # 1. Check if user previously approved
             if inv.id in approved_invoice_ids:
                 filtered_invoices.append(inv)
                 continue
                 
-            # Check if currently assigned as approver
+            # 2. Check if currently assigned as approver
             is_assigned = False
             if inv.assigned_approver:
                 approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
@@ -91,6 +100,17 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
                         is_assigned = True
                         break
             if is_assigned:
+                filtered_invoices.append(inv)
+                continue
+
+            # 3. Check if user belonged to a prior stage pool (e.g. Vivek was in Stage 1 pool, and Sibitha approved)
+            is_prior_pool_member = False
+            if inv.workflow_profile_id and (inv.current_stage or 1) > 1:
+                for prior_stg in range(1, inv.current_stage or 1):
+                    if (inv.workflow_profile_id, prior_stg) in user_pool_stages:
+                        is_prior_pool_member = True
+                        break
+            if is_prior_pool_member:
                 filtered_invoices.append(inv)
         invoices = filtered_invoices
 
@@ -132,10 +152,33 @@ def get_synced_pending_documents(db: Session = Depends(get_db), current_user: Op
         (Invoice.file_url == None) | (Invoice.file_url == "")
     ).order_by(Invoice.created_at.desc()).all()
     
+    # Filter documents based on role permissions (Admin sees all; standard users only see documents currently at their stage)
+    if current_user and current_user.role != "admin":
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+        
+        filtered_invoices = []
+        for inv in invoices:
+            is_assigned = False
+            if inv.assigned_approver:
+                approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
+                for handle in user_handles:
+                    if handle in approvers or any(handle in app or app in handle for app in approvers):
+                        is_assigned = True
+                        break
+            if is_assigned:
+                filtered_invoices.append(inv)
+        invoices = filtered_invoices
+
     results = []
     for inv in invoices:
         inv_res = InvoiceResponse.from_orm(inv)
-        inv_res.is_current_approver = False
+        inv_res.is_current_approver = True if current_user and current_user.role != "admin" else False
         inv_res.has_approved = False
         results.append(inv_res)
     return results
@@ -180,19 +223,21 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
             current_step_name = s["stage_name"]
             break
 
-    inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
-    
+    user_handles = []
+    if current_user:
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+
     is_curr = False
     if current_user and inv.assigned_approver:
         is_active_flow = inv.status not in ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "Settled"]
         if is_active_flow:
             approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
-            user_handles = [
-                current_user.username.lower(),
-                current_user.employee_id.lower(),
-                current_user.employee_name.lower(),
-                current_user.email.lower()
-            ]
             for handle in user_handles:
                 if handle in approvers or any(handle in app or app in handle for app in approvers):
                     is_curr = True
@@ -211,6 +256,34 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
             )
             has_appr = audit_query.first() is not None
 
+    # Check if user was a member of a prior stage pool (e.g. Vivek when Sibitha approved Stage 1)
+    is_prior_pool_member = False
+    if current_user and inv.workflow_profile_id and (inv.current_stage or 1) > 1:
+        for prior_stg in range(1, inv.current_stage or 1):
+            st = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+                WorkflowStepDefinition.stage_number == prior_stg
+            ).first()
+            if st and st.approver_target:
+                targets = [s.strip().lower() for s in st.approver_target.split(",") if s.strip()]
+                if any(h in targets or any(h in t or t in h for t in targets) for h in user_handles):
+                    is_prior_pool_member = True
+                    break
+
+    # Strict Access Control:
+    # 1. Admins have full access
+    # 2. Currently assigned approvers have actionable access (can approve)
+    # 3. Users who previously signed off have read-only access
+    # 4. Users who belonged to a prior stage pool have read-only access
+    # 5. Downstream approvers CANNOT view until preceding stages have completed
+    if current_user and current_user.role != "admin":
+        if not is_curr and not has_appr and not is_prior_pool_member:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to '{inv.assigned_approver}'. It will become visible in your queue once preceding approvals are completed."
+            )
+
+    inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
     inv_dict["is_current_approver"] = is_curr
     inv_dict["has_approved"] = has_appr
     inv_dict["workflow_step_definitions"] = steps_data
@@ -291,6 +364,58 @@ def archive_approved_pdf(inv: Invoice):
             print(f"[Archive] Successfully archived approved PDF to: {dest_approved}")
     except Exception as e:
         print(f"[Archive Warning] Could not archive approved PDF: {e}")
+
+def dispatch_approval_inapp_notifications(
+    db: Session,
+    inv: Invoice,
+    approver_name: str,
+    prev_stage: int,
+    new_stage: int,
+    next_approver_target: Optional[str] = None,
+    is_completed: bool = False
+):
+    """Generates real-time in-app notifications when a document is approved and routed."""
+    try:
+        inv_title = inv.invoice_number or inv.id or "Document"
+        vendor_info = inv.vendor_name or "Vendor"
+        amt_str = f"INR {inv.amount:,.2f}" if inv.amount else ""
+        
+        # 1. Notify the NEXT assigned approver pool members
+        if not is_completed and next_approver_target:
+            next_targets = [t.strip() for t in next_approver_target.split(",") if t.strip()]
+            for target in next_targets:
+                notif = InAppNotification(
+                    document_id=str(inv.id),
+                    recipient_handle=target,
+                    notification_type="PENDING_APPROVAL",
+                    title=f"Action Required: {inv_title} Assigned to You (Stage {new_stage})",
+                    message=f"Document '{inv_title}' ({vendor_info} {amt_str}) was verified and signed off by {approver_name} at Stage {prev_stage}. It is now pending your sign-off at Stage {new_stage}.",
+                    is_read=False
+                )
+                db.add(notif)
+                
+        # 2. Confirmation notification for the approver who signed off
+        db.add(InAppNotification(
+            document_id=str(inv.id),
+            recipient_handle=approver_name,
+            notification_type="COMPLETED" if is_completed else "PENDING_APPROVAL",
+            title=f"Approval Confirmed: Stage {prev_stage} Completed" if not is_completed else f"Document {inv_title} Fully Settled",
+            message=f"You successfully signed off on Stage {prev_stage}. Document routed to Stage {new_stage} ({next_approver_target})." if not is_completed else f"You provided final sign-off for '{inv_title}'. Document is settled and archived.",
+            is_read=False
+        ))
+
+        # 3. Notification for admin governance
+        db.add(InAppNotification(
+            document_id=str(inv.id),
+            recipient_handle="admin",
+            notification_type="COMPLETED" if is_completed else "PENDING_APPROVAL",
+            title=f"Workflow Progress: {inv_title} ➔ Stage {new_stage}" if not is_completed else f"Workflow Settled: {inv_title}",
+            message=f"Stage {prev_stage} signed off by {approver_name}. Assigned to: {next_approver_target or 'Final Settlement'}." if not is_completed else f"Document '{inv_title}' completed all approval stages.",
+            is_read=False
+        ))
+        db.flush()
+    except Exception as e:
+        print(f"[Notification Warning] Failed to generate in-app notification: {e}")
 
 def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session] = None, require_compliance: bool = True):
     # 1. Enforce terminal/settled states
@@ -390,6 +515,7 @@ def workflow_approve_payload(
 
     remarks = payload.get("comments") or payload.get("comment") or payload.get("remarks") or "Compliance items verified and signed off."
     stage_name = f"Stage {inv.current_stage or 1}"
+    prev_stage_num = inv.current_stage or 1
 
     next_assigned_info = "Final Settlement Completed. Ready for payment disbursement."
     if (inv.current_stage or 1) < (inv.total_stages or 1):
@@ -424,6 +550,16 @@ def workflow_approve_payload(
         inv.status = "Settled"
         archive_approved_pdf(inv)
 
+    dispatch_approval_inapp_notifications(
+        db=db,
+        inv=inv,
+        approver_name=approver_name,
+        prev_stage=prev_stage_num,
+        new_stage=inv.current_stage,
+        next_approver_target=inv.assigned_approver,
+        is_completed=(inv.status == "Settled")
+    )
+
     db.add(AuditLog(
         invoice_id=str(inv.id),
         user=approver_name,
@@ -449,6 +585,7 @@ def approve_invoice_url(
     username = (user.employee_name or user.name) if user else "Reviewer"
     remarks = action.remarks if action and action.remarks else "Compliance items verified and signed off."
     stage_name = action.stage_name if action and action.stage_name else f"Stage {inv.current_stage or 1}"
+    prev_stage_num = inv.current_stage or 1
 
     next_assigned_info = "Final Settlement Completed. Ready for payment disbursement."
     if (inv.current_stage or 1) < (inv.total_stages or 1):
@@ -461,10 +598,37 @@ def approve_invoice_url(
             if next_step:
                 inv.assigned_approver = next_step.approver_target
                 next_assigned_info = f"Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}."
+
+                # Auto-initialize checklist items in the database for the next stage
+                existing_next_items = db.query(InvoiceChecklistState).filter(
+                    InvoiceChecklistState.invoice_id == inv.id,
+                    InvoiceChecklistState.stage_name == next_step.step_name
+                ).all()
+                if not existing_next_items:
+                    checklist_items = resolve_checklist_items(db, inv, next_step.step_name)
+                    for item_text in checklist_items:
+                        db.add(InvoiceChecklistState(
+                            invoice_id=inv.id,
+                            stage_name=next_step.step_name,
+                            item_text=item_text,
+                            is_checked=False
+                        ))
+                    inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
+
         inv.status = f"In Progress (Stage {inv.current_stage})"
     else:
         inv.status = "Settled"
         archive_approved_pdf(inv)
+
+    dispatch_approval_inapp_notifications(
+        db=db,
+        inv=inv,
+        approver_name=username,
+        prev_stage=prev_stage_num,
+        new_stage=inv.current_stage,
+        next_approver_target=inv.assigned_approver,
+        is_completed=(inv.status == "Settled")
+    )
 
     db.add(AuditLog(
         invoice_id=str(inv.id),
@@ -495,6 +659,7 @@ def invoice_step_action(
     comments = str(payload.get("comments") or payload.get("comment") or "Action processed by desk operator.").strip()
     approver_name = payload.get("approver") or (user.employee_name or user.name if user else "Desk Operator")
     stage_name = f"Stage {inv.current_stage or 1}"
+    prev_stage_num = inv.current_stage or 1
 
     if "approve" in act_lower or "pass" in act_lower:
         next_assigned_info = "Final Settlement Completed. Ready for payment disbursement."
@@ -508,10 +673,37 @@ def invoice_step_action(
                 if next_step:
                     inv.assigned_approver = next_step.approver_target
                     next_assigned_info = f"Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}."
+
+                    # Auto-initialize checklist items in the database for the next stage
+                    existing_next_items = db.query(InvoiceChecklistState).filter(
+                        InvoiceChecklistState.invoice_id == inv.id,
+                        InvoiceChecklistState.stage_name == next_step.step_name
+                    ).all()
+                    if not existing_next_items:
+                        checklist_items = resolve_checklist_items(db, inv, next_step.step_name)
+                        for item_text in checklist_items:
+                            db.add(InvoiceChecklistState(
+                                invoice_id=inv.id,
+                                stage_name=next_step.step_name,
+                                item_text=item_text,
+                                is_checked=False
+                            ))
+                        inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
+
             inv.status = f"In Progress (Stage {inv.current_stage})"
         else:
             inv.status = "Settled"
             archive_approved_pdf(inv)
+
+        dispatch_approval_inapp_notifications(
+            db=db,
+            inv=inv,
+            approver_name=approver_name,
+            prev_stage=prev_stage_num,
+            new_stage=inv.current_stage,
+            next_approver_target=inv.assigned_approver,
+            is_completed=(inv.status == "Settled")
+        )
 
         db.add(AuditLog(
             invoice_id=str(inv.id),
@@ -995,8 +1187,84 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: Optional[Us
     }
 
 @router.get("/api/notifications")
-def get_notifications(db: Session = Depends(get_db)):
-    return []
+def get_notifications(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    query = db.query(InAppNotification)
+    if current_user and current_user.role != "admin":
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+        
+        all_notifs = query.order_by(InAppNotification.created_at.desc()).limit(100).all()
+        filtered = []
+        for n in all_notifs:
+            handle = (n.recipient_handle or "").lower()
+            if any(uh == handle or uh in handle or handle in uh for uh in user_handles):
+                filtered.append({
+                    "notification_id": n.notification_id,
+                    "document_id": n.document_id,
+                    "notification_type": n.notification_type,
+                    "title": n.title,
+                    "message": n.message,
+                    "is_read": n.is_read,
+                    "created_at": n.created_at.isoformat() if n.created_at else datetime.datetime.utcnow().isoformat()
+                })
+        return filtered
+    
+    # Admin sees all notifications
+    all_notifs = query.order_by(InAppNotification.created_at.desc()).limit(50).all()
+    return [
+        {
+            "notification_id": n.notification_id,
+            "document_id": n.document_id,
+            "notification_type": n.notification_type,
+            "title": n.title,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else datetime.datetime.utcnow().isoformat()
+        }
+        for n in all_notifs
+    ]
+
+@router.put("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, db: Session = Depends(get_db)):
+    notif = db.query(InAppNotification).filter(InAppNotification.notification_id == notification_id).first()
+    if not notif:
+        notif = db.query(InAppNotification).filter(InAppNotification.id == notification_id).first()
+    if notif:
+        notif.is_read = True
+        db.commit()
+    return {"success": True}
+
+@router.put("/api/notifications/read-all")
+def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    query = db.query(InAppNotification)
+    if current_user and current_user.role != "admin":
+        user_handles = [
+            current_user.username.lower() if current_user.username else "",
+            current_user.employee_id.lower() if current_user.employee_id else "",
+            current_user.employee_name.lower() if current_user.employee_name else "",
+            current_user.email.lower() if current_user.email else ""
+        ]
+        user_handles = [h for h in user_handles if h]
+        all_notifs = query.filter(InAppNotification.is_read == False).all()
+        for n in all_notifs:
+            handle = (n.recipient_handle or "").lower()
+            if any(uh == handle or uh in handle or handle in uh for uh in user_handles):
+                n.is_read = True
+    else:
+        query.update({InAppNotification.is_read: True})
+    db.commit()
+    return {"success": True}
 
 @router.get("/api/templates")
 def get_templates(db: Session = Depends(get_db)):
@@ -1206,62 +1474,66 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
 
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
-    # 1. Match ChecklistTemplate directly by workflow profile and stage
-    if inv.workflow_profile_id:
-        tpl_items = db.query(ChecklistTemplate).filter(
-            ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
-            ChecklistTemplate.stage_name == stage_name,
-            ChecklistTemplate.is_active == True
-        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
-        if tpl_items:
-            res = []
-            for it in tpl_items:
-                for sub in it.item_text.split(','):
-                    c = sub.strip()
-                    if c and c not in res: res.append(c)
-            if res: return res
-
-    # 2. Match Checklist Rules from the database (Precision Condition Matching)
+    # =========================================================================
+    # PRIORITY 1 (HIGHEST): Specific Category / Company Condition Rules
+    # (Matches Company == X, DocType/Category == Y, Branch == Z, Stage/Status == S)
+    # =========================================================================
     matching_rules = db.query(ChecklistRule).filter(
-        ChecklistRule.stage_name == stage_name,
+        ChecklistRule.stage_name.ilike(stage_name.strip()),
         ChecklistRule.is_active == True
-    ).all()
+    ).order_by(ChecklistRule.sequence_order.asc()).all()
     
     scored_rules = []
     for r in matching_rules:
-        # Match Division
+        # Match Division / Company
+        div_matched = False
         if r.division and r.division != "ALL":
             divs = [d.strip().upper() for d in r.division.split(',') if d.strip()]
             inv_div = (inv.division or "").strip().upper()
-            if inv_div not in divs and not any(inv_div in d for d in divs):
+            if inv_div in divs or any(inv_div == d or inv_div in d for d in divs):
+                div_matched = True
+            else:
                 continue
 
         # Match Category / Document Type
+        cat_matched = False
         if r.category and r.category != "ALL":
             cats = [c.strip().upper() for c in r.category.split(',') if c.strip()]
             inv_cat = (inv.category or "").strip().upper()
             inv_doc = (inv.document_type or "").strip().upper()
-            if inv_cat not in cats and inv_doc not in cats and not any(inv_cat in c or c in inv_cat for c in cats):
+            if (inv_cat and (inv_cat in cats or any(c == inv_cat or inv_cat in c or c in inv_cat for c in cats))) or \
+               (inv_doc and (inv_doc in cats or any(c == inv_doc or inv_doc in c or c in inv_doc for c in cats))):
+                cat_matched = True
+            else:
                 continue
 
         # Match Branch / Plant
+        branch_matched = False
         if r.branch and r.branch != "ALL":
             branches = [b.strip().upper() for b in r.branch.split(',') if b.strip()]
             inv_plant = (inv.plant or "").strip().upper()
-            if inv_plant not in branches and not any(inv_plant in b for b in branches):
+            if inv_plant in branches or any(inv_plant == b or inv_plant in b for b in branches):
+                branch_matched = True
+            else:
                 continue
 
-        # Match Workflow Profile
+        # Match Workflow Profile (if specified on rule)
+        wf_matched = False
         if r.workflow_profile and r.workflow_profile != "ALL":
-            if r.workflow_profile != inv.workflow_profile_id:
+            if r.workflow_profile.strip().upper() == (inv.workflow_profile_id or "").strip().upper():
+                wf_matched = True
+            else:
                 continue
             
         score = 0
-        if r.division and r.division != "ALL": score += 10
-        if r.category and r.category != "ALL": score += 15
-        if r.branch and r.branch != "ALL": score += 10
-        if r.workflow_profile and r.workflow_profile != "ALL": score += 5
-        scored_rules.append((score, r))
+        if div_matched: score += 20
+        if cat_matched: score += 30
+        if branch_matched: score += 10
+        if wf_matched: score += 10
+        
+        # Only consider condition rules with actual matching specificity (score > 0)
+        if score > 0:
+            scored_rules.append((score, r))
         
     if scored_rules:
         max_score = max(s[0] for s in scored_rules)
@@ -1279,8 +1551,30 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                     res_items.append(clean)
         if res_items:
             return res_items
-        
-    # 3. Fallback Python category generator
+
+    # =========================================================================
+    # PRIORITY 2 (FALLBACK): Workflow-Based Default Checklist (Sheet 4)
+    # (Matches WorkflowProfile == P, Stage/Status == S)
+    # =========================================================================
+    if inv.workflow_profile_id:
+        tpl_items = db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
+            ChecklistTemplate.stage_name.ilike(stage_name.strip()),
+            ChecklistTemplate.is_active == True
+        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
+        if tpl_items:
+            res = []
+            for it in tpl_items:
+                for sub in it.item_text.split(','):
+                    c = sub.strip()
+                    if c and c not in res:
+                        res.append(c)
+            if res:
+                return res
+
+    # =========================================================================
+    # PRIORITY 3 (UNIVERSAL BASE): Standard Compliance Checklist
+    # =========================================================================
     from app.routers.sync import generate_compliance_checklist_for_category
     return generate_compliance_checklist_for_category(
         inv.category, 

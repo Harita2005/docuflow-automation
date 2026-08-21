@@ -183,50 +183,25 @@ def seed_sd_workflow_matrix():
                     escalation_after_hours=48,
                     auto_escalation=False
                 )
-                db.add(new_p)
-                synced_p += 1
-            # Re-generate exact 3 approval stages matching screenshot:
-            # 1. Specific Employee -> YUVASREE (E24-04070)
-            # 2. Approval Pool -> VIGNESH_E25-01583
-            # 3. Specific Employee -> VARUNAN (E22_02046)
+            # Populate exact actual workflow stages from Excel workflow matrix
             db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
-            db.add(WorkflowStepDefinition(
-                profile_name=p_name,
-                stage_number=1,
-                step_name="First Approval",
-                approver_type='Specific Employee',
-                approver_target="YUVASREE (E24-04070)",
-                document_type=p_data['workflow_type'],
-                action_required='Approve',
-                permissions='Approve / Reject',
-                sla_hours=48
-            ))
-            db.add(WorkflowStepDefinition(
-                profile_name=p_name,
-                stage_number=2,
-                step_name="Second Approval",
-                approver_type='Approval Pool',
-                approver_target="VIGNESH_E25-01583",
-                document_type=p_data['workflow_type'],
-                action_required='Approve',
-                permissions='Approve / Reject',
-                sla_hours=48
-            ))
-            db.add(WorkflowStepDefinition(
-                profile_name=p_name,
-                stage_number=3,
-                step_name="Final Approval",
-                approver_type='Specific Employee',
-                approver_target="VARUNAN (E22_02046)",
-                document_type=p_data['workflow_type'],
-                action_required='Approve',
-                permissions='Approve / Reject',
-                sla_hours=48
-            ))
-            synced_s += 3
+            for stage_num, st_name, pool in p_data['steps']:
+                appr_type = 'Approval Pool' if (',' in pool or ';' in pool) else 'Specific Employee'
+                db.add(WorkflowStepDefinition(
+                    profile_name=p_name,
+                    stage_number=stage_num,
+                    step_name=st_name,
+                    approver_type=appr_type,
+                    approver_target=pool,
+                    document_type=p_data['workflow_type'],
+                    action_required='Approve',
+                    permissions='Approve / Reject',
+                    sla_hours=48
+                ))
+                synced_s += 1
 
         db.commit()
-        print(f"  [OK] Synced {synced_p} new profiles and {synced_s} step definitions (3 stages each).")
+        print(f"  [OK] Synced {synced_p} new profiles and {synced_s} step definitions (actual stages from Excel).")
         print(f"  Total Profiles in table: {db.query(WorkflowProfile).count()}")
         print(f"  Total Step Definitions in table: {db.query(WorkflowStepDefinition).count()}")
 
