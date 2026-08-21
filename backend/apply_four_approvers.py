@@ -154,13 +154,13 @@ def apply_four_approvers_all_workflows():
             p_name = p.profile_name
             w_type = p.workflow_type or 'AP INVOICE'
 
-            # Stage 1: YUVASREE (E24-04070)
+            # Stage 1: YUVASREE
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=1,
                 step_name="Attachment Status",
                 approver_type="Specific Employee",
-                approver_target="YUVASREE (E24-04070)",
+                approver_target="YUVASREE",
                 document_type=w_type,
                 action_required="Approve",
                 permissions="Approve / Reject",
@@ -180,26 +180,26 @@ def apply_four_approvers_all_workflows():
                 sla_hours=48
             ))
 
-            # Stage 3: VIGNESH_E25-01583
+            # Stage 3: VIGNESH
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=3,
                 step_name="Third Approval",
                 approver_type="Specific Employee",
-                approver_target="VIGNESH_E25-01583",
+                approver_target="VIGNESH",
                 document_type=w_type,
                 action_required="Approve",
                 permissions="Approve / Reject",
                 sla_hours=48
             ))
 
-            # Stage 4: VARUNAN (E22_02046)
+            # Stage 4: VARUNAN
             db.add(WorkflowStepDefinition(
                 profile_name=p_name,
                 stage_number=4,
                 step_name="Final Approval",
                 approver_type="Specific Employee",
-                approver_target="VARUNAN (E22_02046)",
+                approver_target="VARUNAN",
                 document_type=w_type,
                 action_required="Approve",
                 permissions="Approve / Reject",
@@ -219,15 +219,15 @@ def apply_four_approvers_all_workflows():
             inv.total_stages = 4
             stg = inv.current_stage or 1
             if stg == 1:
-                inv.assigned_approver = "YUVASREE (E24-04070)"
+                inv.assigned_approver = "YUVASREE"
             elif stg == 2:
                 inv.assigned_approver = "Nattudurai"
             elif stg == 3:
-                inv.assigned_approver = "VIGNESH_E25-01583"
+                inv.assigned_approver = "VIGNESH"
             elif stg == 4:
-                inv.assigned_approver = "VARUNAN (E22_02046)"
+                inv.assigned_approver = "VARUNAN"
             else:
-                inv.assigned_approver = "VARUNAN (E22_02046)"
+                inv.assigned_approver = "VARUNAN"
 
         db.commit()
         print(f"  [OK] Updated {len(invoices)} invoices in database.")

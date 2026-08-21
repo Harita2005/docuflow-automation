@@ -25,21 +25,21 @@ try:
         doc_db.current_stage = 1
         doc_db.total_stages = 4
         doc_db.file_url = "/uploads/DOC-101_Tax_Invoice.pdf"
-        doc_db.assigned_approver = "YUVASREE (E24-04070)"
+        doc_db.assigned_approver = "YUVASREE"
         doc_db.status = "In Progress (Attachment Status)"
         db.commit()
 
     # 1. Login all 4 Approvers
-    token_yuva = client.post("/api/auth/login", json={"username": "YUVASREE (E24-04070)", "password": "password123"}).json()["token"]
+    token_yuva = client.post("/api/auth/login", json={"username": "YUVASREE", "password": "password123"}).json()["token"]
     headers_yuva = {"Authorization": f"Bearer {token_yuva}"}
 
     token_nattu = client.post("/api/auth/login", json={"username": "Nattudurai", "password": "password123"}).json()["token"]
     headers_nattu = {"Authorization": f"Bearer {token_nattu}"}
 
-    token_vignesh = client.post("/api/auth/login", json={"username": "VIGNESH_E25-01583", "password": "password123"}).json()["token"]
+    token_vignesh = client.post("/api/auth/login", json={"username": "VIGNESH", "password": "password123"}).json()["token"]
     headers_vignesh = {"Authorization": f"Bearer {token_vignesh}"}
 
-    token_varunan = client.post("/api/auth/login", json={"username": "VARUNAN (E22_02046)", "password": "password123"}).json()["token"]
+    token_varunan = client.post("/api/auth/login", json={"username": "VARUNAN", "password": "password123"}).json()["token"]
     headers_varunan = {"Authorization": f"Bearer {token_varunan}"}
 
     # 2. Pick sample document (DOC-101)
