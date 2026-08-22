@@ -21,6 +21,7 @@ import {
   Layers
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
+import { formatDocNumber } from "../utils/formatters";
 
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
@@ -356,7 +357,7 @@ export default function WorkTrackerPage({
                 const grossAmount = Number(doc.amount || 0);
                 const taxableBase = grossAmount / 1.18;
                 const cleanId = String(doc.id || "").replace(/^#/, "").replace(/^•/, "").trim();
-                const displayId = cleanId.toUpperCase().startsWith("DOC-") ? cleanId : `DOC-${cleanId}`;
+                const displayId = formatDocNumber(doc.id, doc.document_type, (doc as any).category);
 
                 const displayPaymentTerms = (terms: string) => {
                   if (!terms) return "Net 30 Days";
@@ -389,7 +390,7 @@ export default function WorkTrackerPage({
                             {vendorName}
                           </span>
                           <div className="flex items-center gap-1 text-[8.5px] text-slate-400 font-normal truncate">
-                            <span>GSTIN: {(doc as any).vendor_gstin || "33DXWPS8140D1Z1"}</span>
+                            <span>{(doc as any).vendor_gstin ? `GSTIN: ${(doc as any).vendor_gstin}` : ""}</span>
                           </div>
                         </div>
                       </div>

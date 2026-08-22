@@ -179,6 +179,7 @@ export default function App() {
   }, [currentView, selectedDocId]);
 
   const [requireGRN, setRequireGRN] = useState(true);
+  const [orgName, setOrgName] = useState("DocuFlow Automation");
 
   // Fetch dynamic role permissions from DB
   const fetchRolePermissions = async () => {
@@ -189,13 +190,19 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        const roleConfig = data.find((c: any) => c.key === "ROLE_PERMISSIONS");
-        if (roleConfig && roleConfig.value) {
-          setRolePermissions(JSON.parse(roleConfig.value));
-        }
-        const grnConfig = data.find((c: any) => c.key === "GLOBAL_REQUIRE_GRN");
-        if (grnConfig) {
-          setRequireGRN(grnConfig.value === "true");
+        if (Array.isArray(data)) {
+          const roleConfig = data.find((c: any) => c.key === "ROLE_PERMISSIONS");
+          if (roleConfig && roleConfig.value) {
+            setRolePermissions(JSON.parse(roleConfig.value));
+          }
+          const grnConfig = data.find((c: any) => c.key === "GLOBAL_REQUIRE_GRN");
+          if (grnConfig) {
+            setRequireGRN(grnConfig.value === "true");
+          }
+          const orgConfig = data.find((c: any) => c.key === "ORGANIZATION_NAME" || c.key === "COMPANY_NAME");
+          if (orgConfig && orgConfig.value) {
+            setOrgName(orgConfig.value);
+          }
         }
       }
     } catch (e) {
@@ -358,6 +365,7 @@ export default function App() {
           onRefreshStats={handleFullRefresh}
           onLogout={handleLogout}
           onViewDocument={handleViewDocument}
+          orgName={orgName}
         />
 
         {/* Content Viewport */}

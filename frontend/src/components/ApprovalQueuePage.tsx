@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Check, X, HelpCircle, FileText, User, MessageCircle, AlertCircle, Sparkles, Building, Layers, CheckSquare, ShieldCheck, HelpCircle as HelpIcon, FileKey, Loader2, Database } from "lucide-react";
+import { formatDocNumber } from "../utils/formatters";
 
 interface ApprovalQueuePageProps {
   currentUserRole: 'accounting' | 'manager' | 'cfo' | string;
@@ -208,7 +209,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
                               } Stage` 
                             : inv.status}
                         </span>
-                        <span className={selectedInvoice?.id === inv.id ? "text-white/60" : "text-slate-400 font-mono"}>ID: {inv.id}</span>
+                        <span className={selectedInvoice?.id === inv.id ? "text-white/60" : "text-slate-400 font-mono"}>ID: {formatDocNumber(inv.id, inv.document_type, inv.category)}</span>
                       </div>
                     </div>
                   </div>
@@ -223,7 +224,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
           {selectedInvoice ? (
             <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm animate-fadeIn flex flex-col h-[700px]">
               <div className="border-b border-slate-100 pb-3 mb-3 shrink-0">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">AP Ledger Ingestion Slip (SCROLL TO UNLOCK)</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">Document Ingestion Slip (SCROLL TO UNLOCK)</span>
                   <h4 className="text-lg font-display font-extrabold text-slate-800 mt-0.5 truncate">
                     {selectedInvoice.vendor_name} — Invoice Ref: {selectedInvoice.invoice_number}
                   </h4>

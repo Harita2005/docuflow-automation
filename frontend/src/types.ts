@@ -78,6 +78,7 @@ export interface DbInvoice {
 
   is_current_approver?: boolean;
   has_approved?: boolean;
+  has_rejected?: boolean;
 }
 
 export interface DbGoodsReceipt {

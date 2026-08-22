@@ -712,36 +712,38 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
       if (configRes.ok) {
         const configs = await configRes.json();
-        const matrixCfg = configs.find(c => c.key === "RBAC_GRANULAR_MATRIX");
-        if (matrixCfg && matrixCfg.value) {
-          try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch(e) {}
-        }
-        const flacCfg = configs.find(c => c.key === "RBAC_FIELD_PERMISSIONS");
-        if (flacCfg && flacCfg.value) {
-          try {
-            const parsed = JSON.parse(flacCfg.value);
-            if (parsed.admin && !parsed.GLOBAL) {
-              setFieldPermissionsByScope({ GLOBAL: parsed });
-            } else {
-              setFieldPermissionsByScope(parsed);
-            }
-          } catch(e) {}
-        }
-        const customFieldsCfg = configs.find(c => c.key === "RBAC_CUSTOM_FIELDS");
-        if (customFieldsCfg && customFieldsCfg.value) {
-          try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch(e) {}
-        }
-        const rolesCfg = configs.find(c => c.key === "RBAC_CUSTOM_ROLES");
-        if (rolesCfg && rolesCfg.value) {
-          try { setRoles(JSON.parse(rolesCfg.value)); } catch(e) {}
-        }
-        const overridesCfg = configs.find(c => c.key === "UBAC_USER_OVERRIDES");
-        if (overridesCfg && overridesCfg.value) {
-          try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch(e) {}
-        }
-        const permsListCfg = configs.find(c => c.key === "RBAC_PERMISSION_DEFINITIONS");
-        if (permsListCfg && permsListCfg.value) {
-          try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch(e) {}
+        if (Array.isArray(configs)) {
+          const matrixCfg = configs.find(c => c.key === "RBAC_GRANULAR_MATRIX");
+          if (matrixCfg && matrixCfg.value) {
+            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch(e) {}
+          }
+          const flacCfg = configs.find(c => c.key === "RBAC_FIELD_PERMISSIONS");
+          if (flacCfg && flacCfg.value) {
+            try {
+              const parsed = JSON.parse(flacCfg.value);
+              if (parsed.admin && !parsed.GLOBAL) {
+                setFieldPermissionsByScope({ GLOBAL: parsed });
+              } else {
+                setFieldPermissionsByScope(parsed);
+              }
+            } catch(e) {}
+          }
+          const customFieldsCfg = configs.find(c => c.key === "RBAC_CUSTOM_FIELDS");
+          if (customFieldsCfg && customFieldsCfg.value) {
+            try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch(e) {}
+          }
+          const rolesCfg = configs.find(c => c.key === "RBAC_CUSTOM_ROLES");
+          if (rolesCfg && rolesCfg.value) {
+            try { setRoles(JSON.parse(rolesCfg.value)); } catch(e) {}
+          }
+          const overridesCfg = configs.find(c => c.key === "UBAC_USER_OVERRIDES");
+          if (overridesCfg && overridesCfg.value) {
+            try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch(e) {}
+          }
+          const permsListCfg = configs.find(c => c.key === "RBAC_PERMISSION_DEFINITIONS");
+          if (permsListCfg && permsListCfg.value) {
+            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch(e) {}
+          }
         }
       }
 

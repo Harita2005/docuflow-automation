@@ -163,6 +163,7 @@ class InvoiceResponse(InvoiceBase):
     updated_at: Optional[datetime.datetime] = None
     is_current_approver: Optional[bool] = None
     has_approved: Optional[bool] = None
+    has_rejected: Optional[bool] = None
 
     class Config:
         from_attributes = True

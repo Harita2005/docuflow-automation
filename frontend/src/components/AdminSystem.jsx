@@ -15,6 +15,7 @@ export default function AdminSystem() {
     { key: "OCR_ENGINE", default: "Tesseract+Ollama", desc: "Active OCR Pipeline Engine", category: "System" },
     { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System" },
     { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System" },
+    { key: "ORGANIZATION_NAME", default: "DocuFlow Automation", desc: "Organization / Company display name displayed on the top header", category: "System" },
     { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System" },
     { key: "MAX_WORKFLOWS_PER_COMPANY", default: "50", desc: "Maximum number of active workflows allowed per company / organization", category: "Limits & Thresholds" },
     { key: "MAX_APPROVAL_STEPS", default: "10", desc: "Maximum number of approval stages/steps allowed per workflow (Default: 10)", category: "Limits & Thresholds" },

@@ -4,6 +4,7 @@ import {
   Cpu,
   CheckCircle2,
   RotateCw,
+  RotateCcw,
   Play,
   Save,
   Check,
@@ -41,6 +42,7 @@ import {
   Upload
 } from "lucide-react";
 import { DbInvoice, InvoiceLineItem, DbWorkflowInstance } from "../types";
+import { formatDocNumber } from "../utils/formatters";
 
 interface DocumentDetailsProps {
   document: DbInvoice | null;
@@ -243,8 +245,20 @@ export default function DocumentDetails({
     return null;
   };
 
+  const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
+  const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
+  const isDocumentLocked = isTerminal || !isCurrentApprover;
+
   // Hierarchical FLAC resolution (Specific Scope -> Global Master -> Safe Baseline)
   const getFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
+    const raw = getRawFieldPerm(fieldId);
+    if (isDocumentLocked && raw === "edit") {
+      return "view";
+    }
+    return raw;
+  };
+
+  const getRawFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
     const role = (currentUserRole || "admin").toLowerCase();
     
     // Determine scope key from document type / workflow
@@ -298,11 +312,13 @@ export default function DocumentDetails({
         });
         if (res.ok) {
           const configs = await res.json();
-          const flacCfg = configs.find((c: any) => c.key === "RBAC_FIELD_PERMISSIONS");
-          if (flacCfg && flacCfg.value) {
-            try {
-              setFieldPermissions(JSON.parse(flacCfg.value));
-            } catch (e) {}
+          if (Array.isArray(configs)) {
+            const flacCfg = configs.find((c: any) => c.key === "RBAC_FIELD_PERMISSIONS");
+            if (flacCfg && flacCfg.value) {
+              try {
+                setFieldPermissions(JSON.parse(flacCfg.value));
+              } catch (e) {}
+            }
           }
         }
       } catch (e) {}
@@ -510,7 +526,7 @@ export default function DocumentDetails({
           const items = data.map((item: any) => item.item_text);
           const states: Record<string, boolean> = {};
           data.forEach((item: any) => {
-            states[item.item_text] = !!item.is_checked;
+            states[item.item_text] = Boolean(item.is_checked);
           });
           setChecklistItems(items);
           setCheckedStates(states);
@@ -521,7 +537,7 @@ export default function DocumentDetails({
     };
 
     fetchChecklist();
-  }, [document]);
+  }, [document?.id, document?.current_stage, activeApprovalLog?.current_stage_number]);
 
   useEffect(() => {
     if (!document) {
@@ -535,7 +551,13 @@ export default function DocumentDetails({
       return;
     }
     const rawPath = document.file_url || document.file_path || "";
-    if (!rawPath || (!rawPath.startsWith('/uploads/') && !rawPath.startsWith('uploads/') && !rawPath.startsWith('http'))) {
+    if (
+      !rawPath ||
+      rawPath === "invoice.pdf" ||
+      rawPath === "/uploads/invoice.pdf" ||
+      rawPath === "uploads/invoice.pdf" ||
+      (!rawPath.startsWith('/uploads/') && !rawPath.startsWith('uploads/') && !rawPath.startsWith('http'))
+    ) {
       setIframeSrc("");
       return;
     }
@@ -583,9 +605,13 @@ export default function DocumentDetails({
 
   const handleInlineReject = async () => {
     if (!document) return;
+    const isStage1 = (document?.current_stage || 1) <= 1;
     const comments = approvalComment.trim();
     if (!comments) {
-      alert("Comments are required for rejection in the comments box.");
+      alert(isStage1 
+        ? "Please enter reason notes in the comments box before cancelling this process." 
+        : `Please enter rejection reason notes in the comments box before returning to Stage ${(document.current_stage || 2) - 1} approver.`
+      );
       return;
     }
     setActionLoading(true);
@@ -680,6 +706,7 @@ export default function DocumentDetails({
   };
 
   const handleToggleChecklist = async (itemText: string) => {
+    if (isDocumentLocked) return;
     const updatedStates = { ...checkedStates, [itemText]: !checkedStates[itemText] };
     setCheckedStates(updatedStates);
     
@@ -700,6 +727,7 @@ export default function DocumentDetails({
   };
 
   const handleToggleAllChecklist = async () => {
+    if (isDocumentLocked) return;
     const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
     const updatedStates: Record<string, boolean> = {};
     effectiveChecklist.forEach((item) => {
@@ -726,15 +754,17 @@ export default function DocumentDetails({
   const handleInlineApprove = async () => {
     const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
-    const allItemsChecked = effectiveChecklist.length === 0 || effectiveChecklist.every((item) => checkedStates[item] === true);
+    const checkedCount = Object.values(checkedStates).filter(Boolean).length;
+    const totalCount = effectiveChecklist.length;
+    const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
 
     if (isStage1Attachment && !hasDocAttachment) {
-      setActionError("⚠️ Document Attachment Required: You must attach/upload the physical invoice PDF before approving Stage 1.");
+      setActionError("⚠️ Document Attachment Required: You must attach/upload the physical invoice PDF before approving Stage 1 (Attachment Status).");
       return;
     }
 
     if (!allItemsChecked) {
-      setActionError("⚠️ Compliance Checklist Incomplete: Please verify and check all required checklist items before approving.");
+      setActionError(`⚠️ Compliance Checklist Incomplete: Please verify and check all ${totalCount} checklist items (${totalCount - checkedCount} remaining) before approving.`);
       return;
     }
 
@@ -813,10 +843,17 @@ export default function DocumentDetails({
         </span>
       );
     }
-    if (["Rejected", "Failed"].includes(status)) {
+    if (["Cancelled", "Failed"].includes(status)) {
       return (
         <span className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-400/30 text-[9px] font-extrabold text-rose-300 uppercase tracking-wider">
-          Rejected
+          Cancelled
+        </span>
+      );
+    }
+    if ((status || '').toLowerCase().includes('return') || (status || '').toLowerCase().includes('reject')) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-400/30 text-[9px] font-extrabold text-rose-300 uppercase tracking-wider">
+          Rejected / Returned
         </span>
       );
     }
@@ -859,7 +896,7 @@ export default function DocumentDetails({
                   Review & Compliance Action
                 </span>
                 <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[9px] font-mono font-bold text-indigo-200">
-                  DOC #{document.id}
+                  {formatDocNumber(document.id, document.document_type, (document as any).category)}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
                   <FileText className="h-2.5 w-2.5" />
@@ -1029,99 +1066,27 @@ export default function DocumentDetails({
                 </div>
               )}
 
-              {/* Render 5-9 in the first row if allFit is true */}
-              {containerWidth >= 1280 && (
-                <>
-                  {/* 5. Base Taxable */}
-                  {getFieldPerm("base_taxable") !== "hidden" && (
-                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
-                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                        Base Taxable
-                      </div>
-                      <div className="text-[11px] font-bold text-slate-800 truncate">
-                        ₹{(Number(amount || document.amount || 0) / 1.18).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 6. GST Tax (18%) */}
-                  {getFieldPerm("gst_tax") !== "hidden" && (
-                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
-                      <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                        <span>GST (18%)</span>
-                        <span className="text-slate-400 text-[7px]">9+9%</span>
-                      </div>
-                      <div className="text-[11px] font-bold text-slate-800 truncate">
-                        ₹{(Number(amount || document.amount || 0) * (0.18 / 1.18)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 7. Vendor GSTIN */}
-                  {getFieldPerm("vendor_gstin") !== "hidden" && (
-                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[130px] max-w-[160px]">
-                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                        Vendor GSTIN
-                      </div>
-                      <div className="text-[10.5px] font-mono font-bold text-slate-800 truncate">
-                        {(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 8. Cost Center & Div */}
-                  {getFieldPerm("cost_center") !== "hidden" && (
-                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[120px] max-w-[150px]">
-                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-indigo-600 mb-0.5">
-                        Cost Center / Div
-                      </div>
-                      <div className="text-[10.5px] font-bold text-slate-800 truncate">
-                        {(document as any)?.cost_center || (document as any)?.division || "BATTERY VEHICLE"}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 9. Payment Terms */}
-                  {getFieldPerm("payment_terms") !== "hidden" && (
-                    <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[105px] max-w-[135px]">
-                      <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
-                        Payment Terms
-                      </div>
-                      {getFieldPerm("payment_terms") === "edit" ? (
-                        <input 
-                          type="text"
-                          value={paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
-                          onChange={e => setPaymentTerms(e.target.value)}
-                          className="w-full text-[10.5px] font-bold text-slate-800 bg-transparent border-0 p-0 outline-none truncate"
-                        />
-                      ) : (
-                        <div className="text-[10.5px] font-bold text-slate-800 truncate">
-                          {paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
             </div>
 
-            {/* Expand / Collapse Toggle Button */}
-            {containerWidth < 1280 && (
-              <button
-                type="button"
-                onClick={() => setShowMoreMetadata(!showMoreMetadata)}
-                className="py-1.5 px-3.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0"
-              >
-                <span>{showMoreMetadata ? "Hide Details" : "More Details"}</span>
-                {showMoreMetadata ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
-              </button>
-            )}
+            {/* Extra Data Dropdown Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowMoreMetadata(!showMoreMetadata)}
+              className={`py-1.5 px-3 rounded-lg border text-[10.5px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                showMoreMetadata 
+                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
+                  : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300"
+              }`}
+              title="Click to view/hide extra financial, tax, and ERP metadata fields"
+            >
+              <span>{showMoreMetadata ? "Hide Extra Data" : "Extra Data ▾"}</span>
+              {showMoreMetadata ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+            </button>
           </div>
 
-          {/* Secondary Expandable Metrics Row */}
-          {containerWidth < 1280 && showMoreMetadata && (
-            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200/50 animate-fadeIn">
+          {/* Secondary Collapsible Extra Data Panel */}
+          {showMoreMetadata && (
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200/60 animate-fadeIn">
               
               {/* 5. Base Taxable */}
               {getFieldPerm("base_taxable") !== "hidden" && (
@@ -1155,7 +1120,7 @@ export default function DocumentDetails({
                     Vendor GSTIN
                   </div>
                   <div className="text-[10.5px] font-mono font-bold text-slate-800 truncate">
-                    {(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}
+                    {(document as any)?.vendor_gstin || "-"}
                   </div>
                 </div>
               )}
@@ -1167,7 +1132,7 @@ export default function DocumentDetails({
                     Cost Center / Div
                   </div>
                   <div className="text-[10.5px] font-bold text-slate-800 truncate">
-                    {(document as any)?.cost_center || (document as any)?.division || "BATTERY VEHICLE"}
+                    {(document as any)?.cost_center || "-"}
                   </div>
                 </div>
               )}
@@ -1192,6 +1157,19 @@ export default function DocumentDetails({
                   )}
                 </div>
               )}
+
+              {/* 10. Plant / Division (Extra ERP field) */}
+              {document.plant && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[140px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Plant Location
+                  </div>
+                  <div className="text-[10.5px] font-bold text-slate-800 truncate">
+                    {document.plant}
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
         </div>
@@ -1269,7 +1247,8 @@ export default function DocumentDetails({
             {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
             {(() => {
               const isSettled = (document?.status || '').toLowerCase().includes('settled') || (document?.status || '').toLowerCase().includes('paid') || document?.status === 'Approved';
-              const isRejected = (document?.status || '').toLowerCase().includes('reject');
+              const isCancelled = ["Cancelled", "Failed"].includes(document?.status || "");
+              const isReturned = (document?.status || '').toLowerCase().includes('return');
               
               if (isSettled) {
                 return (
@@ -1300,7 +1279,7 @@ export default function DocumentDetails({
                 );
               }
 
-              if (isRejected) {
+              if (isCancelled) {
                 return (
                   <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-950 flex flex-col gap-2 shadow-2xs shrink-0 animate-fadeIn">
                     <div className="flex items-center justify-between">
@@ -1309,12 +1288,12 @@ export default function DocumentDetails({
                           ✕
                         </div>
                         <div>
-                          <span className="font-extrabold text-xs block text-rose-900 leading-tight">Document Rejected</span>
-                          <span className="text-[10px] text-rose-700 font-medium">This document was declined during compliance review.</span>
+                          <span className="font-extrabold text-xs block text-rose-900 leading-tight">Document Process Cancelled</span>
+                          <span className="text-[10px] text-rose-700 font-medium">This workflow process was cancelled and voided.</span>
                         </div>
                       </div>
                       <span className="px-2.5 py-1 bg-rose-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider shadow-2xs">
-                        Rejected
+                        Cancelled
                       </span>
                     </div>
                     <button
@@ -1323,23 +1302,26 @@ export default function DocumentDetails({
                       className="w-full py-1.5 px-3 bg-white hover:bg-rose-100/60 text-rose-900 border border-rose-300 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Clock className="h-3.5 w-3.5 text-rose-600" />
-                      <span>View Rejection Audit Log</span>
+                      <span>View Cancellation Audit Trail</span>
                     </button>
                   </div>
                 );
               }
 
-              if (currentUserRole !== 'admin' && !document.is_current_approver) {
+              if (isDocumentLocked) {
                 return (
                   <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-medium flex flex-col gap-2 shrink-0 animate-fadeIn shadow-2xs">
                     <div className="flex items-center gap-1.5 text-slate-800 font-bold">
-                      <AlertCircle className="h-4 w-4 text-blue-600 shrink-0" />
+                      <Lock className="h-4 w-4 text-amber-600 shrink-0" />
                       <span>
-                        Read-Only View: Assigned to {document.assigned_approver || 'next stage approver'}
+                        Document Locked (Read-Only): Currently at Stage {document.current_stage || 1} {document.assigned_approver ? `(Assigned: ${document.assigned_approver})` : ''}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                      You have viewing access as a recognized pool member / audit participant. Approvals are restricted to the actively assigned stage.
+                      {isTerminal 
+                        ? `This document is in a completed terminal state (${document.status}) and cannot be edited.`
+                        : `This document has been signed off for this stage. All fields, checklists, and document attachments are locked in read-only mode until returned via rejection.`
+                      }
                     </p>
                     <button
                       type="button"
@@ -1362,11 +1344,36 @@ export default function DocumentDetails({
 
               return (
                 <div className="space-y-1.5 shrink-0">
-                  {/* Stage 1 Guidance Alert Pill */}
+                  {/* Step-Down Returned Notice */}
+                  {isReturned && (
+                    <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <RotateCcw className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                        <span>Returned Document: Rejected by next stage approver. Review feedback, verify checklist, and re-approve.</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowTimelineModal(true)} 
+                        className="text-[8.5px] uppercase tracking-wider text-rose-700 bg-rose-100 hover:bg-rose-200 px-1.5 py-0.5 rounded font-extrabold cursor-pointer"
+                      >
+                        View Notes
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Stage Guidance Alert Pill */}
                   {isStage1Attachment && !hasDocAttachment ? (
                     <div className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
                       <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                       <span>Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval.</span>
+                    </div>
+                  ) : isStage1Attachment && hasDocAttachment && !allItemsChecked ? (
+                    <div className="p-2 bg-amber-50/70 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span>Attachment Stage: Review document, verify checklist ({checkedCount}/{totalCount}), and click Approve to forward (or Cancel).</span>
+                      </div>
+                      <span className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-extrabold">Stage 1</span>
                     </div>
                   ) : !allItemsChecked ? (
                     <div className="p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
@@ -1379,7 +1386,7 @@ export default function DocumentDetails({
                   ) : (
                     <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
                       <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3] shrink-0" />
-                      <span>All Stage 1 criteria satisfied! Click Approve to forward to Stage 2.</span>
+                      <span>All Stage {document?.current_stage || 1} criteria satisfied! Click Approve to forward to next stage.</span>
                     </div>
                   )}
 
@@ -1429,10 +1436,23 @@ export default function DocumentDetails({
                       onClick={handleInlineReject}
                       disabled={actionLoading}
                       className="px-3 py-2 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
-                      title="Reject record with remarks"
+                      title={
+                        (document?.current_stage || 1) > 1
+                          ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
+                          : "Cancel and void this process at Attachment stage"
+                      }
                     >
-                      <X className="h-3.5 w-3.5 stroke-[3]" />
-                      <span>Reject</span>
+                      {(document?.current_stage || 1) > 1 ? (
+                        <>
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Reject / Return</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3.5 w-3.5 stroke-[3]" />
+                          <span>Cancel Process</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1448,13 +1468,19 @@ export default function DocumentDetails({
                   <Shield className="h-3.5 w-3.5 text-indigo-600" />
                   <span>Compliance Checklist ({Object.values(checkedStates).filter(Boolean).length}/{effectiveChecklist.length})</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={handleToggleAllChecklist}
-                  className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                >
-                  {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
-                </button>
+                {isDocumentLocked ? (
+                  <span className="text-[9px] uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-extrabold flex items-center gap-1">
+                    <Lock className="h-2.5 w-2.5" /> Locked (Read-Only)
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleToggleAllChecklist}
+                    className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                  >
+                    {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
+                  </button>
+                )}
               </div>
 
               {/* Checklist Items Matrix */}
@@ -1464,11 +1490,15 @@ export default function DocumentDetails({
                   return (
                     <div
                       key={idx}
-                      onClick={() => handleToggleChecklist(item)}
-                      className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 select-none shadow-2xs hover:shadow-xs active:scale-[0.99] ${
-                        isChecked
-                          ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold"
-                          : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                      onClick={isDocumentLocked ? undefined : () => handleToggleChecklist(item)}
+                      className={`p-2 rounded-lg border transition-all flex items-center gap-2.5 select-none shadow-2xs ${
+                        isDocumentLocked
+                          ? isChecked
+                            ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 font-bold cursor-default"
+                            : "bg-slate-50 border-slate-200 text-slate-500 cursor-default"
+                          : isChecked
+                          ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold cursor-pointer hover:shadow-xs active:scale-[0.99]"
+                          : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 cursor-pointer active:scale-[0.99]"
                       }`}
                     >
                       <div
@@ -1492,30 +1522,47 @@ export default function DocumentDetails({
                   <label className="block text-[8.5px] uppercase font-bold text-slate-500">
                     Audit Notes / Decision Remarks
                   </label>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setApprovalComment("✓ All 9 verification points verified & reconciled.")}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
-                    >
-                      + All Verified
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setApprovalComment("Tax component and GST rates checked.")}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
-                    >
-                      + Tax OK
-                    </button>
-                  </div>
+                  {!isDocumentLocked ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setApprovalComment("✓ All 9 verification points verified & reconciled.")}
+                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
+                      >
+                        + All Verified
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setApprovalComment("Tax component and GST rates checked.")}
+                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
+                      >
+                        + Tax OK
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[8.5px] text-slate-400 font-medium flex items-center gap-1">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  )}
                 </div>
                 
                 <textarea
                   rows={3}
                   value={approvalComment}
                   onChange={(e) => setApprovalComment(e.target.value)}
-                  placeholder="Add compliance notes, settlement instructions, or audit remarks..."
-                  className="w-full text-[10.5px] font-medium p-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition resize-none"
+                  disabled={isDocumentLocked || actionLoading}
+                  placeholder={
+                    isDocumentLocked
+                      ? "Document is locked in read-only mode for this stage."
+                      : (document?.current_stage || 1) === 1
+                      ? "Enter reason notes if cancelling, or optional compliance remarks..."
+                      : "Enter reason notes if rejecting / returning to previous approver, or optional remarks..."
+                  }
+                  className={`w-full text-[10.5px] font-medium p-2 border rounded-xl outline-none transition resize-none ${
+                    isDocumentLocked 
+                      ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" 
+                      : "bg-slate-50 border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500/20"
+                  }`}
                 />
               </div>
 
@@ -1536,21 +1583,23 @@ export default function DocumentDetails({
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
-                  <Upload className="h-3 w-3" />
-                  <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
-                  <input 
-                    type="file" 
-                    accept=".pdf,application/pdf" 
-                    disabled={isUploadingVersion}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleUploadVersion(e.target.files[0]);
-                      }
-                    }}
-                    className="hidden" 
-                  />
-                </label>
+                {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
+                  <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
+                    <Upload className="h-3 w-3" />
+                    <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
+                    <input 
+                      type="file" 
+                      accept=".pdf,application/pdf" 
+                      disabled={isUploadingVersion}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadVersion(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                )}
 
                 {iframeSrc && (
                   <a
@@ -1580,36 +1629,43 @@ export default function DocumentDetails({
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    if (!isDocumentLocked && (document?.current_stage || 1) === 1 && e.dataTransfer.files && e.dataTransfer.files[0]) {
                       handleUploadVersion(e.dataTransfer.files[0]);
                     }
                   }}
                   className="w-full h-full bg-slate-50 border-2 border-dashed border-indigo-300/80 hover:border-indigo-500 hover:bg-indigo-50/20 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
                 >
                   <div className="h-14 w-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-3.5 shadow-sm">
-                    <Upload className="h-7 w-7 animate-bounce text-indigo-600" />
+                    <Upload className="h-7 w-7 text-indigo-600" />
                   </div>
                   <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
-                    This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record.
+                    {isDocumentLocked 
+                      ? "This document is locked in read-only mode. Physical invoice attachment is pending from the Stage 1 initiator desk."
+                      : "This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record."
+                    }
                   </p>
                   
-                  <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
-                    <Plus className="h-4 w-4" />
-                    <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
-                    <input 
-                      type="file" 
-                      accept=".pdf,application/pdf" 
-                      disabled={isUploadingVersion}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleUploadVersion(e.target.files[0]);
-                        }
-                      }}
-                      className="hidden" 
-                    />
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono mt-2">Drag & Drop or Click to Upload (PDF only)</span>
+                  {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
+                    <>
+                      <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
+                        <Plus className="h-4 w-4" />
+                        <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
+                        <input 
+                          type="file" 
+                          accept=".pdf,application/pdf" 
+                          disabled={isUploadingVersion}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUploadVersion(e.target.files[0]);
+                            }
+                          }}
+                          className="hidden" 
+                        />
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono mt-2">Drag & Drop or Click to Upload (PDF only)</span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1720,8 +1776,8 @@ export default function DocumentDetails({
                   </div>
                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
                     <span className="text-[8px] font-extrabold text-slate-400 uppercase block">Cost Center & GL</span>
-                    <span className="text-[11px] font-bold text-slate-800 truncate" title="BATTERY VEHICLE (GL-210040)">
-                      {(document as any)?.cost_center || "BATTERY VEHICLE"}
+                    <span className="text-[11px] font-bold text-slate-800 truncate" title={(document as any)?.cost_center || "-"}>
+                      {(document as any)?.cost_center || "-"}
                     </span>
                   </div>
                 </div>
@@ -1750,15 +1806,15 @@ export default function DocumentDetails({
                     <tbody className="divide-y divide-slate-100">
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Vendor / Entity</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{vendorName || document.vendor_name || "GREEN ENERGY VEHICLES LTD"}</td>
+                        <td className="py-2 px-3 font-medium text-slate-900">{vendorName || document.vendor_name || "-"}</td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Bill No & Date</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{invoiceNumber || document.invoice_number || "INV-ACC-08"} • {invoiceDate || document.invoice_date || "2026-08-11"}</td>
+                        <td className="py-2 px-3 font-medium text-slate-900">{invoiceNumber || document.invoice_number || "-"} • {invoiceDate || document.invoice_date || "-"}</td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Purchase Order</td>
-                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{poNumber || document.po_number || "PO-2026-8803"}</td>
+                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{poNumber || document.po_number || "-"}</td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Total Gross (₹)</td>
@@ -1770,11 +1826,15 @@ export default function DocumentDetails({
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Vendor GSTIN</td>
-                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{(document as any)?.vendor_gstin || "33DXWPS8140D1Z1"}</td>
+                        <td className="py-2 px-3 font-mono font-medium text-slate-900">{(document as any)?.vendor_gstin || "-"}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50">
+                        <td className="py-2 px-3 font-bold text-slate-700">Cost Center</td>
+                        <td className="py-2 px-3 font-medium text-slate-900">{(document as any)?.cost_center || "-"}</td>
                       </tr>
                       <tr className="hover:bg-slate-50">
                         <td className="py-2 px-3 font-bold text-slate-700">Payment Terms</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{paymentTerms || (customDataObj as any)?.paymentTerms || "Net 30 Days"}</td>
+                        <td className="py-2 px-3 font-medium text-slate-900">{paymentTerms || (customDataObj as any)?.paymentTerms || "-"}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1799,20 +1859,20 @@ export default function DocumentDetails({
                   <pre className="p-2.5 bg-slate-900 text-emerald-400 rounded-lg text-[9.5px] font-mono overflow-x-auto max-h-48 custom-scrollbar">
                     {JSON.stringify(
                       {
-                        DocKey: document.doc_key || 8803,
-                        DocNum: document.doc_num || 20268803,
+                        DocKey: document.doc_key || document.id,
+                        DocNum: document.doc_num || document.id,
                         DocDate: invoiceDate || document.invoice_date,
-                        CardCode: document.vendor_code || "VEND-GEV-991",
+                        CardCode: document.vendor_code || "-",
                         CardName: vendorName || document.vendor_name,
                         DocRefNo: invoiceNumber || document.invoice_number,
                         DocTotal: amount || document.amount,
                         BaseAmount: Number(amount || document.amount || 0) / 1.18,
                         TaxAmount: Number(amount || document.amount || 0) * (0.18 / 1.18),
-                        GSTIN: (document as any)?.vendor_gstin || "33DXWPS8140D1Z1",
-                        CompanyCode: document.division || "VCC",
-                        Branch: document.plant || "TN-SIVAKASI",
-                        CostCenter: (document as any)?.cost_center || "BATTERY VEHICLE",
-                        PaymentTerms: paymentTerms || "Net 30 Days",
+                        GSTIN: (document as any)?.vendor_gstin || "-",
+                        CompanyCode: document.division || "-",
+                        Branch: document.plant || "-",
+                        CostCenter: (document as any)?.cost_center || "-",
+                        PaymentTerms: paymentTerms || document.payment_terms || "-",
                         SyncAgent: "SAP S/4HANA PI/PO Integration Pipeline",
                         SyncStatus: "SUCCESS",
                         Timestamp: new Date().toISOString()
@@ -1880,7 +1940,7 @@ export default function DocumentDetails({
                   <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
                     <span>Approval Timeline & Audit Trail</span>
                     <span className="text-[10px] font-mono font-normal text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
-                      DOC #{document.id}
+                      {formatDocNumber(document.id, document.document_type, (document as any).category)}
                     </span>
                   </h3>
                   <p className="text-[10.5px] text-slate-400 font-medium">
@@ -1964,10 +2024,18 @@ export default function DocumentDetails({
                         {/* Approver Details & Specific Sign-off Identity Card */}
                         {(() => {
                           const poolMembers = (step.approver_target || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-                          const matchingLog = commentsList.find((c: any) => 
-                            (c.stage && c.stage.includes(String(step.stage_number))) || 
-                            (c.action && (c.action.includes(String(step.stage_number)) || c.action.includes(step.stage_name)))
-                          );
+                          const matchingLog = commentsList.find((c: any) => {
+                            const action = (c.action || "").toLowerCase();
+                            const author = (c.author || c.user_name || c.user || "").toLowerCase();
+                            const isSyncOrSystem = author.includes("sync") || author.includes("erp") || action.includes("sync") || action.includes("ingest");
+                            if (isSyncOrSystem) return false;
+                            const isApprovalAction = action.includes("approved") || action.includes("signoff") || action.includes("verified");
+                            if (!isApprovalAction) return false;
+                            return (
+                              (c.stage && (c.stage.includes(String(step.stage_number)) || c.stage.toLowerCase().includes(step.stage_name.toLowerCase()))) || 
+                              (c.action && (c.action.includes(String(step.stage_number)) || c.action.toLowerCase().includes(step.stage_name.toLowerCase())))
+                            );
+                          });
 
                           return (
                             <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
@@ -1980,7 +2048,7 @@ export default function DocumentDetails({
                                   <div className="flex flex-wrap gap-1 pt-0.5">
                                     {poolMembers.length > 0 ? (
                                       poolMembers.map((mem: string, mIdx: number) => {
-                                        const isTheSigner = matchingLog && (matchingLog.author || "").toLowerCase().includes(mem.toLowerCase());
+                                        const isTheSigner = matchingLog && (matchingLog.author || matchingLog.user_name || matchingLog.user || "").toLowerCase().includes(mem.toLowerCase());
                                         return (
                                           <span 
                                             key={mIdx} 
@@ -1995,7 +2063,7 @@ export default function DocumentDetails({
                                         );
                                       })
                                     ) : (
-                                      <span className="font-mono font-bold text-slate-700">{step.approver_target || currentUserUsername || "anbu"}</span>
+                                      <span className="font-mono font-bold text-slate-700">{step.approver_target || "Authorized Pool"}</span>
                                     )}
                                   </div>
                                 </div>
@@ -2008,7 +2076,7 @@ export default function DocumentDetails({
                                   <div className="flex items-center gap-1.5">
                                     <span className="h-4 w-4 rounded-full bg-emerald-600 text-white font-bold text-[9px] flex items-center justify-center">✓</span>
                                     <span>
-                                      <strong>Approved By:</strong> {matchingLog ? (matchingLog.author || matchingLog.user_name) : (currentUserUsername || "Authorized Approver")}
+                                      <strong>Approved By:</strong> {matchingLog ? (matchingLog.author || matchingLog.user_name || matchingLog.user) : (step.approver_target || "Stage Approver")}
                                     </span>
                                   </div>
                                   {matchingLog?.created_at && (

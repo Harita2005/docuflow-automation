@@ -16,7 +16,7 @@ from app.schemas import (
     BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult,
     Base64AttachmentSyncRequest, AttachmentSyncResponse
 )
-from app.services.rules_engine import evaluate_business_rules
+from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.ocr_service import extract_text_from_pdf
 
 router = APIRouter(prefix="/api/sync", tags=["Enterprise Data & Attachment Sync"])
@@ -387,7 +387,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     else:
         # Create new record
         timestamp = int(datetime.datetime.utcnow().timestamp() * 1000)
-        doc_id = f"DOC-{req.doc_key if req.doc_key else (timestamp % 100000)}"
+        prefix = get_doc_type_prefix(req.document_type or "", req.category or "")
+        key = req.doc_key if req.doc_key else (timestamp % 100000)
+        doc_id = f"{prefix}-{key}"
         
         new_inv = Invoice(
             id=doc_id,
@@ -480,13 +482,13 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             db.commit()
             db.refresh(target_inv)
 
-    # 3. Log Sync Audit Entry
+    # 3. Log Sync Audit Entry (Pure Ingestion, not an approval)
     db.add(AuditLog(
         invoice_id=target_inv.id,
         user="ERP Data Sync",
-        action=f"Flow {action_type}",
-        stage=f"Stage {target_inv.current_stage}",
-        notes=f"Data synced to DB. Matched workflow '{target_inv.workflow_profile_id}' at Stage 1. Assigned approvers: {target_inv.assigned_approver}."
+        action="Data Ingested",
+        stage="Intake (ERP)",
+        notes=f"Invoice metadata ingested from ERP. Stage 1 (Attachment Status) assigned to: {target_inv.assigned_approver}."
     ))
     db.add(SystemLog(
         invoice_id=target_inv.id,
@@ -584,7 +586,9 @@ def sync_single_document(payload: DocumentSyncRequest, db: Session = Depends(get
                 target_inv = existing
             else:
                 timestamp = int(datetime.datetime.utcnow().timestamp() * 1000)
-                doc_id = f"DOC-{payload.doc_key if payload.doc_key else (timestamp % 100000)}"
+                prefix = get_doc_type_prefix(payload.document_type or "", payload.category or "")
+                key = payload.doc_key if payload.doc_key else (timestamp % 100000)
+                doc_id = f"{prefix}-{key}"
                 new_inv = Invoice(
                     id=doc_id,
                     doc_key=str(payload.doc_key) if payload.doc_key is not None else None,

@@ -12,6 +12,7 @@ interface HeaderProps {
   onRefreshStats: () => void;
   onLogout: () => void;
   onViewDocument?: (docId: string) => void;
+  orgName?: string;
 }
 
 export default function Header({
@@ -24,7 +25,8 @@ export default function Header({
   stats,
   onRefreshStats,
   onLogout,
-  onViewDocument
+  onViewDocument,
+  orgName
 }: HeaderProps) {
   const [spinning, setSpinning] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -118,17 +120,20 @@ export default function Header({
 
   const getViewTitle = () => {
     switch (currentView) {
-      case "getting-started": return "System Onboarding & Walkthrough";
-      case "dashboard": return "Executive Command Dashboard";
-      case "upload": return "Supplier Document Ingest";
-      case "incoming": return "Document Ledger Repository";
+      case "getting-started": return "Getting Started";
+      case "dashboard": return "Dashboard";
+      case "work-tracker": return "Work Tracker";
+      case "upload": return "Upload Document";
+      case "incoming": return "Document Repository";
       case "goods-receipt": return "Gate Entry Verification";
-      case "workflow-builder": return "Compliance Route Designer";
-      case "approval-queue": return "Compliance & Audit Desk";
-      case "payment-readiness": return "Treasury Release Panel";
+      case "data-verification": return "Data Verification";
+      case "workflow-builder": return "Workflow Designer";
+      case "approval-queue": return "Approval Queue";
+      case "payment-readiness": return "Payment Readiness";
       case "reports": return "Reports & Spend Analytics";
-      case "details": return "Document Extraction Inspector";
-      default: return "Enterprise Portal";
+      case "admin": return "Control Settings";
+      case "details": return "Document Details";
+      default: return "Dashboard";
     }
   };
 
@@ -145,7 +150,7 @@ export default function Header({
       <div className="flex flex-col relative pl-3">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></div>
         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
-          Initech accounts payable
+          {orgName || "DocuFlow Automation"}
         </span>
         <h1 className="text-[12px] font-extrabold text-slate-800 tracking-tight flex items-center font-display uppercase">
           {getViewTitle()}

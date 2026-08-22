@@ -15,7 +15,10 @@ export default function AdminMasterData() {
     try {
       const token = localStorage.getItem("authToken");
       const res = await fetch('/api/admin/erp-master', { headers: { "Authorization": `Bearer ${token}` } });
-      if (res.ok) setData(await res.json());
+      if (res.ok) {
+        const json = await res.json();
+        setData(Array.isArray(json) ? json : []);
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   };

@@ -98,10 +98,15 @@ export default function Dashboard({
   // Dynamic Dashboard KPI Calculations
   const pendingCount = documents.filter(d => !!d.is_current_approver).length;
   const approvedCount = documents.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status)).length;
-  const rejectedCount = documents.filter(d => ["Rejected", "Failed"].includes(d.status)).length;
+  const isRejectedStatus = (st: string) => {
+    const s = (st || '').toLowerCase();
+    return s.includes('reject') || s.includes('return') || s.includes('cancel') || s.includes('fail');
+  };
+  const rejectedCount = documents.filter(d => isRejectedStatus(d.status)).length;
   const onHoldCount = documents.filter(d => d.status === "On Hold").length;
   const inProgressCount = documents.filter(d => 
-    !["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "On Hold"].includes(d.status) &&
+    !["Approved", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
+    !isRejectedStatus(d.status) &&
     !d.is_current_approver
   ).length;
 
@@ -326,19 +331,20 @@ export default function Dashboard({
             let filteredDocs = documents;
             if (listFilter === 'all') {
               if (currentUserRole !== 'admin') {
-                filteredDocs = filteredDocs.filter(d => !!d.is_current_approver || !!d.has_approved);
+                filteredDocs = filteredDocs.filter(d => !!d.is_current_approver || !!d.has_approved || !!d.has_rejected || isRejectedStatus(d.status));
               }
             } else if (listFilter === 'pending') {
               filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
             } else if (listFilter === 'inprogress') {
               filteredDocs = filteredDocs.filter(d => 
-                !["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "On Hold"].includes(d.status) &&
+                !["Approved", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
+                !isRejectedStatus(d.status) &&
                 !d.is_current_approver
               );
             } else if (listFilter === 'approved') {
               filteredDocs = filteredDocs.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status));
             } else if (listFilter === 'rejected') {
-              filteredDocs = filteredDocs.filter(d => ["Rejected", "Failed"].includes(d.status));
+              filteredDocs = filteredDocs.filter(d => isRejectedStatus(d.status));
             } else if (listFilter === 'onhold') {
               filteredDocs = filteredDocs.filter(d => d.status === "On Hold");
             }

@@ -183,6 +183,7 @@ class AuditLog(Base):
 
     invoice = relationship("Invoice")
 
+
 class SystemLog(Base):
     __tablename__ = "system_logs"
 
@@ -190,6 +191,7 @@ class SystemLog(Base):
     invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True)
     action = Column(String(150), nullable=False)
     user = Column(String(150), default="System Engine")
+    
     details = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
 
@@ -266,7 +268,7 @@ class NotificationProviderConfig(Base):
     __tablename__ = "notification_provider_configs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    smtp_server = Column(String(200), nullable=False)
+    smtp_server   = Column(String(200), nullable=False)  
     port = Column(Integer, default=587)
     username = Column(String(200), nullable=True)
     encrypted_password = Column(String(200), nullable=True)

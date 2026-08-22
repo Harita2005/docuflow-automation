@@ -52,3 +52,79 @@ export function formatDateTime(dateStr: string | Date | null | undefined): strin
     minute: "2-digit"
   });
 }
+
+/**
+ * Returns a standardized document prefix based on document type and category.
+ * e.g. "AP INVOICE" -> "INV", "CASH VOUCHER" -> "CV", "E-VOUCHER" -> "EV", etc.
+ */
+export function getDocTypePrefix(docType?: string, category?: string): string {
+  const combined = `${docType || ""} ${category || ""}`.trim().toUpperCase();
+
+  if (combined.includes("CASH VOUCHER") || combined.includes("CASH") || combined.includes("PETTY")) {
+    return "CV";
+  }
+  if (combined.includes("E-VOUCHER") || combined.includes("EVOUCHER")) {
+    return "EV";
+  }
+  if (combined.includes("JOURNAL") || combined.includes("JRNL")) {
+    return "JV";
+  }
+  if (combined.includes("ADVANCE")) {
+    return "ADV";
+  }
+  if (combined.includes("CAPEX") || combined.includes("FIXED ASSET") || combined.includes("ASSET") || combined.includes("MACHINERY")) {
+    return "CAPEX";
+  }
+  if (combined.includes("GRN") || combined.includes("GOODS")) {
+    return "GRN";
+  }
+  if (combined.includes("SERVICE") || combined.includes("MAINTENANCE") || combined.includes("REPAIR")) {
+    return "SRV";
+  }
+  if (combined.includes("FREIGHT") || combined.includes("LOGISTICS") || combined.includes("TRANSPORT") || combined.includes("COURIER")) {
+    return "FRT";
+  }
+  if (combined.includes("UTILITY") || combined.includes("RENT") || combined.includes("ELECTRICITY") || combined.includes("POWER")) {
+    return "UTL";
+  }
+  if (combined.includes("STAFF") || combined.includes("HR") || combined.includes("EXPENSE") || combined.includes("TRAVEL") || combined.includes("WELFARE") || combined.includes("SALARY")) {
+    return "EXP";
+  }
+  if (combined.includes("DEBIT")) {
+    return "DN";
+  }
+  if (combined.includes("CREDIT")) {
+    return "CN";
+  }
+  if (combined.includes("PROJECT") || combined.includes("BUDGET")) {
+    return "PRJ";
+  }
+  if (combined.includes("NON - RETURNABLE") || combined.includes("NON-RETURNABLE")) {
+    return "NR";
+  }
+  if (combined.includes("INVOICE") || combined.includes("AP") || combined.includes("TAX")) {
+    return "INV";
+  }
+  if (combined.includes("VOUCHER")) {
+    return "VOUCH";
+  }
+  // Default prefix for all standard records/invoices
+  return "INV";
+}
+
+/**
+ * Formats a document ID with its appropriate prefix based on doc type.
+ * e.g. ("DOC-28999", "CASH VOUCHER") -> "CV-28999"
+ *      ("DOC-32490", "AP INVOICE") -> "INV-32490"
+ */
+export function formatDocNumber(id?: string | number, docType?: string, category?: string): string {
+  if (!id && id !== 0) return "";
+  const raw = String(id).replace(/^#+/, "").replace(/^•+/, "").trim();
+
+  // Strip existing known prefixes or leading symbols
+  const cleanNum = raw.replace(/^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?/i, "").trim();
+  const prefix = getDocTypePrefix(docType, category);
+
+  return cleanNum ? `${prefix}-${cleanNum}` : `${prefix}-${raw}`;
+}
+

@@ -20,5 +20,5 @@ test('Critical Path: Login as Manager and route to Approval Queue', async ({ pag
   await page.getByRole('button', { name: /Sign in to account/i }).click();
 
   // 7. Verify Smart Routing: We should be instantly routed to the Dashboard
-  await expect(page.getByText('Executive Command Dashboard')).toBeVisible();
+  await expect(page.getByText('Dashboard', { exact: true })).toBeVisible();
 });

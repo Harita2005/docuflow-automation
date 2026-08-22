@@ -31,6 +31,44 @@ def infer_document_type(category: str = "", trans_type: str = "", wf_name: str =
         return "JOURNAL VOUCHER"
     return doc_type or "PURCHASE INVOICE"
 
+def get_doc_type_prefix(doc_type: str = "", category: str = "", trans_type: str = "", wf_name: str = "") -> str:
+    combined = f"{doc_type or ''} {category or ''} {trans_type or ''} {wf_name or ''}".strip().upper()
+    if "CASH VOUCHER" in combined or "CASH" in combined or "PETTY" in combined:
+        return "CV"
+    elif "E-VOUCHER" in combined or "EVOUCHER" in combined:
+        return "EV"
+    elif "JOURNAL" in combined or "JRNL" in combined:
+        return "JV"
+    elif "ADVANCE" in combined:
+        return "ADV"
+    elif "CAPEX" in combined or "FIXED ASSET" in combined or "ASSET" in combined or "MACHINERY" in combined:
+        return "CAPEX"
+    elif "GRN" in combined or "GOODS" in combined:
+        return "GRN"
+    elif "SERVICE" in combined or "MAINTENANCE" in combined or "REPAIR" in combined:
+        return "SRV"
+    elif "FREIGHT" in combined or "LOGISTICS" in combined or "TRANSPORT" in combined or "COURIER" in combined:
+        return "FRT"
+    elif "UTILITY" in combined or "RENT" in combined or "ELECTRICITY" in combined or "POWER" in combined:
+        return "UTL"
+    elif "STAFF" in combined or "HR" in combined or "EXPENSE" in combined or "TRAVEL" in combined or "WELFARE" in combined or "SALARY" in combined:
+        return "EXP"
+    elif "DEBIT" in combined:
+        return "DN"
+    elif "CREDIT" in combined:
+        return "CN"
+    elif "PROJECT" in combined or "BUDGET" in combined:
+        return "PRJ"
+    elif "NON - RETURNABLE" in combined or "NON-RETURNABLE" in combined:
+        return "NR"
+    elif "INVOICE" in combined or "AP" in combined or "TAX" in combined:
+        return "INV"
+    elif "VOUCHER" in combined:
+        return "VOUCH"
+    # Default prefix for all standard records/invoices
+    return "INV"
+
+
 def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
     field = cond.get("field", "").strip()
     operator = cond.get("operator", "equals").strip().lower()
