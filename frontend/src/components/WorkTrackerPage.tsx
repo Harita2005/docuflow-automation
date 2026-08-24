@@ -18,7 +18,9 @@ import {
   Sparkles,
   TrendingUp,
   CreditCard,
-  Layers
+  Layers,
+  Calendar,
+  X
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
 import { formatDocNumber } from "../utils/formatters";
@@ -40,7 +42,81 @@ export default function WorkTrackerPage({
   const [activeTab, setActiveTab] = useState("All");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
+  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
+
+  // Robust date extraction and filter matching
+  const getDocumentDates = (d: DbInvoice): string[] => {
+    const dates: string[] = [];
+    const parseCandidate = (val?: string | null) => {
+      if (!val || typeof val !== 'string') return;
+      const str = val.trim();
+      if (!str) return;
+      const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (ymd) {
+        dates.push(`${ymd[1]}-${ymd[2]}-${ymd[3]}`);
+        return;
+      }
+      const dmy = str.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+      if (dmy) {
+        dates.push(`${dmy[3]}-${dmy[2]}-${dmy[1]}`);
+        return;
+      }
+      const parsed = new Date(str.replace(' ', 'T'));
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const day = String(parsed.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${day}`);
+      }
+    };
+
+    parseCandidate(d.invoice_date);
+    parseCandidate(d.doc_date);
+    parseCandidate(d.created_at);
+
+    return dates;
+  };
+
+  const matchesTimeFilter = (d: DbInvoice): boolean => {
+    if (timeFilter === 'all') return true;
+    const docDates = getDocumentDates(d);
+    if (docDates.length === 0) return true;
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    if (timeFilter === 'today') {
+      return docDates.some(dt => dt === todayStr);
+    }
+
+    if (timeFilter === 'this_week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const weekAgoStr = `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())}`;
+      return docDates.some(dt => dt >= weekAgoStr && dt <= todayStr);
+    }
+
+    if (timeFilter === 'this_month') {
+      const monthStartStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+      return docDates.some(dt => dt >= monthStartStr);
+    }
+
+    if (timeFilter === 'custom') {
+      if (customStartDate && customEndDate) {
+        return docDates.some(dt => dt >= customStartDate && dt <= customEndDate);
+      } else if (customStartDate) {
+        return docDates.some(dt => dt >= customStartDate);
+      } else if (customEndDate) {
+        return docDates.some(dt => dt <= customEndDate);
+      }
+      return true;
+    }
+
+    return true;
+  };
 
   const getApproverRole = (approverStr: string) => {
     if (!approverStr) return "";
@@ -118,6 +194,9 @@ export default function WorkTrackerPage({
         if (statusFilter === "grn" && doc.status !== "Waiting for GRN") return false;
       }
 
+      // Time / Date filter
+      if (!matchesTimeFilter(doc)) return false;
+
       // Search filter
       const search = searchTerm.toLowerCase().trim();
       if (!search) return true;
@@ -136,10 +215,16 @@ export default function WorkTrackerPage({
       if (sortBy === "amount_desc") return (b.amount || 0) - (a.amount || 0);
       if (sortBy === "amount_asc") return (a.amount || 0) - (b.amount || 0);
       if (sortBy === "vendor") return (a.vendor_name || "").localeCompare(b.vendor_name || "");
-      if (sortBy === "date_asc") return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      if (sortBy === "date_asc") {
+        const da = getDocumentDates(a)[0] || "";
+        const db = getDocumentDates(b)[0] || "";
+        return da.localeCompare(db);
+      }
+      const da = getDocumentDates(a)[0] || "";
+      const db = getDocumentDates(b)[0] || "";
+      return db.localeCompare(da);
     });
-  }, [documents, activeTab, statusFilter, searchTerm, sortBy]);
+  }, [visibleDocs, activeTab, statusFilter, searchTerm, sortBy, timeFilter, customStartDate, customEndDate]);
 
   // Export to CSV helper
   const handleExportCSV = () => {
@@ -296,18 +381,55 @@ export default function WorkTrackerPage({
             <option value="grn">Waiting for GRN</option>
           </select>
 
-          {/* Sort By Dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer"
-          >
-            <option value="date_desc">Latest Date</option>
-            <option value="date_asc">Oldest Date</option>
-            <option value="amount_desc">Highest Amount</option>
-            <option value="amount_asc">Lowest Amount</option>
-            <option value="vendor">Vendor A-Z</option>
-          </select>
+          {/* Time / Date Filter */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-1">
+            <Calendar className="h-3 w-3 text-slate-500" />
+            <select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value as any)}
+              className="bg-transparent text-[10px] font-medium text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          {/* Custom Date Inputs if custom range is active */}
+          {timeFilter === 'custom' && (
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                <span className="text-[9px] font-bold text-slate-400">From:</span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="text-[10px] bg-transparent text-slate-700 outline-none cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                <span className="text-[9px] font-bold text-slate-400">To:</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  min={customStartDate || undefined}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="text-[10px] bg-transparent text-slate-700 outline-none cursor-pointer"
+                />
+              </div>
+              {(customStartDate || customEndDate) && (
+                <button
+                  onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }}
+                  title="Clear custom dates"
+                  className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-slate-100 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Export to CSV Button */}
           <button

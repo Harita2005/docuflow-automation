@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Calendar,
   PauseCircle,
-  XCircle
+  XCircle,
+  X
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -52,7 +53,9 @@ export default function Dashboard({
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
   const [currentPage, setCurrentPage] = useState(1);
-  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month'>('all');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const itemsPerPage = 8;
 
   if (loading || !stats) {
@@ -115,6 +118,77 @@ export default function Dashboard({
     { name: "In Review", value: documents.filter(i => i.status === "In Approval" || i.status === "Ready for Approval").length, color: "#8b5cf6" },
     requireGRN ? { name: "Awaiting GRN", value: documents.filter(i => i.status === "Waiting for GRN" || i.status === "Received").length, color: "#f43f5e" } : null,
   ].filter(Boolean).filter(s => s!.value > 0) as any[];
+
+  // Robust date extraction and filter matching
+  const getDocumentDates = (d: DbInvoice): string[] => {
+    const dates: string[] = [];
+    const parseCandidate = (val?: string | null) => {
+      if (!val || typeof val !== 'string') return;
+      const str = val.trim();
+      if (!str) return;
+      const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (ymd) {
+        dates.push(`${ymd[1]}-${ymd[2]}-${ymd[3]}`);
+        return;
+      }
+      const dmy = str.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+      if (dmy) {
+        dates.push(`${dmy[3]}-${dmy[2]}-${dmy[1]}`);
+        return;
+      }
+      const parsed = new Date(str.replace(' ', 'T'));
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const day = String(parsed.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${day}`);
+      }
+    };
+
+    parseCandidate(d.invoice_date);
+    parseCandidate(d.doc_date);
+    parseCandidate(d.created_at);
+
+    return dates;
+  };
+
+  const matchesTimeFilter = (d: DbInvoice): boolean => {
+    if (timeFilter === 'all') return true;
+    const docDates = getDocumentDates(d);
+    if (docDates.length === 0) return true;
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    if (timeFilter === 'today') {
+      return docDates.some(dt => dt === todayStr);
+    }
+
+    if (timeFilter === 'this_week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const weekAgoStr = `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())}`;
+      return docDates.some(dt => dt >= weekAgoStr && dt <= todayStr);
+    }
+
+    if (timeFilter === 'this_month') {
+      const monthStartStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+      return docDates.some(dt => dt >= monthStartStr);
+    }
+
+    if (timeFilter === 'custom') {
+      if (customStartDate && customEndDate) {
+        return docDates.some(dt => dt >= customStartDate && dt <= customEndDate);
+      } else if (customStartDate) {
+        return docDates.some(dt => dt >= customStartDate);
+      } else if (customEndDate) {
+        return docDates.some(dt => dt <= customEndDate);
+      }
+      return true;
+    }
+
+    return true;
+  };
 
   // Render role indicator bar
   const roleLabels: { [key: string]: string } = {
@@ -277,20 +351,57 @@ export default function Dashboard({
                 Document List
               </h3>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 shadow-sm">
                 <Calendar className="h-3.5 w-3.5 text-slate-500" />
                 <select 
                   value={timeFilter}
-                  onChange={(e) => { setTimeFilter(e.target.value as any); setCurrentPage(1); }}
+                  onChange={(e) => { 
+                    setTimeFilter(e.target.value as any); 
+                    setCurrentPage(1); 
+                  }}
                   className="text-[10px] bg-transparent font-bold text-slate-600 outline-none uppercase tracking-wider cursor-pointer"
                 >
                   <option value="all">All Time</option>
                   <option value="today">Today</option>
                   <option value="this_week">This Week</option>
                   <option value="this_month">This Month</option>
+                  <option value="custom">Custom Range</option>
                 </select>
               </div>
+
+              {timeFilter === 'custom' && (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">From:</span>
+                    <input 
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => { setCustomStartDate(e.target.value); setCurrentPage(1); }}
+                      className="text-[10px] bg-transparent font-semibold text-slate-700 outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">To:</span>
+                    <input 
+                      type="date"
+                      value={customEndDate}
+                      min={customStartDate || undefined}
+                      onChange={(e) => { setCustomEndDate(e.target.value); setCurrentPage(1); }}
+                      className="text-[10px] bg-transparent font-semibold text-slate-700 outline-none cursor-pointer"
+                    />
+                  </div>
+                  {(customStartDate || customEndDate) && (
+                    <button
+                      onClick={() => { setCustomStartDate(''); setCustomEndDate(''); setCurrentPage(1); }}
+                      title="Clear date range"
+                      className="p-1 text-slate-400 hover:text-rose-500 rounded-md hover:bg-slate-100 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -303,11 +414,11 @@ export default function Dashboard({
             >
               <span>All Documents</span>
               <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-md ${docTypeFilter === 'All' ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-500"}`}>
-                {documents.length}
+                {documents.filter(matchesTimeFilter).length}
               </span>
             </button>
             {Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => {
-              const count = documents.filter(d => (d.document_type || "").toUpperCase().trim() === type).length;
+              const count = documents.filter(matchesTimeFilter).filter(d => (d.document_type || "").toUpperCase().trim() === type).length;
               const isActive = docTypeFilter === type;
               return (
                 <button
@@ -353,20 +464,7 @@ export default function Dashboard({
               filteredDocs = filteredDocs.filter(d => (d.document_type || "").toUpperCase().trim() === docTypeFilter);
             }
             
-            if (timeFilter !== 'all') {
-              const now = new Date();
-              let cutoffDate = new Date(now);
-              
-              if (timeFilter === 'today') {
-                cutoffDate.setHours(0, 0, 0, 0);
-              } else if (timeFilter === 'this_week') {
-                cutoffDate.setDate(now.getDate() - 7);
-              } else if (timeFilter === 'this_month') {
-                cutoffDate.setMonth(now.getMonth() - 1);
-              }
-              
-              filteredDocs = filteredDocs.filter(d => new Date(d.created_at) >= cutoffDate);
-            }
+            filteredDocs = filteredDocs.filter(matchesTimeFilter);
 
             const totalPages = Math.ceil(filteredDocs.length / itemsPerPage);
             const paginatedDocs = filteredDocs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -403,7 +501,9 @@ export default function Dashboard({
                             >
                               {doc.document_type || "Document"}
                             </span>
-                            <span className="font-mono font-bold text-slate-400 text-[9px]">{doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""}</span>
+                            <span className="font-mono font-bold text-slate-400 text-[9px]">
+                              {doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""} {doc.invoice_date ? `• ${doc.invoice_date}` : doc.created_at ? `• ${String(doc.created_at).slice(0, 10)}` : ""}
+                            </span>
                             <span className="text-slate-300">•</span>
                             <span className={`font-bold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-sm ${doc.status.includes('Approval') ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
                               {doc.status.includes("Approval") && doc.workflowInst?.current_stage_index 

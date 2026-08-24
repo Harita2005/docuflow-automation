@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder, Users, ListChecks, Sparkles, CheckSquare } from 'lucide-react';
+
+const STAGE_CHECKLIST_LIBRARY = [
+  "Verify PO & Line Items Match Invoice",
+  "Confirm Unit Rates & Total Price Calculations",
+  "Validate HSN/SAC Code & Applicable GST Rates",
+  "Verify Delivery / Goods Receipt Confirmation (GRN)",
+  "Verify Physical Stamp & Authorized Signatures",
+  "Validate Vendor Bank Details & GSTIN against ERP Master",
+  "Confirm Cost Center & Department Budget Clearance",
+  "Check Advance Adjustment & TDS Withholding",
+  "Verify Payment Terms & Credit Period Compliance",
+  "Inspect Quality Inspection Certificate & Warranty Terms"
+];
 
 const getPrefixCode = (category, subCat) => {
   if (!category && !subCat) return "";
@@ -68,6 +81,29 @@ export default function FlowBuilder({ users = [] }) {
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
   const [configuringStepIndex, setConfiguringStepIndex] = useState(null);
   const [memberSearchText, setMemberSearchText] = useState("");
+  const [showApproversList, setShowApproversList] = useState(false);
+  const [showChecklistSection, setShowChecklistSection] = useState(false);
+  const [newStageChecklistText, setNewStageChecklistText] = useState("");
+
+  const addChecklistItemToConfiguringStep = (text) => {
+    if (!text || !text.trim() || configuringStepIndex === null || !editingWorkflow) return;
+    const clean = text.trim();
+    const currentStep = editingWorkflow.steps[configuringStepIndex];
+    if (!currentStep) return;
+    const currentList = Array.isArray(currentStep.checklist_items) ? currentStep.checklist_items : [];
+    if (!currentList.includes(clean)) {
+      updateStep(configuringStepIndex, 'checklist_items', [...currentList, clean]);
+    }
+    setNewStageChecklistText("");
+  };
+
+  const removeChecklistItemFromConfiguringStep = (indexToRemove) => {
+    if (configuringStepIndex === null || !editingWorkflow) return;
+    const currentStep = editingWorkflow.steps[configuringStepIndex];
+    if (!currentStep) return;
+    const currentList = Array.isArray(currentStep.checklist_items) ? currentStep.checklist_items : [];
+    updateStep(configuringStepIndex, 'checklist_items', currentList.filter((_, idx) => idx !== indexToRemove));
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -191,6 +227,18 @@ export default function FlowBuilder({ users = [] }) {
       if (!cloned.workflow_code || cloned.workflow_code === 'INV-APP-001') {
         cloned.workflow_code = generatedCode || cloned.workflow_code;
       }
+      if (Array.isArray(cloned.steps)) {
+        cloned.steps = cloned.steps.map((st, idx) => ({
+          ...st,
+          checklist_items: Array.isArray(st.checklist_items) 
+            ? st.checklist_items 
+            : (st.checklist_json ? JSON.parse(st.checklist_json) : [
+                "Verify PO & Line Items Match Invoice",
+                "Validate Tax Calculations & HSN/SAC Code",
+                "Verify Goods Receipt (GRN) & Delivery Acceptance"
+              ])
+        }));
+      }
       setEditingWorkflow(cloned);
     } else {
       setEditingWorkflow({
@@ -216,7 +264,12 @@ export default function FlowBuilder({ users = [] }) {
           delegate_approver: '',
           escalation_rule: '',
           target_division: '',
-          target_department: ''
+          target_department: '',
+          checklist_items: [
+            "Verify PO & Line Items Match Invoice",
+            "Validate Tax Calculations & HSN/SAC Code",
+            "Verify Goods Receipt (GRN) & Delivery Acceptance"
+          ]
         }]
       });
     }
@@ -241,7 +294,8 @@ export default function FlowBuilder({ users = [] }) {
         document_type: step.document_type || docType || 'RECORD',
         action_required: step.action_required || 'Approve',
         permissions: step.permissions || 'Approve / Reject',
-        sla_hours: parseInt(step.sla_hours || 48, 10)
+        sla_hours: parseInt(step.sla_hours || 48, 10),
+        checklist_items: Array.isArray(step.checklist_items) ? step.checklist_items : []
       }));
 
       const payload = {
@@ -319,7 +373,11 @@ export default function FlowBuilder({ users = [] }) {
       delegate_approver: '',
       escalation_rule: '',
       target_division: '',
-      target_department: ''
+      target_department: '',
+      checklist_items: [
+        "Verify Line Items & Price Calculations",
+        "Confirm Department Approval & Budget Signoff"
+      ]
     }];
     setEditingWorkflow({ ...editingWorkflow, steps: newSteps });
   };
@@ -760,6 +818,21 @@ export default function FlowBuilder({ users = [] }) {
                       </td>
                       <td className="py-2.5 px-2 align-top">
                         <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs px-2 py-1.5 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setConfiguringStepIndex(idx)}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold border transition-colors cursor-pointer ${
+                              (step.checklist_items || []).length > 0 
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
+                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title="Click to configure verification checklist for this stage"
+                          >
+                            <ListChecks className="h-2.5 w-2.5" />
+                            <span>{(step.checklist_items || []).length} Checklist Items</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="py-2.5 px-2 align-middle">
                         {(() => {
@@ -944,15 +1017,20 @@ export default function FlowBuilder({ users = [] }) {
     </form>
     
     {configuringStepIndex !== null && editingWorkflow.steps[configuringStepIndex] && (
-      <div className="fixed inset-0 z-50 flex justify-end">
-        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setConfiguringStepIndex(null)} />
-        <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-slate-200">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setConfiguringStepIndex(null)} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col border border-slate-200 overflow-hidden max-h-[88vh] animate-in fade-in zoom-in-95 duration-150">
           <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <div>
-              <h3 className="text-base font-black text-slate-800">Configure Step {configuringStepIndex + 1}</h3>
-              <p className="text-xs font-bold text-slate-500 mt-1">{editingWorkflow.steps[configuringStepIndex].step_name || 'Untitled Step'}</p>
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <span>Configure Step {configuringStepIndex + 1}</span>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                  {editingWorkflow.steps[configuringStepIndex].step_name || 'Untitled Step'}
+                </span>
+              </h3>
+              <p className="text-xs font-medium text-slate-500 mt-1">Set stage approver pool, backup delegates, SLA, and verification checklist.</p>
             </div>
-            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-2 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shadow-2xs">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -1097,7 +1175,7 @@ export default function FlowBuilder({ users = [] }) {
                           </div>
                         </div>
 
-                        {/* User Checkbox Selection List */}
+                        {/* User Checkbox Selection List (Collapsible & Hidden by Default) */}
                         <div>
                           {(() => {
                             const q = memberSearchText.trim().toLowerCase();
@@ -1109,58 +1187,61 @@ export default function FlowBuilder({ users = [] }) {
                               return nameMatch || userMatch || emailMatch;
                             });
 
-                            return (
-                              <>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                                    Available Approvers List ({filteredUsers.length})
-                                  </label>
-                                  {memberSearchText.trim() && (
-                                    <button 
-                                      type="button" 
-                                      onClick={() => setMemberSearchText("")} 
-                                      className="text-[10px] text-blue-600 hover:underline font-bold"
-                                    >
-                                      Clear Filter
-                                    </button>
-                                  )}
-                                </div>
+                            const isListVisible = showApproversList || Boolean(q);
 
-                                <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white custom-scrollbar">
-                                  {filteredUsers.length > 0 ? (
-                                    filteredUsers.map(u => {
-                                      const uKey = u.username || u.email;
-                                      const isChecked = selectedList.includes(uKey);
-                                      return (
-                                        <label key={u.id || uKey} className="flex items-center justify-between p-2.5 hover:bg-slate-50 cursor-pointer transition">
-                                          <div className="flex items-center gap-2.5">
-                                            <input 
-                                              type="checkbox" 
-                                              checked={isChecked} 
-                                              onChange={() => toggleUserInPool(uKey)}
-                                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
-                                            />
-                                            <div>
-                                              <div className="text-xs font-bold text-slate-800">{u.name}</div>
-                                              <div className="text-[10px] text-slate-400 font-mono">{uKey}</div>
+                            return (
+                              <div className="space-y-2">
+                                <button 
+                                  type="button" 
+                                  onClick={() => setShowApproversList(!showApproversList)}
+                                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-3.5 w-3.5 text-blue-600" />
+                                    <span>{isListVisible ? "Hide Available Approvers List" : `Browse & Select from System Approvers (${filteredUsers.length})`}</span>
+                                  </div>
+                                  <span className="text-[10px] text-blue-600 font-extrabold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                    {isListVisible ? "▲ Hide List" : "▼ Click to View Members"}
+                                  </span>
+                                </button>
+
+                                {isListVisible && (
+                                  <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white custom-scrollbar shadow-inner animate-in fade-in duration-150">
+                                    {filteredUsers.length > 0 ? (
+                                      filteredUsers.map(u => {
+                                        const uKey = u.username || u.email;
+                                        const isChecked = selectedList.includes(uKey);
+                                        return (
+                                          <label key={u.id || uKey} className="flex items-center justify-between p-2.5 hover:bg-slate-50 cursor-pointer transition">
+                                            <div className="flex items-center gap-2.5">
+                                              <input 
+                                                type="checkbox" 
+                                                checked={isChecked} 
+                                                onChange={() => toggleUserInPool(uKey)}
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                              />
+                                              <div>
+                                                <div className="text-xs font-bold text-slate-800">{u.name}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{uKey}</div>
+                                              </div>
                                             </div>
-                                          </div>
-                                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
-                                            {u.role || 'Employee'}
-                                          </span>
-                                        </label>
-                                      );
-                                    })
-                                  ) : (
-                                    <div className="p-4 text-center text-xs text-slate-500">
-                                      No existing user matches "<strong>{memberSearchText}</strong>".
-                                      <div className="mt-1 font-bold text-blue-600">
-                                        Click "+ Add to Pool" button above to add directly!
+                                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                              {u.role || 'Employee'}
+                                            </span>
+                                          </label>
+                                        );
+                                      })
+                                    ) : (
+                                      <div className="p-4 text-center text-xs text-slate-500">
+                                        No existing user matches "<strong>{memberSearchText}</strong>".
+                                        <div className="mt-1 font-bold text-blue-600">
+                                          Click "+ Add to Pool" button above to add directly!
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             );
                           })()}
                         </div>
@@ -1275,6 +1356,104 @@ export default function FlowBuilder({ users = [] }) {
                     </div>
                   );
                 })()}
+              </div>
+
+              {/* SECTION: STAGE-SPECIFIC VERIFICATION CHECKLIST (Collapsible) */}
+              <div className="border-t border-slate-200 pt-4 space-y-3">
+                <button 
+                  type="button" 
+                  onClick={() => setShowChecklistSection(!showChecklistSection)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900 transition cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="h-4 w-4 text-indigo-600" />
+                    <span>
+                      Stage Verification Checklist ({(editingWorkflow.steps[configuringStepIndex].checklist_items || []).length} Points)
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-indigo-700 font-extrabold bg-white px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
+                    {showChecklistSection ? "▲ Hide Checklist" : "▼ Click to View / Edit"}
+                  </span>
+                </button>
+
+                {showChecklistSection && (
+                  <div className="space-y-4 pt-1 animate-in fade-in duration-150 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Verification points that approvers must review and tick off before approving this stage.
+                      </p>
+                      {(editingWorkflow.steps[configuringStepIndex].checklist_items || []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => updateStep(configuringStepIndex, 'checklist_items', [])}
+                          className="text-[10px] text-rose-600 hover:underline font-bold"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Input to add custom checklist item */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newStageChecklistText}
+                        onChange={e => setNewStageChecklistText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addChecklistItemToConfiguringStep(newStageChecklistText);
+                          }
+                        }}
+                        placeholder="Type custom verification requirement..."
+                        className="flex-1 text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-indigo-500 outline-none font-medium text-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addChecklistItemToConfiguringStep(newStageChecklistText)}
+                        disabled={!newStageChecklistText.trim()}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+
+                    {/* Checklist Items List */}
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                      {(!editingWorkflow.steps[configuringStepIndex].checklist_items || editingWorkflow.steps[configuringStepIndex].checklist_items.length === 0) ? (
+                        <div className="p-3 border border-dashed border-slate-200 rounded-lg text-center bg-white">
+                          <ListChecks className="h-4 w-4 text-slate-400 mx-auto mb-1" />
+                          <p className="text-xs font-bold text-slate-500">No checklist items added for this stage yet.</p>
+                        </div>
+                      ) : (
+                        editingWorkflow.steps[configuringStepIndex].checklist_items.map((item, cIdx) => (
+                          <div
+                            key={cIdx}
+                            className="flex items-center justify-between p-2 bg-white hover:bg-indigo-50/40 border border-slate-200 rounded-lg group transition-colors shadow-2xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 pr-2">
+                              <span className="h-4.5 w-4.5 rounded bg-indigo-100 text-indigo-700 font-black text-[9px] flex items-center justify-center shrink-0">
+                                {cIdx + 1}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-800 break-words">
+                                {item}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeChecklistItemFromConfiguringStep(cIdx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
+                              title="Remove item"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckSquare, Plus, Edit2, Trash2, Search, Save, X, AlertTriangle, ShieldCheck, CheckCircle2, RefreshCw, Filter, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CheckSquare, Plus, Edit2, Trash2, Search, Save, X, AlertTriangle, ShieldCheck, CheckCircle2, RefreshCw, Filter, Layers, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
 const MASTER_CHECKLIST_LIBRARY = [
@@ -37,12 +37,27 @@ const STAGES_LIST = [
   "Final Approval"
 ];
 
+export const getStageBadgeStyle = (stageName) => {
+  const s = (stageName || '').toUpperCase();
+  if (s.includes("ATTACHMENT")) return "bg-blue-50 text-blue-700 border-blue-200";
+  if (s.includes("FIRST")) return "bg-purple-50 text-purple-700 border-purple-200";
+  if (s.includes("SECOND")) return "bg-indigo-50 text-indigo-700 border-indigo-200";
+  if (s.includes("3RD") || s.includes("THIRD")) return "bg-amber-50 text-amber-800 border-amber-200";
+  if (s.includes("IA")) return "bg-rose-50 text-rose-700 border-rose-200";
+  if (s.includes("FINAL")) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
+};
+
 export default function ChecklistConditionBuilder() {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStageFilter, setSelectedStageFilter] = useState('ALL');
   const [selectedDivisionFilter, setSelectedDivisionFilter] = useState('ALL');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const [editingRule, setEditingRule] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -74,7 +89,17 @@ export default function ChecklistConditionBuilder() {
 
   const openEditor = (r = null) => {
     if (r) {
-      const parsedItems = (r.item_text || '').split(',').map(s => s.trim()).filter(Boolean);
+      let parsedItems = [];
+      const txt = (r.item_text || '').trim();
+      if (txt.includes(' || ')) {
+        parsedItems = txt.split(' || ').map(s => s.trim()).filter(Boolean);
+      } else if (txt.includes('\n')) {
+        parsedItems = txt.split('\n').map(s => s.trim()).filter(Boolean);
+      } else if (txt.includes(',') && !(txt.includes('(') && txt.includes(')'))) {
+        parsedItems = txt.split(',').map(s => s.trim()).filter(Boolean);
+      } else {
+        parsedItems = txt ? [txt] : [];
+      }
       setEditingRule({
         ...r,
         itemsList: parsedItems.length > 0 ? parsedItems : ['Documents Attached']
@@ -117,7 +142,7 @@ export default function ChecklistConditionBuilder() {
         branch: editingRule.branch || 'ALL',
         workflow_profile: editingRule.workflow_profile || 'ALL',
         stage_name: editingRule.stage_name || 'Attachment Status',
-        item_text: (editingRule.itemsList || []).join(', '),
+        item_text: (editingRule.itemsList || []).join(' || '),
         is_mandatory: editingRule.is_mandatory !== false,
         is_active: editingRule.is_active !== false,
         sequence_order: editingRule.sequence_order || 1
@@ -178,93 +203,210 @@ export default function ChecklistConditionBuilder() {
     });
   };
 
-  // Filtered Rules
-  const filteredRules = rules.filter(r => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = (
-      (r.rule_name || '').toLowerCase().includes(q) ||
-      (r.category || '').toLowerCase().includes(q) ||
-      (r.branch || '').toLowerCase().includes(q) ||
-      (r.division || '').toLowerCase().includes(q) ||
-      (r.item_text || '').toLowerCase().includes(q)
-    );
-    const matchesStage = (selectedStageFilter === 'ALL' || r.stage_name === selectedStageFilter);
-    const matchesDivision = (selectedDivisionFilter === 'ALL' || r.division === selectedDivisionFilter);
-    return matchesSearch && matchesStage && matchesDivision;
-  });
+  // Compute distinct filter options
+  const distinctDivisions = useMemo(() => {
+    return Array.from(new Set(rules.map(r => r.division).filter(Boolean))).sort();
+  }, [rules]);
 
-  const distinctDivisions = Array.from(new Set(rules.map(r => r.division).filter(Boolean))).sort();
+  const distinctCategories = useMemo(() => {
+    return Array.from(new Set(rules.map(r => r.category).filter(Boolean))).sort();
+  }, [rules]);
+
+  const distinctBranches = useMemo(() => {
+    return Array.from(new Set(rules.map(r => r.branch).filter(Boolean))).sort();
+  }, [rules]);
+
+  const stageCounts = useMemo(() => {
+    const counts = { ALL: rules.length };
+    STAGES_LIST.forEach(stg => { counts[stg] = 0; });
+    rules.forEach(r => {
+      if (r.stage_name && counts[r.stage_name] !== undefined) {
+        counts[r.stage_name] += 1;
+      }
+    });
+    return counts;
+  }, [rules]);
+
+  // Filtered Rules
+  const filteredRules = useMemo(() => {
+    return rules.filter(r => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || (
+        (r.rule_name || '').toLowerCase().includes(q) ||
+        (r.category || '').toLowerCase().includes(q) ||
+        (r.branch || '').toLowerCase().includes(q) ||
+        (r.division || '').toLowerCase().includes(q) ||
+        (r.item_text || '').toLowerCase().includes(q)
+      );
+      const matchesStage = (selectedStageFilter === 'ALL' || r.stage_name === selectedStageFilter);
+      const matchesDivision = (selectedDivisionFilter === 'ALL' || r.division === selectedDivisionFilter);
+      const matchesCategory = (selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter);
+      const matchesBranch = (selectedBranchFilter === 'ALL' || r.branch === selectedBranchFilter);
+      return matchesSearch && matchesStage && matchesDivision && matchesCategory && matchesBranch;
+    });
+  }, [rules, searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRules.length / itemsPerPage));
+  const paginatedRules = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredRules.slice(start, start + itemsPerPage);
+  }, [filteredRules, currentPage]);
 
   return (
     <div className="flex flex-col gap-4">
       {/* HEADER CONTROLS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-4 py-3 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-3xs">
-            <CheckSquare className="h-5 w-5" />
+      <div className="flex flex-col gap-3 bg-white px-4 py-3.5 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-3xs shrink-0">
+              <CheckSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                <span>Stage-Wise Checklist Matrix</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                  {rules.length} Rules Active
+                </span>
+              </h2>
+              <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
+                Configured verification rules: <code className="text-blue-600 font-bold">Doc Type == X AND Branch == Y AND Stage == Z → Checklist Items</code>
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-              <span>Checklist Condition Matrix</span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                {rules.length} Rules Active
-              </span>
-            </h2>
-            <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">
-              Defines dynamic stage verification requirements: <code className="text-blue-600 font-bold">Company == X AND Doc Type == Y AND Stage == Z → Checklist Items</code> (Cascading Priority over Workflow Defaults)
-            </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* SEARCH */}
+            <div className="relative w-48 sm:w-60">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Search doc type, branch, items..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all font-medium"
+              />
+            </div>
+
+            {/* CREATE RULE */}
+            <button 
+              onClick={() => openEditor(null)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wide rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"
+            >
+              <Plus className="h-4 w-4" /> Create Checklist Rule
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* SEARCH */}
-          <div className="relative w-48 sm:w-60">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <input 
-              type="text"
-              placeholder="Search doc type, branch, items..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-all font-medium"
-            />
+        {/* STAGE QUICK FILTER PILLS */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar border-t border-slate-100 pt-2.5">
+          <button
+            type="button"
+            onClick={() => setSelectedStageFilter('ALL')}
+            className={`px-3 py-1 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              selectedStageFilter === 'ALL'
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <span>All Stages</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+              selectedStageFilter === 'ALL' ? "bg-slate-800 text-white" : "bg-slate-200 text-slate-600"
+            }`}>
+              {stageCounts.ALL || 0}
+            </span>
+          </button>
+          {STAGES_LIST.map(stg => (
+            <button
+              key={stg}
+              type="button"
+              onClick={() => setSelectedStageFilter(stg)}
+              className={`px-3 py-1 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                selectedStageFilter === stg
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <span>{stg}</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                selectedStageFilter === stg ? "bg-blue-700 text-white" : "bg-blue-50 text-blue-700 border border-blue-100"
+              }`}>
+                {stageCounts[stg] || 0}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* MULTI-FILTER DROPDOWNS BAR */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100 text-xs">
+          {/* STAGE SELECT */}
+          <div>
+            <label className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Stage Filter</label>
+            <select 
+              value={selectedStageFilter}
+              onChange={e => setSelectedStageFilter(e.target.value)}
+              className="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-blue-700 outline-none focus:border-emerald-500"
+            >
+              <option value="ALL">All Stages ({rules.length})</option>
+              {STAGES_LIST.map(stg => (
+                <option key={stg} value={stg}>{stg} ({stageCounts[stg] || 0})</option>
+              ))}
+            </select>
           </div>
 
-          {/* STAGE FILTER */}
-          <select 
-            value={selectedStageFilter}
-            onChange={e => setSelectedStageFilter(e.target.value)}
-            className="text-xs py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-emerald-500"
-          >
-            <option value="ALL">All Stages</option>
-            {STAGES_LIST.map(stg => (
-              <option key={stg} value={stg}>{stg}</option>
-            ))}
-          </select>
+          {/* DOC TYPE / CATEGORY SELECT */}
+          <div>
+            <label className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Doc Type / Category</label>
+            <select 
+              value={selectedCategoryFilter}
+              onChange={e => setSelectedCategoryFilter(e.target.value)}
+              className="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:border-emerald-500 truncate"
+            >
+              <option value="ALL">All Doc Types ({distinctCategories.length})</option>
+              {distinctCategories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* DIVISION FILTER */}
-          <select 
-            value={selectedDivisionFilter}
-            onChange={e => setSelectedDivisionFilter(e.target.value)}
-            className="text-xs py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-emerald-500"
-          >
-            <option value="ALL">All Divisions</option>
-            {distinctDivisions.map(d => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
+          {/* BRANCH / PLANT SELECT */}
+          <div>
+            <label className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Branch / Plant</label>
+            <select 
+              value={selectedBranchFilter}
+              onChange={e => setSelectedBranchFilter(e.target.value)}
+              className="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:border-emerald-500 truncate"
+            >
+              <option value="ALL">All Branches ({distinctBranches.length})</option>
+              {distinctBranches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* CREATE RULE */}
-          <button 
-            onClick={() => openEditor(null)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wide rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"
-          >
-            <Plus className="h-4 w-4" /> Create Checklist Rule
-          </button>
+          {/* DIVISION SELECT */}
+          <div>
+            <label className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Division</label>
+            <select 
+              value={selectedDivisionFilter}
+              onChange={e => setSelectedDivisionFilter(e.target.value)}
+              className="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:border-emerald-500"
+            >
+              <option value="ALL">All Divisions ({distinctDivisions.length})</option>
+              {distinctDivisions.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* CHECKLIST RULES DATA TABLE */}
-      <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto min-w-full">
           <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
@@ -293,8 +435,14 @@ export default function ChecklistConditionBuilder() {
                   </td>
                 </tr>
               ) : (
-                filteredRules.map((r, idx) => {
-                  const items = (r.item_text || '').split(',').map(s => s.trim()).filter(Boolean);
+                paginatedRules.map((r, idx) => {
+                const items = (() => {
+                  const txt = (r.item_text || '').trim();
+                  if (txt.includes(' || ')) return txt.split(' || ').map(s => s.trim()).filter(Boolean);
+                  if (txt.includes('\n')) return txt.split('\n').map(s => s.trim()).filter(Boolean);
+                  if (txt.includes(',') && !(txt.includes('(') && txt.includes(')'))) return txt.split(',').map(s => s.trim()).filter(Boolean);
+                  return txt ? [txt] : [];
+                })();
                   return (
                     <tr key={r.id || idx} className="hover:bg-slate-50/80 transition-colors group">
                       {/* Rule Name */}
@@ -333,7 +481,7 @@ export default function ChecklistConditionBuilder() {
 
                       {/* Stage Name */}
                       <td className="px-3.5 py-3 align-top">
-                        <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 text-[10px]">
+                        <span className={`font-bold px-2 py-0.5 rounded border text-[10px] whitespace-nowrap ${getStageBadgeStyle(r.stage_name)}`}>
                           {r.stage_name || 'Attachment Status'}
                         </span>
                       </td>
@@ -359,14 +507,14 @@ export default function ChecklistConditionBuilder() {
                         <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={() => openEditor(r)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
                             title="Edit Rule"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button 
                             onClick={() => setDeleteConfirmTarget(r.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                             title="Delete Rule"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -380,6 +528,43 @@ export default function ChecklistConditionBuilder() {
             </tbody>
           </table>
         </div>
+
+        {/* PAGINATION BAR */}
+        {filteredRules.length > 0 && (
+          <div className="p-3 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="text-slate-500 font-medium">
+              Showing <strong className="text-slate-800">{(currentPage - 1) * itemsPerPage + 1}</strong> to <strong className="text-slate-800">{Math.min(currentPage * itemsPerPage, filteredRules.length)}</strong> of <strong className="text-slate-800">{filteredRules.length}</strong> matching checklist rules
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                <span>Prev</span>
+              </button>
+
+              <div className="flex items-center gap-1 px-2">
+                <span className="font-bold text-slate-700">Page {currentPage}</span>
+                <span className="text-slate-400">/</span>
+                <span className="text-slate-500">{totalPages}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>Next</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ADD / EDIT CHECKLIST RULE MODAL */}

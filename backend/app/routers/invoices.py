@@ -1810,7 +1810,26 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
     # =========================================================================
-    # PRIORITY 1 (HIGHEST): Specific Category / Company Condition Rules
+    # PRIORITY 0 (DIRECT WORKFLOW STAGE CONFIGURATION):
+    # Direct stage checklist configured on the workflow step in FlowBuilder UI
+    # =========================================================================
+    if inv.workflow_profile_id:
+        step_def = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.step_name.ilike(stage_name.strip())
+        ).first()
+        if step_def and step_def.checklist_json:
+            try:
+                parsed = json.loads(step_def.checklist_json)
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    clean_items = [str(x).strip() for x in parsed if str(x).strip()]
+                    if clean_items:
+                        return clean_items
+            except Exception:
+                pass
+
+    # =========================================================================
+    # PRIORITY 1: Specific Category / Company Condition Rules
     # (Matches Company == X, DocType/Category == Y, Branch == Z, Stage/Status == S)
     # =========================================================================
     matching_rules = db.query(ChecklistRule).filter(
@@ -1875,13 +1894,16 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         best_rules = [r for score, r in scored_rules if score == max_score]
         res_items = []
         for r in best_rules:
-            if "," in r.item_text:
-                for sub_it in r.item_text.split(","):
-                    clean = sub_it.strip()
-                    if clean and clean not in res_items:
-                        res_items.append(clean)
+            txt = (r.item_text or "").strip()
+            if " || " in txt:
+                sub_items = txt.split(" || ")
+            elif "\n" in txt:
+                sub_items = txt.split("\n")
             else:
-                clean = (r.item_text or "").strip()
+                sub_items = [txt]
+
+            for sub_it in sub_items:
+                clean = sub_it.strip()
                 if clean and clean not in res_items:
                     res_items.append(clean)
         if res_items:
@@ -1900,10 +1922,9 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         if tpl_items:
             res = []
             for it in tpl_items:
-                for sub in it.item_text.split(','):
-                    c = sub.strip()
-                    if c and c not in res:
-                        res.append(c)
+                c = (it.item_text or "").strip()
+                if c and c not in res:
+                    res.append(c)
             if res:
                 return res
 

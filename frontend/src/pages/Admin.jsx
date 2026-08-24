@@ -7,6 +7,7 @@ import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
 import AdminBackups from '../components/AdminBackups.jsx';
+import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -39,7 +40,7 @@ export default function Admin() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem("adminActiveTab");
-    return (stored === "checklists" || stored === "masterdata" || stored === "recycle" || !stored) ? "routing" : stored;
+    return (stored === "masterdata" || stored === "recycle" || !stored) ? "routing" : stored;
   });
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -412,6 +413,12 @@ export default function Admin() {
               Condition Builder
             </button>
             <button
+              onClick={() => setActiveTab("checklists")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "checklists" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Checklist Matrix
+            </button>
+            <button
               onClick={() => setActiveTab("templates")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
@@ -558,6 +565,11 @@ export default function Admin() {
         {/* --- ROUTING TAB CONTENT --- */}
         {activeTab === "routing" && (
           <FlowBuilder users={allUsers} />
+        )}
+
+        {/* --- CHECKLIST MATRIX TAB CONTENT --- */}
+        {activeTab === "checklists" && (
+          <ChecklistConditionBuilder />
         )}
 
     {/* --- TEMPLATES TAB CONTENT --- */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, CornerDownRight, Search, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, CornerDownRight, Search, AlertTriangle, Folder } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
 export default function ConditionBuilder({ rules, setRules, setHasChanges, handleDeleteRuleLocal }) {
@@ -13,6 +13,48 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
+  const [valuePickerModal, setValuePickerModal] = useState(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [customValInput, setCustomValInput] = useState('');
+  const [showMasterOptions, setShowMasterOptions] = useState(false);
+
+  const DEFAULT_CONDITION_FIELDS = [
+    { id: 'Division', label: 'Division / Company' },
+    { id: 'Category', label: 'Category / Expense Type' },
+    { id: 'Cost Center', label: 'Cost Center / Dept' },
+    { id: 'Branch', label: 'Branch / Plant Location' },
+    { id: 'Invoice Amount (Total)', label: 'Invoice Amount (Total)' },
+    { id: 'Document Type', label: 'Document Type' },
+    { id: 'Vendor Name', label: 'Vendor Name' },
+    { id: 'Tax Amount', label: 'Tax Amount' },
+    { id: 'Payment Mode', label: 'Payment Mode' },
+    { id: 'GSTIN', label: 'Vendor GSTIN' },
+    { id: 'PO Number', label: 'PO / Order Number' }
+  ];
+
+  const [availableFields, setAvailableFields] = useState(() => {
+    try {
+      const saved = localStorage.getItem("docuflow_custom_condition_fields");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const existingIds = new Set(DEFAULT_CONDITION_FIELDS.map(f => f.id));
+        const extra = parsed.filter(p => !existingIds.has(p.id));
+        return [...DEFAULT_CONDITION_FIELDS, ...extra];
+      }
+    } catch(e) {}
+    return DEFAULT_CONDITION_FIELDS;
+  });
+  const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+  const [newFieldNameInput, setNewFieldNameInput] = useState('');
+  const [addFieldTargetIdx, setAddFieldTargetIdx] = useState(null);
+
+  const getFieldMasterOptions = (fieldName) => {
+    if (fieldName === 'Cost Center') return ['ALL', ...(matrixOptions?.cost_centers || [])];
+    if (fieldName === 'Category') return ['ALL', ...(matrixOptions?.categories || [])];
+    if (fieldName === 'Branch' || fieldName === 'Plant') return ['ALL', ...(matrixOptions?.branches || [])];
+    if (fieldName === 'Division') return ['ALL', ...(matrixOptions?.divisions || [])];
+    return [];
+  };
 
   const handleAddCategory = () => {
     setShowAddModal(true);
@@ -544,12 +586,33 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-4 gap-3 items-end">
-                    <div className="col-span-1">
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Field <span className="text-rose-500">*</span></label>
+                  <div className="flex flex-col md:flex-row md:items-start gap-3 w-full">
+                    {/* Field Selector */}
+                    <div className="w-full md:w-52 shrink-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">Field <span className="text-rose-500">*</span></label>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setAddFieldTargetIdx(idx);
+                            setNewFieldNameInput('');
+                            setShowAddFieldModal(true);
+                          }}
+                          className="text-[9px] font-bold text-blue-600 hover:underline cursor-pointer"
+                          title="Add a custom field"
+                        >
+                          + New Field
+                        </button>
+                      </div>
                       <select 
                         value={c.field === 'Plant' ? 'Branch' : c.field}
                         onChange={(e) => {
+                          if (e.target.value === '__ADD_NEW_FIELD__') {
+                            setAddFieldTargetIdx(idx);
+                            setNewFieldNameInput('');
+                            setShowAddFieldModal(true);
+                            return;
+                          }
                           const newC = [...parsedJson.conditions];
                           newC[idx].field = e.target.value;
                           if (e.target.value === 'Division') {
@@ -563,27 +626,26 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                             newC[idx].value = 'TN-SIVAKASI';
                           } else if (e.target.value === 'Cost Center') {
                             newC[idx].operator = 'contains any of';
-                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance';
+                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE';
                           }
                           updateJson({ conditions: newC });
                         }}
-                        className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none bg-white font-semibold text-slate-800 focus:border-blue-500 shadow-2xs cursor-pointer"
                       >
-                        <option value="Division">Division (Company: VCC, ACC, ENES)</option>
-                        <option value="Branch">Branch / Plant (e.g. TN-SIVAKASI, Sulur, HQ)</option>
-                        <option value="Category">Category (Document Type / Expense)</option>
-                        <option value="Cost Center">Cost Center (Branch / Cost Code)</option>
-                        <option value="Invoice Amount (Total)">Invoice Amount (Total)</option>
-                        <option value="Amount">Amount</option>
-                        <option value="Tax Amount">Tax Amount</option>
-                        <option value="Vendor Type">Vendor Type</option>
-                        <option value="Vendor Name">Vendor Name</option>
-                        <option value="Department">Department</option>
-                        <option value="Product Line Items">Product Line Items</option>
+                        <optgroup label="Available Fields">
+                          {availableFields.map(f => (
+                            <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Custom Actions">
+                          <option value="__ADD_NEW_FIELD__">➕ + Add Custom Field...</option>
+                        </optgroup>
                       </select>
                     </div>
-                    <div className="col-span-1">
-                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Operator <span className="text-rose-500">*</span></label>
+
+                    {/* Operator Selector */}
+                    <div className="w-full md:w-44 shrink-0">
+                      <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">Operator <span className="text-rose-500">*</span></label>
                       <select 
                         value={getNormalizedOp(c.operator)}
                         onChange={(e) => {
@@ -591,7 +653,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                           newC[idx].operator = e.target.value;
                           updateJson({ conditions: newC });
                         }}
-                        className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium"
+                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none bg-white font-semibold text-slate-800 focus:border-blue-500 shadow-2xs"
                       >
                         <option value="equals">Equals (=)</option>
                         <option value="contains any of">Contains Any of (OR)</option>
@@ -601,131 +663,98 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         <option value="lt">Less Than (&lt;)</option>
                       </select>
                     </div>
-                    <div className="col-span-1">
+
+                    {/* Value Field with Popup Trigger */}
+                    <div className="flex-1 min-w-0 w-full">
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          Value <span className="text-rose-500">*</span>
+                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                          Value / Target Match <span className="text-rose-500">*</span>
                         </label>
-                        {c.field === 'Cost Center' && (
+                        {['Cost Center', 'Category', 'Branch', 'Plant', 'Division'].includes(c.field) && (
                           <button 
                             type="button" 
                             onClick={() => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].operator = 'Contains Any of';
-                              newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance, ORBITO BRAND PLOTTER MDL1512IJ, REFRIGERATOR, WASHING MACHINE, ACC WAREHOUSE BUILDING -NEW, BLITZ NUMBRING MACHINE, GARDEN EQUIPMENTS, IT-HARDWARE, IT-SOFTWARE, PAD PRINTING MACHINE-INKCUPS, AUTOMATED KERCHIEF HEMMING MCN, CCTV EQUIPMENTS, TELEVISION, AUTO PACKAGING SYSTEM CONVEYOR, ROOTS SWEEP MACHINE';
-                              updateJson({ conditions: newC });
+                              const items = c.value ? c.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              setValuePickerModal({
+                                conditionIndex: idx,
+                                field: c.field,
+                                selectedItems: items
+                              });
+                              setPickerSearch('');
+                              setCustomValInput('');
                             }}
-                            className="text-[8px] font-bold text-blue-600 hover:underline"
-                            title="Populate all 17 Excel SD Cost Centers"
+                            className="inline-flex items-center gap-1 text-[10px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200 transition-colors cursor-pointer"
+                            title={`Open Selection Popup for ${c.field}`}
                           >
-                            + 17 SD Cost Centers
-                          </button>
-                        )}
-                        {(c.field === 'Plant' || c.field === 'Branch') && (
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].operator = 'Contains Any of';
-                              newC[idx].value = 'TN-SIVAKASI, TN-NAGERCOIL, TN-UDUMALPET, TN-CHN-CHROMPET';
-                              updateJson({ conditions: newC });
-                            }}
-                            className="text-[8px] font-bold text-blue-600 hover:underline"
-                            title="Populate SR10 Regional Branches"
-                          >
-                            + SR10 Branches
+                            <Edit2 className="h-2.5 w-2.5" /> Select / Edit Popup
                           </button>
                         )}
                       </div>
 
-                      {c.field === 'Division' ? (
-                        <div className="space-y-1">
+                      <div className="space-y-1.5">
+                        {['Cost Center', 'Category', 'Branch', 'Plant', 'Division'].includes(c.field) ? (
+                          <div 
+                            onClick={() => {
+                              const items = c.value ? c.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              setValuePickerModal({
+                                conditionIndex: idx,
+                                field: c.field,
+                                selectedItems: items
+                              });
+                              setPickerSearch('');
+                              setCustomValInput('');
+                            }}
+                            className="w-full text-xs p-2.5 border border-slate-200 hover:border-blue-400 bg-slate-50/70 hover:bg-white rounded-lg cursor-pointer transition-all flex items-center justify-between gap-2 shadow-2xs group/box"
+                          >
+                            <div className="flex-1 truncate">
+                              {c.value ? (
+                                <span className="font-bold text-slate-900">
+                                  {c.value.includes(',') ? (
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded">
+                                        {c.value.split(',').length} Selected
+                                      </span>
+                                      <span className="truncate">{c.value}</span>
+                                    </span>
+                                  ) : (
+                                    c.value
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-medium italic">Click to select {c.field}...</span>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-[10px] font-bold text-blue-600 group-hover/box:underline">
+                              Edit ➔
+                            </span>
+                          </div>
+                        ) : (
                           <input 
-                            list="divisions-list"
                             value={c.value}
                             onChange={(e) => {
                               const newC = [...parsedJson.conditions];
                               newC[idx].value = e.target.value;
                               updateJson({ conditions: newC });
                             }}
-                            placeholder="Select or type Division (e.g. VCC, ACC, ACM, ATC, ALL)..."
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
+                            placeholder="Enter target value..."
+                            className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 bg-white focus:border-blue-500 shadow-2xs"
                           />
-                        </div>
-                      ) : c.field === 'Category' ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="categories-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder="Select or type Category (e.g. ACCESSORIES - COMPUTER, COMPUTER, MOBILE PHONE)..."
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-bold text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : (c.field === 'Plant' || c.field === 'Branch') ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="branches-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder={c.operator === 'Contains Any of' ? "e.g. ANTS, ATITHYA-EXCISE, MKT_MDU, TN-SIVAKASI..." : "Select or type Branch (e.g. ANTS, MKT_MDU, ALL)..."}
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : c.field === 'Cost Center' ? (
-                        <div className="space-y-1">
-                          <input 
-                            list="cost-centers-list"
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder={c.operator === 'Contains Any of' ? "e.g. BATTERY VEHICLE, CANTEEN MAINTENANCE, Office Maintenance..." : "Select or type Cost Center..."}
-                            className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium text-slate-800 bg-white"
-                          />
-                        </div>
-                      ) : (
-                        <input 
-                          value={c.value}
-                          onChange={(e) => {
-                            const newC = [...parsedJson.conditions];
-                            newC[idx].value = e.target.value;
-                            updateJson({ conditions: newC });
-                          }}
-                          placeholder={c.operator === 'Contains Any of' ? "Enter comma-separated values..." : "Enter value..."}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none font-medium"
-                        />
-                      )}
+                        )}
+                      </div>
                     </div>
-                    <div className="col-span-1 flex gap-2">
-                      {c.field && c.field.includes('Amount') && (
-                        <div className="flex-1">
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Currency</label>
-                          <select className="w-full text-xs p-2 border border-slate-200 rounded-md outline-none bg-white font-medium">
-                            <option>INR - Indian Rupee</option>
-                            <option>USD - US Dollar</option>
-                          </select>
-                        </div>
-                      )}
+
+                    {/* Delete Condition Button */}
+                    <div className="shrink-0 self-end md:self-center pt-2">
                       <button 
                         type="button" 
                         onClick={() => {
                           const newC = parsedJson.conditions.filter((_, i) => i !== idx);
                           updateJson({ conditions: newC });
                         }}
-                        className="p-2 border border-rose-200 text-rose-500 rounded-md hover:bg-rose-50 mt-4 transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-2.5 border border-rose-200 text-rose-500 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shadow-2xs"
+                        title="Delete this condition"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -751,23 +780,6 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                   title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
                 >
                   <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
-                </button>
-
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const matrixConditions = [
-                      { field: 'Division', operator: 'Equals', value: 'ACC', logicalOperator: 'AND' },
-                      { field: 'Category', operator: 'Equals', value: 'ACCESSORIES - COMPUTER', logicalOperator: 'AND' },
-                      { field: 'Cost Center', operator: 'Equals', value: 'BATTERY VEHICLE', logicalOperator: 'AND' },
-                      { field: 'Plant', operator: 'Equals', value: 'ANTS', logicalOperator: 'AND' }
-                    ];
-                    updateJson({ conditions: matrixConditions, condition_type: 'Combination Condition' });
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-300 text-blue-700 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-100 cursor-pointer"
-                  title="Generate standard 4-Point SD Condition Matrix: Division + Category + Cost Center + Branch"
-                >
-                  <Network className="h-3 w-3 text-blue-600" /> + 4-Point SD Matrix (Division + Category + Cost Center + Branch)
                 </button>
               </div>
 
@@ -799,19 +811,10 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                     className="w-full text-xs px-2 py-1.5 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors outline-none bg-white font-medium focus:border-emerald-400"
                   >
                     <option value="">-- Select Workflow Profile --</option>
-                    {workflows.map(wf => (
-                      <option key={wf.profile_name} value={wf.profile_name}>{wf.profile_name}</option>
+                    {workflows.map((w, wIdx) => (
+                      <option key={w.id || wIdx} value={w.profile_name}>{w.profile_name}</option>
                     ))}
                   </select>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 bg-rose-50/50 p-2 rounded-lg border border-rose-100 opacity-60">
-                <div className="w-24 shrink-0">
-                  <span className="text-[10px] font-black text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">If Condition is False</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] font-medium text-slate-500 italic">Evaluates the next rule in the priority list automatically.</p>
                 </div>
               </div>
             </div>
@@ -821,75 +824,75 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
         {/* RIGHT COLUMN: Summary & Preview */}
         <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-6">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Condition Summary</h3>
-            <div className="space-y-3 mb-4">
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Name</p>
-                <p className="text-xs font-bold text-slate-800">{editingRule.rule_name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Evaluate On</p>
-                <p className="text-xs font-bold text-slate-800">{parsedJson.evaluate_on || '-'}</p>
-              </div>
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Type</p>
-                <p className="text-xs font-bold text-slate-800">{parsedJson.condition_type || '-'}</p>
-              </div>
+          <div className="space-y-3 mb-4">
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Name</p>
+              <p className="text-xs font-bold text-slate-800">{editingRule.rule_name || '-'}</p>
             </div>
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Evaluate On</p>
+              <p className="text-xs font-bold text-slate-800">{parsedJson.evaluate_on || '-'}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Type</p>
+              <p className="text-xs font-bold text-slate-800">{parsedJson.condition_type || '-'}</p>
+            </div>
+          </div>
 
-            <div className="border-t border-slate-100 pt-3">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Condition Preview</h3>
+          <div className="border-t border-slate-100 pt-3">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Condition Preview</h3>
+            
+            <div className="flex flex-col items-center">
+              {/* Condition Box */}
+              <div className="w-full bg-white border border-slate-200/60 rounded-lg p-2 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.02)] relative z-10">
+                <div className="absolute -top-2 -left-2 h-4 w-4 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded text-[9px] font-black flex items-center justify-center">IF</div>
+                <div className="text-center">
+                  {(parsedJson.conditions || []).map((c, i) => (
+                    <div key={i}>
+                      {i > 0 && <div className="text-[9px] font-black text-blue-600 my-1">{c.logicalOperator}</div>}
+                      <p className="text-xs font-medium text-slate-500">{c.field}</p>
+                      <p className="text-xs font-bold text-slate-700">{c.operator} {c.value}</p>
+                    </div>
+                  ))}
+                  {(!parsedJson.conditions || parsedJson.conditions.length === 0) && (
+                    <p className="text-xs italic text-slate-400">No conditions defined</p>
+                  )}
+                </div>
+              </div>
               
-              <div className="flex flex-col items-center">
-                {/* Condition Box */}
-                <div className="w-full bg-white border border-slate-200/60 rounded-lg p-2 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.02)] relative z-10">
-                  <div className="absolute -top-2 -left-2 h-4 w-4 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded text-[9px] font-black flex items-center justify-center">IF</div>
-                  <div className="text-center">
-                    {(parsedJson.conditions || []).map((c, i) => (
-                      <div key={i}>
-                        {i > 0 && <div className="text-[9px] font-black text-blue-600 my-1">{c.logicalOperator}</div>}
-                        <p className="text-xs font-medium text-slate-500">{c.field}</p>
-                        <p className="text-xs font-bold text-slate-700">{c.operator} {c.value}</p>
-                      </div>
-                    ))}
-                    {(!parsedJson.conditions || parsedJson.conditions.length === 0) && (
-                      <p className="text-xs italic text-slate-400">No conditions defined</p>
-                    )}
+              <div className="h-3 w-px bg-slate-300"></div>
+              <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
+              
+              {/* True Path */}
+              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 shadow-sm relative mt-1.5">
+                <span className="absolute -top-2.5 left-2 bg-emerald-100 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded">THEN (True)</span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <CornerDownRight className="h-3 w-3 text-emerald-500" />
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{editingRule.target_workflow_id || 'Unassigned'}</p>
+                    <p className="text-[9px] font-medium text-slate-500">Trigger Workflow Profile</p>
                   </div>
                 </div>
-                
-                <div className="h-3 w-px bg-slate-300"></div>
-                <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
-                
-                {/* True Path */}
-                <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 shadow-sm relative mt-1.5">
-                  <span className="absolute -top-2.5 left-2 bg-emerald-100 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded">THEN (True)</span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <CornerDownRight className="h-3 w-3 text-emerald-500" />
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">{editingRule.target_workflow_id || 'Unassigned'}</p>
-                      <p className="text-[9px] font-medium text-slate-500">Trigger Workflow Profile</p>
-                    </div>
-                  </div>
-                </div>
+              </div>
 
-                <div className="h-3 w-px bg-slate-300"></div>
-                <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
-                
-                {/* False Path */}
-                <div className="w-full bg-rose-50 border border-rose-200 rounded-lg p-2 shadow-sm relative mt-1.5">
-                  <span className="absolute -top-2.5 left-2 bg-rose-100 text-rose-700 text-[9px] font-black px-1.5 py-0.5 rounded">ELSE (False)</span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <CornerDownRight className="h-3 w-3 text-rose-500" />
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">Next Priority Rule</p>
-                      <p className="text-[9px] font-medium text-slate-500">Continue evaluation</p>
-                    </div>
+              <div className="h-3 w-px bg-slate-300"></div>
+              <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
+              
+              {/* False Path */}
+              <div className="w-full bg-rose-50 border border-rose-200 rounded-lg p-2 shadow-sm relative mt-1.5">
+                <span className="absolute -top-2.5 left-2 bg-rose-100 text-rose-700 text-[9px] font-black px-1.5 py-0.5 rounded">ELSE (False)</span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <CornerDownRight className="h-3 w-3 text-rose-500" />
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Next Priority Rule</p>
+                    <p className="text-[9px] font-medium text-slate-500">Continue evaluation</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
         {/* Datalists for Excel Matrix Auto-completion */}
         <datalist id="divisions-list">
@@ -919,6 +922,314 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
             <option key={i} value={br} />
           ))}
         </datalist>
+
+        {/* MODAL POPUP FOR SELECTING / EDITING VALUES */}
+        {valuePickerModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+              {/* Modal Header */}
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <span>Select & Edit {valuePickerModal.field}</span>
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                      {valuePickerModal.selectedItems.length} Selected
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Check existing master options or type below to add custom values.</p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setValuePickerModal(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 overflow-y-auto space-y-3 flex-1">
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input 
+                    type="text"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder={`Search ${valuePickerModal.field} master options...`}
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none bg-slate-50 focus:bg-white focus:border-blue-500 font-medium shadow-2xs"
+                  />
+                </div>
+
+                {/* Add Custom Value Input */}
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={customValInput}
+                    onChange={(e) => setCustomValInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const clean = customValInput.trim();
+                        if (clean && !valuePickerModal.selectedItems.includes(clean)) {
+                          setValuePickerModal({
+                            ...valuePickerModal,
+                            selectedItems: [...valuePickerModal.selectedItems, clean]
+                          });
+                          setCustomValInput('');
+                        }
+                      }
+                    }}
+                    placeholder={`Type custom ${valuePickerModal.field} name and click Add...`}
+                    className="flex-1 text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium"
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const clean = customValInput.trim();
+                      if (clean && !valuePickerModal.selectedItems.includes(clean)) {
+                        setValuePickerModal({
+                          ...valuePickerModal,
+                          selectedItems: [...valuePickerModal.selectedItems, clean]
+                        });
+                        setCustomValInput('');
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-blue-600 text-white font-bold text-xs rounded-lg hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {/* Currently Selected Badges */}
+                {valuePickerModal.selectedItems.length > 0 && (
+                  <div className="space-y-1.5 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-blue-900">
+                      <span>Selected Items ({valuePickerModal.selectedItems.length})</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setValuePickerModal({ ...valuePickerModal, selectedItems: [] })}
+                        className="text-rose-500 hover:underline cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {valuePickerModal.selectedItems.map((item, itIdx) => (
+                        <span 
+                          key={itIdx}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-blue-200 text-blue-900 text-[11px] font-bold rounded-md shadow-2xs"
+                        >
+                          <span>{item}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              setValuePickerModal({
+                                ...valuePickerModal,
+                                selectedItems: valuePickerModal.selectedItems.filter((_, i) => i !== itIdx)
+                              });
+                            }}
+                            className="text-blue-400 hover:text-rose-600 font-black cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Master Options Checklist (Collapsible & Hidden by Default) */}
+                {(() => {
+                  const masterList = getFieldMasterOptions(valuePickerModal.field);
+                  const filteredMaster = masterList.filter(opt => !pickerSearch || opt.toLowerCase().includes(pickerSearch.toLowerCase()));
+                  const isVisible = showMasterOptions || Boolean(pickerSearch.trim());
+
+                  return (
+                    <div className="space-y-2">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowMasterOptions(!showMasterOptions)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Folder className="h-3.5 w-3.5 text-blue-600" />
+                          <span>{isVisible ? `Hide Master ${valuePickerModal.field} Options` : `Browse Master ${valuePickerModal.field} Options (${filteredMaster.length})`}</span>
+                        </div>
+                        <span className="text-[10px] text-blue-600 font-extrabold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          {isVisible ? "▲ Hide Options" : "▼ Click to View / Check"}
+                        </span>
+                      </button>
+
+                      {isVisible && (
+                        <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-52 overflow-y-auto bg-white custom-scrollbar shadow-inner animate-in fade-in duration-150">
+                          {filteredMaster.length > 0 ? (
+                            filteredMaster.map((opt, oIdx) => {
+                              const isSelected = valuePickerModal.selectedItems.includes(opt);
+                              return (
+                                <label 
+                                  key={oIdx}
+                                  className={`flex items-center justify-between px-3 py-2 text-xs font-medium cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/80 text-blue-900 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
+                                >
+                                  <span className="truncate mr-2">{opt}</span>
+                                  <input 
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      if (isSelected) {
+                                        setValuePickerModal({
+                                          ...valuePickerModal,
+                                          selectedItems: valuePickerModal.selectedItems.filter(x => x !== opt)
+                                        });
+                                      } else {
+                                        setValuePickerModal({
+                                          ...valuePickerModal,
+                                          selectedItems: [...valuePickerModal.selectedItems, opt]
+                                        });
+                                      }
+                                    }}
+                                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                  />
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <div className="p-4 text-center text-xs text-slate-500">
+                              No master option matches "<strong>{pickerSearch}</strong>".
+                              <div className="mt-1 font-bold text-blue-600">
+                                Type above and click "+ Add" to add it!
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setValuePickerModal(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const newC = [...parsedJson.conditions];
+                    const selectedStr = valuePickerModal.selectedItems.join(', ');
+                    newC[valuePickerModal.conditionIndex].value = selectedStr;
+                    if (valuePickerModal.selectedItems.length > 1 && newC[valuePickerModal.conditionIndex].operator === 'equals') {
+                      newC[valuePickerModal.conditionIndex].operator = 'contains any of';
+                    }
+                    updateJson({ conditions: newC });
+                    setValuePickerModal(null);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
+                >
+                  Apply ({valuePickerModal.selectedItems.length} Selected)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ADD CUSTOM FIELD MODAL POPUP */}
+        {showAddFieldModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h3 className="text-sm font-black text-slate-800">Add Custom Condition Field</h3>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddFieldModal(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                    Field Name / Property <span className="text-rose-500">*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    autoFocus
+                    value={newFieldNameInput}
+                    onChange={e => setNewFieldNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const clean = newFieldNameInput.trim();
+                        if (!clean) return;
+                        const newFieldObj = { id: clean, label: clean };
+                        if (!availableFields.some(f => f.id.toLowerCase() === clean.toLowerCase())) {
+                          const updated = [...availableFields, newFieldObj];
+                          setAvailableFields(updated);
+                          try {
+                            localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
+                          } catch(err) {}
+                        }
+                        if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
+                          const newC = [...parsedJson.conditions];
+                          newC[addFieldTargetIdx].field = clean;
+                          newC[addFieldTargetIdx].value = '';
+                          updateJson({ conditions: newC });
+                        }
+                        setShowAddFieldModal(false);
+                        setNewFieldNameInput('');
+                      }
+                    }}
+                    placeholder="e.g. Project Code, Sub-Category, GSTIN, Approval Level..."
+                    className="w-full text-xs px-3 py-2.5 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-semibold text-slate-800"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">This field will be available across all condition rules.</p>
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAddFieldModal(false)}
+                    className="px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="button"
+                    disabled={!newFieldNameInput.trim()}
+                    onClick={() => {
+                      const clean = newFieldNameInput.trim();
+                      if (!clean) return;
+                      const newFieldObj = { id: clean, label: clean };
+                      if (!availableFields.some(f => f.id.toLowerCase() === clean.toLowerCase())) {
+                        const updated = [...availableFields, newFieldObj];
+                        setAvailableFields(updated);
+                        try {
+                          localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
+                        } catch(err) {}
+                      }
+                      if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
+                        const newC = [...parsedJson.conditions];
+                        newC[addFieldTargetIdx].field = clean;
+                        newC[addFieldTargetIdx].value = '';
+                        updateJson({ conditions: newC });
+                      }
+                      setShowAddFieldModal(false);
+                      setNewFieldNameInput('');
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-sm transition cursor-pointer"
+                  >
+                    Add Field
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
   );
 }

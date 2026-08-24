@@ -179,6 +179,8 @@ class WorkflowStepSchema(BaseModel):
     action_required: str = "Approve"
     permissions: str = "Approve / Reject"
     sla_hours: int = 48
+    checklist_items: Optional[List[str]] = []
+    checklist_json: Optional[str] = None
 
     class Config:
         from_attributes = True

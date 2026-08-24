@@ -35,6 +35,8 @@
     ]
   },
   "dependencies": {
+    "@esbuild/win32-x64": "^0.28.2",
+    "@rollup/rollup-win32-x64-msvc": "^4.62.5",
     "lucide-react": "^1.30.0",
     "pdfjs-dist": "^6.2.108",
     "playwright": "^1.61.1",

@@ -1,16 +1,19 @@
 import datetime
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Numeric
+    Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Numeric, Index
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
 
+# =========================================================================
+# 1. USER & IDENTITY MANAGEMENT
+# =========================================================================
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_uid = Column(String(50), unique=True, index=True, nullable=True) # Auto-generated random UID (e.g. USR-782914)
+    user_uid = Column(String(50), unique=True, index=True, nullable=True) # e.g. USR-782914
     employee_id = Column(String(50), unique=True, index=True, nullable=False) # Unique Employee ID
     employee_name = Column(String(150), nullable=False) # Employee Full Name
     name = Column(String(150), nullable=False) # Alias for backward compatibility
@@ -21,7 +24,7 @@ class User(Base):
     # Department & Plant Assignment
     division = Column(String(100), default="VCC", index=True)
     department = Column(String(100), nullable=True)
-    plant = Column(String(100), nullable=True, index=True) # Assigned Branch/Plant (e.g. TN-SIVAKASI)
+    plant = Column(String(100), nullable=True, index=True) # Assigned Branch/Plant
     role = Column(String(100), default="employee", index=True) # admin, manager, finance_auditor, employee
     
     # Security & Password
@@ -32,7 +35,7 @@ class User(Base):
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
     
-    # MFA & OTP Security
+    # MFA & Security
     mfa_enabled = Column(Boolean, default=False)
     mfa_type = Column(String(50), default="EMAIL") # SMS, EMAIL, AUTHENTICATOR
     mfa_secret = Column(String(100), nullable=True)
@@ -41,73 +44,121 @@ class User(Base):
     # Audit Metadata
     created_by = Column(String(150), default="System Admin")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    created_on = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-class Invoice(Base):
+
+# =========================================================================
+# 2. UNIVERSAL DOCUMENT MASTER LEDGER
+# =========================================================================
+class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(String(100), primary_key=True, index=True) # e.g. "DOC-101" or string ID
-    doc_key = Column(String(100), index=True, nullable=True)     # Matching MS SQL DocTrans.DocKey
-    doc_num = Column(String(100), index=True, nullable=True)     # MS SQL DocTrans.DocNum
-    doc_date = Column(String(50), nullable=True)             # MS SQL DocTrans.DocDate
+    id = Column(String(100), primary_key=True, index=True) # e.g. "DOC-101"
+    doc_key = Column(String(100), index=True, nullable=True)     # ERP DocKey
+    doc_num = Column(String(100), index=True, nullable=True)     # ERP DocNum
+    doc_date = Column(String(50), nullable=True)                 # ERP DocDate
     
-    # Billing & Financials
-    vendor_name = Column(String(250), nullable=True)         # MS SQL DocTrans.CardName
-    vendor_code = Column(String(100), nullable=True, index=True)         # MS SQL DocTrans.CardCode
-    vendor_gstin = Column(String(50), nullable=True)         # MS SQL DocTrans.GSTIN
-    invoice_number = Column(String(150), nullable=True, index=True)      # MS SQL DocTrans.DocRefNo
+    # External / Party Reference & Billing
+    party_name = Column(String(250), nullable=True, index=True)  # Vendor / Customer / Employee Name
+    party_code = Column(String(100), nullable=True, index=True)  # ERP CardCode
+    party_tax_id = Column(String(50), nullable=True)             # GSTIN / Tax ID
+    
+    # Aliases for backward compatibility
+    vendor_name = Column(String(250), nullable=True)
+    vendor_code = Column(String(100), nullable=True, index=True)
+    vendor_gstin = Column(String(50), nullable=True)
+    invoice_number = Column(String(150), nullable=True, index=True) # Reference Number
     invoice_date = Column(String(50), nullable=True)
     po_number = Column(String(100), nullable=True, index=True)
-    amount = Column(Float, default=0.0)                      # MS SQL DocTrans.DocTotal
-    base_amount = Column(Float, default=0.0)
-    tax_amount = Column(Float, default=0.0)
+    
+    # Financials (Exact Numeric Decimal Precision)
+    amount = Column(Numeric(18, 2), default=0.0, nullable=False)
+    base_amount = Column(Numeric(18, 2), default=0.0, nullable=False)
+    tax_amount = Column(Numeric(18, 2), default=0.0, nullable=False)
+    cgst = Column(Numeric(18, 2), default=0.0, nullable=True)
+    sgst = Column(Numeric(18, 2), default=0.0, nullable=True)
+    igst = Column(Numeric(18, 2), default=0.0, nullable=True)
     currency = Column(String(20), default="INR")
     
     # Classification & Routing
-    document_type = Column(String(100), default="AP INVOICE")# MS SQL DocTrans.TransType / DocTypeID
-    division = Column(String(100), default="VCC", index=True)            # MS SQL DocTrans.CompanyCode
-    category = Column(String(200), nullable=True, index=True)            # MS SQL DocTrans.Category
+    document_type = Column(String(100), default="AP INVOICE", index=True) # E-VOUCHER, AP INVOICE, DEBIT NOTE, CAPEX
+    division = Column(String(100), default="VCC", index=True)             # Company Code
+    category = Column(String(200), nullable=True, index=True)             # Operational Category
     cost_center = Column(String(200), nullable=True, index=True)
-    plant = Column(String(200), nullable=True, index=True)               # Branch / Location
+    plant = Column(String(200), nullable=True, index=True)                # Branch / Plant Location
     payment_terms = Column(String(100), default="Net 30")
+    pay_mode = Column(String(20), default="BANK", nullable=True)
     
     # Workflow Progression
-    status = Column(String(50), default="Pending Approval", index=True)  # Pending Approval, Approved, Rejected, Hold, Settled
+    status = Column(String(50), default="Pending Approval", index=True)   # Pending Approval, Approved, Rejected, Hold
     current_stage = Column(Integer, default=1)
     total_stages = Column(Integer, default=2)
-    assigned_approver = Column(String(255), nullable=True, index=True)   # MS SQL DocTrans.WFAssignedToUserIDs
+    assigned_approver = Column(String(500), nullable=True, index=True)    # Active Approver Pool / User IDs
     workflow_profile_id = Column(String(200), nullable=True, index=True)
     
     # Soft Deletes (Corporate Compliance)
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
     
-    # Checklists & Items JSON
-    checklist_state = Column(Text, nullable=True)            # JSON of 9-point verification state
-    line_items_json = Column(Text, nullable=True)            # Line items breakdown
-    custom_data = Column(Text, nullable=True)                # Additional OCR/ERP payload
-    file_url = Column(String(500), nullable=True)            # PDF file path
-    cgst = Column(Float, default=0.0, nullable=True)
-    sgst = Column(Float, default=0.0, nullable=True)
-    igst = Column(Float, default=0.0, nullable=True)
-
-    # New ERP fields
-    pi_indicator = Column(String(10), nullable=True)         # PIdicator
-    trans_type = Column(String(20), nullable=True)           # TransType
-    gstin = Column(String(15), nullable=True)                # GSTIN
-    doc_status = Column(Integer, default=0, nullable=True)   # Status (Doc Status)
-    doc_due_date = Column(String(50), nullable=True)         # DocDueDate (Due Date)
-    contact_person = Column(String(100), nullable=True)      # ContactPerson
-    pay_mode = Column(String(10), default="BANK", nullable=True)  # PayMode
-    link_column = Column(String(500), nullable=True)         # LinkColumn
-
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    # Attachments & Extended Payload
+    checklist_state = Column(Text, nullable=True)                         # Fallback JSON checklist cache
+    line_items_json = Column(Text, nullable=True)                         # Line items JSON
+    custom_data = Column(Text, nullable=True)                             # Extended OCR / ERP payload
+    file_url = Column(String(500), nullable=True)                         # Scanned PDF file URL
+    
+    # ERP Synchronization Metadata
+    pi_indicator = Column(String(10), nullable=True)
+    trans_type = Column(String(20), nullable=True)
+    gstin = Column(String(15), nullable=True)
+    doc_status = Column(Integer, default=0, nullable=True)
+    doc_due_date = Column(String(50), nullable=True)
+    contact_person = Column(String(100), nullable=True)
+    link_column = Column(String(500), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     # Relationships
-    line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
+    line_items = relationship("DocumentLineItem", back_populates="document", cascade="all, delete-orphan")
+    checklist_states = relationship("DocumentChecklistState", back_populates="document", cascade="all, delete-orphan")
+    approval_logs = relationship("DocumentApprovalLog", back_populates="document", cascade="all, delete-orphan")
 
+    # High-Performance Composite Indexes for 100+ daily documents
+    __table_args__ = (
+        Index('ix_documents_assigned_status', 'assigned_approver', 'status'),
+        Index('ix_documents_division_status', 'division', 'status'),
+        Index('ix_documents_created_status', 'created_at', 'status'),
+    )
+
+# Backward Compatibility Alias
+Invoice = Document
+
+
+# =========================================================================
+# 3. DOCUMENT LINE ITEMS (NORMALIZED BREAKDOWN)
+# =========================================================================
+class DocumentLineItem(Base):
+    __tablename__ = "document_line_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
+    description = Column(String(500), nullable=False)
+    quantity = Column(Numeric(12, 2), default=1.0)
+    unit_price = Column(Numeric(18, 2), default=0.0)
+    amount = Column(Numeric(18, 2), default=0.0)
+    item_code = Column(String(100), nullable=True)
+    warranty_text = Column(String(500), nullable=True)
+    serial_numbers = Column(String(1000), nullable=True)
+
+    document = relationship("Document", back_populates="line_items")
+
+# Backward Compatibility Alias
+InvoiceLineItem = DocumentLineItem
+
+
+# =========================================================================
+# 4. WORKFLOW PROFILES & STEP STAGES
+# =========================================================================
 class WorkflowProfile(Base):
     __tablename__ = "workflow_profiles"
 
@@ -119,20 +170,21 @@ class WorkflowProfile(Base):
     description = Column(Text, nullable=True)
     status = Column(String(50), default="Active")
     
-    # Execution Settings
+    # Execution Rules
     approval_threshold = Column(Integer, default=100)
     rejection_handling = Column(String(100), default="Return to Previous Step")
     reminder_interval_hours = Column(Integer, default=24)
     escalation_after_hours = Column(Integer, default=48)
     auto_escalation = Column(Boolean, default=False)
     
-    # Soft Deletes (Corporate Compliance)
+    # Soft Deletes
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     steps = relationship("WorkflowStepDefinition", back_populates="profile", cascade="all, delete-orphan")
+
 
 class WorkflowStepDefinition(Base):
     __tablename__ = "workflow_step_definitions"
@@ -142,15 +194,20 @@ class WorkflowStepDefinition(Base):
     stage_number = Column(Integer, nullable=False)
     step_name = Column(String(200), nullable=False)
     approver_type = Column(String(100), default="Approval Pool") # Approval Pool, Specific Employee, Role Based
-    approver_target = Column(String(500), nullable=True)         # Comma separated users or single user
+    approver_target = Column(String(500), nullable=True)         # Comma separated corporate usernames
     delegate_approver = Column(String(200), nullable=True)
     document_type = Column(String(100), default="AP INVOICE")
     action_required = Column(String(100), default="Approve")
     permissions = Column(String(200), default="Approve / Reject")
     sla_hours = Column(Integer, default=48)
+    checklist_json = Column(Text, nullable=True)                 # Stage-specific checklist items JSON
 
     profile = relationship("WorkflowProfile", back_populates="steps")
 
+
+# =========================================================================
+# 5. BUSINESS DECISION RULES (CONDITION MATRIX)
+# =========================================================================
 class BusinessRule(Base):
     __tablename__ = "business_rules"
 
@@ -159,44 +216,21 @@ class BusinessRule(Base):
     rule_category = Column(String(100), default="Vendor Payment Workflows")
     document_type = Column(String(100), default="AP INVOICE")
     priority = Column(Integer, default=10)
-    target_workflow_id = Column(String(200), nullable=False, index=True)     # profile_name of target workflow
-    conditions_json = Column(Text, nullable=False)               # JSON string of conditions array
+    target_workflow_id = Column(String(200), nullable=False, index=True) # profile_name of target workflow
+    conditions_json = Column(Text, nullable=False)                       # 4-point condition array JSON
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
     
-    # Soft Deletes (Corporate Compliance)
+    # Soft Deletes
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
-    user = Column(String(150), nullable=False, index=True)
-    action = Column(String(100), nullable=False)                # Approved, Rejected, Held, Sync, Created
-    stage = Column(String(100), nullable=True)
-    notes = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
-
-    invoice = relationship("Invoice")
-
-
-class SystemLog(Base):
-    __tablename__ = "system_logs"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True)
-    action = Column(String(150), nullable=False)
-    user = Column(String(150), default="System Engine")
-    
-    details = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
-
-    invoice = relationship("Invoice")
-
+# =========================================================================
+# 6. STAGE COMPLIANCE & CHECKLIST STATES
+# =========================================================================
 class ChecklistTemplate(Base):
     __tablename__ = "checklist_templates"
 
@@ -208,49 +242,101 @@ class ChecklistTemplate(Base):
     is_active = Column(Boolean, default=True)
     sequence_order = Column(Integer, default=1)
 
+
 class ChecklistRule(Base):
     __tablename__ = "checklist_rules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     rule_name = Column(String(200), nullable=False)
-    division = Column(String(100), nullable=True)         # Division/Company (e.g., 'VCC', 'ACM', 'ALL')
-    category = Column(String(200), nullable=True)         # Category name (e.g., 'Freight Charges', 'ALL')
-    branch = Column(String(200), nullable=True)           # Branch/Plant name (e.g., 'TN-OOTY', 'ALL')
-    workflow_profile = Column(String(200), nullable=True)  # Workflow Profile ID (e.g., 'VCC_DA_IA_FLOW')
-    stage_name = Column(String(200), nullable=False)      # Stage Name (e.g., 'Attachment Status', 'IA Approval')
-    item_text = Column(String(500), nullable=False)       # Single checklist verification requirement text
+    division = Column(String(100), nullable=True)         # Division/Company
+    category = Column(String(200), nullable=True)         # Category
+    branch = Column(String(200), nullable=True)           # Branch/Plant
+    workflow_profile = Column(String(200), nullable=True)  # Workflow Profile
+    stage_name = Column(String(200), nullable=False)      # Stage Name
+    item_text = Column(String(500), nullable=False)       # Verification Requirement
     is_mandatory = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
     sequence_order = Column(Integer, default=1)
 
-class InvoiceChecklistState(Base):
+
+class DocumentChecklistState(Base):
     __tablename__ = "document_checklist_states"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
-    stage_name = Column(String(200), nullable=False)
+    stage_name = Column(String(200), nullable=False, index=True)
     item_text = Column(String(500), nullable=False)
     is_checked = Column(Boolean, default=False)
     checked_by = Column(String(150), nullable=True)
     checked_at = Column(DateTime, nullable=True)
 
-    invoice = relationship("Invoice")
+    document = relationship("Document", back_populates="checklist_states")
 
-# Normalize Invoice Line Items (Option 3 for Reporting & Scale)
-class InvoiceLineItem(Base):
-    __tablename__ = "document_line_items"
+# Backward Compatibility Alias
+InvoiceChecklistState = DocumentChecklistState
+
+
+# =========================================================================
+# 7. LOG SEPARATION: USER ACCESS & SECURITY AUDIT LOGS
+# =========================================================================
+class UserAccessLog(Base):
+    __tablename__ = "user_access_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
-    description = Column(String(250), nullable=False)
-    quantity = Column(Float, default=1.0)
-    unit_price = Column(Float, default=0.0)
-    amount = Column(Float, default=0.0)
-    warranty_text = Column(String(500), nullable=True)
-    serial_numbers = Column(String(1000), nullable=True)
+    username = Column(String(150), nullable=False, index=True)
+    event_type = Column(String(50), nullable=False, index=True) # LOGIN_SUCCESS, LOGOUT, LOGIN_FAILED, MFA_VERIFIED, PASSWORD_CHANGED
+    status = Column(String(20), default="SUCCESS", nullable=False) # SUCCESS, FAILED, BLOCKED
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    failure_reason = Column(String(250), nullable=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
 
-    invoice = relationship("Invoice", back_populates="line_items")
 
+# =========================================================================
+# 8. LOG SEPARATION: DOCUMENT APPROVAL & STAGE AUDIT TRAIL
+# =========================================================================
+class DocumentApprovalLog(Base):
+    __tablename__ = "document_approval_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
+    user = Column(String(150), nullable=False, index=True)
+    action = Column(String(100), nullable=False) # STAGE_APPROVED, FINAL_APPROVED, REJECTED, SENT_BACK, ON_HOLD, CHECKLIST_SIGNED, SYSTEM_SYNC
+    stage = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    document = relationship("Document", back_populates="approval_logs")
+
+# Backward Compatibility Alias
+AuditLog = DocumentApprovalLog
+
+
+# =========================================================================
+# 9. LOG SEPARATION: SYSTEM & BACKGROUND ENGINE LOGS
+# =========================================================================
+class SystemEngineLog(Base):
+    __tablename__ = "system_engine_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    module_name = Column(String(100), default="System Engine", index=True)
+    invoice_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    action = Column(String(150), nullable=False)
+    user = Column(String(150), default="System Engine")
+    log_level = Column(String(20), default="INFO", index=True) # INFO, WARNING, ERROR, CRITICAL
+    details = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    document = relationship("Document")
+
+# Backward Compatibility Alias
+SystemLog = SystemEngineLog
+
+
+# =========================================================================
+# 10. RACI NOTIFICATIONS & IN-APP ALERTS
+# =========================================================================
 class NotificationRaciMatrix(Base):
     __tablename__ = "notification_raci_matrices"
 
@@ -264,11 +350,12 @@ class NotificationRaciMatrix(Base):
     title_template = Column(String(500), nullable=True)
     message_template = Column(Text, nullable=True)
 
+
 class NotificationProviderConfig(Base):
     __tablename__ = "notification_provider_configs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    smtp_server   = Column(String(200), nullable=False)  
+    smtp_server = Column(String(200), nullable=False)  
     port = Column(Integer, default=587)
     username = Column(String(200), nullable=True)
     encrypted_password = Column(String(200), nullable=True)
@@ -282,8 +369,8 @@ class InAppNotification(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     notification_id = Column(String(100), unique=True, index=True, default=lambda: f"NOTIF-{uuid.uuid4().hex[:8].upper()}")
     document_id = Column(String(100), index=True, nullable=False)
-    recipient_handle = Column(String(200), index=True, nullable=False) # username, employee_id, or email
-    notification_type = Column(String(50), default="PENDING_APPROVAL") # PENDING_APPROVAL, COMPLETED, REJECTED, SENT_BACK, CLARIFICATION
+    recipient_handle = Column(String(200), index=True, nullable=False)
+    notification_type = Column(String(50), default="PENDING_APPROVAL")
     title = Column(String(300), nullable=False)
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)

@@ -5,15 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
-from app.models import User, WorkflowProfile
+from app.models import User, WorkflowProfile, Invoice
 from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router
-from app import drop_orphan_tables
-
-# Drop orphan/wf_* tables on startup (runs once, idempotent)
-try:
-    drop_orphan_tables.run(engine)
-except Exception as _drop_err:
-    print(f"[Database] Drop orphan tables warning: {_drop_err}")
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -99,6 +92,11 @@ try:
                     conn.execute(text("ALTER TABLE workflow_profiles ADD is_deleted BIT NOT NULL DEFAULT 0;"))
                 if 'deleted_at' not in existing_cols_workflows:
                     conn.execute(text("ALTER TABLE workflow_profiles ADD deleted_at DATETIME NULL;"))
+
+                # Workflow step definitions table migrations
+                existing_cols_steps = [c['name'] for c in inspector.get_columns('workflow_step_definitions')]
+                if 'checklist_json' not in existing_cols_steps:
+                    conn.execute(text("ALTER TABLE workflow_step_definitions ADD checklist_json NVARCHAR(MAX) NULL;"))
                     
                 # Business rules table migrations
                 existing_cols_rules = [c['name'] for c in inspector.get_columns('business_rules')]
@@ -143,12 +141,12 @@ app = FastAPI(
 @app.on_event("startup")
 def startup_event():
     try:
-
         db = SessionLocal()
         user_count = db.query(User).count()
         wf_count = db.query(WorkflowProfile).count()
-        if user_count < 10 or wf_count == 0:
-            print(f"[Startup] Seeding complete dataset (Found {user_count} users, {wf_count} workflows)...")
+        inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
+        if user_count < 10 or wf_count == 0 or inv_count < 5:
+            print(f"[Startup] Seeding complete dataset (Found {user_count} users, {wf_count} workflows, {inv_count} invoices)...")
             from seed_excel import seed_database
             seed_database()
         db.close()
@@ -163,6 +161,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Enterprise Security Headers & Rate Limiting Middleware
+from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimiterMiddleware, max_auth_requests=15, window_seconds=60)
 
 # Mount uploads & stored_pdfs directory for PDF documents and attachments
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

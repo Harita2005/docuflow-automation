@@ -1,12 +1,63 @@
 import datetime
+import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule
-from app.schemas import WorkflowProfileSchema
+from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate, ChecklistRule
+from app.schemas import WorkflowProfileSchema, WorkflowStepSchema
 
 router = APIRouter(tags=["Workflow Administration"])
+
+def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profile_name: str) -> dict:
+    items: List[str] = []
+    if step.checklist_json:
+        try:
+            parsed = json.loads(step.checklist_json)
+            if isinstance(parsed, list):
+                items = [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            items = []
+    
+    if not items:
+        # Fallback to ChecklistTemplate
+        tpls = db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == profile_name,
+            ChecklistTemplate.stage_name.ilike(step.step_name.strip()),
+            ChecklistTemplate.is_active == True
+        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
+        for t in tpls:
+            if "," in t.item_text:
+                for sub in t.item_text.split(","):
+                    c = sub.strip()
+                    if c and c not in items:
+                        items.append(c)
+            else:
+                c = t.item_text.strip()
+                if c and c not in items:
+                    items.append(c)
+
+    if not items:
+        from app.routers.sync import generate_compliance_checklist_for_category
+        wf = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
+        items = generate_compliance_checklist_for_category(
+            wf.workflow_category if wf else None,
+            wf.workflow_type if wf else None
+        )
+
+    return {
+        "stage_number": step.stage_number,
+        "step_name": step.step_name,
+        "approver_type": step.approver_type,
+        "approver_target": step.approver_target,
+        "delegate_approver": step.delegate_approver,
+        "document_type": step.document_type,
+        "action_required": step.action_required,
+        "permissions": step.permissions,
+        "sla_hours": step.sla_hours,
+        "checklist_items": items,
+        "checklist_json": json.dumps(items)
+    }
 
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
@@ -14,9 +65,11 @@ def get_workflow_profiles(db: Session = Depends(get_db)):
     profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.id.asc()).all()
     result = []
     for p in profiles:
-        steps = db.query(WorkflowStepDefinition).filter(
+        raw_steps = db.query(WorkflowStepDefinition).filter(
             WorkflowStepDefinition.profile_name == p.profile_name
         ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        
+        steps = [format_step_with_checklist(db, st, p.profile_name) for st in raw_steps]
         
         p_dict = {
             "profile_name": p.profile_name,
@@ -79,7 +132,25 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
         )
         db.add(existing)
 
+    # Clean old ChecklistTemplate entries for this workflow
+    db.query(ChecklistTemplate).filter(
+        ChecklistTemplate.workflow_profile == payload.profile_name
+    ).delete()
+
     for step in payload.steps:
+        # Extract checklist items list
+        step_items = step.checklist_items or []
+        if not step_items and step.checklist_json:
+            try:
+                parsed = json.loads(step.checklist_json)
+                if isinstance(parsed, list):
+                    step_items = parsed
+            except Exception:
+                step_items = []
+        
+        step_items_clean = [str(it).strip() for it in step_items if str(it).strip()]
+        checklist_json_str = json.dumps(step_items_clean)
+
         step_obj = WorkflowStepDefinition(
             profile_name=payload.profile_name,
             stage_number=step.stage_number,
@@ -90,9 +161,45 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
             document_type=step.document_type,
             action_required=step.action_required,
             permissions=step.permissions,
-            sla_hours=step.sla_hours
+            sla_hours=step.sla_hours,
+            checklist_json=checklist_json_str
         )
         db.add(step_obj)
+
+        # Also populate ChecklistTemplate records for backward & fallback compatibility
+        for c_idx, c_text in enumerate(step_items_clean):
+            db.add(ChecklistTemplate(
+                workflow_profile=payload.profile_name,
+                stage_name=step.step_name,
+                item_text=c_text,
+                is_mandatory=True,
+                is_active=True,
+                sequence_order=c_idx + 1
+            ))
+
+        # Auto-sync into Checklist Matrix (ChecklistRule) referenced by workflow profile name
+        if step_items_clean:
+            combined_items_str = " || ".join(step_items_clean)
+            chk_rule = db.query(ChecklistRule).filter(
+                ChecklistRule.workflow_profile == payload.profile_name,
+                ChecklistRule.stage_name.ilike(step.step_name.strip())
+            ).first()
+            if chk_rule:
+                chk_rule.item_text = combined_items_str
+                chk_rule.is_active = True
+            else:
+                db.add(ChecklistRule(
+                    rule_name=f"Rule: {payload.profile_name} - {step.step_name}",
+                    division="ALL",
+                    category="ALL",
+                    branch="ALL",
+                    workflow_profile=payload.profile_name,
+                    stage_name=step.step_name,
+                    item_text=combined_items_str,
+                    is_mandatory=True,
+                    is_active=True,
+                    sequence_order=step.stage_number
+                ))
 
     db.commit()
     return {"success": True, "profile_name": payload.profile_name}
@@ -103,9 +210,11 @@ def get_single_workflow_profile(profile_name: str, db: Session = Depends(get_db)
     p = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).filter(WorkflowProfile.is_deleted == False).first()
     if not p:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    steps = db.query(WorkflowStepDefinition).filter(
+    raw_steps = db.query(WorkflowStepDefinition).filter(
         WorkflowStepDefinition.profile_name == p.profile_name
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    
+    steps = [format_step_with_checklist(db, st, p.profile_name) for st in raw_steps]
     return {
         "profile_name": p.profile_name,
         "workflow_code": p.workflow_code,
