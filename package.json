@@ -6,7 +6,7 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w frontend\" \"python backend/run.py\"",
+    "dev": "npx concurrently \"npm run dev -w frontend\" \"python backend/run.py\"",
     "dev:backend": "python backend/run.py",
     "dev:frontend": "npm run dev -w frontend",
     "install:all": "npm install",

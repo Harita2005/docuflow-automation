@@ -33,6 +33,7 @@ interface DashboardProps {
   onViewDocument: (docId: string) => void;
   currentUserRole?: string;
   currentUserEmail?: string;
+  currentUserUsername?: string;
   setCurrentView?: (view: string) => void;
   requireGRN?: boolean;
 }
@@ -44,6 +45,7 @@ export default function Dashboard({
   onViewDocument,
   currentUserRole = "ap_executive",
   currentUserEmail = "ap.executive@company.com",
+  currentUserUsername = "",
   setCurrentView,
   requireGRN = true
 }: DashboardProps) {
@@ -56,11 +58,30 @@ export default function Dashboard({
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [viewScope, setViewScope] = useState<'individual' | 'all'>(() => 
+    currentUserRole === 'admin' ? 'all' : 'individual'
+  );
   const itemsPerPage = 8;
 
-  if (loading || !stats) {
+  const isAssignedToMe = (d: DbInvoice): boolean => {
+    if (d.is_current_approver) return true;
+    if (!currentUserUsername && !currentUserEmail) return false;
+    const uHandle = (currentUserUsername || '').toLowerCase().trim();
+    const eHandle = (currentUserEmail || '').toLowerCase().trim();
+    const approverStr = (d.assigned_approver || '').toLowerCase();
+    const pool = approverStr.split(',').map(s => s.trim());
+    if (uHandle && (pool.includes(uHandle) || pool.some(p => p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && (pool.includes(eHandle) || pool.some(p => p.includes(eHandle)))) return true;
+    return false;
+  };
 
-  return (
+  // Base documents depending on individual vs all scope
+  const scopedDocs = (viewScope === 'individual' || currentUserRole !== 'admin')
+    ? documents.filter(d => isAssignedToMe(d) || !!d.is_current_approver || !!d.has_approved)
+    : documents;
+
+  if (loading || !stats) {
+    return (
       <div className="flex flex-col items-center justify-center py-24 min-h-[150px]">
         <Loader2 className="h-9 w-9 text-blue-600 animate-spin mb-1" />
         <p className="text-slate-500 font-semibold text-[10px] uppercase tracking-widest font-display">
@@ -72,7 +93,7 @@ export default function Dashboard({
 
   // Vendor Spend Chart Data
   const vendorMap: { [key: string]: number } = {};
-  documents.forEach((i) => {
+  scopedDocs.forEach((i) => {
     const v = i.vendor_name || 'Unknown';
     vendorMap[v] = (vendorMap[v] || 0) + Number(i.amount || 0);
   });
@@ -92,23 +113,100 @@ export default function Dashboard({
   };
 
   // Timeline activities feed
-  const recentInvoices = [...documents]
+  const recentInvoices = [...scopedDocs]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
 
-  const totalSpentVal = documents.reduce((acc, curr) => acc + curr.amount, 0);
+  const totalSpentVal = scopedDocs.reduce((acc, curr) => acc + curr.amount, 0);
 
-  // Dynamic Dashboard KPI Calculations
-  const pendingCount = documents.filter(d => !!d.is_current_approver).length;
-  const approvedCount = documents.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status)).length;
+  // Dynamic Dashboard KPI Calculations for Individual Assigned vs All
   const isRejectedStatus = (st: string) => {
     const s = (st || '').toLowerCase();
     return s.includes('reject') || s.includes('return') || s.includes('cancel') || s.includes('fail');
   };
-  const rejectedCount = documents.filter(d => isRejectedStatus(d.status)).length;
-  const onHoldCount = documents.filter(d => d.status === "On Hold").length;
-  const inProgressCount = documents.filter(d => 
-    !["Approved", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
+
+  const renderDashboardStatusBadge = (statusStr: string, workflowInst?: any) => {
+    const status = (statusStr || "Pending").trim();
+    const sLower = status.toLowerCase();
+
+    let label = status;
+    if (sLower.includes("approval") && workflowInst?.current_stage_index) {
+      const idx = workflowInst.current_stage_index;
+      label = `In Approval: ${idx}${idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th'} Stage`;
+    }
+
+    // Cancelled / Failed
+    if (sLower.includes("cancel") || sLower.includes("fail") || sLower.includes("void")) {
+      return (
+        <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+          <span className="h-1 w-1 rounded-full bg-rose-500" />
+          {label}
+        </span>
+      );
+    }
+
+    // Settled / Approved / Paid
+    if (["settled", "approved", "paid", "ready for payment"].some(s => sLower.includes(s))) {
+      return (
+        <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+          <span className="h-1 w-1 rounded-full bg-emerald-500" />
+          {label}
+        </span>
+      );
+    }
+
+    // Rejected / Returned / Sendback
+    if (sLower.includes("reject") || sLower.includes("return") || sLower.includes("send back")) {
+      return (
+        <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+          <span className="h-1 w-1 rounded-full bg-amber-500" />
+          {label}
+        </span>
+      );
+    }
+
+    // On Hold
+    if (sLower.includes("hold")) {
+      return (
+        <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+          <span className="h-1 w-1 rounded-full bg-purple-500" />
+          {label}
+        </span>
+      );
+    }
+
+    // Initiated / In Progress / Under Review
+    if (sLower.includes("initiat") || sLower.includes("progress") || sLower.includes("approval")) {
+      return (
+        <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+          <span className="h-1 w-1 rounded-full bg-amber-500" />
+          {label}
+        </span>
+      );
+    }
+
+    // Default Indigo
+    return (
+      <span className="font-extrabold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-3xs bg-indigo-50 text-indigo-700 border border-indigo-200">
+        {label}
+      </span>
+    );
+  };
+
+  const totalAssignedCount = (currentUserRole !== 'admin' || viewScope === 'individual')
+    ? scopedDocs.length
+    : (stats?.totalDocuments ?? documents.length);
+
+  const pendingCount = scopedDocs.filter(d => 
+    !!d.is_current_approver || 
+    (isAssignedToMe(d) && !["Approved", "Settled", "Paid", "Ready for Payment", "On Hold"].includes(d.status) && !isRejectedStatus(d.status))
+  ).length;
+
+  const approvedCount = scopedDocs.filter(d => ["Approved", "Settled", "Paid", "Ready for Payment"].includes(d.status)).length;
+  const rejectedCount = scopedDocs.filter(d => isRejectedStatus(d.status)).length;
+  const onHoldCount = scopedDocs.filter(d => d.status === "On Hold").length;
+  const inProgressCount = scopedDocs.filter(d => 
+    !["Approved", "Settled", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
     !isRejectedStatus(d.status) &&
     !d.is_current_approver
   ).length;
@@ -414,11 +512,11 @@ export default function Dashboard({
             >
               <span>All Documents</span>
               <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-md ${docTypeFilter === 'All' ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-500"}`}>
-                {documents.filter(matchesTimeFilter).length}
+                {scopedDocs.filter(matchesTimeFilter).length}
               </span>
             </button>
-            {Array.from(new Set(documents.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => {
-              const count = documents.filter(matchesTimeFilter).filter(d => (d.document_type || "").toUpperCase().trim() === type).length;
+            {Array.from(new Set(scopedDocs.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean))).map(type => {
+              const count = scopedDocs.filter(matchesTimeFilter).filter(d => (d.document_type || "").toUpperCase().trim() === type).length;
               const isActive = docTypeFilter === type;
               return (
                 <button
@@ -439,21 +537,24 @@ export default function Dashboard({
 
             <div className="flex flex-col gap-1 mt-1">
           {(() => {
-            let filteredDocs = documents;
+            let filteredDocs = scopedDocs;
             if (listFilter === 'all') {
               if (currentUserRole !== 'admin') {
                 filteredDocs = filteredDocs.filter(d => !!d.is_current_approver || !!d.has_approved || !!d.has_rejected || isRejectedStatus(d.status));
               }
             } else if (listFilter === 'pending') {
-              filteredDocs = filteredDocs.filter(d => !!d.is_current_approver);
+              filteredDocs = filteredDocs.filter(d => 
+                !!d.is_current_approver || 
+                (isAssignedToMe(d) && !["Approved", "Settled", "Paid", "Ready for Payment", "On Hold"].includes(d.status) && !isRejectedStatus(d.status))
+              );
             } else if (listFilter === 'inprogress') {
               filteredDocs = filteredDocs.filter(d => 
-                !["Approved", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
+                !["Approved", "Settled", "Paid", "Ready for Payment", "On Hold"].includes(d.status) &&
                 !isRejectedStatus(d.status) &&
                 !d.is_current_approver
               );
             } else if (listFilter === 'approved') {
-              filteredDocs = filteredDocs.filter(d => ["Approved", "Paid", "Ready for Payment"].includes(d.status));
+              filteredDocs = filteredDocs.filter(d => ["Approved", "Settled", "Paid", "Ready for Payment"].includes(d.status));
             } else if (listFilter === 'rejected') {
               filteredDocs = filteredDocs.filter(d => isRejectedStatus(d.status));
             } else if (listFilter === 'onhold') {
@@ -505,15 +606,7 @@ export default function Dashboard({
                               {doc.id} {doc.invoice_number ? `| ${doc.invoice_number}` : ""} {doc.invoice_date ? `• ${doc.invoice_date}` : doc.created_at ? `• ${String(doc.created_at).slice(0, 10)}` : ""}
                             </span>
                             <span className="text-slate-300">•</span>
-                            <span className={`font-bold uppercase tracking-widest px-1.5 py-0.5 text-[8px] rounded-[4px] shadow-sm ${doc.status.includes('Approval') ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                              {doc.status.includes("Approval") && doc.workflowInst?.current_stage_index 
-                                ? `In Approval: ${doc.workflowInst.current_stage_index}${
-                                    doc.workflowInst.current_stage_index === 1 ? 'st' :
-                                    doc.workflowInst.current_stage_index === 2 ? 'nd' :
-                                    doc.workflowInst.current_stage_index === 3 ? 'rd' : 'th'
-                                  } Stage` 
-                                : doc.status}
-                            </span>
+                            {renderDashboardStatusBadge(doc.status, doc.workflowInst)}
                           </div>
                         </div>
                       </div>

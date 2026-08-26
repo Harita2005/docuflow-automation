@@ -125,9 +125,7 @@ export default function Header({
       case "work-tracker": return "Work Tracker";
       case "upload": return "Upload Document";
       case "incoming": return "Document Repository";
-      case "goods-receipt": return "Gate Entry Verification";
       case "data-verification": return "Data Verification";
-      case "workflow-builder": return "Workflow Designer";
       case "approval-queue": return "Approval Queue";
       case "payment-readiness": return "Payment Readiness";
       case "reports": return "Reports & Spend Analytics";

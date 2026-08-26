@@ -59,3 +59,37 @@ def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
     db.delete(rule)
     db.commit()
     return {"success": True, "deleted_id": rule_id}
+
+@router.post("/api/admin/rules/simulate")
+def simulate_rule_routing(payload: dict, db: Session = Depends(get_db)):
+    """
+    Simulation sandbox for Policy Matrix rules.
+    Takes mock document attributes (division, plant, category, amount, etc.) and optional draft rules.
+    Returns the matched rule, target workflow, multi-stage approver pools, and condition trace.
+    """
+    from app.services.rules_engine import simulate_rule_evaluation
+    
+    mock_doc = {
+        "division": payload.get("division") or "VCC",
+        "plant": payload.get("plant") or payload.get("branch") or "TN-SIVAKASI",
+        "category": payload.get("category") or "PURCHASE",
+        "document_type": payload.get("document_type") or "AP INVOICE",
+        "amount": float(payload.get("amount") or 0.0),
+        "tax_amount": float(payload.get("tax_amount") or 0.0),
+        "vendor_name": payload.get("vendor_name") or "Test Vendor Enterprise",
+        "cost_center": payload.get("cost_center") or ""
+    }
+    
+    draft_rules = payload.get("draft_rules") or []
+    return simulate_rule_evaluation(db, mock_invoice=mock_doc, draft_rules=draft_rules)
+
+@router.post("/api/admin/rules/detect-conflicts")
+@router.get("/api/admin/rules/conflicts")
+def detect_conflicts_endpoint(payload: dict = None, db: Session = Depends(get_db)):
+    """
+    Detects duplicate condition signatures, priority ties, and shadowed rules across the Policy Matrix.
+    """
+    from app.services.rules_engine import detect_rule_conflicts
+    custom_rules = payload.get("rules") if payload else None
+    return detect_rule_conflicts(db, custom_rules=custom_rules)
+

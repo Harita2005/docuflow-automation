@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import datetime
+import logging
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
@@ -17,26 +18,34 @@ from app.schemas import (
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.ocr_service import extract_text_from_pdf
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/sync", tags=["Enterprise Data & Attachment Sync"])
 
 def generate_compliance_checklist_for_category(
     category: Optional[str], 
     doc_type: Optional[str], 
     division: Optional[str] = None, 
-    plant: Optional[str] = None
+    plant: Optional[str] = None,
+    document_id: Optional[str] = None
 ) -> List[str]:
     # --- BRANCH / DIVISION SPECIFIC CHECKLIST CONDITIONS ---
     # Define custom checklist conditions based on division or branch (plant) here.
-    # Examples:
-    # if division and division.upper() == "VCC":
-    #     return ["VCC Specific Requirement A", "VCC Specific Requirement B"]
-    # if plant and "chennai" in plant.lower():
-    #     return ["Chennai Branch Inward Gate Stamp", "Chennai Local Tax Audit Check"]
     
     cat = (category or "").lower()
+    matched_keyword = None
     
-    if any(k in cat for k in ["rent", "eb", "deposit", "electricity", "tel"]):
-        return [
+    rent_keywords = ["rent", "eb", "deposit", "electricity", "tel"]
+    asset_keywords = ["asset", "capex", "machinery", "equipment"]
+    freight_keywords = ["freight", "transport", "logistics", "courier"]
+
+    for k in rent_keywords:
+        if k in cat:
+            matched_keyword = k
+            break
+
+    if matched_keyword:
+        checklist = [
             "Rental Agreement / EB Bill Copy Attached",
             "Meter Reading & Tariff Slab Verified",
             "Premises / Branch Address Verified",
@@ -46,39 +55,57 @@ def generate_compliance_checklist_for_category(
             "Cost Center & Plant GL Code Validated",
             "Authorized Signatory Sign-off Verified"
         ]
-    elif any(k in cat for k in ["asset", "capex", "machinery", "equipment"]):
-        return [
-            "Asset Purchase Order & Approval Attached",
-            "Physical Asset Delivery & Serial No. Verified",
-            "Vendor GSTIN & Tax Invoice Verified",
-            "Plant & Cost Center Tagging Verified",
-            "Gate Inward / GRN Verified",
-            "Asset Capitalization & Depreciation GL Validated",
-            "Advance / Retention Amount Adjusted",
-            "Authorized Signatory & HOD Approval Verified"
-        ]
-    elif any(k in cat for k in ["freight", "transport", "logistics", "courier"]):
-        return [
-            "Consignment Note / Lorry Receipt (LR) Attached",
-            "Trip Sheet & Vehicle Number Verified",
-            "Weight, Distance & Freight Rate Verified",
-            "Vendor GSTIN & Tax Invoice Verified",
-            "RCM (Reverse Charge Mechanism) Applicability Verified",
-            "Gate Inward Verification Completed",
-            "Cost Center & Plant Accounting Verified"
-        ]
     else:
-        return [
-            "Documents Attached",
-            "Party Name & Total Amount Verified",
-            "Vendor GST no, Signaure Verified",
-            "Bill No ,Date & Address Verified",
-            "Tax portion verified (GST, TDS, etc..)",
-            "RO/PO Verified",
-            "Gate Inward, GRN, Debit/Credit Note Verified",
-            "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
-            "Advance, Narration, Supportive Copy (If Any)"
-        ]
+        for k in asset_keywords:
+            if k in cat:
+                matched_keyword = k
+                break
+        if matched_keyword:
+            checklist = [
+                "Asset Purchase Order & Approval Attached",
+                "Physical Asset Delivery & Serial No. Verified",
+                "Vendor GSTIN & Tax Invoice Verified",
+                "Plant & Cost Center Tagging Verified",
+                "Gate Inward / GRN Verified",
+                "Asset Capitalization & Depreciation GL Validated",
+                "Advance / Retention Amount Adjusted",
+                "Authorized Signatory & HOD Approval Verified"
+            ]
+        else:
+            for k in freight_keywords:
+                if k in cat:
+                    matched_keyword = k
+                    break
+            if matched_keyword:
+                checklist = [
+                    "Consignment Note / Lorry Receipt (LR) Attached",
+                    "Trip Sheet & Vehicle Number Verified",
+                    "Weight, Distance & Freight Rate Verified",
+                    "Vendor GSTIN & Tax Invoice Verified",
+                    "RCM (Reverse Charge Mechanism) Applicability Verified",
+                    "Gate Inward Verification Completed",
+                    "Cost Center & Plant Accounting Verified"
+                ]
+            else:
+                checklist = [
+                    "Documents Attached",
+                    "Party Name & Total Amount Verified",
+                    "Vendor GST no, Signaure Verified",
+                    "Bill No ,Date & Address Verified",
+                    "Tax portion verified (GST, TDS, etc..)",
+                    "RO/PO Verified",
+                    "Gate Inward, GRN, Debit/Credit Note Verified",
+                    "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
+                    "Advance, Narration, Supportive Copy (If Any)"
+                ]
+
+    doc_str = f"document_id='{document_id}'" if document_id else "document_id=N/A"
+    keyword_str = f"matched_keyword='{matched_keyword}'" if matched_keyword else "matched_keyword=None (defaulting to standard checklist)"
+    logger.warning(
+        f"[Compliance Checklist Fallback] Triggered category compliance checklist fallback: {doc_str}, category='{category}', {keyword_str}"
+    )
+
+    return checklist
 
 def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv: Invoice):
     try:

@@ -4,6 +4,7 @@ import json
 import shutil
 import datetime
 import smtplib
+import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -23,8 +24,25 @@ from app.schemas import (
     NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
 )
 from app.auth import get_current_user
-from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
+from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, match_condition, score_checklist_rule
 from app.services.ocr_service import extract_text_from_pdf
+from app.services.integration_service import dispatch_outgoing_webhook
+
+def trigger_async_integration_push(document_id: str):
+    """Spawns a background thread to dispatch the approved document to configured 3rd-party webhook / SAP."""
+    try:
+        t = threading.Thread(target=dispatch_outgoing_webhook, args=(document_id,), daemon=True)
+        t.start()
+    except Exception as e:
+        print(f"[Integration Warning] Could not spawn background webhook thread: {e}")
+
+def safe_broadcast_event(event_type: str, payload: dict):
+    """Safely broadcasts a real-time event via SSE to connected clients."""
+    try:
+        from app.routers.events import broadcast_event
+        broadcast_event(event_type, payload)
+    except Exception as e:
+        print(f"[Event Broadcast Notice] {e}")
 
 router = APIRouter(tags=["Invoices & Documents"])
 
@@ -49,6 +67,29 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
     return inv
+
+def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> bool:
+    if not user or not pool_str:
+        return False
+    pool = [s.strip().lower() for s in pool_str.split(",") if s.strip()]
+    user_handles = [
+        (user.username or "").strip().lower(),
+        (user.employee_id or "").strip().lower(),
+        (user.employee_name or "").strip().lower(),
+        (user.email or "").strip().lower()
+    ]
+    user_handles = [h for h in user_handles if h]
+    for h in user_handles:
+        if h in pool:
+            return True
+        for target in pool:
+            target_tokens = [t.lower() for t in target.replace("-", "_").split("_") if len(t) >= 3]
+            h_tokens = [t.lower() for t in h.replace("-", "_").split("_") if len(t) >= 3]
+            if h in target_tokens or target in h_tokens:
+                return True
+            if h == target.replace("-", "_") or target == h.replace("-", "_"):
+                return True
+    return False
 
 @router.get("/api/records", response_model=List[InvoiceResponse])
 @router.get("/api/documents", response_model=List[InvoiceResponse])
@@ -77,73 +118,58 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
                     rejected_invoice_ids.add(row[0])
                     rejected_invoice_ids.add(doc_id_clean)
 
-    # Filter documents based on role permissions (Admin sees all; standard user sees assigned, approved, rejected, or prior pool documents)
-    if current_user and current_user.role != "admin":
-        user_handles = [
-            current_user.username.lower() if current_user.username else "",
-            current_user.employee_id.lower() if current_user.employee_id else "",
-            current_user.employee_name.lower() if current_user.employee_name else "",
-            current_user.email.lower() if current_user.email else ""
-        ]
-        user_handles = [h for h in user_handles if h]
-
-        # Index all workflow steps where current user was an approver
-        user_steps = db.query(WorkflowStepDefinition).all()
-        user_pool_stages = set()
+    # Index all workflow steps where current user was an approver
+    user_steps = db.query(WorkflowStepDefinition).all()
+    user_pool_stages = set()
+    if current_user:
         for st in user_steps:
-            if st.approver_target:
-                targets = [s.strip().lower() for s in st.approver_target.split(",") if s.strip()]
-                if any(h in targets or any(h in t or t in h for t in targets) for h in user_handles):
-                    user_pool_stages.add((st.profile_name, st.stage_number))
-        
-        filtered_invoices = []
-        for inv in invoices:
-            # 1. Check if user previously approved or rejected
-            if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
-                filtered_invoices.append(inv)
-                continue
-                
-            # 2. Check if currently assigned as approver
-            is_assigned = False
-            if inv.assigned_approver:
-                approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
-                for handle in user_handles:
-                    if handle in approvers or any(handle in app or app in handle for app in approvers):
-                        is_assigned = True
-                        break
-            if is_assigned:
-                filtered_invoices.append(inv)
-                continue
+            if st.approver_target and is_user_in_approver_pool(current_user, st.approver_target):
+                user_pool_stages.add((st.profile_name, st.stage_number))
 
-            # 3. Check if user belonged to a prior stage pool (e.g. Vivek was in Stage 1 pool, and Sibitha approved)
-            is_prior_pool_member = False
-            if inv.workflow_profile_id and (inv.current_stage or 1) > 1:
-                for prior_stg in range(1, inv.current_stage or 1):
-                    if (inv.workflow_profile_id, prior_stg) in user_pool_stages:
-                        is_prior_pool_member = True
-                        break
-            if is_prior_pool_member:
-                filtered_invoices.append(inv)
-        invoices = filtered_invoices
+    # Synchronize and filter documents based on current active stage
+    filtered_invoices = []
+    for inv in invoices:
+        # Dynamically sync active approver pool from WorkflowStepDefinition
+        if inv.workflow_profile_id:
+            step_def = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+                WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+            ).first()
+            if step_def and step_def.approver_target:
+                inv.assigned_approver = step_def.approver_target
+
+        if not current_user or current_user.role == "admin":
+            filtered_invoices.append(inv)
+            continue
+
+        # 1. Check if user previously approved or rejected
+        if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
+            filtered_invoices.append(inv)
+            continue
+            
+        # 2. Check if currently assigned as active approver for this stage
+        if inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver):
+            filtered_invoices.append(inv)
+            continue
+
+        # 3. Check if user belonged to a prior stage pool (e.g. Vivek was in Stage 1 pool, and Sibitha approved)
+        is_prior_pool_member = False
+        if inv.workflow_profile_id and (inv.current_stage or 1) > 1:
+            for prior_stg in range(1, inv.current_stage or 1):
+                if (inv.workflow_profile_id, prior_stg) in user_pool_stages:
+                    is_prior_pool_member = True
+                    break
+        if is_prior_pool_member:
+            filtered_invoices.append(inv)
+            continue
 
     results = []
-    for inv in invoices:
+    for inv in filtered_invoices:
         is_curr = False
         if current_user and inv.assigned_approver:
             is_active_flow = inv.status not in ["Approved", "Paid", "Ready for Payment", "Cancelled", "Failed", "Settled"]
             if is_active_flow:
-                approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
-                user_handles = [
-                    current_user.username.lower() if current_user.username else "",
-                    current_user.employee_id.lower() if current_user.employee_id else "",
-                    current_user.employee_name.lower() if current_user.employee_name else "",
-                    current_user.email.lower() if current_user.email else ""
-                ]
-                user_handles = [h for h in user_handles if h]
-                for handle in user_handles:
-                    if handle in approvers or any(handle in app or app in handle for app in approvers):
-                        is_curr = True
-                        break
+                is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
         
         has_appr = (inv.id in approved_invoice_ids)
         has_rej = (inv.id in rejected_invoice_ids)
@@ -218,18 +244,11 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
             })
     
     if not steps_data:
-        if inv.division in ["ACC", "ENES", "EIC", "RCH", "RMPL", "RRTC"]:
-            steps_data = [
-                {"stage_number": 1, "stage_name": "ATTACHMENT STATUS", "approver_target": "NATHIYA, REVATHI, RAMANA, RISHI"},
-                {"stage_number": 2, "stage_name": "FIRST APPROVAL", "approver_target": "KANNADHASAN"},
-                {"stage_number": 3, "stage_name": "IA APPROVAL", "approver_target": "ABINAYA, DINESH"},
-                {"stage_number": 4, "stage_name": "FINAL APPROVAL", "approver_target": "PGMOHAN, RAJAVEL"}
-            ]
-        else:
-            steps_data = [
-                {"stage_number": 1, "stage_name": "FIRST APPROVAL", "approver_target": inv.assigned_approver or "SIBITHA, VIVEK"},
-                {"stage_number": 2, "stage_name": "IA APPROVAL", "approver_target": "ABINAYA, DINESH"}
-            ]
+        target_profile = inv.workflow_profile_id or "UNRESOLVED"
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow step definitions missing: No stages configured in workflow_step_definitions for profile '{target_profile}' on document '{inv.id}'."
+        )
     
     current_step_name = "Stage 1"
     for s in steps_data:
@@ -237,25 +256,20 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
             current_step_name = s["stage_name"]
             break
 
-    user_handles = []
-    if current_user:
-        user_handles = [
-            current_user.username.lower() if current_user.username else "",
-            current_user.employee_id.lower() if current_user.employee_id else "",
-            current_user.employee_name.lower() if current_user.employee_name else "",
-            current_user.email.lower() if current_user.email else ""
-        ]
-        user_handles = [h for h in user_handles if h]
+    # Dynamically sync active approver pool from WorkflowStepDefinition
+    if inv.workflow_profile_id:
+        step_def = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+        ).first()
+        if step_def and step_def.approver_target:
+            inv.assigned_approver = step_def.approver_target
 
     is_curr = False
     if current_user and inv.assigned_approver:
         is_active_flow = inv.status not in ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed", "Settled"]
         if is_active_flow:
-            approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
-            for handle in user_handles:
-                if handle in approvers or any(handle in app or app in handle for app in approvers):
-                    is_curr = True
-                    break
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
 
     has_appr = False
     has_rej = False
@@ -283,24 +297,22 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
                 WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
                 WorkflowStepDefinition.stage_number == prior_stg
             ).first()
-            if st and st.approver_target:
-                targets = [s.strip().lower() for s in st.approver_target.split(",") if s.strip()]
-                if any(h in targets or any(h in t or t in h for t in targets) for h in user_handles):
-                    is_prior_pool_member = True
-                    break
+            if st and st.approver_target and is_user_in_approver_pool(current_user, st.approver_target):
+                is_prior_pool_member = True
+                break
 
     # Strict Access Control:
     # 1. Admins have full access
-    # 2. Currently assigned approvers have actionable access (can approve)
-    # 3. Users who previously signed off have read-only access
-    # 4. Users who rejected/returned the document have read-only access
-    # 5. Users who belonged to a prior stage pool have read-only access
-    # 6. Downstream approvers CANNOT view until preceding stages have completed
+    # 2. Currently assigned approvers for THIS stage have actionable access
+    # 3. Users who previously signed off or rejected have read-only access
+    # 4. Users who belonged to a prior stage pool have read-only access
+    # 5. Downstream approvers (e.g. Stage 2) CANNOT view until Stage 1 is approved
+    # 6. Uninvolved users CANNOT view
     if current_user and current_user.role != "admin":
         if not is_curr and not has_appr and not has_rej and not is_prior_pool_member:
             raise HTTPException(
                 status_code=403,
-                detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to '{inv.assigned_approver}'. It will become visible in your queue once preceding approvals are completed."
+                detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to '{inv.assigned_approver}'. It will only become accessible in your queue once preceding stage approvals are signed off."
             )
 
     inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
@@ -360,29 +372,119 @@ def update_invoice(
     db.refresh(inv)
     return inv
 
+def extract_date_components(date_str: Optional[str]):
+    """Extracts (YYYY, MM_MonthName) from a date string or defaults to current UTC time."""
+    if date_str:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt = datetime.datetime.strptime(str(date_str).strip()[:19], fmt)
+                return dt.strftime("%Y"), dt.strftime("%m_%B")
+            except Exception:
+                pass
+    now = datetime.datetime.utcnow()
+    return now.strftime("%Y"), now.strftime("%m_%B")
+
+def normalize_doc_type_folder(doc_type: Optional[str]) -> str:
+    """Normalizes document category/type to a clean folder name (INVOICE, CREDIT_NOTE, DEBIT_NOTE, etc.)."""
+    if not doc_type:
+        return "INVOICE"
+    raw = str(doc_type).strip().upper()
+    if "CREDIT" in raw:
+        return "CREDIT_NOTE"
+    elif "DEBIT" in raw:
+        return "DEBIT_NOTE"
+    elif "EVOUCH" in raw or "E-VOUCH" in raw or "E_VOUCH" in raw:
+        return "E_VOUCHER"
+    elif "CAPEX" in raw or "ASSET" in raw:
+        return "CAPEX"
+    elif "PURCHASE" in raw or "PO_" in raw or "PO " in raw:
+        return "PURCHASE_INVOICE"
+    elif "RENT" in raw or "UTILITY" in raw or "EB" in raw:
+        return "RENT_UTILITY"
+    elif "FREIGHT" in raw or "TRANSPORT" in raw:
+        return "FREIGHT"
+    elif "GRN" in raw or "RECEIPT" in raw:
+        return "GRN_RECEIPT"
+    elif "ADVANCE" in raw:
+        return "ADVANCE_VOUCHER"
+    elif "JOURNAL" in raw or "JRNL" in raw:
+        return "JOURNAL_VOUCHER"
+    elif "INVOICE" in raw or "AP" in raw:
+        return "INVOICE"
+    else:
+        clean = re.sub(r'[^A-Z0-9_]+', '_', raw).strip('_')
+        return clean or "INVOICE"
+
+def sanitize_name(text: Optional[str]) -> str:
+    """Removes invalid filename characters for safe filesystem naming."""
+    if not text:
+        return ""
+    return re.sub(r'[\\/*?:"<>| ]+', '_', str(text)).strip('_')
+
+def get_archived_pdf_path(inv: Invoice) -> Path:
+    """
+    Constructs the hierarchical storage path:
+    stored_pdfs/approved/{YEAR}/{MONTH}/{DOC_TYPE}/{DOC_NUM}_{PRIMARY_KEY}.pdf
+    """
+    year_str, month_str = extract_date_components(inv.invoice_date or inv.doc_date)
+    doc_type_folder = normalize_doc_type_folder(inv.document_type or inv.category)
+    
+    clean_doc_num = sanitize_name(inv.invoice_number or inv.doc_num or "DOC")
+    clean_id = sanitize_name(str(inv.id) if inv.id else "0")
+    
+    filename = f"{clean_doc_num}_{clean_id}.pdf"
+    return settings.APPROVED_PDF_DIR / year_str / month_str / doc_type_folder / filename
+
 def archive_approved_pdf(inv: Invoice):
-    """Archival helper: copies approved physical PDF into stored_pdfs and stored_pdfs/approved folder."""
+    """
+    Archival helper:
+    1. Saves approved physical PDF into hierarchical folders:
+       stored_pdfs/approved/{YEAR}/{MONTH}/{DOC_TYPE}/{DOC_NUM}_{PRIMARY_KEY}.pdf
+    2. Updates inv.file_url in the database to point to the new /stored_pdfs/ route.
+    3. Deletes the temporary file from uploads/ directory to maintain a clean workspace.
+    4. Triggers background push to 3rd-party webhook / SAP.
+    """
     try:
         if not inv or not inv.file_url:
             return
         filename = os.path.basename(inv.file_url)
-        src_path = settings.UPLOAD_DIR / filename
-        if not src_path.exists():
-            src_path = settings.PDF_STORAGE_DIR / filename
+        upload_path = settings.UPLOAD_DIR / filename
+        legacy_storage_path = settings.PDF_STORAGE_DIR / filename
 
-        if src_path.exists():
-            # 1. Ensure copy exists in stored_pdfs
-            dest_main = settings.PDF_STORAGE_DIR / filename
-            if src_path.resolve() != dest_main.resolve() and not dest_main.exists():
-                shutil.copy2(src_path, dest_main)
+        src_path = None
+        if upload_path.exists():
+            src_path = upload_path
+        elif legacy_storage_path.exists():
+            src_path = legacy_storage_path
+        elif Path(inv.file_url).exists():
+            src_path = Path(inv.file_url)
 
-            # 2. Copy to stored_pdfs/approved with readable filename
-            safe_inv_no = (inv.invoice_number or inv.id or "INV").replace("/", "_").replace("\\", "_")
-            safe_vendor = (inv.vendor_name or "Vendor").replace("/", "_").replace("\\", "_")[:40]
-            approved_filename = f"{inv.id}_{safe_inv_no}_{safe_vendor}.pdf"
-            dest_approved = settings.APPROVED_PDF_DIR / approved_filename
-            shutil.copy2(src_path, dest_approved)
-            print(f"[Archive] Successfully archived approved PDF to: {dest_approved}")
+        if src_path and src_path.exists():
+            dest_approved = get_archived_pdf_path(inv)
+            dest_approved.parent.mkdir(parents=True, exist_ok=True)
+
+            # Copy to structured permanent storage
+            if src_path.resolve() != dest_approved.resolve():
+                shutil.copy2(src_path, dest_approved)
+                print(f"[Archive] Successfully archived approved PDF to structured path: {dest_approved}")
+
+                # Delete temporary source file from uploads/
+                if upload_path.exists() and upload_path.resolve() != dest_approved.resolve():
+                    try:
+                        upload_path.unlink()
+                        print(f"[Archive] Cleaned up temporary upload file: {upload_path}")
+                    except Exception as del_err:
+                        print(f"[Archive Warning] Could not remove upload file: {del_err}")
+
+            # Update document file_url to point to the permanent stored_pdfs web route
+            try:
+                rel_path = dest_approved.relative_to(settings.PDF_STORAGE_DIR)
+                inv.file_url = f"/stored_pdfs/{rel_path.as_posix()}"
+            except ValueError:
+                inv.file_url = f"/stored_pdfs/approved/{dest_approved.name}"
+
+        # Trigger real-time integration push to 3rd-party webhook / SAP
+        trigger_async_integration_push(str(inv.id))
     except Exception as e:
         print(f"[Archive Warning] Could not archive approved PDF: {e}")
 
@@ -578,6 +680,13 @@ def process_rejection_logic(
             notes=f"Rejected at Stage {current_stage} by {approver_name} ➔ Returned to Stage {prev_stage} ({prev_step_name}, Assigned: {inv.assigned_approver}). Reason: {remarks}"
         ))
 
+        safe_broadcast_event("DOCUMENT_UPDATED", {
+            "document_id": str(inv.id),
+            "status": inv.status,
+            "current_stage": inv.current_stage,
+            "assigned_approver": inv.assigned_approver
+        })
+
         return {
             "success": True,
             "status": inv.status,
@@ -608,6 +717,13 @@ def process_rejection_logic(
             stage="Stage 1 (Attachment Status)",
             notes=f"Workflow process cancelled/voided by {approver_name} at Stage 1. Reason: {remarks}"
         ))
+
+        safe_broadcast_event("DOCUMENT_UPDATED", {
+            "document_id": str(inv.id),
+            "status": inv.status,
+            "current_stage": inv.current_stage,
+            "assigned_approver": None
+        })
 
         return {
             "success": True,
@@ -789,6 +905,14 @@ def workflow_approve_payload(
     ))
     db.commit()
     db.refresh(inv)
+
+    safe_broadcast_event("DOCUMENT_UPDATED", {
+        "document_id": str(inv.id),
+        "status": inv.status,
+        "current_stage": inv.current_stage,
+        "assigned_approver": inv.assigned_approver
+    })
+
     return {"success": True, "status": inv.status, "current_stage": inv.current_stage, "invoice": inv, "approved_by": approver_name}
 
 @router.post("/api/records/{invoice_id}/approve")
@@ -970,6 +1094,14 @@ def invoice_step_action(
         ))
         db.commit()
         db.refresh(inv)
+
+        safe_broadcast_event("DOCUMENT_UPDATED", {
+            "document_id": str(inv.id),
+            "status": inv.status,
+            "current_stage": inv.current_stage,
+            "assigned_approver": inv.assigned_approver
+        })
+
         return {"success": True, "status": inv.status, "current_stage": inv.current_stage, "invoice": inv}
 
 # Unified Rejection Routes (Step-Down to Previous Approver / Cancel at Stage 1)
@@ -1129,9 +1261,11 @@ async def upload_document(
     document_type: Optional[str] = Form("AP INVOICE"),
     db: Session = Depends(get_db)
 ):
+    import uuid
     timestamp = int(datetime.datetime.utcnow().timestamp())
     prefix = get_doc_type_prefix(document_type or "", "")
-    new_id = f"{prefix}-{timestamp % 100000}"
+    rand_hex = uuid.uuid4().hex[:6].upper()
+    new_id = f"{prefix}-{timestamp % 1000000}_{rand_hex}"
     ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
     filename = f"{new_id}.{ext}"
     file_path = settings.UPLOAD_DIR / filename
@@ -1139,21 +1273,28 @@ async def upload_document(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    amount = 45000.0
+    from app.services.ocr_service import extract_text_from_pdf
+    ocr_data = extract_text_from_pdf(file_path) if ext.lower() == 'pdf' else {}
+
+    amount = float(ocr_data.get("amount") or 45000.0)
     base_amount = round(amount / 1.18, 2)
     tax_amount = round(amount - base_amount, 2)
+    vendor_name = ocr_data.get("vendor_name") or "Sample Vendor Enterprise"
+    invoice_number = ocr_data.get("invoice_number") or f"INV-{timestamp % 10000}"
+    vendor_gstin = ocr_data.get("gstin") or "33AAACR1234F1Z5"
 
     new_inv = Invoice(
         id=new_id,
-        vendor_name="Sample Vendor Enterprise",
-        invoice_number=f"INV-{timestamp % 10000}",
-        invoice_date=datetime.date.today().strftime("%Y-%m-%d"),
+        vendor_name=vendor_name,
+        invoice_number=invoice_number,
+        invoice_date=ocr_data.get("date") or datetime.date.today().strftime("%Y-%m-%d"),
         amount=amount,
         base_amount=base_amount,
         tax_amount=tax_amount,
-        vendor_gstin="33AAACR1234F1Z5",
-        division=division,
-        plant=plant,
+        vendor_gstin=vendor_gstin,
+        division=division or "VCC",
+        plant=plant or "TN-SIVAKASI",
+        category=document_type or "PURCHASE",
         document_type=document_type or "AP INVOICE",
         file_url=f"/uploads/{filename}",
         status="Pending Approval",
@@ -1161,27 +1302,26 @@ async def upload_document(
         total_stages=2
     )
 
-    db.add(new_inv)
-    db.commit()
-    db.refresh(new_inv)
-
-    from app.services.rules_engine import infer_document_type
+    from app.services.rules_engine import infer_document_type, evaluate_business_rules
     matched_wf = evaluate_business_rules(db, new_inv)
     if not matched_wf:
-        matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
+        default_wf = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
+        matched_wf = default_wf.name if default_wf else "VCC_PURCHASE_SR10"
 
     new_inv.workflow_profile_id = matched_wf
-    new_inv.document_type = infer_document_type(category=category, wf_name=matched_wf, doc_type=document_type)
+    new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
+    
     steps = db.query(WorkflowStepDefinition).filter(
         WorkflowStepDefinition.profile_name == matched_wf
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
     
     new_inv.total_stages = len(steps) if steps else 2
     new_inv.current_stage = 1
-    if steps:
-        new_inv.assigned_approver = steps[0].approver_target
+    if steps and steps[0].approver_target:
+        new_inv.assigned_approver = steps[0].approver_target.strip()
         new_inv.status = f"Initiated ({steps[0].step_name})"
     else:
+        new_inv.assigned_approver = "SIBITHA, VIVEK_00336"
         new_inv.status = "Initiated (Stage 1)"
 
     from app.routers.sync import generate_compliance_checklist_for_category
@@ -1189,10 +1329,12 @@ async def upload_document(
         new_inv.category, 
         new_inv.document_type, 
         new_inv.division, 
-        new_inv.plant
+        new_inv.plant,
+        document_id=new_inv.id
     )
     new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
+    db.add(new_inv)
     db.commit()
     db.refresh(new_inv)
 
@@ -1202,9 +1344,16 @@ async def upload_document(
         user="Document Uploader",
         action="Created & Uploaded",
         stage="Stage 1",
-        notes=f"Document uploaded manually. Matched workflow '{matched_wf}'."
+        notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
     ))
     db.commit()
+
+    safe_broadcast_event("DOCUMENT_CREATED", {
+        "document_id": str(new_inv.id),
+        "status": new_inv.status,
+        "current_stage": new_inv.current_stage,
+        "assigned_approver": new_inv.assigned_approver
+    })
 
     return {"success": True, "invoice": new_inv}
 
@@ -1273,7 +1422,8 @@ async def upload_and_route(
         inv.category, 
         inv.document_type, 
         inv.division, 
-        inv.plant
+        inv.plant,
+        document_id=inv.id
     )
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
@@ -1341,11 +1491,14 @@ def get_document_comments(id: str, db: Session = Depends(get_db)):
     comments = []
     for l in logs:
         if l.notes:
+            ts_str = l.timestamp.isoformat() if l.timestamp else datetime.datetime.utcnow().isoformat()
+            if not ts_str.endswith("Z") and "+" not in ts_str and "-" not in ts_str[10:]:
+                ts_str += "Z"
             comments.append({
                 "id": str(l.id),
                 "author": l.user or "System",
                 "text": l.notes,
-                "created_at": l.timestamp.isoformat() if l.timestamp else datetime.datetime.utcnow().isoformat(),
+                "created_at": ts_str,
                 "action": l.action,
                 "stage": l.stage
             })
@@ -1839,52 +1992,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
     
     scored_rules = []
     for r in matching_rules:
-        # Match Division / Company
-        div_matched = False
-        if r.division and r.division != "ALL":
-            divs = [d.strip().upper() for d in r.division.split(',') if d.strip()]
-            inv_div = (inv.division or "").strip().upper()
-            if inv_div in divs or any(inv_div == d or inv_div in d for d in divs):
-                div_matched = True
-            else:
-                continue
-
-        # Match Category / Document Type
-        cat_matched = False
-        if r.category and r.category != "ALL":
-            cats = [c.strip().upper() for c in r.category.split(',') if c.strip()]
-            inv_cat = (inv.category or "").strip().upper()
-            inv_doc = (inv.document_type or "").strip().upper()
-            if (inv_cat and (inv_cat in cats or any(c == inv_cat or inv_cat in c or c in inv_cat for c in cats))) or \
-               (inv_doc and (inv_doc in cats or any(c == inv_doc or inv_doc in c or c in inv_doc for c in cats))):
-                cat_matched = True
-            else:
-                continue
-
-        # Match Branch / Plant
-        branch_matched = False
-        if r.branch and r.branch != "ALL":
-            branches = [b.strip().upper() for b in r.branch.split(',') if b.strip()]
-            inv_plant = (inv.plant or "").strip().upper()
-            if inv_plant in branches or any(inv_plant == b or inv_plant in b for b in branches):
-                branch_matched = True
-            else:
-                continue
-
-        # Match Workflow Profile (if specified on rule)
-        wf_matched = False
-        if r.workflow_profile and r.workflow_profile != "ALL":
-            if r.workflow_profile.strip().upper() == (inv.workflow_profile_id or "").strip().upper():
-                wf_matched = True
-            else:
-                continue
-            
-        score = 0
-        if div_matched: score += 20
-        if cat_matched: score += 30
-        if branch_matched: score += 10
-        if wf_matched: score += 10
-        
+        score = score_checklist_rule(r, inv)
         # Only consider condition rules with actual matching specificity (score > 0)
         if score > 0:
             scored_rules.append((score, r))
@@ -1936,7 +2044,8 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         inv.category, 
         inv.document_type, 
         inv.division, 
-        inv.plant
+        inv.plant,
+        document_id=inv.id
     )
 
 

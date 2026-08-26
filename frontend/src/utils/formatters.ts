@@ -20,14 +20,30 @@ export function formatCurrencyINR(amount: number | string | null | undefined, ma
 }
 
 /**
+ * Safely parses any date string from the backend. If it is naive (e.g. "2026-08-25T04:47:00"),
+ * appends "Z" so it is correctly recognized as UTC and converted to the user's local timezone (IST).
+ */
+export function parseUTCDate(dateStr: string | Date | null | undefined): Date | null {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  let s = String(dateStr).trim();
+  if (!s) return null;
+  // If string has date + time (T or space) without timezone offset (no Z, no +, no - in time portion), append Z
+  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+    s = s.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Formats an ISO date string or Date object into a readable date string.
  * @param dateStr ISO date string or Date object
- * @returns Formatted date, e.g. "09 Aug 2026"
+ * @returns Formatted date, e.g. "25 Aug 2026"
  */
 export function formatDate(dateStr: string | Date | null | undefined): string {
-  if (!dateStr) return "-";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "-";
+  const date = parseUTCDate(dateStr);
+  if (!date) return "-";
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -36,20 +52,33 @@ export function formatDate(dateStr: string | Date | null | undefined): string {
 }
 
 /**
- * Formats an ISO date string into date + time.
+ * Formats an ISO date string into date + time (e.g. "25/08/26, 10:17 am").
  * @param dateStr ISO date string or Date object
- * @returns Formatted date-time, e.g. "09 Aug 2026, 08:30 AM"
+ * @returns Formatted date-time
  */
 export function formatDateTime(dateStr: string | Date | null | undefined): string {
-  if (!dateStr) return "-";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "-";
+  const date = parseUTCDate(dateStr);
+  if (!date) return "-";
   return date.toLocaleString("en-IN", {
     day: "2-digit",
-    month: "short",
-    year: "numeric",
+    month: "2-digit",
+    year: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+/**
+ * Formats an ISO date string into time only (e.g. "10:17 am").
+ */
+export function formatTimeOnly(dateStr: string | Date | null | undefined): string {
+  const date = parseUTCDate(dateStr);
+  if (!date) return "-";
+  return date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
   });
 }
 

@@ -8,6 +8,7 @@ from collections import defaultdict
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
 from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
+from app.services.rules_engine import calculate_rule_priority, is_wildcard
 
 BASE_DIR = Path(__file__).resolve().parent
 candidate_paths = [
@@ -263,11 +264,8 @@ def seed_sd_workflow_matrix():
             if cc_val != "ALL" and cc_val:
                 conditions.append({"field": "Cost Center", "operator": "contains any of" if "," in cc_val else "equals", "value": cc_val, "logicalOperator": "AND"})
 
-            # Priority calculation based on specificity
-            priority = 50
-            if cat_val != 'ALL': priority += 20
-            if branch_val != 'ALL': priority += 15
-            if cc_val != 'ALL': priority += 15
+            # Priority calculation based on specificity (centralized in rules_engine)
+            priority = calculate_rule_priority(cat_val, branch_val, cc_val, base_priority=50)
 
             rule_name = f"RULE_{parent_comp}_{cat_name[:40]}".replace(" ", "_").replace("&", "_").replace("/", "_").strip("_")
             rule_name = f"{rule_name}_{rule_idx}"

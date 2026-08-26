@@ -552,6 +552,11 @@ export default function Admin() {
           </div>
         )}
 
+        {/* --- ROUTING TAB CONTENT --- */}
+        {activeTab === "routing" && (
+          <FlowBuilder users={allUsers} />
+        )}
+
         {/* --- POLICY MATRIX TAB CONTENT --- */}
         {activeTab === "matrix" && (
           <ConditionBuilder 
@@ -560,11 +565,6 @@ export default function Admin() {
             setHasChanges={setHasChanges} 
             handleDeleteRuleLocal={handleDeleteRuleLocal}
           />
-        )}
-
-        {/* --- ROUTING TAB CONTENT --- */}
-        {activeTab === "routing" && (
-          <FlowBuilder users={allUsers} />
         )}
 
         {/* --- CHECKLIST MATRIX TAB CONTENT --- */}

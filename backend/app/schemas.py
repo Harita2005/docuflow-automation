@@ -152,7 +152,7 @@ class InvoiceUpdate(BaseModel):
     notes: Optional[str] = None
 
 class InvoiceActionRequest(BaseModel):
-    decision: str # "APPROVE", "REJECT", "HOLD"
+    decision: Optional[str] = "APPROVE" # "APPROVE", "REJECT", "HOLD"
     remarks: Optional[str] = None
     stage_name: Optional[str] = None
 
@@ -340,7 +340,7 @@ class Base64AttachmentSyncRequest(BaseModel):
 
 class AttachmentSyncResponse(BaseModel):
     success: bool
-    message: str
+    message: str 
     document_id: str
     file_name: str
     file_url: str
@@ -369,5 +369,45 @@ class NotificationTestSchema(BaseModel):
     to: str
     subject: str
     html: str
+
+
+# --- THIRD-PARTY & SAP INTEGRATION SCHEMAS ---
+class ThirdPartyWebhookConfigCreate(BaseModel):
+    name: Optional[str] = Field("Primary ERP Integration Endpoint", description="Descriptive name")
+    target_url: str = Field(..., description="External Webhook / API URL to receive approved documents")
+    auth_header_name: Optional[str] = Field("Authorization", description="e.g. Authorization or X-API-Key")
+    auth_token: Optional[str] = Field(None, description="Bearer token or API key for the external endpoint")
+    hmac_secret: Optional[str] = Field(None, description="Secret used to sign the X-DocuFlow-Signature header")
+    is_active: Optional[bool] = Field(True, description="Enable or disable real-time push")
+    retry_count: Optional[int] = Field(3, description="Number of retry attempts if target endpoint fails")
+
+class ThirdPartyWebhookConfigResponse(ThirdPartyWebhookConfigCreate):
+    id: int
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ThirdPartyWebhookTestRequest(BaseModel):
+    target_url: Optional[str] = None
+    auth_header_name: Optional[str] = "Authorization"
+    auth_token: Optional[str] = None
+    hmac_secret: Optional[str] = None
+
+class IntegrationAcknowledgmentRequest(BaseModel):
+    external_system_name: str = Field(..., description="e.g. SAP S/4HANA, Tally Prime, Oracle, Zoho Books")
+    external_reference_id: str = Field(..., description="External Transaction ID or SAP Accounting Doc #")
+    notes: Optional[str] = Field(None, description="Optional posting notes or status details")
+    posting_status: Optional[str] = Field("SYNCED", description="SYNCED or FAILED")
+
+class IntegrationAcknowledgmentResponse(BaseModel):
+    success: bool
+    document_id: str
+    external_sync_status: str
+    external_sync_ref: Optional[str] = None
+    external_synced_at: Optional[datetime.datetime] = None
+    message: str
+
 
 

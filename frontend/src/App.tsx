@@ -5,7 +5,6 @@ import LoginPage from "./components/LoginPage.tsx";
 import Dashboard from "./components/Dashboard.tsx";
 import DocumentUpload from "./components/DocumentUpload.tsx";
 import DocumentDetails from "./components/DocumentDetails.tsx";
-import GoodsReceiptPage from "./components/GoodsReceiptPage.tsx";
 import DataVerificationPage from "./components/DataVerificationPage.tsx";
 import ApprovalQueuePage from "./components/ApprovalQueuePage.tsx";
 import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
@@ -123,15 +122,38 @@ export default function App() {
     fetchDocuments();
     fetchStats();
 
-    // Aggressive Polling for Real-Time Dashboard Metrics
+    // Real-Time Server-Sent Events (SSE) Stream
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/events/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (['DOCUMENT_UPDATED', 'DOCUMENT_CREATED', 'DOCUMENT_LOCKED', 'DOCUMENT_UNLOCKED', 'STAGE_APPROVED'].includes(data.type)) {
+            fetchDocuments(true);
+            fetchStats(true);
+          }
+        } catch (err) {
+          // heartbeat or ping
+        }
+      };
+      eventSource.onerror = () => {
+        // EventSource will auto-reconnect
+      };
+    } catch (e) {
+      console.warn("SSE connection error:", e);
+    }
+
+    // Polling fallback
     const docInterval = setInterval(() => {
       fetchDocuments(true);
-    }, 3000);
+    }, 10000);
     const statsInterval = setInterval(() => {
       fetchStats(true);
-    }, 5000);
+    }, 15000);
 
     return () => {
+      if (eventSource) eventSource.close();
       clearInterval(docInterval);
       clearInterval(statsInterval);
     };
@@ -387,6 +409,8 @@ export default function App() {
                 loading={loadingDocs || loadingStats}
                 onViewDocument={handleViewDocument}
                 currentUserRole={currentUserRole}
+                currentUserEmail={currentUserEmail}
+                currentUserUsername={currentUserUsername}
                 setCurrentView={setCurrentView}
                 requireGRN={requireGRN}
               />
@@ -398,6 +422,8 @@ export default function App() {
                 onViewDocument={handleViewDocument}
                 requireGRN={requireGRN}
                 currentUserRole={currentUserRole}
+                currentUserEmail={currentUserEmail}
+                currentUserUsername={currentUserUsername}
               />
             )}
 
@@ -406,13 +432,6 @@ export default function App() {
                 onUploadSuccess={handleDocUploadSuccess}
                 setCurrentView={setCurrentView}
                 setSelectedDocId={setSelectedDocId}
-              />
-            )}
-
-            {currentView === "goods-receipt" && (
-              <GoodsReceiptPage
-                onWorkflowTriggered={handleFullRefresh}
-                currentUserEmail={currentUserEmail}
               />
             )}
 

@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile, Invoice
-from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router
+from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router, integrations, events
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -70,6 +70,16 @@ try:
                     conn.execute(text("ALTER TABLE documents ADD pay_mode NVARCHAR(10) NOT NULL DEFAULT N'BANK';"))
                 if 'link_column' not in existing_cols_documents:
                     conn.execute(text("ALTER TABLE documents ADD link_column NVARCHAR(500) NULL;"))
+                if 'external_sync_status' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD external_sync_status VARCHAR(50) NULL DEFAULT 'UNSYNCED';"))
+                if 'external_sync_ref' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD external_sync_ref VARCHAR(100) NULL;"))
+                if 'external_synced_at' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD external_synced_at DATETIME NULL;"))
+                if 'external_sync_system' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD external_sync_system VARCHAR(100) NULL;"))
+                if 'external_sync_error' not in existing_cols_documents:
+                    conn.execute(text("ALTER TABLE documents ADD external_sync_error NVARCHAR(MAX) NULL;"))
                 
                 # Users table migrations
                 existing_cols_users = [c['name'] for c in inspector.get_columns('users')]
@@ -104,6 +114,23 @@ try:
                     conn.execute(text("ALTER TABLE business_rules ADD is_deleted BIT NOT NULL DEFAULT 0;"))
                 if 'deleted_at' not in existing_cols_rules:
                     conn.execute(text("ALTER TABLE business_rules ADD deleted_at DATETIME NULL;"))
+
+                # Document line items table migrations
+                if inspector.has_table('document_line_items'):
+                    existing_cols_line_items = [c['name'] for c in inspector.get_columns('document_line_items')]
+                    if 'item_code' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD item_code VARCHAR(100) NULL;"))
+                    if 'warranty_text' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD warranty_text NVARCHAR(500) NULL;"))
+                    if 'serial_numbers' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD serial_numbers NVARCHAR(1000) NULL;"))
+                    if 'quantity' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD quantity NUMERIC(12, 2) NULL DEFAULT 1.0;"))
+                    if 'unit_price' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD unit_price NUMERIC(18, 2) NULL DEFAULT 0.0;"))
+                    if 'amount' not in existing_cols_line_items:
+                        conn.execute(text("ALTER TABLE document_line_items ADD amount NUMERIC(18, 2) NULL DEFAULT 0.0;"))
+
 
                 # Audit logs & System logs type conversions for invoice_id type matching
                 try:
@@ -149,9 +176,22 @@ def startup_event():
             print(f"[Startup] Seeding complete dataset (Found {user_count} users, {wf_count} workflows, {inv_count} invoices)...")
             from seed_excel import seed_database
             seed_database()
+
+        # Always synchronize active stage approvers for all documents
+        from app.models import WorkflowStepDefinition
+        active_docs = db.query(Invoice).filter(Invoice.is_deleted == False).all()
+        for d in active_docs:
+            if d.workflow_profile_id:
+                st = db.query(WorkflowStepDefinition).filter(
+                    WorkflowStepDefinition.profile_name == d.workflow_profile_id,
+                    WorkflowStepDefinition.stage_number == (d.current_stage or 1)
+                ).first()
+                if st and st.approver_target and st.approver_target.strip() != (d.assigned_approver or '').strip():
+                    d.assigned_approver = st.approver_target.strip()
+        db.commit()
         db.close()
     except Exception as e:
-        print(f"[Startup] Notice during startup seed: {e}")
+        print(f"[Startup] Notice during startup sync: {e}")
 
 # CORS Configuration
 app.add_middleware(
@@ -183,6 +223,8 @@ app.include_router(conditions.router)
 app.include_router(audit.router)
 app.include_router(sync.router)
 app.include_router(sync_router.router)
+app.include_router(integrations.router)
+app.include_router(events.router)
 
 @app.get("/")
 def root():

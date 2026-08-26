@@ -114,6 +114,13 @@ class Document(Base):
     doc_due_date = Column(String(50), nullable=True)
     contact_person = Column(String(100), nullable=True)
     link_column = Column(String(500), nullable=True)
+
+    # 3rd-Party & SAP Integration Tracking
+    external_sync_status = Column(String(50), default="UNSYNCED", index=True) # UNSYNCED, PENDING, SYNCED, FAILED
+    external_sync_ref = Column(String(100), nullable=True, index=True)        # External SAP Doc # or 3rd-party ID
+    external_synced_at = Column(DateTime, nullable=True)                     # Timestamp of confirmation
+    external_sync_system = Column(String(100), nullable=True)                 # SAP_S4HANA, TALLY, ZOHO, WEBHOOK, etc.
+    external_sync_error = Column(Text, nullable=True)                         # Last sync error details
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -375,5 +382,44 @@ class InAppNotification(Base):
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+# =========================================================================
+# 11. THIRD-PARTY & SAP INTEGRATION CONFIGURATION & LOGS
+# =========================================================================
+class ThirdPartyWebhookConfig(Base):
+    __tablename__ = "third_party_webhook_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(150), default="Primary ERP Integration Endpoint", nullable=False)
+    target_url = Column(String(500), nullable=False)
+    auth_header_name = Column(String(100), default="Authorization")
+    auth_token = Column(String(500), nullable=True) # e.g. "Bearer ..." or "ApiKey ..."
+    hmac_secret = Column(String(200), nullable=True) # Optional secret for signing X-DocuFlow-Signature
+    is_active = Column(Boolean, default=True, index=True)
+    events_json = Column(Text, default='["document.settled"]') # Events that trigger this webhook
+    retry_count = Column(Integer, default=3)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class IntegrationSyncLog(Base):
+    __tablename__ = "integration_sync_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(String(100), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    sync_direction = Column(String(20), default="PUSH", index=True) # PUSH or PULL
+    target_system = Column(String(100), default="WEBHOOK", index=True) # SAP_S4HANA, TALLY, ZOHO, WEBHOOK
+    request_url = Column(String(500), nullable=True)
+    status_code = Column(Integer, nullable=True)
+    status = Column(String(50), default="PENDING", index=True) # SUCCESS, FAILED, PENDING
+    external_reference = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    payload_snapshot = Column(Text, nullable=True)
+    response_body = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    document = relationship("Document")
+
 
 

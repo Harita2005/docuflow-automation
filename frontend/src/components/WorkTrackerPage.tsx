@@ -30,13 +30,17 @@ interface WorkTrackerPageProps {
   onViewDocument: (id: string) => void;
   requireGRN?: boolean;
   currentUserRole?: string;
+  currentUserEmail?: string;
+  currentUserUsername?: string;
 }
 
 export default function WorkTrackerPage({ 
   documents, 
   onViewDocument,
   requireGRN = true,
-  currentUserRole = "employee"
+  currentUserRole = "employee",
+  currentUserEmail = "",
+  currentUserUsername = ""
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -129,11 +133,28 @@ export default function WorkTrackerPage({
     return "auditor";
   };
 
-  // Filter documents base based on role: non-admin users only see docs they are current approver of or have approved
+  const isAssignedToUser = (doc: DbInvoice): boolean => {
+    if (doc.is_current_approver) return true;
+    if (!currentUserUsername && !currentUserEmail) return false;
+    const uHandle = (currentUserUsername || '').toLowerCase().trim();
+    const eHandle = (currentUserEmail || '').toLowerCase().trim();
+    const approverStr = (doc.assigned_approver || '').toLowerCase();
+    const pool = approverStr.split(',').map(s => s.trim());
+    if (uHandle && (pool.includes(uHandle) || pool.some(p => p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && (pool.includes(eHandle) || pool.some(p => p.includes(eHandle)))) return true;
+    return false;
+  };
+
+  const [trackerScope, setTrackerScope] = useState<'assigned' | 'all'>(() => 
+    currentUserRole === 'admin' ? 'all' : 'assigned'
+  );
+
+  // Filter documents: non-admin users see strictly documents assigned to them (with fallback to all)
   const visibleDocs = useMemo(() => {
-    if (currentUserRole === "admin") return documents;
-    return documents.filter(doc => !!doc.is_current_approver || !!doc.has_approved);
-  }, [documents, currentUserRole]);
+    if (trackerScope === "all" || currentUserRole === "admin") return documents;
+    const filtered = documents.filter(doc => isAssignedToUser(doc) || !!doc.is_current_approver || !!doc.has_approved);
+    return filtered.length > 0 ? filtered : documents;
+  }, [documents, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
 
   // Derive dynamic document types
   const dynamicTypes = useMemo(() => {
@@ -525,7 +546,7 @@ export default function WorkTrackerPage({
                           {doc.invoice_number || `INV-${cleanId}`}
                         </span>
                         <span className="text-[9.5px] text-slate-500 font-medium whitespace-nowrap">
-                          {doc.invoice_date || new Date(doc.created_at || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
                         </span>
                         <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
                           {displayPaymentTerms(doc.payment_terms)}
