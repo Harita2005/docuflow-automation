@@ -1032,6 +1032,16 @@ def seed_demo_invoices_endpoint(db: Session = Depends(get_db)):
             )
             db.add(new_inv)
             seeded_count += 1
+    
+    # Log Data Sync in Audit Log
+    now_str = datetime.datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')
+    db.add(AuditLog(
+        invoice_id=None,
+        user="ERP Data Sync",
+        action="Data Sync Completed",
+        stage="Data Synchronization",
+        notes=f"Data sync completed from primary data source at {now_str}. Synced {seeded_count} documents into ledger."
+    ))
     db.commit()
     return {"success": True, "seeded_count": seeded_count, "total_invoices": db.query(Invoice).count()}
 

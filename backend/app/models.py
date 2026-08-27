@@ -41,6 +41,12 @@ class User(Base):
     mfa_secret = Column(String(100), nullable=True)
     last_login = Column(DateTime, nullable=True)
     
+    # Active Device Session Tracking (Single Concurrent Session & Prompt/Kick)
+    active_session_id = Column(String(100), nullable=True, index=True)
+    active_device_info = Column(String(255), nullable=True)
+    session_created_at = Column(DateTime, nullable=True)
+    last_activity_at = Column(DateTime, nullable=True)
+    
     # Audit Metadata
     created_by = Column(String(150), default="System Admin")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

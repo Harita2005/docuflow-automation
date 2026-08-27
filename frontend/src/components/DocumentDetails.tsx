@@ -607,10 +607,11 @@ export default function DocumentDetails({
     const rawPath = document.file_url || document.file_path || "";
     if (
       !rawPath ||
+      rawPath === "/" ||
       rawPath === "invoice.pdf" ||
       rawPath === "/uploads/invoice.pdf" ||
       rawPath === "uploads/invoice.pdf" ||
-      (!rawPath.startsWith('/uploads/') && !rawPath.startsWith('uploads/') && !rawPath.startsWith('http'))
+      (!rawPath.startsWith('/uploads/') && !rawPath.startsWith('uploads/') && !rawPath.startsWith('/stored_pdfs/') && !rawPath.startsWith('stored_pdfs/') && !rawPath.startsWith('http'))
     ) {
       setIframeSrc("");
       return;

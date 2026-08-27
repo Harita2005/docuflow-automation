@@ -9,6 +9,8 @@ class LoginRequest(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
     expires_in_minutes: Optional[int] = None
+    force_login: bool = False
+    device_info: Optional[str] = None
 
 class TokenResponse(BaseModel):
     token: Optional[str] = None
@@ -22,6 +24,11 @@ class TokenResponse(BaseModel):
     masked_email: Optional[str] = None
     masked_phone: Optional[str] = None
     has_authenticator_setup: bool = False
+    active_session_conflict: bool = False
+    active_device_info: Optional[str] = None
+    session_created_at: Optional[str] = None
+    session_id: Optional[str] = None
+    message: Optional[str] = None
 
 class MFASendOTPRequest(BaseModel):
     ticket: str
@@ -31,6 +38,8 @@ class MFAVerifyRequest(BaseModel):
     ticket: str
     method: str # EMAIL, SMS, AUTHENTICATOR
     code: str
+    force_login: bool = False
+    device_info: Optional[str] = None
 
 class MFASetupTOTPRequest(BaseModel):
     ticket: str

@@ -59,18 +59,72 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
         "checklist_json": json.dumps(items)
     }
 
+from collections import defaultdict
+
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
 def get_workflow_profiles(db: Session = Depends(get_db)):
+    # 1. Fetch all active profiles in 1 query
     profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.id.asc()).all()
+    if not profiles:
+        return []
+
+    # 2. Fetch all steps in 1 query and group by profile_name
+    all_steps = db.query(WorkflowStepDefinition).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    steps_by_profile = defaultdict(list)
+    for st in all_steps:
+        if st.profile_name:
+            steps_by_profile[st.profile_name].append(st)
+
+    # 3. Fetch all active checklist templates in 1 query and group by (profile, stage_name)
+    all_tpls = db.query(ChecklistTemplate).filter(ChecklistTemplate.is_active == True).order_by(ChecklistTemplate.sequence_order.asc()).all()
+    tpls_by_profile_stage = defaultdict(list)
+    for t in all_tpls:
+        key = ((t.workflow_profile or "").strip().lower(), (t.stage_name or "").strip().lower())
+        tpls_by_profile_stage[key].append(t)
+
     result = []
     for p in profiles:
-        raw_steps = db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == p.profile_name
-        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
-        
-        steps = [format_step_with_checklist(db, st, p.profile_name) for st in raw_steps]
-        
+        raw_steps = steps_by_profile.get(p.profile_name, [])
+        steps = []
+        for st in raw_steps:
+            items: List[str] = []
+            if st.checklist_json:
+                try:
+                    parsed = json.loads(st.checklist_json)
+                    if isinstance(parsed, list):
+                        items = [str(x).strip() for x in parsed if str(x).strip()]
+                except Exception:
+                    items = []
+            
+            if not items:
+                tpl_key = ((p.profile_name or "").strip().lower(), (st.step_name or "").strip().lower())
+                tpls = tpls_by_profile_stage.get(tpl_key, [])
+                for t in tpls:
+                    if "," in t.item_text:
+                        for sub in t.item_text.split(","):
+                            c = sub.strip()
+                            if c and c not in items:
+                                items.append(c)
+                    else:
+                        c = t.item_text.strip()
+                        if c and c not in items:
+                            items.append(c)
+
+            steps.append({
+                "stage_number": st.stage_number,
+                "step_name": st.step_name,
+                "approver_type": st.approver_type,
+                "approver_target": st.approver_target,
+                "delegate_approver": st.delegate_approver,
+                "document_type": st.document_type,
+                "action_required": st.action_required,
+                "permissions": st.permissions,
+                "sla_hours": st.sla_hours,
+                "checklist_items": items,
+                "checklist_json": json.dumps(items)
+            })
+
         p_dict = {
             "profile_name": p.profile_name,
             "workflow_code": p.workflow_code,

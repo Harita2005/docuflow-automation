@@ -474,15 +474,15 @@ export default function WorkTrackerPage({
           <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             <thead className="bg-slate-50 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-2.5 px-3 w-[8%] whitespace-nowrap">ID</th>
-                <th className="py-2.5 px-3 w-[22%]">Supplier / Vendor</th>
-                <th className="py-2.5 px-3 w-[13%]">Document Ref</th>
+                <th className="py-2.5 px-3 w-[9%]">ID</th>
+                <th className="py-2.5 px-3 w-[20%]">Supplier / Vendor</th>
+                <th className="py-2.5 px-3 w-[12%]">Document Ref</th>
                 <th className="py-2.5 px-3 w-[13%]">PO Reference</th>
-                <th className="py-2.5 px-3 w-[12%] text-right">Gross Value (₹)</th>
-                <th className="py-2.5 px-3 w-[8%]">Stage</th>
-                <th className="py-2.5 px-3 w-[10%]">Status</th>
-                <th className="py-2.5 px-3 w-[16%]">Assigned To</th>
-                <th className="py-2.5 px-3 w-[8%] text-center">Action</th>
+                <th className="py-2.5 px-3 w-[11%] text-right">Gross Value (₹)</th>
+                <th className="py-2.5 px-3 w-[8%] text-center">Stage</th>
+                <th className="py-2.5 px-3 w-[9%] text-center">Status</th>
+                <th className="py-2.5 px-3 w-[12%]">Assigned To</th>
+                <th className="py-2.5 px-3 w-[6%] text-center">Action</th>
               </tr>
             </thead>
 
@@ -516,14 +516,14 @@ export default function WorkTrackerPage({
                   >
                     
                     {/* 1. Document ID */}
-                    <td className="py-2.5 px-3 align-middle whitespace-nowrap w-[8%]">
-                      <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                    <td className="py-2.5 px-3 align-middle w-[9%] min-w-0">
+                      <span className="text-[9.5px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate inline-block max-w-full" title={displayId}>
                         {displayId}
                       </span>
                     </td>
 
                     {/* 2. Supplier / Vendor */}
-                    <td className="py-2.5 px-3 align-middle w-[22%] min-w-0">
+                    <td className="py-2.5 px-3 align-middle w-[20%] min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
                           {vendorInitials}
@@ -540,9 +540,9 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 3. Document Ref */}
-                    <td className="py-2.5 px-3 align-middle w-[13%]">
-                      <div className="flex flex-col space-y-0.5">
-                        <span className="font-bold text-[11px] text-slate-900 truncate">
+                    <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
+                      <div className="flex flex-col space-y-0.5 min-w-0">
+                        <span className="font-bold text-[11px] text-slate-900 truncate block" title={doc.invoice_number || `INV-${cleanId}`}>
                           {doc.invoice_number || `INV-${cleanId}`}
                         </span>
                         <span className="text-[9.5px] text-slate-500 font-medium whitespace-nowrap">
@@ -555,36 +555,36 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 4. PO Reference */}
-                    <td className="py-2.5 px-3 align-middle w-[13%]">
-                      <span className="text-[9.5px] font-semibold text-indigo-650 font-mono truncate block" title={doc.po_number || `PO-2026-${cleanId}`}>
+                    <td className="py-2.5 px-3 align-middle w-[13%] min-w-0">
+                      <span className="text-[9.5px] font-semibold text-indigo-600 font-mono truncate block" title={doc.po_number || `PO-2026-${cleanId}`}>
                         {doc.po_number || `PO-2026-${cleanId}`}
                       </span>
                     </td>
 
                     {/* 5. Gross Value (INR) */}
-                    <td className="py-2.5 px-3 align-middle text-right w-[12%]">
+                    <td className="py-2.5 px-3 align-middle text-right w-[11%]">
                       <div className="flex flex-col items-end">
                         <span className="font-extrabold text-[11px] text-slate-900 whitespace-nowrap">
                           ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[9px] text-slate-450 font-medium whitespace-nowrap">
+                        <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
                           Base: ₹{taxableBase.toLocaleString('en-IN', { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
                         </span>
-                        <span className="text-[9px] text-slate-455 font-medium whitespace-nowrap">
+                        <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
                           +18% GST
                         </span>
                       </div>
                     </td>
 
                     {/* 6. Stage */}
-                    <td className="py-2.5 px-3 align-middle w-[8%]">
+                    <td className="py-2.5 px-3 align-middle text-center w-[8%]">
                       {(() => {
                         const status = (doc.status || "Pending Approval").trim();
                         const stageNum = doc.current_stage || doc.activeApprovalLog?.current_stage_number || 1;
 
                         if (status === "Settled" || status === "Approved" || status === "Paid" || status === "Ready for Payment") {
                           return (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-255">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               Approved
                             </span>
                           );
@@ -618,7 +618,7 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 7. Status */}
-                    <td className="py-2.5 px-3 align-middle w-[10%]">
+                    <td className="py-2.5 px-3 align-middle text-center w-[9%]">
                       {(() => {
                         const status = (doc.status || "Pending Approval").trim();
                         const stageNum = doc.current_stage || doc.activeApprovalLog?.current_stage_number || 1;
@@ -641,7 +641,7 @@ export default function WorkTrackerPage({
                         }
                         if (status === "Rejected" || status === "Failed") {
                           return (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-rose-50 text-rose-700 border border-rose-250">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
                               <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                               <span>Rejected</span>
                             </span>
@@ -666,28 +666,44 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 8. Assigned To */}
-                    <td className="py-2.5 px-3 align-middle whitespace-normal break-all w-[16%]">
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-[10.5px] text-slate-800 leading-tight">
-                          {(doc.assigned_approver || "-").replace(/,/g, ", ")}
-                        </span>
-                        {doc.assigned_approver && (
-                          <span className="text-[9px] text-slate-455 font-bold uppercase tracking-wider mt-0.5">
-                            {getApproverRole(doc.assigned_approver)}
-                          </span>
-                        )}
-                      </div>
+                    <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
+                      {(() => {
+                        const rawApprover = (doc.assigned_approver || "-").trim();
+                        const approverList = rawApprover.split(",").map(a => a.trim()).filter(Boolean);
+                        const firstApprover = approverList[0] || "-";
+                        const extraCount = approverList.length - 1;
+
+                        return (
+                          <div className="flex flex-col min-w-0" title={rawApprover}>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-bold text-[10px] text-slate-800 truncate block">
+                                {firstApprover}
+                              </span>
+                              {extraCount > 0 && (
+                                <span className="text-[8.5px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1 rounded shrink-0">
+                                  +{extraCount}
+                                </span>
+                              )}
+                            </div>
+                            {rawApprover !== "-" && (
+                              <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate block">
+                                {getApproverRole(rawApprover)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* 9. Primary Action CTA */}
-                    <td className="py-2.5 px-3 align-middle text-center w-[8%]">
+                    <td className="py-2.5 px-3 align-middle text-center w-[6%]">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onViewDocument(doc.id);
                         }}
-                        className="px-3 py-1.5 border border-indigo-200 bg-indigo-50/45 hover:bg-indigo-650 hover:text-indigo-700 font-bold text-[10px] rounded-lg transition-all shadow-3xs hover:shadow-2xs cursor-pointer flex items-center justify-center gap-0.5 mx-auto text-indigo-650"
+                        className="px-2.5 py-1 border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white font-bold text-[9.5px] rounded-md transition-all cursor-pointer flex items-center justify-center gap-0.5 mx-auto text-indigo-700"
                       >
                         <span>Review</span>
                         <span>&gt;</span>

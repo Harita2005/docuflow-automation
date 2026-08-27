@@ -21,10 +21,11 @@ export default function AdminInApp() {
     try {
       const res = await fetch('/api/admin/notifications/inapp-config', { headers });
       if (res.ok) {
-        const data = await res.json();
+        const rawData = await res.json();
+        const dataList = Array.isArray(rawData) ? rawData : (Array.isArray(rawData?.configs) ? rawData.configs : []);
         // Merge fetched data with our expected EVENTS
         const merged = EVENTS.map(event => {
-          const found = data.find(c => c.trigger_event === event);
+          const found = dataList.find(c => c && c.trigger_event === event);
           if (found) return found;
           return {
             trigger_event: event,

@@ -36,12 +36,108 @@ export default function App() {
   const [currentUserRole, setCurrentUserRole] = useState<string>(() => localStorage.getItem("currentUserRole") || "");
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => localStorage.getItem("currentUserEmail") || "");
   const [currentUserUsername, setCurrentUserUsername] = useState<string>(() => localStorage.getItem("currentUserUsername") || "");
+  const [kickedReason, setKickedReason] = useState<string | null>(() => sessionStorage.getItem("sessionKickedReason") || null);
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
     employee: ["dashboard", "work-tracker"],
     settings_editor: ["dashboard", "work-tracker", "admin"],
     admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin"]
   });
+
+  // Multi-Tab Synchronization across tabs in the same browser
+  useEffect(() => {
+    let authChannel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        authChannel = new BroadcastChannel("docuflow_auth_channel");
+        authChannel.onmessage = (event) => {
+          if (event.data?.type === "LOGIN") {
+            setIsLoggedIn(true);
+            setCurrentUserRole(event.data.role || localStorage.getItem("currentUserRole") || "");
+            setCurrentUserEmail(event.data.email || localStorage.getItem("currentUserEmail") || "");
+            setCurrentUserUsername(event.data.username || localStorage.getItem("currentUserUsername") || "");
+            setKickedReason(null);
+            sessionStorage.removeItem("sessionKickedReason");
+          } else if (event.data?.type === "LOGOUT") {
+            setIsLoggedIn(false);
+          } else if (event.data?.type === "SESSION_KICKED") {
+            const reason = event.data.reason || "Your session was terminated because your account was logged in from another device/browser.";
+            setKickedReason(reason);
+            sessionStorage.setItem("sessionKickedReason", reason);
+            handleLogout(reason, false);
+          }
+        };
+      }
+    } catch (e) {
+      console.warn("BroadcastChannel not supported or error:", e);
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "authToken") {
+        if (!e.newValue) {
+          setIsLoggedIn(false);
+        } else {
+          setIsLoggedIn(true);
+          setCurrentUserRole(localStorage.getItem("currentUserRole") || "");
+          setCurrentUserEmail(localStorage.getItem("currentUserEmail") || "");
+          setCurrentUserUsername(localStorage.getItem("currentUserUsername") || "");
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      if (authChannel) authChannel.close();
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  // 30-Minute Inactivity & Session Expiration Watcher
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+    const updateLastActivity = () => {
+      localStorage.setItem("lastActivityTime", String(Date.now()));
+    };
+
+    if (!localStorage.getItem("lastActivityTime")) {
+      updateLastActivity();
+    }
+
+    const checkSessionExpiry = () => {
+      const lastActive = parseInt(localStorage.getItem("lastActivityTime") || "0", 10);
+      const now = Date.now();
+      if (lastActive > 0 && now - lastActive > SESSION_TIMEOUT_MS) {
+        handleLogout("Your session has expired after 30 minutes of inactivity. Please log in again.", true);
+      }
+    };
+
+    // User interaction listeners
+    const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
+    let throttleTimer: any = null;
+    const handleUserActivity = () => {
+      if (!throttleTimer) {
+        updateLastActivity();
+        throttleTimer = setTimeout(() => {
+          throttleTimer = null;
+        }, 10000); // Throttled every 10s
+      }
+    };
+
+    events.forEach((evt) => window.addEventListener(evt, handleUserActivity, { passive: true }));
+
+    // Periodic check every 15 seconds
+    const interval = setInterval(checkSessionExpiry, 15000);
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, handleUserActivity));
+      clearInterval(interval);
+      if (throttleTimer) clearTimeout(throttleTimer);
+    };
+  }, [isLoggedIn]);
 
   // Registry states
   const [documents, setDocuments] = useState<DbInvoice[]>([]);
@@ -80,6 +176,13 @@ export default function App() {
         const data = await response.json();
         setDocuments(data);
       } else if (response.status === 401 || response.status === 403) {
+        try {
+          const errData = await response.json();
+          if (errData?.detail === "SESSION_TERMINATED_BY_NEW_LOGIN") {
+            handleLogout("Your session was terminated because your account was logged in from another device/browser.", true);
+            return;
+          }
+        } catch (_) {}
         handleLogout();
       } else {
         console.error("Failed to fetch documents:", await response.text());
@@ -103,6 +206,13 @@ export default function App() {
         const data = await response.json();
         setStats(data);
       } else if (response.status === 401 || response.status === 403) {
+        try {
+          const errData = await response.json();
+          if (errData?.detail === "SESSION_TERMINATED_BY_NEW_LOGIN") {
+            handleLogout("Your session was terminated because your account was logged in from another device/browser.", true);
+            return;
+          }
+        } catch (_) {}
         handleLogout();
       } else {
         console.error("Failed to fetch analytical stats counters:", await response.text());
@@ -129,6 +239,15 @@ export default function App() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Check for session kick on this user
+          if (data.type === "SESSION_KICKED") {
+            if (data.payload?.username && data.payload.username.toLowerCase() === currentUserUsername.toLowerCase()) {
+              const newDevice = data.payload.new_device || "another device/browser";
+              const reason = `Your session was terminated because your account was logged in from ${newDevice}.`;
+              handleLogout(reason, true);
+              return;
+            }
+          }
           if (['DOCUMENT_UPDATED', 'DOCUMENT_CREATED', 'DOCUMENT_LOCKED', 'DOCUMENT_UNLOCKED', 'STAGE_APPROVED'].includes(data.type)) {
             fetchDocuments(true);
             fetchStats(true);
@@ -157,21 +276,33 @@ export default function App() {
       clearInterval(docInterval);
       clearInterval(statsInterval);
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, currentUserUsername]);
 
   // Sync state to localStorage to persist across refreshes
   useEffect(() => {
     localStorage.setItem("isLoggedIn", String(isLoggedIn));
   }, [isLoggedIn]);
 
-  const handleLoginSuccess = (userId: string, role: string, email: string) => {
+  const handleLoginSuccess = (userId: string, role: string, email: string, username: string) => {
     localStorage.setItem("isLoggedIn", "true");
     localStorage.setItem("currentUserRole", role);
     localStorage.setItem("currentUserEmail", email);
+    localStorage.setItem("currentUserUsername", username);
+    localStorage.setItem("lastActivityTime", String(Date.now()));
     setCurrentUserRole(role);
     setCurrentUserEmail(email);
-    setCurrentUserUsername(localStorage.getItem("currentUserUsername") || "");
+    setCurrentUserUsername(username);
+    setKickedReason(null);
+    sessionStorage.removeItem("sessionKickedReason");
     setIsLoggedIn(true);
+
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const channel = new BroadcastChannel("docuflow_auth_channel");
+        channel.postMessage({ type: "LOGIN", role, email, username });
+        channel.close();
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -290,10 +421,30 @@ export default function App() {
     fetchStats();
   };
 
-  function handleLogout() {
+  function handleLogout(reason?: string | null, broadcast = true) {
     localStorage.removeItem("authToken");
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("lastActivityTime");
     sessionStorage.removeItem("hasShownWelcomeQueue");
+    if (reason) {
+      setKickedReason(reason);
+      sessionStorage.setItem("sessionKickedReason", reason);
+    }
     setIsLoggedIn(false);
+
+    if (broadcast) {
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const channel = new BroadcastChannel("docuflow_auth_channel");
+          if (reason) {
+            channel.postMessage({ type: "SESSION_KICKED", reason });
+          } else {
+            channel.postMessage({ type: "LOGOUT" });
+          }
+          channel.close();
+        }
+      } catch (e) {}
+    }
   }
 
   // Reset the hasShownWelcomeQueue flag when the app loads, the role changes, or the user logs in,
@@ -334,11 +485,13 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <LoginPage
+        kickedReason={kickedReason}
+        onClearKickedReason={() => {
+          setKickedReason(null);
+          sessionStorage.removeItem("sessionKickedReason");
+        }}
         onLoginSuccess={(userId, role, email, username) => {
-          setCurrentUserRole(role);
-          setCurrentUserEmail(email);
-          setCurrentUserUsername(username);
-          setIsLoggedIn(true);
+          handleLoginSuccess(userId, role, email, username);
           sessionStorage.setItem("hasShownWelcomeQueue", "false");
           // Smart Routing based on role
           setCurrentView((prev) => {

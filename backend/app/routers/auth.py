@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.config import settings
 from app.models import User, AuditLog
 from app.schemas import (
     LoginRequest, TokenResponse, MFASendOTPRequest, MFAVerifyRequest,
@@ -61,10 +62,60 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Invalid username or password"
             )
         
-        # Issue standard 60-minute JWT token (returns ONLY token fields, no sensitive personal details)
-        expires_minutes = request.expires_in_minutes or 60
+        # Check for active concurrent session conflict
+        if user.active_session_id and not request.force_login:
+            return {
+                "token": None,
+                "access_token": None,
+                "token_type": "bearer",
+                "expires_in": 0,
+                "user": None,
+                "mfa_required": False,
+                "active_session_conflict": True,
+                "active_device_info": user.active_device_info or "Another Browser / Device",
+                "session_created_at": (user.session_created_at.isoformat() + "Z") if user.session_created_at else None,
+                "message": f"User '{user.employee_name or user.username}' is currently logged in on another device/browser."
+            }
+
+        # Generate fresh session ID for this login
+        import uuid
+        new_session_id = str(uuid.uuid4())
+        device_label = request.device_info or "Web Browser"
+
+        had_prior_session = bool(user.active_session_id)
+        user.active_session_id = new_session_id
+        user.active_device_info = device_label
+        user.session_created_at = datetime.datetime.utcnow()
+        user.last_activity_at = datetime.datetime.utcnow()
+        user.last_login = datetime.datetime.utcnow()
+
+        # If taking over prior session, broadcast real-time kick event to prior device
+        if had_prior_session:
+            try:
+                from app.routers.events import broadcast_event
+                broadcast_event("SESSION_KICKED", {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "new_device": device_label,
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                })
+                db.add(AuditLog(
+                    invoice_id=None,
+                    user=user.employee_name or user.name or user.username,
+                    action="Session Replaced",
+                    stage="Authentication",
+                    notes=f"Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated."
+                ))
+            except Exception as e:
+                print("Error on session kick broadcast / audit:", e)
+
+        db.commit()
+        db.refresh(user)
+
+        # Issue standard 30-minute JWT token containing session_id
+        expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
         access_token = create_access_token(
-            data={"sub": user.username, "user_id": user.id, "role": user.role},
+            data={"sub": user.username, "user_id": user.id, "role": user.role, "session_id": new_session_id},
             expires_delta=datetime.timedelta(minutes=expires_minutes)
         )
         return {
@@ -80,7 +131,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 "role": user.role,
                 "employee_id": user.employee_id
             },
-            "mfa_required": False
+            "mfa_required": False,
+            "active_session_conflict": False,
+            "session_id": new_session_id
         }
 
     # 2. Interactive Browser 2FA Flow (when password omitted in step 1)
@@ -96,7 +149,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         "available_methods": ["EMAIL", "AUTHENTICATOR", "SMS"],
         "masked_email": mask_email(user.email),
         "masked_phone": mask_phone(user.phone_number or "+91 98765 43210"),
-        "has_authenticator_setup": bool(user.mfa_secret)
+        "has_authenticator_setup": bool(user.mfa_secret),
+        "active_session_conflict": False
     }
 
 @router.post("/mfa/send-otp")
@@ -218,9 +272,58 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Too many invalid attempts. Session locked. Please sign in again.")
         raise HTTPException(status_code=400, detail="Invalid verification code. Please check and try again.")
 
-    # Verification successful!
+    # Check for active concurrent session conflict during MFA verification
+    if user.active_session_id and not request.force_login:
+        return {
+            "token": None,
+            "access_token": None,
+            "token_type": "bearer",
+            "expires_in": 0,
+            "user": None,
+            "mfa_required": False,
+            "active_session_conflict": True,
+            "active_device_info": user.active_device_info or "Another Browser / Device",
+            "session_created_at": (user.session_created_at.isoformat() + "Z") if user.session_created_at else None,
+            "message": f"User '{user.employee_name or user.username}' is currently logged in on another device/browser."
+        }
+
+    # Generate fresh session ID for this device session
+    import uuid
+    new_session_id = str(uuid.uuid4())
+    device_label = request.device_info or "Web Browser"
+
+    had_prior_session = bool(user.active_session_id)
+    user.active_session_id = new_session_id
+    user.active_device_info = device_label
+    user.session_created_at = datetime.datetime.utcnow()
+    user.last_activity_at = datetime.datetime.utcnow()
     user.last_login = datetime.datetime.utcnow()
-    access_token = create_access_token(data={"sub": user.username, "id": user.id, "role": user.role})
+
+    # If taking over prior session, broadcast real-time kick event to prior device
+    if had_prior_session:
+        try:
+            from app.routers.events import broadcast_event
+            broadcast_event("SESSION_KICKED", {
+                "user_id": user.id,
+                "username": user.username,
+                "new_device": device_label,
+                "timestamp": datetime.datetime.utcnow().isoformat()
+            })
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action="Session Replaced",
+                stage="Authentication",
+                notes=f"Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated."
+            ))
+        except Exception as e:
+            print("Error on session kick broadcast / audit:", e)
+
+    expires_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    access_token = create_access_token(
+        data={"sub": user.username, "id": user.id, "role": user.role, "session_id": new_session_id},
+        expires_delta=datetime.timedelta(minutes=expires_minutes)
+    )
 
     # Log successful MFA audit trail
     try:
@@ -242,6 +345,9 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
 
     return {
         "token": access_token,
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": expires_minutes * 60,
         "user": {
             "id": user.id,
             "username": user.username,
@@ -250,12 +356,16 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
             "role": user.role,
             "employee_id": user.employee_id
         },
-        "mfa_required": False
+        "mfa_required": False,
+        "active_session_conflict": False,
+        "session_id": new_session_id
     }
 
 @router.post("/logout")
 def logout(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user:
+        current_user.active_session_id = None
+        current_user.active_device_info = None
         try:
             db.add(AuditLog(
                 invoice_id=None,

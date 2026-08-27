@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2 } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -60,6 +60,8 @@ export default function Admin() {
   
   // New States for Search and Diagnostics
   const [logSearchQuery, setLogSearchQuery] = useState("");
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState("ALL");
+  const [syncingData, setSyncingData] = useState(false);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
   const [templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
@@ -91,6 +93,22 @@ export default function Admin() {
       const res = await fetch('/api/admin/audit-logs', { headers });
       if (res.ok) setAuditLogs(await res.json());
     } catch (e) {}
+  };
+
+  const handleTriggerSync = async () => {
+    setSyncingData(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch('/api/sync/seed-demo', { method: 'POST', headers });
+      if (res.ok) {
+        await fetchAuditLogs();
+      }
+    } catch (e) {
+      console.error("Sync error:", e);
+    } finally {
+      setSyncingData(false);
+    }
   };
 
   const fetchData = async () => {
@@ -912,21 +930,83 @@ export default function Admin() {
     {activeTab === "audit" && (
       <div className="lg:col-span-12 bg-white/80 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col min-h-[500px] transition-all duration-300">
         <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-[10px] font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-widest">
-            <ShieldCheck className="h-4 w-4 text-indigo-600" />
-            Immutable System Audit Ledger
-          </h2>
-          <div className="relative w-full sm:w-64">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
+          <div className="flex items-center gap-3">
+            <h2 className="text-[10px] font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-widest">
+              <ShieldCheck className="h-4 w-4 text-indigo-600" />
+              Immutable System Audit Ledger
+            </h2>
+            <div className="flex items-center space-x-1 bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => setAuditCategoryFilter("ALL")}
+                className={`px-2.5 py-1 rounded-md text-[9px] font-bold transition-all ${
+                  auditCategoryFilter === "ALL"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                All Events
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuditCategoryFilter("SYNC")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-bold transition-all ${
+                  auditCategoryFilter === "SYNC"
+                    ? "bg-cyan-500 text-white shadow-sm shadow-cyan-500/20"
+                    : "text-slate-500 hover:text-cyan-700"
+                }`}
+              >
+                <Database className="h-3 w-3" />
+                Data Syncs
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuditCategoryFilter("APPROVAL")}
+                className={`px-2.5 py-1 rounded-md text-[9px] font-bold transition-all ${
+                  auditCategoryFilter === "APPROVAL"
+                    ? "bg-emerald-600 text-white shadow-sm shadow-emerald-500/20"
+                    : "text-slate-500 hover:text-emerald-700"
+                }`}
+              >
+                Approvals
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuditCategoryFilter("SECURITY")}
+                className={`px-2.5 py-1 rounded-md text-[9px] font-bold transition-all ${
+                  auditCategoryFilter === "SECURITY"
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-500/20"
+                    : "text-slate-500 hover:text-violet-700"
+                }`}
+              >
+                Security & Sessions
+              </button>
             </div>
-            <input
-              type="text"
-              placeholder="Search ID, action, or user..."
-              value={logSearchQuery}
-              onChange={(e) => setLogSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-[10px] font-medium bg-white border border-slate-200 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700"
-            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTriggerSync}
+              disabled={syncingData}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm disabled:opacity-50 transition-all cursor-pointer"
+              title="Trigger Data Sync from primary data source and log to audit ledger"
+            >
+              <RefreshCw className={`h-3 w-3 ${syncingData ? 'animate-spin' : ''}`} />
+              {syncingData ? "Syncing..." : "Sync Data Now"}
+            </button>
+            <div className="relative w-full sm:w-60">
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                <Search className="h-3.5 w-3.5 text-slate-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search ID, action, or user..."
+                value={logSearchQuery}
+                onChange={(e) => setLogSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-[10px] font-medium bg-white border border-slate-200 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-slate-700"
+              />
+            </div>
           </div>
         </div>
         <div className="p-0 overflow-x-auto">
@@ -936,28 +1016,51 @@ export default function Admin() {
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Timestamp</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">User / Agent</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Action</th>
+                <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Stage</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/60 text-[10px]">
-              {auditLogs.filter(log => 
-                logSearchQuery === "" || 
-                log.action.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
-                log.details.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
-                log.user.toLowerCase().includes(logSearchQuery.toLowerCase())
-              ).length === 0 ? (
-                <tr><td colSpan="4" className="p-8 text-center text-slate-400 font-medium italic">No audit logs found matching your search.</td></tr>
-              ) : (
-                auditLogs.filter(log => 
-                  logSearchQuery === "" || 
-                  log.action.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
-                  log.details.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
-                  log.user.toLowerCase().includes(logSearchQuery.toLowerCase())
-                ).map((log) => {
-                  const actionStr = log.action.toLowerCase();
+              {(() => {
+                const filtered = auditLogs.filter(log => {
+                  const act = (log.action || "").toLowerCase();
+                  const stg = (log.stage || "").toLowerCase();
+                  const usr = (log.user || "").toLowerCase();
+                  const det = (log.details || log.notes || "").toLowerCase();
+                  const q = logSearchQuery.toLowerCase();
+                  const matchesSearch = q === "" || act.includes(q) || det.includes(q) || usr.includes(q) || stg.includes(q);
+
+                  if (!matchesSearch) return false;
+
+                  if (auditCategoryFilter === "SYNC") {
+                    return act.includes("sync") || act.includes("ingest") || stg.includes("sync") || usr.includes("sync") || det.includes("sync");
+                  } else if (auditCategoryFilter === "APPROVAL") {
+                    return act.includes("approve") || act.includes("reject") || act.includes("send back") || act.includes("review") || stg.includes("stage") || act.includes("checklist");
+                  } else if (auditCategoryFilter === "SECURITY") {
+                    return act.includes("session") || act.includes("mfa") || act.includes("login") || act.includes("auth") || act.includes("logout");
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan="5" className="p-8 text-center text-slate-400 font-medium italic">
+                        No audit logs found matching your filter or search.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filtered.map((log) => {
+                  const actionStr = (log.action || "").toLowerCase();
                   let badgeColors = "bg-slate-50 text-slate-600 border-slate-200/80 shadow-[0_0_10px_rgba(148,163,184,0.1)]";
-                  if (actionStr.includes("clear") || actionStr.includes("confirm") || actionStr.includes("complete") || actionStr.includes("approve")) 
+                  if (actionStr.includes("sync") || actionStr.includes("ingest"))
+                    badgeColors = "bg-cyan-50 text-cyan-700 border-cyan-200/80 shadow-[0_0_10px_rgba(6,182,212,0.15)]";
+                  else if (actionStr.includes("clear") || actionStr.includes("confirm") || actionStr.includes("complete") || actionStr.includes("approve")) 
                     badgeColors = "bg-emerald-50 text-emerald-700 border-emerald-200/60 shadow-[0_0_10px_rgba(16,185,129,0.15)]";
+                  else if (actionStr.includes("session") || actionStr.includes("mfa") || actionStr.includes("auth"))
+                    badgeColors = "bg-violet-50 text-violet-700 border-violet-200/80 shadow-[0_0_10px_rgba(139,92,246,0.15)]";
                   else if (actionStr.includes("pause") || actionStr.includes("wait")) 
                     badgeColors = "bg-amber-50 text-amber-700 border-amber-200/60 shadow-[0_0_10px_rgba(245,158,11,0.15)]";
                   else if (actionStr.includes("ai ") || actionStr.includes("parse") || actionStr.includes("classif") || actionStr.includes("extract")) 
@@ -970,19 +1073,25 @@ export default function Admin() {
                       <td className="px-4 py-2.5 text-slate-400 font-mono text-[9px] whitespace-nowrap">
                         {new Date(log.timestamp).toLocaleString()}
                       </td>
-                      <td className="px-4 py-2.5 font-bold text-slate-700">{log.user}</td>
+                      <td className="px-4 py-2.5 font-bold text-slate-700 flex items-center gap-1.5">
+                        {actionStr.includes("sync") && <Database className="h-3 w-3 text-cyan-600 shrink-0" />}
+                        <span>{log.user}</span>
+                      </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <span className={`px-2 py-0.5 border rounded-md text-[8.5px] font-extrabold uppercase tracking-widest transition-all duration-300 group-hover:-translate-y-px ${badgeColors}`}>
                           {log.action}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500 font-medium leading-relaxed max-w-xl">
-                        {log.details}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 font-medium text-[9px]">
+                        {log.stage || "-"}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600 font-medium leading-relaxed max-w-xl">
+                        {log.details || log.notes}
                       </td>
                     </tr>
                   );
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>

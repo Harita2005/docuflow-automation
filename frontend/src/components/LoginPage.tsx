@@ -2,14 +2,17 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Layers, ArrowRight, User, Mail, 
   Smartphone, ShieldCheck, KeyRound, QrCode, RefreshCw, 
-  ChevronLeft, CheckCircle2, AlertCircle, Copy, Check
+  ChevronLeft, CheckCircle2, AlertCircle, Copy, Check,
+  Monitor, LogOut, Laptop, AlertTriangle, X
 } from "lucide-react";
 
 interface LoginPageProps {
   onLoginSuccess: (userId: string, role: string, email: string, username: string) => void;
+  kickedReason?: string | null;
+  onClearKickedReason?: () => void;
 }
 
-export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
+export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedReason }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   
@@ -35,7 +38,34 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [totpSecret, setTotpSecret] = useState<string>("");
   const [copiedSecret, setCopiedSecret] = useState(false);
 
+  // Active Session Conflict Modal State
+  interface SessionConflictData {
+    deviceInfo: string;
+    createdAt?: string;
+    message?: string;
+    onConfirm: () => void;
+  }
+  const [sessionConflict, setSessionConflict] = useState<SessionConflictData | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const getDeviceLabel = () => {
+    const ua = navigator.userAgent;
+    let browser = "Browser";
+    if (ua.includes("Firefox/")) browser = "Firefox";
+    else if (ua.includes("Edg/")) browser = "Edge";
+    else if (ua.includes("Chrome/")) browser = "Chrome";
+    else if (ua.includes("Safari/")) browser = "Safari";
+
+    let os = "Desktop";
+    if (ua.includes("Win")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+
+    return `${browser} on ${os}`;
+  };
 
   // Countdown timer effect
   useEffect(() => {
@@ -58,8 +88,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   }, [step]);
 
   // Step 1 Submit: Identifier only (MFA required)
-  const handleIdentifierSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleIdentifierSubmit = async (e?: React.FormEvent, forceLogin = false) => {
+    if (e) e.preventDefault();
     if (!username.trim()) return;
     setLoading(true);
     setOtpError("");
@@ -70,12 +100,27 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           username: username.trim(), 
-          identifier: username.trim()
+          identifier: username.trim(),
+          force_login: forceLogin,
+          device_info: getDeviceLabel()
         })
       });
       
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.error || "User not found");
+
+      if (data.active_session_conflict) {
+        setSessionConflict({
+          deviceInfo: data.active_device_info || "Another device/browser",
+          createdAt: data.session_created_at,
+          message: data.message,
+          onConfirm: () => {
+            setSessionConflict(null);
+            handleIdentifierSubmit(undefined, true);
+          }
+        });
+        return;
+      }
 
       // If MFA is required, transition directly to the 3-Option Selection screen
       if (data.mfa_required) {
@@ -182,7 +227,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   };
 
   // Internal Verify Function
-  const executeVerification = async (codeToVerify: string) => {
+  const executeVerification = async (codeToVerify: string, forceLogin = false) => {
     if (!codeToVerify.trim()) {
       setOtpError("Please enter your 6-digit verification code");
       return;
@@ -202,12 +247,27 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         body: JSON.stringify({
           ticket: mfaTicket,
           method: selectedMethod,
-          code: codeToVerify.trim()
+          code: codeToVerify.trim(),
+          force_login: forceLogin,
+          device_info: getDeviceLabel()
         })
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Invalid code. Please check and try again.");
+
+      if (data.active_session_conflict) {
+        setSessionConflict({
+          deviceInfo: data.active_device_info || "Another device/browser",
+          createdAt: data.session_created_at,
+          message: data.message,
+          onConfirm: () => {
+            setSessionConflict(null);
+            executeVerification(codeToVerify, true);
+          }
+        });
+        return;
+      }
 
       // Success! Save token and log in
       localStorage.setItem("authToken", data.token);
@@ -275,6 +335,28 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
         <div className="w-full max-w-md mx-auto">
           
+          {/* Real-time Session Kicked Notification Banner */}
+          {kickedReason && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start space-x-3 shadow-xs animate-shake">
+              <div className="p-1 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-bold text-amber-900 tracking-wide uppercase">Session Terminated</h4>
+                <p className="text-xs text-amber-700 font-medium mt-0.5 leading-relaxed">{kickedReason}</p>
+              </div>
+              {onClearKickedReason && (
+                <button
+                  type="button"
+                  onClick={onClearKickedReason}
+                  className="text-amber-500 hover:text-amber-800 text-xs shrink-0 p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ============================================================ */}
           {/* STEP 1: IDENTIFIER INPUT (USERNAME OR EMPLOYEE ID) */}
           {/* ============================================================ */}
@@ -648,6 +730,65 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             >
               Done & Return to Login
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* ACTIVE CONCURRENT SESSION TAKEOVER PROMPT MODAL */}
+      {/* ============================================================ */}
+      {sessionConflict && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200/80 space-y-5 animate-scaleUp">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl border border-amber-200">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 font-display">Active Session Detected</h3>
+                <p className="text-xs text-slate-500 font-medium">Single Active Device Policy</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2.5">
+              <p className="text-xs text-slate-700 leading-relaxed">
+                An active session is currently signed in for <strong className="text-slate-900">{username.trim()}</strong> on:
+              </p>
+              <div className="flex items-center space-x-2.5 py-2 px-3 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-semibold">
+                <Laptop className="h-4 w-4 text-blue-600 shrink-0" />
+                <span className="truncate">{sessionConflict.deviceInfo}</span>
+              </div>
+              {sessionConflict.createdAt && (
+                <p className="text-[11px] text-slate-500">
+                  Active since: {(() => {
+                    const iso = sessionConflict.createdAt.endsWith("Z") ? sessionConflict.createdAt : `${sessionConflict.createdAt}Z`;
+                    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                  })()}
+                </p>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              To protect financial data and audit integrity, only one active device session is permitted. Would you like to terminate the other session and sign in on this device?
+            </p>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSessionConflict(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={sessionConflict.onConfirm}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition shadow-md shadow-blue-600/20 flex items-center justify-center space-x-1.5"
+              >
+                <LogOut className="h-3.5 w-3.5 rotate-180" />
+                <span>Terminate & Continue</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

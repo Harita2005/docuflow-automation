@@ -24,12 +24,12 @@ backend/
 │       ├── __init__.py
 │       ├── auth.py           # /api/auth/login, /api/auth/me
 │       ├── users.py          # /api/users
-│       ├── invoices.py       # /api/invoices, /api/documents, stage approvals, auto-routing
+│       ├── documents.py      # /api/documents, /api/invoices, stage approvals, auto-routing
 │       ├── workflows.py      # /api/admin/workflows CRUD & reordering
 │       ├── conditions.py     # /api/admin/conditions Policy Matrix CRUD
 │       └── audit.py          # /api/audit-logs, /api/system-logs
 ├── requirements.txt
-├── seed_excel.py             # Parses Excel Approval Matrix & seeds database
+├── seed_sd_workflow_matrix.py # Parses Excel Approval Matrix & seeds database
 ├── run.py                    # Uvicorn entry point
 └── README.md
 ```

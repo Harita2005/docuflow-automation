@@ -49,6 +49,7 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub") or payload.get("username")
+        token_session_id: Optional[str] = payload.get("session_id")
         if username is None:
             raise credentials_exception
     except JWTError:
@@ -57,4 +58,15 @@ async def get_current_user(
     user = db.query(User).filter((User.username == username) | (User.email == username)).filter(User.is_deleted == False).first()
     if user is None:
         raise credentials_exception
+
+    # Enforce Single Active Device Session:
+    # If the user has an active session ID recorded and the token includes a session_id,
+    # ensure this token's session_id matches the active one.
+    if token_session_id and user.active_session_id and user.active_session_id != token_session_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SESSION_TERMINATED_BY_NEW_LOGIN",
+            headers={"WWW-Authenticate": "Bearer", "X-Session-Status": "Terminated"},
+        )
+
     return user

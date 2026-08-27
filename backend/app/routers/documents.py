@@ -1933,10 +1933,27 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session =
 
 @router.get("/api/admin/notifications/inapp-config")
 def get_admin_notifications_inapp_config(db: Session = Depends(get_db)):
-    return {
-        "enabled": True,
-        "pollInterval": 5000
-    }
+    configs = load_app_configs()
+    for c in configs:
+        if c.get("key") == "INAPP_NOTIFICATIONS_CONFIG":
+            try:
+                return json.loads(c.get("value", "[]"))
+            except Exception:
+                pass
+    # Default event configs
+    return [
+        {"trigger_event": "PENDING_APPROVAL", "enabled": True, "title_template": "Action Required: {{document_number}}", "message_template": "Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review."},
+        {"trigger_event": "ASSIGNED", "enabled": True, "title_template": "Task Assigned: {{document_number}}", "message_template": "You have been assigned as the reviewer for {{document_number}}."},
+        {"trigger_event": "REJECTED", "enabled": True, "title_template": "Document Rejected: {{document_number}}", "message_template": "Document {{document_number}} was rejected during workflow approval."},
+        {"trigger_event": "SENT_BACK", "enabled": True, "title_template": "Document Sent Back: {{document_number}}", "message_template": "Document {{document_number}} was returned for clarification."},
+        {"trigger_event": "COMPLETED", "enabled": True, "title_template": "Workflow Completed: {{document_number}}", "message_template": "Document {{document_number}} has passed final approval and is ready for payment."},
+        {"trigger_event": "CLARIFICATION", "enabled": True, "title_template": "Clarification Needed: {{document_number}}", "message_template": "Please provide clarification for document {{document_number}}."}
+    ]
+
+@router.post("/api/admin/notifications/inapp-config")
+def save_admin_notifications_inapp_config(payload: list, db: Session = Depends(get_db)):
+    save_app_config("INAPP_NOTIFICATIONS_CONFIG", json.dumps(payload, ensure_ascii=False), "In-App Bell Notification Trigger Templates")
+    return {"success": True, "message": "In-App Notification Configurations saved successfully"}
 
 @router.get("/api/admin/backup/history")
 def get_admin_backup_history(db: Session = Depends(get_db)):

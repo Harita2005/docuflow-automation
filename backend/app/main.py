@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile, Invoice
-from app.routers import auth, users, invoices, workflows, conditions, audit, sync, sync_router, integrations, events
+from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -95,6 +95,14 @@ try:
                     conn.execute(text("ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
                 if 'last_login' not in existing_cols_users:
                     conn.execute(text("ALTER TABLE users ADD last_login DATETIME NULL;"))
+                if 'active_session_id' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD active_session_id VARCHAR(100) NULL;"))
+                if 'active_device_info' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD active_device_info NVARCHAR(255) NULL;"))
+                if 'session_created_at' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD session_created_at DATETIME NULL;"))
+                if 'last_activity_at' not in existing_cols_users:
+                    conn.execute(text("ALTER TABLE users ADD last_activity_at DATETIME NULL;"))
                     
                 # Workflow profiles table migrations
                 existing_cols_workflows = [c['name'] for c in inspector.get_columns('workflow_profiles')]
@@ -174,8 +182,11 @@ def startup_event():
         inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
         if user_count < 10 or wf_count == 0 or inv_count < 5:
             print(f"[Startup] Seeding complete dataset (Found {user_count} users, {wf_count} workflows, {inv_count} invoices)...")
-            from seed_excel import seed_database
-            seed_database()
+            try:
+                from seed_sd_workflow_matrix import seed_sd_workflow_matrix
+                seed_sd_workflow_matrix()
+            except Exception as e:
+                print(f"[Startup] Seed notice: {e}")
 
         # Always synchronize active stage approvers for all documents
         from app.models import WorkflowStepDefinition
@@ -217,7 +228,7 @@ app.mount("/stored_pdfs", StaticFiles(directory=str(settings.PDF_STORAGE_DIR)), 
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(users.admin_router)
-app.include_router(invoices.router)
+app.include_router(documents.router)
 app.include_router(workflows.router)
 app.include_router(conditions.router)
 app.include_router(audit.router)

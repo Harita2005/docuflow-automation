@@ -1017,28 +1017,28 @@ export default function FlowBuilder({ users = [] }) {
     </form>
     
     {configuringStepIndex !== null && editingWorkflow.steps[configuringStepIndex] && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setConfiguringStepIndex(null)} />
-        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col border border-slate-200 overflow-hidden max-h-[88vh] animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl flex flex-col border border-slate-200 overflow-hidden max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <div>
-              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+              <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span>Configure Step {configuringStepIndex + 1}</span>
-                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                   {editingWorkflow.steps[configuringStepIndex].step_name || 'Untitled Step'}
                 </span>
               </h3>
-              <p className="text-xs font-medium text-slate-500 mt-1">Set stage approver pool, backup delegates, SLA, and verification checklist.</p>
+              <p className="text-[10px] font-medium text-slate-500 mt-0.5">Set stage approver pool, backup delegates, SLA, and verification checklist.</p>
             </div>
-            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shadow-2xs">
-              <X className="h-4 w-4" />
+            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shadow-2xs">
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
           
-          <div className="p-6 flex-1 overflow-y-auto">
-            <div className="space-y-6">
+          <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Assignment Strategy</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Assignment Strategy</label>
                 {(() => {
                   const currentTarget = editingWorkflow.steps[configuringStepIndex].approver_target || '';
                   const isCurrentPool = currentTarget.includes(',') || editingWorkflow.steps[configuringStepIndex].approver_type === 'Approval Pool';
@@ -1055,7 +1055,7 @@ export default function FlowBuilder({ users = [] }) {
                           updateStep(configuringStepIndex, 'approver_target', first);
                         }
                       }} 
-                      className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg shadow-sm focus:border-blue-500 outline-none text-slate-800 font-bold"
+                      className="w-full text-xs p-2 bg-white border border-slate-300 rounded-md shadow-2xs focus:border-blue-500 outline-none text-slate-800 font-semibold"
                     >
                       <option value="Approval Pool">Approval Pool / Multi-User Group (Any One Can Approve)</option>
                       <option value="Specific Employee">Specific Employee (Single Direct Assignment)</option>
@@ -1065,7 +1065,7 @@ export default function FlowBuilder({ users = [] }) {
                 })()}
               </div>
               
-              <div className="pt-2">
+              <div>
                 {(() => {
                   const currentTarget = editingWorkflow.steps[configuringStepIndex].approver_target || '';
                   const isPool = currentTarget.includes(',') || editingWorkflow.steps[configuringStepIndex].approver_type === 'Approval Pool';
@@ -1085,45 +1085,46 @@ export default function FlowBuilder({ users = [] }) {
                     };
 
                     return (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {/* Approval Rule Banner */}
-                        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-xs font-black text-blue-900 uppercase tracking-wide">Approval Rule: Any One (First Responder)</span>
+                        <div className="px-2.5 py-1.5 bg-blue-50/80 border border-blue-200 rounded-md flex items-center justify-between gap-2 text-[10px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span className="font-bold text-blue-900 shrink-0">First Responder Rule:</span>
+                            <span className="text-blue-800 font-medium truncate">Any 1 member approval completes this stage.</span>
                           </div>
-                          <p className="text-[11px] text-blue-800 leading-relaxed font-medium">
-                            When an invoice enters this stage, <strong>all {selectedList.length} assigned members</strong> will see it in their pending queue. As soon as <strong>ANY ONE</strong> of them approves it, the stage completes immediately and moves to the next step.
-                          </p>
+                          <span className="text-[9px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded shrink-0">
+                            {selectedList.length} Pool Approvers
+                          </span>
                         </div>
 
                         {/* Selected Members Badges */}
                         <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold uppercase tracking-wider text-blue-600">Assigned Pool Members ({selectedList.length})</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Assigned Pool Members ({selectedList.length})</label>
                             {selectedList.length > 0 && (
                               <button 
                                 type="button" 
                                 onClick={() => updateStep(configuringStepIndex, 'approver_target', '')}
-                                className="text-[10px] text-rose-600 hover:underline font-bold"
+                                className="text-[9px] text-rose-600 hover:underline font-bold"
                               >
                                 Clear All
                               </button>
                             )}
                           </div>
                           
-                          <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                          <div className="flex flex-wrap gap-1 min-h-[32px] p-1.5 bg-slate-50 border border-slate-200 rounded-md">
                             {selectedList.length === 0 ? (
-                              <span className="text-xs text-slate-400 italic">No members selected. Check users below to add to pool.</span>
+                              <span className="text-[10px] text-slate-400 italic">No members selected. Check users below to add to pool.</span>
                             ) : (
                               selectedList.map(m => {
                                 const match = internalUsers.find(u => u.username === m || u.email === m);
                                 const label = match?.name ? `${match.name} (${m})` : m;
                                 return (
-                                  <span key={m} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+                                  <span key={m} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                     <span>{label}</span>
                                     <button type="button" onClick={() => toggleUserInPool(m)} className="text-blue-600 hover:text-rose-600">
-                                      <X className="h-3 w-3" />
+                                      <X className="h-2.5 w-2.5" />
                                     </button>
                                   </span>
                                 );
@@ -1133,11 +1134,11 @@ export default function FlowBuilder({ users = [] }) {
                         </div>
 
                         {/* Search & Quick-Add New Member Input */}
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700">
                             Search or Add New Approver
                           </label>
-                          <div className="flex gap-2">
+                          <div className="flex gap-1.5">
                             <input 
                               type="text"
                               value={memberSearchText}
@@ -1153,7 +1154,7 @@ export default function FlowBuilder({ users = [] }) {
                                 }
                               }}
                               placeholder="Type name, username or email..."
-                              className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-blue-500 outline-none font-medium"
+                              className="flex-1 text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:border-blue-500 outline-none font-medium"
                             />
                             <button
                               type="button"
@@ -1167,15 +1168,15 @@ export default function FlowBuilder({ users = [] }) {
                                 }
                               }}
                               disabled={!memberSearchText.trim()}
-                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-md transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
                             >
-                              <Plus className="h-3.5 w-3.5" />
-                              <span>Add to Pool</span>
+                              <Plus className="h-3 w-3" />
+                              <span>Add</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* User Checkbox Selection List (Collapsible & Hidden by Default) */}
+                        {/* User Checkbox Selection List */}
                         <div>
                           {(() => {
                             const q = memberSearchText.trim().toLowerCase();
@@ -1190,53 +1191,50 @@ export default function FlowBuilder({ users = [] }) {
                             const isListVisible = showApproversList || Boolean(q);
 
                             return (
-                              <div className="space-y-2">
+                              <div className="space-y-1.5">
                                 <button 
                                   type="button" 
                                   onClick={() => setShowApproversList(!showApproversList)}
-                                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+                                  className="w-full flex items-center justify-between px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-md text-[10px] font-bold text-slate-700 transition cursor-pointer"
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <Users className="h-3.5 w-3.5 text-blue-600" />
-                                    <span>{isListVisible ? "Hide Available Approvers List" : `Browse & Select from System Approvers (${filteredUsers.length})`}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Users className="h-3 w-3 text-blue-600" />
+                                    <span>{isListVisible ? "Hide Approvers List" : `Browse System Approvers (${filteredUsers.length})`}</span>
                                   </div>
-                                  <span className="text-[10px] text-blue-600 font-extrabold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                    {isListVisible ? "▲ Hide List" : "▼ Click to View Members"}
+                                  <span className="text-[9px] text-blue-600 font-extrabold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                    {isListVisible ? "▲ Hide" : "▼ View"}
                                   </span>
                                 </button>
 
                                 {isListVisible && (
-                                  <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white custom-scrollbar shadow-inner animate-in fade-in duration-150">
+                                  <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100 bg-white custom-scrollbar shadow-inner animate-in fade-in duration-150">
                                     {filteredUsers.length > 0 ? (
                                       filteredUsers.map(u => {
                                         const uKey = u.username || u.email;
                                         const isChecked = selectedList.includes(uKey);
                                         return (
-                                          <label key={u.id || uKey} className="flex items-center justify-between p-2.5 hover:bg-slate-50 cursor-pointer transition">
-                                            <div className="flex items-center gap-2.5">
+                                          <label key={u.id || uKey} className="flex items-center justify-between p-2 hover:bg-slate-50 cursor-pointer transition">
+                                            <div className="flex items-center gap-2">
                                               <input 
                                                 type="checkbox" 
                                                 checked={isChecked} 
                                                 onChange={() => toggleUserInPool(uKey)}
-                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
                                               />
                                               <div>
-                                                <div className="text-xs font-bold text-slate-800">{u.name}</div>
-                                                <div className="text-[10px] text-slate-400 font-mono">{uKey}</div>
+                                                <div className="text-[11px] font-bold text-slate-800">{u.name}</div>
+                                                <div className="text-[9px] text-slate-400 font-mono">{uKey}</div>
                                               </div>
                                             </div>
-                                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                            <span className="text-[8.5px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
                                               {u.role || 'Employee'}
                                             </span>
                                           </label>
                                         );
                                       })
                                     ) : (
-                                      <div className="p-4 text-center text-xs text-slate-500">
+                                      <div className="p-3 text-center text-[10px] text-slate-500">
                                         No existing user matches "<strong>{memberSearchText}</strong>".
-                                        <div className="mt-1 font-bold text-blue-600">
-                                          Click "+ Add to Pool" button above to add directly!
-                                        </div>
                                       </div>
                                     )}
                                   </div>
@@ -1251,14 +1249,14 @@ export default function FlowBuilder({ users = [] }) {
 
                   if ((editingWorkflow.steps[configuringStepIndex].approver_type || 'Specific Employee') === 'Specific Employee') {
                     return (
-                      <div className="space-y-5">
+                      <div className="space-y-3">
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Primary Assignee</label>
-                          <div className="space-y-2">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Primary Assignee</label>
+                          <div className="space-y-1.5">
                             <select 
                               value={editingWorkflow.steps[configuringStepIndex].approver_target || ''} 
                               onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} 
-                              className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
+                              className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
                             >
                               <option value="">-- Select Target Employee --</option>
                               {(() => {
@@ -1279,13 +1277,13 @@ export default function FlowBuilder({ users = [] }) {
                               })()}
                             </select>
 
-                            <div className="flex gap-2 items-center pt-1">
+                            <div className="flex gap-1.5 items-center">
                               <input 
                                 type="text"
                                 value={memberSearchText}
                                 onChange={e => setMemberSearchText(e.target.value)}
                                 placeholder="Or enter custom username / email..."
-                                className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-blue-500 outline-none font-medium"
+                                className="flex-1 text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:border-blue-500 outline-none font-medium"
                               />
                               <button
                                 type="button"
@@ -1296,7 +1294,7 @@ export default function FlowBuilder({ users = [] }) {
                                   }
                                 }}
                                 disabled={!memberSearchText.trim()}
-                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0"
+                                className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-md transition shadow-xs flex items-center gap-1 shrink-0"
                               >
                                 <span>Set Assignee</span>
                               </button>
@@ -1304,11 +1302,11 @@ export default function FlowBuilder({ users = [] }) {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Delegate / Backup</label>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Delegate / Backup</label>
                           <select 
                             value={editingWorkflow.steps[configuringStepIndex].delegate_approver || ''} 
                             onChange={e => updateStep(configuringStepIndex, 'delegate_approver', e.target.value)} 
-                            className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
+                            className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
                           >
                             <option value="">-- No Backup Selected --</option>
                             {internalUsers.map(u => (
@@ -1319,8 +1317,8 @@ export default function FlowBuilder({ users = [] }) {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Escalation Rule</label>
-                          <select value={editingWorkflow.steps[configuringStepIndex].escalation_rule || ''} onChange={e => updateStep(configuringStepIndex, 'escalation_rule', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Escalation Rule</label>
+                          <select value={editingWorkflow.steps[configuringStepIndex].escalation_rule || ''} onChange={e => updateStep(configuringStepIndex, 'escalation_rule', e.target.value)} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
                             <option value="">-- No Escalation (Wait Indefinitely) --</option>
                             <option value="Route to Direct Manager">Route to Direct Manager</option>
                             <option value="Route to Delegate">Route to Delegate</option>
@@ -1333,10 +1331,10 @@ export default function FlowBuilder({ users = [] }) {
                   }
 
                   return (
-                    <div className="space-y-5">
+                    <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Target Role</label>
-                        <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Target Role</label>
+                        <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
                           <option value="">-- Select Target Role --</option>
                           <option value="Finance Manager">Finance Manager</option>
                           <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
@@ -1358,35 +1356,35 @@ export default function FlowBuilder({ users = [] }) {
                 })()}
               </div>
 
-              {/* SECTION: STAGE-SPECIFIC VERIFICATION CHECKLIST (Collapsible) */}
-              <div className="border-t border-slate-200 pt-4 space-y-3">
+              {/* SECTION: STAGE-SPECIFIC VERIFICATION CHECKLIST */}
+              <div className="border-t border-slate-100 pt-3 space-y-2">
                 <button 
                   type="button" 
                   onClick={() => setShowChecklistSection(!showChecklistSection)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900 transition cursor-pointer shadow-2xs"
+                  className="w-full flex items-center justify-between px-2.5 py-2 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 rounded-lg text-[11px] font-bold text-indigo-900 transition cursor-pointer"
                 >
-                  <div className="flex items-center gap-2">
-                    <ListChecks className="h-4 w-4 text-indigo-600" />
+                  <div className="flex items-center gap-1.5">
+                    <ListChecks className="h-3.5 w-3.5 text-indigo-600" />
                     <span>
                       Stage Verification Checklist ({(editingWorkflow.steps[configuringStepIndex].checklist_items || []).length} Points)
                     </span>
                   </div>
-                  <span className="text-[10px] text-indigo-700 font-extrabold bg-white px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
-                    {showChecklistSection ? "▲ Hide Checklist" : "▼ Click to View / Edit"}
+                  <span className="text-[9px] text-indigo-700 font-extrabold bg-white px-1.5 py-0.5 rounded border border-indigo-200">
+                    {showChecklistSection ? "▲ Hide" : "▼ View / Edit"}
                   </span>
                 </button>
 
                 {showChecklistSection && (
-                  <div className="space-y-4 pt-1 animate-in fade-in duration-150 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+                  <div className="space-y-2.5 pt-1 animate-in fade-in duration-150 bg-slate-50/50 p-2.5 rounded-lg border border-slate-200">
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-slate-500 font-medium">
+                      <p className="text-[10px] text-slate-500 font-medium">
                         Verification points that approvers must review and tick off before approving this stage.
                       </p>
                       {(editingWorkflow.steps[configuringStepIndex].checklist_items || []).length > 0 && (
                         <button
                           type="button"
                           onClick={() => updateStep(configuringStepIndex, 'checklist_items', [])}
-                          className="text-[10px] text-rose-600 hover:underline font-bold"
+                          className="text-[9px] text-rose-600 hover:underline font-bold"
                         >
                           Clear All
                         </button>
@@ -1394,7 +1392,7 @@ export default function FlowBuilder({ users = [] }) {
                     </div>
 
                     {/* Input to add custom checklist item */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                       <input
                         type="text"
                         value={newStageChecklistText}
@@ -1406,47 +1404,47 @@ export default function FlowBuilder({ users = [] }) {
                           }
                         }}
                         placeholder="Type custom verification requirement..."
-                        className="flex-1 text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:border-indigo-500 outline-none font-medium text-slate-800"
+                        className="flex-1 text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-md focus:border-indigo-500 outline-none font-medium text-slate-800"
                       />
                       <button
                         type="button"
                         onClick={() => addChecklistItemToConfiguringStep(newStageChecklistText)}
                         disabled={!newStageChecklistText.trim()}
-                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-md transition shadow-xs flex items-center gap-1 shrink-0 cursor-pointer"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="h-3 w-3" />
                         <span>Add</span>
                       </button>
                     </div>
 
                     {/* Checklist Items List */}
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                    <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                       {(!editingWorkflow.steps[configuringStepIndex].checklist_items || editingWorkflow.steps[configuringStepIndex].checklist_items.length === 0) ? (
-                        <div className="p-3 border border-dashed border-slate-200 rounded-lg text-center bg-white">
-                          <ListChecks className="h-4 w-4 text-slate-400 mx-auto mb-1" />
-                          <p className="text-xs font-bold text-slate-500">No checklist items added for this stage yet.</p>
+                        <div className="p-2 border border-dashed border-slate-200 rounded-md text-center bg-white">
+                          <ListChecks className="h-3.5 w-3.5 text-slate-400 mx-auto mb-0.5" />
+                          <p className="text-[10px] font-bold text-slate-500">No checklist items added for this stage yet.</p>
                         </div>
                       ) : (
                         editingWorkflow.steps[configuringStepIndex].checklist_items.map((item, cIdx) => (
                           <div
                             key={cIdx}
-                            className="flex items-center justify-between p-2 bg-white hover:bg-indigo-50/40 border border-slate-200 rounded-lg group transition-colors shadow-2xs"
+                            className="flex items-center justify-between p-1.5 bg-white hover:bg-indigo-50/40 border border-slate-200 rounded-md group transition-colors shadow-2xs"
                           >
-                            <div className="flex items-center gap-2 min-w-0 pr-2">
-                              <span className="h-4.5 w-4.5 rounded bg-indigo-100 text-indigo-700 font-black text-[9px] flex items-center justify-center shrink-0">
+                            <div className="flex items-center gap-1.5 min-w-0 pr-1.5">
+                              <span className="h-3.5 w-3.5 rounded bg-indigo-100 text-indigo-700 font-black text-[8px] flex items-center justify-center shrink-0">
                                 {cIdx + 1}
                               </span>
-                              <span className="text-xs font-semibold text-slate-800 break-words">
+                              <span className="text-[11px] font-semibold text-slate-800 break-words">
                                 {item}
                               </span>
                             </div>
                             <button
                               type="button"
                               onClick={() => removeChecklistItemFromConfiguringStep(cIdx)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
+                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
                               title="Remove item"
                             >
-                              <X className="h-3.5 w-3.5" />
+                              <X className="h-3 w-3" />
                             </button>
                           </div>
                         ))
@@ -1457,8 +1455,8 @@ export default function FlowBuilder({ users = [] }) {
               </div>
             </div>
           </div>
-          <div className="p-5 border-t border-slate-200 bg-slate-50 flex justify-end">
-            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow transition-colors">
+          <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex justify-end">
+            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-xs transition-colors">
               Done
             </button>
           </div>

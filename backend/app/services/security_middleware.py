@@ -14,8 +14,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Defense against MIME-sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
         
-        # Defense against Clickjacking
-        response.headers["X-Frame-Options"] = "DENY"
+        # Defense against Clickjacking - allow same origin framing for previewing document attachments & PDFs
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         
         # Legacy XSS filter protection for older browsers
         response.headers["X-XSS-Protection"] = "1; mode=block"
