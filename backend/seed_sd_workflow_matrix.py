@@ -12,10 +12,14 @@ from app.services.rules_engine import calculate_rule_priority, is_wildcard
 
 BASE_DIR = Path(__file__).resolve().parent
 candidate_paths = [
+    BASE_DIR / "SD Checklists.xlsx",
     BASE_DIR / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
-    BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
+    Path("/app/SD Checklists.xlsx"),
     Path("/app/SD SCHEMA AND WORKFLOW DETAILS.xlsx"),
-    Path.cwd() / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
+    Path.cwd() / "SD Checklists.xlsx",
+    Path.cwd() / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
+    BASE_DIR.parent / "SD Checklists.xlsx",
+    BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
 ]
 EXCEL_PATH = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
 
