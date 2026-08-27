@@ -400,10 +400,22 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-auto">
                         <div className="flex items-center gap-1.5 text-slate-700 truncate pr-2">
-                          <Network className="h-3 w-3 flex-shrink-0" />
-                          <span className="text-[10px] font-bold truncate" title={targetName}>
-                            {targetName}
-                          </span>
+                          {r.rule_action === 'AUTO_APPROVE' ? (
+                            <span className="text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                              ⚡ STP AUTO-APPROVE
+                            </span>
+                          ) : r.rule_action === 'AUTO_CANCEL' ? (
+                            <span className="text-[9px] font-black bg-rose-600 text-white px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                              🚫 AUTO-CANCEL
+                            </span>
+                          ) : (
+                            <>
+                              <Network className="h-3 w-3 flex-shrink-0 text-blue-600" />
+                              <span className="text-[10px] font-bold truncate" title={targetName}>
+                                {targetName}
+                              </span>
+                            </>
+                          )}
                         </div>
                         
                         <div className="flex gap-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
@@ -795,28 +807,90 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
 
           {/* SECTION 3 */}
           <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)]">
-            <h3 className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">3. Condition Outcome (Workflow Path)</h3>
-            <p className="text-[10px] text-slate-500 font-medium mb-3">Define the workflow profile to trigger based on the condition result.</p>
+            <h3 className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">3. Condition Outcome & Target Action</h3>
+            <p className="text-[10px] text-slate-500 font-medium mb-3">Define whether matching documents route to a human workflow, auto-approve (STP), or auto-cancel.</p>
             
             <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3 bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
-                <div className="w-24 shrink-0">
-                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">If Condition is True</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
+                <div 
+                  onClick={() => setEditingRule({...editingRule, rule_action: 'WORKFLOW_ROUTE'})}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                    (editingRule.rule_action || 'WORKFLOW_ROUTE') === 'WORKFLOW_ROUTE'
+                      ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-800">🔵 Route to Workflow</span>
+                    <input type="radio" name="ruleActionSel" checked={(editingRule.rule_action || 'WORKFLOW_ROUTE') === 'WORKFLOW_ROUTE'} onChange={() => {}} className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Route to a multi-stage human approval chain.</p>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Trigger Workflow</label>
-                  <select 
-                    value={editingRule.target_workflow_id}
-                    onChange={e => setEditingRule({...editingRule, target_workflow_id: e.target.value})}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors outline-none bg-white font-medium focus:border-emerald-400"
-                  >
-                    <option value="">-- Select Workflow Profile --</option>
-                    {workflows.map((w, wIdx) => (
-                      <option key={w.id || wIdx} value={w.profile_name}>{w.profile_name}</option>
-                    ))}
-                  </select>
+
+                <div 
+                  onClick={() => setEditingRule({...editingRule, rule_action: 'AUTO_APPROVE'})}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                    editingRule.rule_action === 'AUTO_APPROVE'
+                      ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-emerald-800">⚡ Auto-Approve (STP)</span>
+                    <input type="radio" name="ruleActionSel" checked={editingRule.rule_action === 'AUTO_APPROVE'} onChange={() => {}} className="text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Straight-Through Processing: Auto-approve with audit log.</p>
+                </div>
+
+                <div 
+                  onClick={() => setEditingRule({...editingRule, rule_action: 'AUTO_CANCEL'})}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                    editingRule.rule_action === 'AUTO_CANCEL'
+                      ? 'border-rose-500 bg-rose-50/50 ring-1 ring-rose-500'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-rose-800">🚫 Auto-Cancel / Reject</span>
+                    <input type="radio" name="ruleActionSel" checked={editingRule.rule_action === 'AUTO_CANCEL'} onChange={() => {}} className="text-rose-600 focus:ring-rose-500 h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-[10px] text-slate-500">Instantly void matching non-compliant documents.</p>
                 </div>
               </div>
+
+              {(editingRule.rule_action || 'WORKFLOW_ROUTE') === 'WORKFLOW_ROUTE' && (
+                <div className="flex items-center gap-3 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                  <div className="w-28 shrink-0">
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Target Profile</span>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Trigger Workflow</label>
+                    <select 
+                      value={editingRule.target_workflow_id}
+                      onChange={e => setEditingRule({...editingRule, target_workflow_id: e.target.value})}
+                      className="w-full text-xs px-2 py-1.5 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors outline-none bg-white font-medium focus:border-emerald-400"
+                    >
+                      <option value="">-- Select Workflow Profile --</option>
+                      {workflows.map((w, wIdx) => (
+                        <option key={w.id || wIdx} value={w.profile_name}>{w.profile_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {editingRule.rule_action === 'AUTO_CANCEL' && (
+                <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-lg">
+                  <label htmlFor="ruleCancelReason" className="block text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1">Rejection / Cancellation Reason Policy</label>
+                  <input 
+                    id="ruleCancelReason" 
+                    value={editingRule.cancel_reason || ''} 
+                    onChange={e => setEditingRule({...editingRule, cancel_reason: e.target.value})} 
+                    className="w-full text-xs px-2.5 py-1.5 bg-white border border-rose-200 rounded-md focus:border-rose-500 outline-none text-rose-900 font-medium" 
+                    placeholder="e.g. Policy Violation: Unverified GSTIN or amount exceeds threshold" 
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -297,6 +297,10 @@ def evaluate_rule_conditions(conditions: List[Dict[str, Any]], invoice: Invoice)
     return is_match
 
 def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
+    res = evaluate_business_rules_full(db, invoice)
+    return res.get("target_workflow_id") if res else None
+
+def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict[str, Any]]:
     # Sort by priority DESC — highest priority number wins
     rules = db.query(BusinessRule).filter(
         BusinessRule.is_active == True,
@@ -311,8 +315,24 @@ def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
             if isinstance(conds, dict) and "conditions" in conds:
                 conds = conds["conditions"]
             if evaluate_rule_conditions(conds, invoice):
-                print(f"[RulesEngine] Matched rule '{rule.rule_name}' -> workflow '{rule.target_workflow_id}'")
-                return rule.target_workflow_id
+                print(f"[RulesEngine] Matched rule '{rule.rule_name}' -> workflow '{rule.target_workflow_id}', action '{rule.rule_action}'")
+                
+                # Check profile-level rule_action override if rule itself is WORKFLOW_ROUTE
+                effective_action = rule.rule_action or "WORKFLOW_ROUTE"
+                effective_cancel_reason = rule.cancel_reason
+                
+                if effective_action == "WORKFLOW_ROUTE" and rule.target_workflow_id:
+                    profile = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == rule.target_workflow_id).first()
+                    if profile and profile.rule_action and profile.rule_action != "WORKFLOW_ROUTE":
+                        effective_action = profile.rule_action
+                        effective_cancel_reason = profile.cancel_reason or f"Auto-cancelled via Workflow Profile: {profile.profile_name}"
+
+                return {
+                    "rule_name": rule.rule_name,
+                    "target_workflow_id": rule.target_workflow_id,
+                    "rule_action": effective_action,
+                    "cancel_reason": effective_cancel_reason
+                }
         except Exception as e:
             print(f"[RulesEngine] Error evaluating rule {rule.rule_name}: {e}")
 
@@ -338,6 +358,8 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
                 "priority": int(dr.get("priority") or 999),
                 "target_workflow_id": dr.get("target_workflow_id") or "",
                 "conditions_json": dr.get("conditions_json") or "[]",
+                "rule_action": dr.get("rule_action") or "WORKFLOW_ROUTE",
+                "cancel_reason": dr.get("cancel_reason") or "",
                 "is_draft": True
             })
 
@@ -347,6 +369,8 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
             "priority": r.priority,
             "target_workflow_id": r.target_workflow_id,
             "conditions_json": r.conditions_json,
+            "rule_action": r.rule_action or "WORKFLOW_ROUTE",
+            "cancel_reason": r.cancel_reason or "",
             "is_draft": False
         })
 

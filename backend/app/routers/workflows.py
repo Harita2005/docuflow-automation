@@ -137,6 +137,12 @@ def get_workflow_profiles(db: Session = Depends(get_db)):
             "reminder_interval_hours": p.reminder_interval_hours,
             "escalation_after_hours": p.escalation_after_hours,
             "auto_escalation": p.auto_escalation,
+            "rule_action": p.rule_action or "WORKFLOW_ROUTE",
+            "cancel_reason": p.cancel_reason,
+            "auto_approve_enabled": bool(p.auto_approve_enabled),
+            "auto_approve_condition": p.auto_approve_condition,
+            "auto_cancel_enabled": bool(p.auto_cancel_enabled),
+            "auto_cancel_condition": p.auto_cancel_condition,
             "steps": steps
         }
         result.append(p_dict)
@@ -165,6 +171,12 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
         existing.reminder_interval_hours = payload.reminder_interval_hours
         existing.escalation_after_hours = payload.escalation_after_hours
         existing.auto_escalation = payload.auto_escalation
+        existing.rule_action = payload.rule_action or "WORKFLOW_ROUTE"
+        existing.cancel_reason = payload.cancel_reason
+        existing.auto_approve_enabled = payload.auto_approve_enabled or False
+        existing.auto_approve_condition = payload.auto_approve_condition
+        existing.auto_cancel_enabled = payload.auto_cancel_enabled or False
+        existing.auto_cancel_condition = payload.auto_cancel_condition
         
         # Replace steps
         db.query(WorkflowStepDefinition).filter(
@@ -182,7 +194,13 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
             rejection_handling=payload.rejection_handling,
             reminder_interval_hours=payload.reminder_interval_hours,
             escalation_after_hours=payload.escalation_after_hours,
-            auto_escalation=payload.auto_escalation
+            auto_escalation=payload.auto_escalation,
+            rule_action=payload.rule_action or "WORKFLOW_ROUTE",
+            cancel_reason=payload.cancel_reason,
+            auto_approve_enabled=payload.auto_approve_enabled or False,
+            auto_approve_condition=payload.auto_approve_condition,
+            auto_cancel_enabled=payload.auto_cancel_enabled or False,
+            auto_cancel_condition=payload.auto_cancel_condition
         )
         db.add(existing)
 
@@ -192,20 +210,7 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
     ).delete()
 
     for step in payload.steps:
-        # Extract checklist items list
-        step_items = step.checklist_items or []
-        if not step_items and step.checklist_json:
-            try:
-                parsed = json.loads(step.checklist_json)
-                if isinstance(parsed, list):
-                    step_items = parsed
-            except Exception:
-                step_items = []
-        
-        step_items_clean = [str(it).strip() for it in step_items if str(it).strip()]
-        checklist_json_str = json.dumps(step_items_clean)
-
-        step_obj = WorkflowStepDefinition(
+        new_step = WorkflowStepDefinition(
             profile_name=payload.profile_name,
             stage_number=step.stage_number,
             step_name=step.step_name,
@@ -216,46 +221,23 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
             action_required=step.action_required,
             permissions=step.permissions,
             sla_hours=step.sla_hours,
-            checklist_json=checklist_json_str
+            checklist_json=json.dumps(step.checklist_items) if step.checklist_items else None
         )
-        db.add(step_obj)
+        db.add(new_step)
 
-        # Also populate ChecklistTemplate records for backward & fallback compatibility
-        for c_idx, c_text in enumerate(step_items_clean):
-            db.add(ChecklistTemplate(
-                workflow_profile=payload.profile_name,
-                stage_name=step.step_name,
-                item_text=c_text,
-                is_mandatory=True,
-                is_active=True,
-                sequence_order=c_idx + 1
-            ))
-
-        # Auto-sync into Checklist Matrix (ChecklistRule) referenced by workflow profile name
-        if step_items_clean:
-            combined_items_str = " || ".join(step_items_clean)
-            chk_rule = db.query(ChecklistRule).filter(
-                ChecklistRule.workflow_profile == payload.profile_name,
-                ChecklistRule.stage_name.ilike(step.step_name.strip())
-            ).first()
-            if chk_rule:
-                chk_rule.item_text = combined_items_str
-                chk_rule.is_active = True
-            else:
-                db.add(ChecklistRule(
-                    rule_name=f"Rule: {payload.profile_name} - {step.step_name}",
-                    division="ALL",
-                    category="ALL",
-                    branch="ALL",
+        # Populate ChecklistTemplate table for backwards compatibility
+        if step.checklist_items:
+            for item_text in step.checklist_items:
+                chk = ChecklistTemplate(
                     workflow_profile=payload.profile_name,
-                    stage_name=step.step_name,
-                    item_text=combined_items_str,
-                    is_mandatory=True,
-                    is_active=True,
-                    sequence_order=step.stage_number
-                ))
+                    stage_number=step.stage_number,
+                    item_text=item_text,
+                    is_required=True
+                )
+                db.add(chk)
 
     db.commit()
+    db.refresh(existing)
     return {"success": True, "profile_name": payload.profile_name}
 
 @router.get("/api/admin/workflows/{profile_name}", response_model=WorkflowProfileSchema)
@@ -281,6 +263,12 @@ def get_single_workflow_profile(profile_name: str, db: Session = Depends(get_db)
         "reminder_interval_hours": p.reminder_interval_hours,
         "escalation_after_hours": p.escalation_after_hours,
         "auto_escalation": p.auto_escalation,
+        "rule_action": p.rule_action or "WORKFLOW_ROUTE",
+        "cancel_reason": p.cancel_reason,
+        "auto_approve_enabled": bool(p.auto_approve_enabled),
+        "auto_approve_condition": p.auto_approve_condition,
+        "auto_cancel_enabled": bool(p.auto_cancel_enabled),
+        "auto_cancel_condition": p.auto_cancel_condition,
         "steps": steps
     }
 

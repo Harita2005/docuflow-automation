@@ -467,7 +467,13 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
     # 2. Automated Business Rules Evaluation & Flow Initiation
     if req.auto_route:
-        target_wf = evaluate_business_rules(db, target_inv)
+        from app.services.rules_engine import evaluate_business_rules_full
+        rule_eval_res = evaluate_business_rules_full(db, target_inv)
+        target_wf = rule_eval_res.get("target_workflow_id") if rule_eval_res else None
+        rule_action = rule_eval_res.get("rule_action", "WORKFLOW_ROUTE") if rule_eval_res else "WORKFLOW_ROUTE"
+        cancel_reason = rule_eval_res.get("cancel_reason", "Auto-cancelled by Policy Engine") if rule_eval_res else None
+        matched_rule_name = rule_eval_res.get("rule_name", "Default Policy") if rule_eval_res else "Default Policy"
+
         if not target_wf:
             target_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
 
@@ -481,28 +487,52 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
             
             target_inv.total_stages = len(steps) if steps else 2
-            target_inv.current_stage = 1
-            if steps:
-                target_inv.assigned_approver = steps[0].approver_target
-                target_inv.status = f"Initiated ({steps[0].step_name})"
-            else:
-                target_inv.status = "Initiated (Stage 1)"
 
-            from app.routers.invoices import resolve_checklist_items
-            current_step_name = steps[0].step_name if steps else "Attachment Status"
-            stage_items = resolve_checklist_items(db, target_inv, current_step_name)
-
-            # Delete any legacy states if retrying sync
-            db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == target_inv.id).delete()
-            for it_text in stage_items:
-                db.add(InvoiceChecklistState(
+            if rule_action == "AUTO_APPROVE":
+                target_inv.status = "Approved"
+                target_inv.current_stage = target_inv.total_stages
+                target_inv.assigned_approver = "System Auto-Approved"
+                db.add(AuditLog(
                     invoice_id=target_inv.id,
-                    stage_name=current_step_name,
-                    item_text=it_text,
-                    is_checked=False
+                    user="Policy Engine (STP)",
+                    action="AUTO_APPROVED",
+                    stage="Straight-Through Processing",
+                    notes=f"Document automatically approved by rule '{matched_rule_name}'."
                 ))
-            
-            target_inv.checklist_state = json.dumps({it_text: False for it_text in stage_items})
+            elif rule_action == "AUTO_CANCEL":
+                target_inv.status = "Cancelled"
+                target_inv.current_stage = 1
+                target_inv.assigned_approver = "System Auto-Cancelled"
+                db.add(AuditLog(
+                    invoice_id=target_inv.id,
+                    user="Policy Engine (Auto-Reject)",
+                    action="AUTO_CANCELLED",
+                    stage="Auto-Rejection Guard",
+                    notes=f"Document auto-cancelled by rule '{matched_rule_name}'. Reason: {cancel_reason or 'Policy Violation'}"
+                ))
+            else:
+                target_inv.current_stage = 1
+                if steps:
+                    target_inv.assigned_approver = steps[0].approver_target
+                    target_inv.status = f"Initiated ({steps[0].step_name})"
+                else:
+                    target_inv.status = "Initiated (Stage 1)"
+
+                from app.routers.invoices import resolve_checklist_items
+                current_step_name = steps[0].step_name if steps else "Attachment Status"
+                stage_items = resolve_checklist_items(db, target_inv, current_step_name)
+
+                # Delete any legacy states if retrying sync
+                db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == target_inv.id).delete()
+                for it_text in stage_items:
+                    db.add(InvoiceChecklistState(
+                        invoice_id=target_inv.id,
+                        stage_name=current_step_name,
+                        item_text=it_text,
+                        is_checked=False
+                    ))
+                
+                target_inv.checklist_state = json.dumps({it_text: False for it_text in stage_items})
 
             db.commit()
             db.refresh(target_inv)
@@ -513,7 +543,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         user="ERP Data Sync",
         action="Data Ingested",
         stage="Intake (ERP)",
-        notes=f"Invoice metadata ingested from ERP. Stage 1 (Attachment Status) assigned to: {target_inv.assigned_approver}."
+        notes=f"Invoice metadata ingested from ERP. Assigned status: {target_inv.status}."
     ))
     db.add(SystemLog(
         invoice_id=target_inv.id,

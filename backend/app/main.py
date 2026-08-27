@@ -110,6 +110,18 @@ try:
                     conn.execute(text("ALTER TABLE workflow_profiles ADD is_deleted BIT NOT NULL DEFAULT 0;"))
                 if 'deleted_at' not in existing_cols_workflows:
                     conn.execute(text("ALTER TABLE workflow_profiles ADD deleted_at DATETIME NULL;"))
+                if 'rule_action' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD rule_action VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE';"))
+                if 'cancel_reason' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD cancel_reason NVARCHAR(MAX) NULL;"))
+                if 'auto_approve_enabled' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_approve_enabled BIT NOT NULL DEFAULT 0;"))
+                if 'auto_approve_condition' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_approve_condition NVARCHAR(MAX) NULL;"))
+                if 'auto_cancel_enabled' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_cancel_enabled BIT NOT NULL DEFAULT 0;"))
+                if 'auto_cancel_condition' not in existing_cols_workflows:
+                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_cancel_condition NVARCHAR(MAX) NULL;"))
 
                 # Workflow step definitions table migrations
                 existing_cols_steps = [c['name'] for c in inspector.get_columns('workflow_step_definitions')]
@@ -122,6 +134,18 @@ try:
                     conn.execute(text("ALTER TABLE business_rules ADD is_deleted BIT NOT NULL DEFAULT 0;"))
                 if 'deleted_at' not in existing_cols_rules:
                     conn.execute(text("ALTER TABLE business_rules ADD deleted_at DATETIME NULL;"))
+                if 'rule_action' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD rule_action VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE';"))
+                if 'cancel_reason' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD cancel_reason NVARCHAR(MAX) NULL;"))
+                if 'auto_approve_enabled' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD auto_approve_enabled BIT NOT NULL DEFAULT 0;"))
+                if 'auto_approve_condition' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD auto_approve_condition NVARCHAR(MAX) NULL;"))
+                if 'auto_cancel_enabled' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD auto_cancel_enabled BIT NOT NULL DEFAULT 0;"))
+                if 'auto_cancel_condition' not in existing_cols_rules:
+                    conn.execute(text("ALTER TABLE business_rules ADD auto_cancel_condition NVARCHAR(MAX) NULL;"))
 
                 # Document line items table migrations
                 if inspector.has_table('document_line_items'):

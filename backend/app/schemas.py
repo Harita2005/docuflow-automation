@@ -206,6 +206,12 @@ class WorkflowProfileSchema(BaseModel):
     reminder_interval_hours: int = 24
     escalation_after_hours: int = 48
     auto_escalation: bool = False
+    rule_action: Optional[str] = "WORKFLOW_ROUTE"
+    cancel_reason: Optional[str] = None
+    auto_approve_enabled: Optional[bool] = False
+    auto_approve_condition: Optional[str] = None
+    auto_cancel_enabled: Optional[bool] = False
+    auto_cancel_condition: Optional[str] = None
     steps: List[WorkflowStepSchema] = []
 
     class Config:
@@ -227,6 +233,12 @@ class BusinessRuleSchema(BaseModel):
     target_workflow_id: str
     conditions_json: str
     description: Optional[str] = None
+    rule_action: Optional[str] = "WORKFLOW_ROUTE"
+    cancel_reason: Optional[str] = None
+    auto_approve_enabled: Optional[bool] = False
+    auto_approve_condition: Optional[str] = None
+    auto_cancel_enabled: Optional[bool] = False
+    auto_cancel_condition: Optional[str] = None
     is_active: bool = True
 
     class Config:

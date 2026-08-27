@@ -11,6 +11,8 @@ services:
       - DATABASE_URL=mssql+pymssql://sa:Admin%401234@host.docker.internal:1433/DocuFlowDB
       - SECRET_KEY=super-secret-docuflow-jwt-key-2026-production
       - FRONTEND_URL=http://localhost:8085
+      - PDF_STORAGE_PATH=/app/stored_pdfs
+      - APPROVED_PDF_PATH=/app/stored_pdfs/approved
     depends_on:
       - db
     restart: unless-stopped

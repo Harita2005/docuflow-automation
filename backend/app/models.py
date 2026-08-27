@@ -189,6 +189,12 @@ class WorkflowProfile(Base):
     reminder_interval_hours = Column(Integer, default=24)
     escalation_after_hours = Column(Integer, default=48)
     auto_escalation = Column(Boolean, default=False)
+    rule_action = Column(String(50), default="WORKFLOW_ROUTE", index=True) # WORKFLOW_ROUTE, AUTO_APPROVE, AUTO_CANCEL
+    cancel_reason = Column(Text, nullable=True)
+    auto_approve_enabled = Column(Boolean, default=False)
+    auto_approve_condition = Column(Text, nullable=True) # JSON condition, e.g. amount <= 5000
+    auto_cancel_enabled = Column(Boolean, default=False)
+    auto_cancel_condition = Column(Text, nullable=True) # JSON condition, e.g. amount > 100000
     
     # Soft Deletes
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
@@ -232,6 +238,12 @@ class BusinessRule(Base):
     target_workflow_id = Column(String(200), nullable=False, index=True) # profile_name of target workflow
     conditions_json = Column(Text, nullable=False)                       # 4-point condition array JSON
     description = Column(Text, nullable=True)
+    rule_action = Column(String(50), default="WORKFLOW_ROUTE", index=True) # WORKFLOW_ROUTE, AUTO_APPROVE, AUTO_CANCEL
+    cancel_reason = Column(Text, nullable=True)
+    auto_approve_enabled = Column(Boolean, default=False)
+    auto_approve_condition = Column(Text, nullable=True)
+    auto_cancel_enabled = Column(Boolean, default=False)
+    auto_cancel_condition = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
     
     # Soft Deletes

@@ -17,6 +17,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Create storage directories inside Docker container for storing approved files
+RUN mkdir -p /app/uploads /app/stored_pdfs/approved
+
 # Copy backend source code
 COPY . .
 

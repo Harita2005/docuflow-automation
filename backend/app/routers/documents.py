@@ -435,6 +435,20 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
     filename = f"{clean_doc_num}_{clean_id}.pdf"
     return settings.APPROVED_PDF_DIR / year_str / month_str / doc_type_folder / filename
 
+def get_rejected_pdf_path(inv: Invoice) -> Path:
+    """
+    Constructs the hierarchical storage path for rejected/cancelled documents:
+    stored_pdfs/rejected/{YEAR}/{MONTH}/{DOC_TYPE}/{DOC_NUM}_{PRIMARY_KEY}.pdf
+    """
+    year_str, month_str = extract_date_components(inv.invoice_date or inv.doc_date)
+    doc_type_folder = normalize_doc_type_folder(inv.document_type or inv.category)
+    
+    clean_doc_num = sanitize_name(inv.invoice_number or inv.doc_num or "DOC")
+    clean_id = sanitize_name(str(inv.id) if inv.id else "0")
+    
+    filename = f"{clean_doc_num}_{clean_id}.pdf"
+    return settings.REJECTED_PDF_DIR / year_str / month_str / doc_type_folder / filename
+
 def archive_approved_pdf(inv: Invoice):
     """
     Archival helper:
@@ -487,6 +501,26 @@ def archive_approved_pdf(inv: Invoice):
         trigger_async_integration_push(str(inv.id))
     except Exception as e:
         print(f"[Archive Warning] Could not archive approved PDF: {e}")
+
+def archive_rejected_pdf(inv: Invoice):
+    """
+    Purges/deletes physical PDF files for rejected or cancelled documents.
+    Only approved documents are permanently stored on disk.
+    """
+    try:
+        if not inv or not inv.file_url:
+            return
+        filename = os.path.basename(inv.file_url)
+        upload_path = settings.UPLOAD_DIR / filename
+
+        if upload_path.exists():
+            try:
+                upload_path.unlink()
+                print(f"[Purge] Purged rejected document file from uploads: {upload_path}")
+            except Exception as del_err:
+                print(f"[Purge Warning] Could not remove rejected file: {del_err}")
+    except Exception as e:
+        print(f"[Purge Warning] Exception while purging rejected PDF: {e}")
 
 def dispatch_approval_inapp_notifications(
     db: Session,
@@ -698,6 +732,7 @@ def process_rejection_logic(
         # At Stage 1 (Attachment Status), rejection cancels / voids the process
         inv.status = "Cancelled"
         inv.assigned_approver = None
+        archive_rejected_pdf(inv)
 
         dispatch_rejection_inapp_notifications(
             db=db,
@@ -1207,6 +1242,7 @@ def workflow_cancel_route(
     
     inv.status = "Cancelled"
     inv.assigned_approver = None
+    archive_rejected_pdf(inv)
     dispatch_rejection_inapp_notifications(
         db=db,
         inv=inv,
@@ -1302,11 +1338,16 @@ async def upload_document(
         total_stages=2
     )
 
-    from app.services.rules_engine import infer_document_type, evaluate_business_rules
-    matched_wf = evaluate_business_rules(db, new_inv)
+    from app.services.rules_engine import infer_document_type, evaluate_business_rules_full
+    rule_eval = evaluate_business_rules_full(db, new_inv)
+    matched_wf = rule_eval.get("target_workflow_id") if rule_eval else None
+    rule_act = rule_eval.get("rule_action", "WORKFLOW_ROUTE") if rule_eval else "WORKFLOW_ROUTE"
+    cancel_res = rule_eval.get("cancel_reason", "Auto-cancelled by policy") if rule_eval else None
+    rule_name = rule_eval.get("rule_name", "Default Policy") if rule_eval else "Default Policy"
+
     if not matched_wf:
         default_wf = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
-        matched_wf = default_wf.name if default_wf else "VCC_PURCHASE_SR10"
+        matched_wf = default_wf.profile_name if default_wf else "VCC_PURCHASE_SR10"
 
     new_inv.workflow_profile_id = matched_wf
     new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
@@ -1316,13 +1357,47 @@ async def upload_document(
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
     
     new_inv.total_stages = len(steps) if steps else 2
-    new_inv.current_stage = 1
-    if steps and steps[0].approver_target:
-        new_inv.assigned_approver = steps[0].approver_target.strip()
-        new_inv.status = f"Initiated ({steps[0].step_name})"
+
+    if rule_act == "AUTO_APPROVE":
+        new_inv.status = "Approved"
+        new_inv.current_stage = new_inv.total_stages
+        new_inv.assigned_approver = "System Auto-Approved"
+        db.add(AuditLog(
+            invoice_id=new_inv.id,
+            user="Policy Engine (STP)",
+            action="AUTO_APPROVED",
+            stage="Straight-Through Processing",
+            notes=f"Document uploaded and auto-approved by rule '{rule_name}'."
+        ))
+        archive_approved_pdf(new_inv)
+    elif rule_act == "AUTO_CANCEL":
+        new_inv.status = "Cancelled"
+        new_inv.current_stage = 1
+        new_inv.assigned_approver = "System Auto-Cancelled"
+        db.add(AuditLog(
+            invoice_id=new_inv.id,
+            user="Policy Engine (Auto-Reject)",
+            action="AUTO_CANCELLED",
+            stage="Auto-Rejection Guard",
+            notes=f"Document uploaded and auto-cancelled by rule '{rule_name}'. Reason: {cancel_res or 'Policy Violation'}"
+        ))
+        archive_rejected_pdf(new_inv)
     else:
-        new_inv.assigned_approver = "SIBITHA, VIVEK_00336"
-        new_inv.status = "Initiated (Stage 1)"
+        new_inv.current_stage = 1
+        if steps and steps[0].approver_target:
+            new_inv.assigned_approver = steps[0].approver_target.strip()
+            new_inv.status = f"Initiated ({steps[0].step_name})"
+        else:
+            new_inv.assigned_approver = "SIBITHA, VIVEK_00336"
+            new_inv.status = "Initiated (Stage 1)"
+
+        db.add(AuditLog(
+            invoice_id=new_inv.id,
+            user="Document Uploader",
+            action="Created & Uploaded",
+            stage="Stage 1",
+            notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
+        ))
 
     from app.routers.sync import generate_compliance_checklist_for_category
     checklist_items = generate_compliance_checklist_for_category(
@@ -1337,16 +1412,6 @@ async def upload_document(
     db.add(new_inv)
     db.commit()
     db.refresh(new_inv)
-
-    # Log audit trail
-    db.add(AuditLog(
-        invoice_id=new_inv.id,
-        user="Document Uploader",
-        action="Created & Uploaded",
-        stage="Stage 1",
-        notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
-    ))
-    db.commit()
 
     safe_broadcast_event("DOCUMENT_CREATED", {
         "document_id": str(new_inv.id),
@@ -1398,8 +1463,13 @@ async def upload_and_route(
     if sgst is not None: inv.sgst = sgst
     if igst is not None: inv.igst = igst
     
-    from app.services.rules_engine import infer_document_type
-    matched_wf = evaluate_business_rules(db, inv)
+    from app.services.rules_engine import infer_document_type, evaluate_business_rules_full
+    rule_eval2 = evaluate_business_rules_full(db, inv)
+    matched_wf = rule_eval2.get("target_workflow_id") if rule_eval2 else None
+    rule_act2 = rule_eval2.get("rule_action", "WORKFLOW_ROUTE") if rule_eval2 else "WORKFLOW_ROUTE"
+    cancel_res2 = rule_eval2.get("cancel_reason", "Auto-cancelled by policy") if rule_eval2 else None
+    rule_name2 = rule_eval2.get("rule_name", "Default Policy") if rule_eval2 else "Default Policy"
+
     if not matched_wf:
         matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
 
@@ -1410,14 +1480,44 @@ async def upload_and_route(
     ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
     
     inv.total_stages = len(steps) if steps else 2
-    inv.current_stage = 1
-    if steps:
-        inv.assigned_approver = steps[0].approver_target
-        inv.status = f"Initiated ({steps[0].step_name})"
-    else:
-        inv.status = "Initiated (Stage 1)"
 
-    from app.routers.sync import generate_compliance_checklist_for_category
+    if rule_act2 == "AUTO_APPROVE":
+        inv.status = "Approved"
+        inv.current_stage = inv.total_stages
+        inv.assigned_approver = "System Auto-Approved"
+        db.add(AuditLog(
+            invoice_id=inv.id,
+            user="Policy Engine (STP)",
+            action="AUTO_APPROVED",
+            stage="Straight-Through Processing",
+            notes=f"Document routed and auto-approved by rule '{rule_name2}'."
+        ))
+    elif rule_act2 == "AUTO_CANCEL":
+        inv.status = "Cancelled"
+        inv.current_stage = 1
+        inv.assigned_approver = "System Auto-Cancelled"
+        db.add(AuditLog(
+            invoice_id=inv.id,
+            user="Policy Engine (Auto-Reject)",
+            action="AUTO_CANCELLED",
+            stage="Auto-Rejection Guard",
+            notes=f"Document routed and auto-cancelled by rule '{rule_name2}'. Reason: {cancel_res2 or 'Policy Violation'}"
+        ))
+    else:
+        inv.current_stage = 1
+        if steps:
+            inv.assigned_approver = steps[0].approver_target
+            inv.status = f"Initiated ({steps[0].step_name})"
+        else:
+            inv.status = "Initiated (Stage 1)"
+
+        db.add(AuditLog(
+            invoice_id=inv.id,
+            user="Metadata Editor / Sync Uploader",
+            action="Metadata Completed & Routed",
+            stage="Stage 1",
+            notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."
+        ))
     checklist_items = generate_compliance_checklist_for_category(
         inv.category, 
         inv.document_type, 

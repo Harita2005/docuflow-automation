@@ -239,6 +239,12 @@ export default function FlowBuilder({ users = [] }) {
               ])
         }));
       }
+      cloned.rule_action = wf.rule_action || 'WORKFLOW_ROUTE';
+      cloned.cancel_reason = wf.cancel_reason || '';
+      cloned.auto_approve_enabled = wf.auto_approve_enabled || false;
+      cloned.auto_approve_condition = wf.auto_approve_condition || JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'lt', value: '5000' });
+      cloned.auto_cancel_enabled = wf.auto_cancel_enabled || false;
+      cloned.auto_cancel_condition = wf.auto_cancel_condition || JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'gt', value: '500000' });
       setEditingWorkflow(cloned);
     } else {
       setEditingWorkflow({
@@ -253,6 +259,12 @@ export default function FlowBuilder({ users = [] }) {
         reminder_interval_hours: 24,
         escalation_after_hours: 72,
         auto_escalation: true,
+        rule_action: 'WORKFLOW_ROUTE',
+        cancel_reason: '',
+        auto_approve_enabled: false,
+        auto_approve_condition: JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'lt', value: '5000' }),
+        auto_cancel_enabled: false,
+        auto_cancel_condition: JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'gt', value: '500000' }),
         steps: [{
           stage_number: 1,
           step_name: 'Initial Review',
@@ -310,6 +322,12 @@ export default function FlowBuilder({ users = [] }) {
         reminder_interval_hours: parseInt(editingWorkflow.reminder_interval_hours || 24, 10),
         escalation_after_hours: parseInt(editingWorkflow.escalation_after_hours || 72, 10),
         auto_escalation: !!editingWorkflow.auto_escalation,
+        rule_action: editingWorkflow.rule_action || 'WORKFLOW_ROUTE',
+        cancel_reason: editingWorkflow.cancel_reason || '',
+        auto_approve_enabled: !!editingWorkflow.auto_approve_enabled,
+        auto_approve_condition: editingWorkflow.auto_approve_condition || '',
+        auto_cancel_enabled: !!editingWorkflow.auto_cancel_enabled,
+        auto_cancel_condition: editingWorkflow.auto_cancel_condition || '',
         steps: cleanedSteps
       };
 

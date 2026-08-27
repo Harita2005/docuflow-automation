@@ -32,6 +32,8 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
         rule.target_workflow_id = payload.target_workflow_id
         rule.conditions_json = payload.conditions_json
         rule.description = payload.description
+        rule.rule_action = payload.rule_action or "WORKFLOW_ROUTE"
+        rule.cancel_reason = payload.cancel_reason
         rule.is_active = payload.is_active
     else:
         rule = BusinessRule(
@@ -42,6 +44,8 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
             target_workflow_id=payload.target_workflow_id,
             conditions_json=payload.conditions_json,
             description=payload.description,
+            rule_action=payload.rule_action or "WORKFLOW_ROUTE",
+            cancel_reason=payload.cancel_reason,
             is_active=payload.is_active
         )
         db.add(rule)

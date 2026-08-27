@@ -529,18 +529,40 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
               </label>
               <div className="flex items-center gap-1">
                 <select 
-                  value={rule.target_workflow_id || ''}
-                  onChange={(e) => updateRuleFlow(rule.id, e.target.value)}
-                  className="w-full p-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded focus:border-indigo-500 outline-none"
+                  value={rule.rule_action && rule.rule_action !== 'WORKFLOW_ROUTE' ? rule.rule_action : (rule.target_workflow_id || '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'AUTO_APPROVE') {
+                      setRules(rules.map(r => r.id === rule.id ? { ...r, rule_action: 'AUTO_APPROVE' } : r));
+                    } else if (val === 'AUTO_CANCEL') {
+                      setRules(rules.map(r => r.id === rule.id ? { ...r, rule_action: 'AUTO_CANCEL', cancel_reason: 'Auto-cancelled via Policy Matrix Rule' } : r));
+                    } else {
+                      setRules(rules.map(r => r.id === rule.id ? { ...r, target_workflow_id: val, rule_action: 'WORKFLOW_ROUTE' } : r));
+                    }
+                    setHasChanges(true);
+                  }}
+                  className={`w-full p-1.5 text-xs font-bold rounded border outline-none ${
+                    rule.rule_action === 'AUTO_APPROVE' 
+                      ? 'bg-emerald-600 text-white border-emerald-700' 
+                      : rule.rule_action === 'AUTO_CANCEL' 
+                      ? 'bg-rose-600 text-white border-rose-700' 
+                      : 'bg-white text-slate-700 border-slate-300 focus:border-indigo-500'
+                  }`}
                 >
-                  <option value="">-- Select Flow --</option>
-                  {uniqueWorkflows.map(wf => (
-                    <option key={wf} value={wf}>{wf}</option>
-                  ))}
+                  <optgroup label="⚡ Straight-Through Actions">
+                    <option value="AUTO_APPROVE">⚡ Auto-Approve (STP)</option>
+                    <option value="AUTO_CANCEL">🚫 Auto-Cancel / Reject</option>
+                  </optgroup>
+                  <optgroup label="🔵 Workflow Profiles">
+                    <option value="">-- Select Flow --</option>
+                    {uniqueWorkflows.map(wf => (
+                      <option key={wf} value={wf}>{wf}</option>
+                    ))}
+                  </optgroup>
                 </select>
                 <button 
                   onClick={() => setActiveTab('routing')}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded text-[10px] font-bold transition-colors"
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded text-[10px] font-bold transition-colors shrink-0"
                   title="Edit Flows"
                 >
                   Edit
