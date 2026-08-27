@@ -126,6 +126,15 @@ def run_seeder():
                 print(f"    [Warning] Table {tbl_name} not found in metadata.")
                 continue
 
+            # Check if this specific table has an identity column in MSSQL
+            has_identity = False
+            if is_mssql:
+                try:
+                    check_q = text("SELECT OBJECTPROPERTY(OBJECT_ID('" + tbl_name + "'), 'TableHasIdentity')")
+                    has_identity = bool(conn.execute(check_q).scalar())
+                except Exception:
+                    has_identity = False
+
             cleaned_rows = []
             for r in rows:
                 row_dict = {}
@@ -138,13 +147,13 @@ def run_seeder():
             chunk_size = 500
             for i in range(0, len(cleaned_rows), chunk_size):
                 chunk = cleaned_rows[i:i + chunk_size]
-                if is_mssql:
+                if is_mssql and has_identity:
                     try:
                         conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] ON"))
                     except Exception:
                         pass
                 conn.execute(tbl.insert(), chunk)
-                if is_mssql:
+                if is_mssql and has_identity:
                     try:
                         conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] OFF"))
                     except Exception:
