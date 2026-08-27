@@ -85,36 +85,36 @@ def run_seeder():
     meta = MetaData()
     meta.reflect(bind=engine)
 
-    # 2. Wipe existing tables cleanly with constraints disabled
-    print("\n[Step 2/3] Cleaning existing table records...")
     is_mssql = "mssql" in settings.DATABASE_URL.lower() or "sqlserver" in settings.DATABASE_URL.lower()
 
-    with engine.connect() as conn:
+    # Use autocommit connection to prevent pymssql transaction boundary errors
+    autocommit_engine = engine.execution_options(isolation_level="AUTOCOMMIT")
+
+    # 2. Wipe existing tables cleanly
+    print("\n[Step 2/3] Cleaning existing table records...")
+    with autocommit_engine.connect() as conn:
         if is_mssql:
             try:
                 conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'"))
-                conn.commit()
             except Exception as e:
                 print(f"    [Notice] Disable constraints: {e}")
 
             for tbl in ALL_WIPE_TABLES:
                 try:
-                    conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}];"))
-                    conn.commit()
+                    conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}]"))
                 except Exception as e:
                     print(f"    [Notice] Table {tbl}: {e}")
         else:
             for tbl in ALL_WIPE_TABLES:
                 try:
-                    conn.execute(text(f"DELETE FROM {tbl};"))
+                    conn.execute(text(f"DELETE FROM {tbl}"))
                 except Exception:
                     pass
-            conn.commit()
     print("    [OK] Tables cleaned.")
 
     # 3. Insert records table by table
     print("\n[Step 3/3] Inserting records from snapshot...")
-    with engine.connect() as conn:
+    with autocommit_engine.connect() as conn:
         for tbl_name in TABLES_ORDERED:
             rows = data.get(tbl_name, [])
             if not rows:
@@ -126,11 +126,10 @@ def run_seeder():
                 print(f"    [Warning] Table {tbl_name} not found in metadata.")
                 continue
 
-            # Check if this specific table has an identity column in MSSQL
             has_identity = False
             if is_mssql:
                 try:
-                    check_q = text("SELECT OBJECTPROPERTY(OBJECT_ID('" + tbl_name + "'), 'TableHasIdentity')")
+                    check_q = text(f"SELECT OBJECTPROPERTY(OBJECT_ID('{tbl_name}'), 'TableHasIdentity')")
                     has_identity = bool(conn.execute(check_q).scalar())
                 except Exception:
                     has_identity = False
@@ -145,28 +144,28 @@ def run_seeder():
 
             # Insert in chunks of 500
             chunk_size = 500
+            if is_mssql and has_identity:
+                try:
+                    conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] ON"))
+                except Exception:
+                    pass
+
             for i in range(0, len(cleaned_rows), chunk_size):
                 chunk = cleaned_rows[i:i + chunk_size]
-                if is_mssql and has_identity:
-                    try:
-                        conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] ON"))
-                    except Exception:
-                        pass
                 conn.execute(tbl.insert(), chunk)
-                if is_mssql and has_identity:
-                    try:
-                        conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] OFF"))
-                    except Exception:
-                        pass
-                conn.commit()
 
-            print(f"    ✓ {tbl_name:30s} : {len(cleaned_rows):,} rows inserted")
+            if is_mssql and has_identity:
+                try:
+                    conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] OFF"))
+                except Exception:
+                    pass
+
+            print(f"    [OK] {tbl_name:30s} : {len(cleaned_rows):,} rows inserted")
 
         # 4. Re-enable constraints at the very end
         if is_mssql:
             try:
                 conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
-                conn.commit()
             except Exception as e:
                 print(f"    [Notice] Re-enable constraints: {e}")
 
