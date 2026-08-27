@@ -15,6 +15,25 @@ JSON_PATH = BASE_DIR / "seed_data.json"
 if not JSON_PATH.exists():
     JSON_PATH = Path("/app/seed_data.json")
 
+ALL_WIPE_TABLES = [
+    "system_logs",
+    "system_engine_logs",
+    "audit_logs",
+    "document_checklist_states",
+    "document_approval_logs",
+    "document_line_items",
+    "documents",
+    "checklist_templates",
+    "checklist_rules",
+    "business_rules",
+    "workflow_step_definitions",
+    "workflow_profiles",
+    "in_app_notifications",
+    "notification_provider_configs",
+    "notification_raci_matrices",
+    "users"
+]
+
 TABLES_ORDERED = [
     "users",
     "workflow_profiles",
@@ -26,6 +45,7 @@ TABLES_ORDERED = [
     "document_line_items",
     "document_checklist_states",
     "document_approval_logs",
+    "audit_logs",
     "in_app_notifications",
     "notification_provider_configs",
     "notification_raci_matrices"
@@ -65,22 +85,26 @@ def run_seeder():
     meta = MetaData()
     meta.reflect(bind=engine)
 
-    # 2. Wipe existing tables cleanly
+    # 2. Wipe existing tables cleanly with constraints disabled
     print("\n[Step 2/3] Cleaning existing table records...")
     is_mssql = "mssql" in settings.DATABASE_URL.lower() or "sqlserver" in settings.DATABASE_URL.lower()
 
     with engine.connect() as conn:
         if is_mssql:
-            conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'"))
-            for tbl in reversed(TABLES_ORDERED):
+            try:
+                conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'"))
+                conn.commit()
+            except Exception as e:
+                print(f"    [Notice] Disable constraints: {e}")
+
+            for tbl in ALL_WIPE_TABLES:
                 try:
                     conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}];"))
+                    conn.commit()
                 except Exception as e:
                     print(f"    [Notice] Table {tbl}: {e}")
-            conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
-            conn.commit()
         else:
-            for tbl in reversed(TABLES_ORDERED):
+            for tbl in ALL_WIPE_TABLES:
                 try:
                     conn.execute(text(f"DELETE FROM {tbl};"))
                 except Exception:
@@ -128,6 +152,14 @@ def run_seeder():
                 conn.commit()
 
             print(f"    ✓ {tbl_name:30s} : {len(cleaned_rows):,} rows inserted")
+
+        # 4. Re-enable constraints at the very end
+        if is_mssql:
+            try:
+                conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
+                conn.commit()
+            except Exception as e:
+                print(f"    [Notice] Re-enable constraints: {e}")
 
     print("\n" + "=" * 70)
     print(">>> DATABASE SEEDING COMPLETED SUCCESSFULLY!")
