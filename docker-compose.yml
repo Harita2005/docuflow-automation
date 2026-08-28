@@ -40,7 +40,7 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=Admin@1234
     ports:
-      - "1433:1433"
+      - "1443:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     restart: unless-stopped
