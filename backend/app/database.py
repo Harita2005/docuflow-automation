@@ -41,27 +41,29 @@ else:
 import time
 
 if "mssql" in db_url:
-    for attempt in range(1, 7):
+    max_attempts = 15
+    for attempt in range(1, max_attempts + 1):
         try:
             ensure_mssql_database_exists(db_url)
             engine = create_engine(db_url, **engine_kwargs)
             with engine.connect() as conn:
                 pass
-            print(f"[Database] Successfully connected to MS SQL Server on attempt {attempt}.")
+            print(f"[Database] Successfully connected to PRIMARY MS SQL Server ({db_url.split('@')[-1]}) on attempt {attempt}.")
             break
         except Exception as e:
-            if attempt == 6:
-                print(f"[Database] Could not connect to primary DATABASE_URL after {attempt} attempts ({e}). Falling back to SQLite.")
+            if attempt == max_attempts:
+                print(f"[Database ERROR] Could not connect to primary MS SQL Server after {max_attempts} attempts ({e}). Falling back to SQLite.")
                 fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
                 engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
             else:
-                print(f"[Database] SQL Server not ready yet (attempt {attempt}/6: {e}). Waiting 5 seconds...")
+                print(f"[Database] MS SQL Server container initializing (attempt {attempt}/{max_attempts}: {e}). Waiting 5 seconds...")
                 time.sleep(5)
 else:
     try:
         engine = create_engine(db_url, **engine_kwargs)
+        print(f"[Database] Successfully connected to DATABASE_URL: {db_url}")
     except Exception as e:
-        print(f"[Database] Warning: Could not connect to primary DATABASE_URL ({e}). Falling back to SQLite.")
+        print(f"[Database Warning] Could not connect to primary DATABASE_URL ({e}). Falling back to SQLite.")
         fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
         engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
 
