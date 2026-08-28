@@ -8,13 +8,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=mssql+pymssql://sa:Admin%401234@db:1433/DocuFlowDB
+      - DATABASE_URL=mssql+pymssql://sa:Admin%401234@host.docker.internal:1433/DocuFlowDB
       - SECRET_KEY=super-secret-docuflow-jwt-key-2026-production
       - FRONTEND_URL=http://localhost:8085
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
-    depends_on:
-      - db
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
@@ -33,19 +31,5 @@ services:
       - backend
     restart: unless-stopped
 
-  db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: docuflow-db
-    environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=Admin@1234
-    ports:
-      - "1443:1433"
-    volumes:
-      - mssql_data:/var/opt/mssql
-    restart: unless-stopped
-
-volumes:
-  mssql_data:
 
 
