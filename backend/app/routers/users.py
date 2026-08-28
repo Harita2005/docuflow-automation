@@ -121,7 +121,6 @@ def create_user_master(
         mfa_enabled=payload.mfa_enabled,
         mfa_type=payload.mfa_type,
         created_by=admin.name if admin else payload.created_by or "System Admin",
-        created_on=datetime.datetime.utcnow(),
         created_at=datetime.datetime.utcnow()
     )
 
