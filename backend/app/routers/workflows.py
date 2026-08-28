@@ -156,89 +156,97 @@ def get_workflow_steps(db: Session = Depends(get_db)):
 @router.post("/api/admin/workflows")
 @router.post("/api/admin/workflows/save")
 def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(get_db)):
-    existing = db.query(WorkflowProfile).filter(
-        WorkflowProfile.profile_name == payload.profile_name
-    ).filter(WorkflowProfile.is_deleted == False).first()
+    try:
+        existing = db.query(WorkflowProfile).filter(
+            WorkflowProfile.profile_name == payload.profile_name
+        ).filter(WorkflowProfile.is_deleted == False).first()
 
-    if existing:
-        existing.workflow_code = payload.workflow_code
-        existing.workflow_category = payload.workflow_category
-        existing.workflow_type = payload.workflow_type
-        existing.description = payload.description
-        existing.status = payload.status
-        existing.approval_threshold = payload.approval_threshold
-        existing.rejection_handling = payload.rejection_handling
-        existing.reminder_interval_hours = payload.reminder_interval_hours
-        existing.escalation_after_hours = payload.escalation_after_hours
-        existing.auto_escalation = payload.auto_escalation
-        existing.rule_action = payload.rule_action or "WORKFLOW_ROUTE"
-        existing.cancel_reason = payload.cancel_reason
-        existing.auto_approve_enabled = payload.auto_approve_enabled or False
-        existing.auto_approve_condition = payload.auto_approve_condition
-        existing.auto_cancel_enabled = payload.auto_cancel_enabled or False
-        existing.auto_cancel_condition = payload.auto_cancel_condition
-        
-        # Replace steps
-        db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == payload.profile_name
-        ).delete()
-    else:
-        existing = WorkflowProfile(
-            profile_name=payload.profile_name,
-            workflow_code=payload.workflow_code,
-            workflow_category=payload.workflow_category,
-            workflow_type=payload.workflow_type,
-            description=payload.description,
-            status=payload.status,
-            approval_threshold=payload.approval_threshold,
-            rejection_handling=payload.rejection_handling,
-            reminder_interval_hours=payload.reminder_interval_hours,
-            escalation_after_hours=payload.escalation_after_hours,
-            auto_escalation=payload.auto_escalation,
-            rule_action=payload.rule_action or "WORKFLOW_ROUTE",
-            cancel_reason=payload.cancel_reason,
-            auto_approve_enabled=payload.auto_approve_enabled or False,
-            auto_approve_condition=payload.auto_approve_condition,
-            auto_cancel_enabled=payload.auto_cancel_enabled or False,
-            auto_cancel_condition=payload.auto_cancel_condition
-        )
-        db.add(existing)
+        if existing:
+            existing.workflow_code = payload.workflow_code
+            existing.workflow_category = payload.workflow_category
+            existing.workflow_type = payload.workflow_type
+            existing.description = payload.description
+            existing.status = payload.status
+            existing.approval_threshold = payload.approval_threshold
+            existing.rejection_handling = payload.rejection_handling
+            existing.reminder_interval_hours = payload.reminder_interval_hours
+            existing.escalation_after_hours = payload.escalation_after_hours
+            existing.auto_escalation = payload.auto_escalation
+            existing.rule_action = payload.rule_action or "WORKFLOW_ROUTE"
+            existing.cancel_reason = payload.cancel_reason
+            existing.auto_approve_enabled = payload.auto_approve_enabled or False
+            existing.auto_approve_condition = payload.auto_approve_condition
+            existing.auto_cancel_enabled = payload.auto_cancel_enabled or False
+            existing.auto_cancel_condition = payload.auto_cancel_condition
+            db.flush()
+            
+            # Replace existing steps
+            db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == payload.profile_name
+            ).delete(synchronize_session='fetch')
+        else:
+            existing = WorkflowProfile(
+                profile_name=payload.profile_name,
+                workflow_code=payload.workflow_code,
+                workflow_category=payload.workflow_category,
+                workflow_type=payload.workflow_type,
+                description=payload.description,
+                status=payload.status,
+                approval_threshold=payload.approval_threshold,
+                rejection_handling=payload.rejection_handling,
+                reminder_interval_hours=payload.reminder_interval_hours,
+                escalation_after_hours=payload.escalation_after_hours,
+                auto_escalation=payload.auto_escalation,
+                rule_action=payload.rule_action or "WORKFLOW_ROUTE",
+                cancel_reason=payload.cancel_reason,
+                auto_approve_enabled=payload.auto_approve_enabled or False,
+                auto_approve_condition=payload.auto_approve_condition,
+                auto_cancel_enabled=payload.auto_cancel_enabled or False,
+                auto_cancel_condition=payload.auto_cancel_condition
+            )
+            db.add(existing)
+            db.flush()
 
-    # Clean old ChecklistTemplate entries for this workflow
-    db.query(ChecklistTemplate).filter(
-        ChecklistTemplate.workflow_profile == payload.profile_name
-    ).delete()
+        # Clean old ChecklistTemplate entries for this workflow
+        db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == payload.profile_name
+        ).delete(synchronize_session='fetch')
 
-    for step in payload.steps:
-        new_step = WorkflowStepDefinition(
-            profile_name=payload.profile_name,
-            stage_number=step.stage_number,
-            step_name=step.step_name,
-            approver_type=step.approver_type,
-            approver_target=step.approver_target,
-            delegate_approver=step.delegate_approver,
-            document_type=step.document_type,
-            action_required=step.action_required,
-            permissions=step.permissions,
-            sla_hours=step.sla_hours,
-            checklist_json=json.dumps(step.checklist_items) if step.checklist_items else None
-        )
-        db.add(new_step)
+        for step in payload.steps:
+            new_step = WorkflowStepDefinition(
+                profile_name=payload.profile_name,
+                stage_number=step.stage_number,
+                step_name=step.step_name,
+                approver_type=step.approver_type,
+                approver_target=step.approver_target,
+                delegate_approver=step.delegate_approver,
+                document_type=step.document_type,
+                action_required=step.action_required,
+                permissions=step.permissions,
+                sla_hours=step.sla_hours,
+                checklist_json=json.dumps(step.checklist_items) if step.checklist_items else None
+            )
+            db.add(new_step)
 
-        # Populate ChecklistTemplate table for backwards compatibility
-        if step.checklist_items:
-            for item_text in step.checklist_items:
-                chk = ChecklistTemplate(
-                    workflow_profile=payload.profile_name,
-                    stage_number=step.stage_number,
-                    item_text=item_text,
-                    is_required=True
-                )
-                db.add(chk)
+            # Populate ChecklistTemplate table for backwards compatibility
+            if step.checklist_items:
+                for item_text in step.checklist_items:
+                    chk = ChecklistTemplate(
+                        workflow_profile=payload.profile_name,
+                        stage_number=step.stage_number,
+                        item_text=item_text,
+                        is_required=True
+                    )
+                    db.add(chk)
 
-    db.commit()
-    db.refresh(existing)
-    return {"success": True, "profile_name": payload.profile_name}
+        db.commit()
+        db.refresh(existing)
+        return {"success": True, "profile_name": payload.profile_name}
+    except Exception as e:
+        db.rollback()
+        print(f"[Workflow Save Error] Failed to save workflow '{payload.profile_name}': {e}")
+        raise HTTPException(status_code=500, detail=f"Database error while saving workflow: {str(e)}")
+
 
 @router.get("/api/admin/workflows/{profile_name}", response_model=WorkflowProfileSchema)
 @router.get("/api/workflows/{profile_name}", response_model=WorkflowProfileSchema)
