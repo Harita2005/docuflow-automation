@@ -233,9 +233,9 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
                 for item_text in step.checklist_items:
                     chk = ChecklistTemplate(
                         workflow_profile=payload.profile_name,
-                        stage_number=step.stage_number,
+                        stage_name=step.step_name or f"Stage {step.stage_number}",
                         item_text=item_text,
-                        is_required=True
+                        is_mandatory=True
                     )
                     db.add(chk)
 
