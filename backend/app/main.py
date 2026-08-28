@@ -12,181 +12,128 @@ from app.routers import auth, users, documents, workflows, conditions, audit, sy
 try:
     Base.metadata.create_all(bind=engine)
     
-    # Auto-migrate SQL Server schema columns immediately on import
     from sqlalchemy import text, inspect
-    try:
-        with engine.connect() as conn:
-            # 1. Rename tables dynamically if they exist under old names
-            try:
-                conn.execute(text("IF OBJECT_ID('invoices', 'U') IS NOT NULL AND OBJECT_ID('documents', 'U') IS NULL EXEC sp_rename 'invoices', 'documents';"))
-                conn.execute(text("IF OBJECT_ID('invoice_line_items', 'U') IS NOT NULL AND OBJECT_ID('document_line_items', 'U') IS NULL EXEC sp_rename 'invoice_line_items', 'document_line_items';"))
-                conn.execute(text("IF OBJECT_ID('invoice_checklist_states', 'U') IS NOT NULL AND OBJECT_ID('document_checklist_states', 'U') IS NULL EXEC sp_rename 'invoice_checklist_states', 'document_checklist_states';"))
-                conn.commit()
-            except Exception as rename_err:
-                print(f"[Database] Rename tables warning: {rename_err}")
+    
+    def run_migration_sql(sql_cmd: str):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(sql_cmd))
+        except Exception as err:
+            print(f"[Database Migration Notice] {err}")
 
-            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE documents ALTER COLUMN doc_num VARCHAR(100) NULL;"))
-            conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND IS_NULLABLE='NO') ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
-            
-            # doc_key column migration to VARCHAR(100)
-            try:
-                conn.execute(text("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_invoices_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_invoices_doc_key ON documents;"))
-                conn.execute(text("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_documents_doc_key ON documents;"))
-                conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_key' AND DATA_TYPE <> 'varchar') ALTER TABLE documents ALTER COLUMN doc_key VARCHAR(100) NULL;"))
-                conn.execute(text("IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) CREATE INDEX ix_documents_doc_key ON documents (doc_key);"))
-                conn.commit()
-            except Exception as dockey_err:
-                print(f"[Database] doc_key migration warning: {dockey_err}")
+    # 1. Rename legacy tables if present
+    run_migration_sql("IF OBJECT_ID('invoices', 'U') IS NOT NULL AND OBJECT_ID('documents', 'U') IS NULL EXEC sp_rename 'invoices', 'documents';")
+    run_migration_sql("IF OBJECT_ID('invoice_line_items', 'U') IS NOT NULL AND OBJECT_ID('document_line_items', 'U') IS NULL EXEC sp_rename 'invoice_line_items', 'document_line_items';")
+    run_migration_sql("IF OBJECT_ID('invoice_checklist_states', 'U') IS NOT NULL AND OBJECT_ID('document_checklist_states', 'U') IS NULL EXEC sp_rename 'invoice_checklist_states', 'document_checklist_states';")
 
-            # Add cgst, sgst, igst columns to documents if missing
-            try:
-                inspector = inspect(engine)
-                
-                # Documents table migrations
-                existing_cols_documents = [c['name'] for c in inspector.get_columns('documents')]
-                if 'cgst' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD cgst FLOAT NULL;"))
-                if 'sgst' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD sgst FLOAT NULL;"))
-                if 'igst' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD igst FLOAT NULL;"))
-                if 'is_deleted' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD is_deleted BIT NOT NULL DEFAULT 0;"))
-                if 'deleted_at' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD deleted_at DATETIME NULL;"))
-                if 'pi_indicator' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD pi_indicator NVARCHAR(10) NULL;"))
-                if 'trans_type' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD trans_type NVARCHAR(20) NULL;"))
-                if 'gstin' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD gstin NVARCHAR(15) NULL;"))
-                if 'doc_status' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD doc_status INT NULL DEFAULT 0;"))
-                if 'doc_due_date' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD doc_due_date DATE NULL;"))
-                if 'contact_person' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD contact_person NVARCHAR(100) NULL;"))
-                if 'pay_mode' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD pay_mode NVARCHAR(10) NOT NULL DEFAULT N'BANK';"))
-                if 'link_column' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD link_column NVARCHAR(500) NULL;"))
-                if 'external_sync_status' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD external_sync_status VARCHAR(50) NULL DEFAULT 'UNSYNCED';"))
-                if 'external_sync_ref' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD external_sync_ref VARCHAR(100) NULL;"))
-                if 'external_synced_at' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD external_synced_at DATETIME NULL;"))
-                if 'external_sync_system' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD external_sync_system VARCHAR(100) NULL;"))
-                if 'external_sync_error' not in existing_cols_documents:
-                    conn.execute(text("ALTER TABLE documents ADD external_sync_error NVARCHAR(MAX) NULL;"))
-                
-                # Users table migrations
-                existing_cols_users = [c['name'] for c in inspector.get_columns('users')]
-                if 'is_deleted' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD is_deleted BIT NOT NULL DEFAULT 0;"))
-                if 'deleted_at' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD deleted_at DATETIME NULL;"))
-                if 'mfa_enabled' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD mfa_enabled BIT NOT NULL DEFAULT 0;"))
-                if 'mfa_type' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD mfa_type VARCHAR(50) NULL DEFAULT 'EMAIL';"))
-                if 'mfa_secret' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
-                if 'last_login' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD last_login DATETIME NULL;"))
-                if 'active_session_id' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD active_session_id VARCHAR(100) NULL;"))
-                if 'active_device_info' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD active_device_info NVARCHAR(255) NULL;"))
-                if 'session_created_at' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD session_created_at DATETIME NULL;"))
-                if 'last_activity_at' not in existing_cols_users:
-                    conn.execute(text("ALTER TABLE users ADD last_activity_at DATETIME NULL;"))
-                    
-                # Workflow profiles table migrations
-                existing_cols_workflows = [c['name'] for c in inspector.get_columns('workflow_profiles')]
-                if 'is_deleted' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD is_deleted BIT NOT NULL DEFAULT 0;"))
-                if 'deleted_at' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD deleted_at DATETIME NULL;"))
-                if 'rule_action' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD rule_action VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE';"))
-                if 'cancel_reason' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD cancel_reason NVARCHAR(MAX) NULL;"))
-                if 'auto_approve_enabled' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_approve_enabled BIT NOT NULL DEFAULT 0;"))
-                if 'auto_approve_condition' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_approve_condition NVARCHAR(MAX) NULL;"))
-                if 'auto_cancel_enabled' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_cancel_enabled BIT NOT NULL DEFAULT 0;"))
-                if 'auto_cancel_condition' not in existing_cols_workflows:
-                    conn.execute(text("ALTER TABLE workflow_profiles ADD auto_cancel_condition NVARCHAR(MAX) NULL;"))
+    # 2. Data type conversions & index fixes
+    run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_num' AND DATA_TYPE='int') ALTER TABLE documents ALTER COLUMN doc_num VARCHAR(100) NULL;")
+    run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND IS_NULLABLE='NO') ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
+    run_migration_sql("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_invoices_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_invoices_doc_key ON documents;")
+    run_migration_sql("IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) DROP INDEX ix_documents_doc_key ON documents;")
+    run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='doc_key' AND DATA_TYPE <> 'varchar') ALTER TABLE documents ALTER COLUMN doc_key VARCHAR(100) NULL;")
+    run_migration_sql("IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_documents_doc_key' AND object_id = OBJECT_ID('documents')) CREATE INDEX ix_documents_doc_key ON documents (doc_key);")
 
-                # Workflow step definitions table migrations
-                existing_cols_steps = [c['name'] for c in inspector.get_columns('workflow_step_definitions')]
-                if 'checklist_json' not in existing_cols_steps:
-                    conn.execute(text("ALTER TABLE workflow_step_definitions ADD checklist_json NVARCHAR(MAX) NULL;"))
-                    
-                # Business rules table migrations
-                existing_cols_rules = [c['name'] for c in inspector.get_columns('business_rules')]
-                if 'is_deleted' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD is_deleted BIT NOT NULL DEFAULT 0;"))
-                if 'deleted_at' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD deleted_at DATETIME NULL;"))
-                if 'rule_action' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD rule_action VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE';"))
-                if 'cancel_reason' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD cancel_reason NVARCHAR(MAX) NULL;"))
-                if 'auto_approve_enabled' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD auto_approve_enabled BIT NOT NULL DEFAULT 0;"))
-                if 'auto_approve_condition' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD auto_approve_condition NVARCHAR(MAX) NULL;"))
-                if 'auto_cancel_enabled' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD auto_cancel_enabled BIT NOT NULL DEFAULT 0;"))
-                if 'auto_cancel_condition' not in existing_cols_rules:
-                    conn.execute(text("ALTER TABLE business_rules ADD auto_cancel_condition NVARCHAR(MAX) NULL;"))
+    # 3. Documents table column additions (Individual guaranteed transactions)
+    doc_cols = [
+        ("party_name", "NVARCHAR(250) NULL"),
+        ("party_code", "NVARCHAR(100) NULL"),
+        ("party_tax_id", "NVARCHAR(50) NULL"),
+        ("vendor_name", "NVARCHAR(250) NULL"),
+        ("vendor_code", "NVARCHAR(100) NULL"),
+        ("vendor_gstin", "NVARCHAR(50) NULL"),
+        ("cgst", "FLOAT NULL"),
+        ("sgst", "FLOAT NULL"),
+        ("igst", "FLOAT NULL"),
+        ("is_deleted", "BIT NOT NULL DEFAULT 0"),
+        ("deleted_at", "DATETIME NULL"),
+        ("pi_indicator", "NVARCHAR(10) NULL"),
+        ("trans_type", "NVARCHAR(20) NULL"),
+        ("gstin", "NVARCHAR(15) NULL"),
+        ("doc_status", "INT NULL DEFAULT 0"),
+        ("doc_due_date", "DATE NULL"),
+        ("contact_person", "NVARCHAR(100) NULL"),
+        ("pay_mode", "NVARCHAR(10) NOT NULL DEFAULT N'BANK'"),
+        ("link_column", "NVARCHAR(500) NULL"),
+        ("external_sync_status", "VARCHAR(50) NULL DEFAULT 'UNSYNCED'"),
+        ("external_sync_ref", "VARCHAR(100) NULL"),
+        ("external_synced_at", "DATETIME NULL"),
+        ("external_sync_system", "VARCHAR(100) NULL"),
+        ("external_sync_error", "NVARCHAR(MAX) NULL")
+    ]
+    for col_name, col_type in doc_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='documents' AND COLUMN_NAME='{col_name}') ALTER TABLE documents ADD {col_name} {col_type};")
 
-                # Document line items table migrations
-                if inspector.has_table('document_line_items'):
-                    existing_cols_line_items = [c['name'] for c in inspector.get_columns('document_line_items')]
-                    if 'item_code' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD item_code VARCHAR(100) NULL;"))
-                    if 'warranty_text' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD warranty_text NVARCHAR(500) NULL;"))
-                    if 'serial_numbers' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD serial_numbers NVARCHAR(1000) NULL;"))
-                    if 'quantity' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD quantity NUMERIC(12, 2) NULL DEFAULT 1.0;"))
-                    if 'unit_price' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD unit_price NUMERIC(18, 2) NULL DEFAULT 0.0;"))
-                    if 'amount' not in existing_cols_line_items:
-                        conn.execute(text("ALTER TABLE document_line_items ADD amount NUMERIC(18, 2) NULL DEFAULT 0.0;"))
+    # 4. Users table column additions
+    user_cols = [
+        ("is_deleted", "BIT NOT NULL DEFAULT 0"),
+        ("deleted_at", "DATETIME NULL"),
+        ("mfa_enabled", "BIT NOT NULL DEFAULT 0"),
+        ("mfa_type", "VARCHAR(50) NULL DEFAULT 'EMAIL'"),
+        ("mfa_secret", "VARCHAR(100) NULL"),
+        ("last_login", "DATETIME NULL"),
+        ("active_session_id", "VARCHAR(100) NULL"),
+        ("active_device_info", "NVARCHAR(255) NULL"),
+        ("session_created_at", "DATETIME NULL"),
+        ("last_activity_at", "DATETIME NULL")
+    ]
+    for col_name, col_type in user_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='users' AND COLUMN_NAME='{col_name}') ALTER TABLE users ADD {col_name} {col_type};")
 
+    # 5. Workflow profiles table column additions
+    wf_cols = [
+        ("is_deleted", "BIT NOT NULL DEFAULT 0"),
+        ("deleted_at", "DATETIME NULL"),
+        ("rule_action", "VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE'"),
+        ("cancel_reason", "NVARCHAR(MAX) NULL"),
+        ("auto_approve_enabled", "BIT NOT NULL DEFAULT 0"),
+        ("auto_approve_condition", "NVARCHAR(MAX) NULL"),
+        ("auto_cancel_enabled", "BIT NOT NULL DEFAULT 0"),
+        ("auto_cancel_condition", "NVARCHAR(MAX) NULL")
+    ]
+    for col_name, col_type in wf_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='workflow_profiles' AND COLUMN_NAME='{col_name}') ALTER TABLE workflow_profiles ADD {col_name} {col_type};")
 
-                # Audit logs & System logs type conversions for invoice_id type matching
-                try:
-                    conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
-                    conn.execute(text("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;"))
-                except Exception as log_err:
-                    print(f"[Database] Log columns alteration warning: {log_err}")
-                
-                # Ensure is_deleted defaults to 0 for any existing records where it is NULL
-                try:
-                    conn.execute(text("UPDATE documents SET is_deleted = 0 WHERE is_deleted IS NULL;"))
-                    conn.execute(text("UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;"))
-                    conn.execute(text("UPDATE workflow_profiles SET is_deleted = 0 WHERE is_deleted IS NULL;"))
-                    conn.execute(text("UPDATE business_rules SET is_deleted = 0 WHERE is_deleted IS NULL;"))
-                except Exception as update_err:
-                    print(f"[Database] Defaults update warning: {update_err}")
-                    
-            except Exception as col_err:
-                print(f"[Database] Column migration warning: {col_err}")
-            
-            conn.commit()
-        print("[Database] Schema migrations completed successfully.")
-    except Exception as mig_err:
-        print(f"[Database] Migration error: {mig_err}")
+    # 6. Workflow step definitions table column additions
+    run_migration_sql("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='workflow_step_definitions' AND COLUMN_NAME='checklist_json') ALTER TABLE workflow_step_definitions ADD checklist_json NVARCHAR(MAX) NULL;")
+
+    # 7. Business rules table column additions
+    rule_cols = [
+        ("is_deleted", "BIT NOT NULL DEFAULT 0"),
+        ("deleted_at", "DATETIME NULL"),
+        ("rule_action", "VARCHAR(50) NOT NULL DEFAULT 'WORKFLOW_ROUTE'"),
+        ("cancel_reason", "NVARCHAR(MAX) NULL"),
+        ("auto_approve_enabled", "BIT NOT NULL DEFAULT 0"),
+        ("auto_approve_condition", "NVARCHAR(MAX) NULL"),
+        ("auto_cancel_enabled", "BIT NOT NULL DEFAULT 0"),
+        ("auto_cancel_condition", "NVARCHAR(MAX) NULL")
+    ]
+    for col_name, col_type in rule_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='business_rules' AND COLUMN_NAME='{col_name}') ALTER TABLE business_rules ADD {col_name} {col_type};")
+
+    # 8. Document line items table column additions
+    line_cols = [
+        ("item_code", "VARCHAR(100) NULL"),
+        ("warranty_text", "NVARCHAR(500) NULL"),
+        ("serial_numbers", "NVARCHAR(1000) NULL"),
+        ("quantity", "NUMERIC(12, 2) NULL DEFAULT 1.0"),
+        ("unit_price", "NUMERIC(18, 2) NULL DEFAULT 0.0"),
+        ("amount", "NUMERIC(18, 2) NULL DEFAULT 0.0")
+    ]
+    for col_name, col_type in line_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='document_line_items' AND COLUMN_NAME='{col_name}') ALTER TABLE document_line_items ADD {col_name} {col_type};")
+
+    # 9. Audit & system logs type conversions
+    run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
+    run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
+
+    # 10. Default cleanups for NULL values
+    run_migration_sql("UPDATE documents SET is_deleted = 0 WHERE is_deleted IS NULL;")
+    run_migration_sql("UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;")
+    run_migration_sql("UPDATE workflow_profiles SET is_deleted = 0 WHERE is_deleted IS NULL;")
+    run_migration_sql("UPDATE business_rules SET is_deleted = 0 WHERE is_deleted IS NULL;")
+
+    print("[Database] Schema migrations completed successfully.")
 except Exception as e:
     print(f"[Database] Warning on table creation: {e}")
 

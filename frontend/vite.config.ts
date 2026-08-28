@@ -22,15 +22,25 @@ export default defineConfig(() => {
       },
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:3000',
-          changeOrigin: true
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          secure: false,
+          configure: (proxy) => {
+            proxy.on('error', (err, _req, res) => {
+              console.error('[Vite Proxy Error] Backend server on port 3000 unreachable:', err.message);
+              if (res && !res.headersSent) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Backend server on port 3000 is not running. Please start backend using python run.py' }));
+              }
+            });
+          }
         },
         '/uploads': {
-          target: 'http://127.0.0.1:3000',
+          target: 'http://localhost:3000',
           changeOrigin: true
         },
         '/socket.io': {
-          target: 'http://127.0.0.1:3000',
+          target: 'http://localhost:3000',
           changeOrigin: true,
           ws: true
         }
