@@ -6,6 +6,7 @@ import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
+import AdminBackups from '../components/AdminBackups.jsx';
 import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
 import IntegrationsHub from '../components/integrations/IntegrationsHub.tsx';
 export default function Admin() {
