@@ -817,13 +817,19 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             )
 
     if require_compliance and db:
-        # 3. If Stage 1 (Attachment Status), strictly require physical document attachment
+        # 3. If Stage 1 (Attachment Status), strictly require physical document attachment and disk file verification
         is_stage_1 = (inv.current_stage or 1) == 1
-        has_attachment = bool(inv.file_url and inv.file_url.strip())
+        has_attachment = False
+        if inv.file_url and inv.file_url.strip():
+            filename = inv.file_url.split('/')[-1]
+            file_disk_path = settings.UPLOAD_DIR / filename
+            if file_disk_path.exists() and file_disk_path.stat().st_size > 0:
+                has_attachment = True
+        
         if is_stage_1 and not has_attachment:
             raise HTTPException(
                 status_code=400,
-                detail="Document Attachment Required: A physical invoice PDF must be attached and uploaded before approving Stage 1 (Attachment Status)."
+                detail="Physical PDF Attachment Compulsory: A valid physical invoice PDF file must be attached and uploaded before approving Stage 1 (Attachment Status)."
             )
 
         # 4. Mandatory checklist verification: All checklist boxes for current stage MUST be checked

@@ -817,14 +817,14 @@ export default function DocumentDetails({
   };
 
   const handleInlineApprove = async () => {
-    const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
+    const hasDocAttachment = Boolean(iframeSrc);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
     const checkedCount = Object.values(checkedStates).filter(Boolean).length;
     const totalCount = effectiveChecklist.length;
     const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
 
     if (isStage1Attachment && !hasDocAttachment) {
-      setActionError("⚠️ Document Attachment Required: You must attach/upload the physical invoice PDF before approving Stage 1 (Attachment Status).");
+      setActionError("⚠️ Physical PDF Attachment Compulsory: You must upload/attach the physical invoice PDF document before approving Stage 1 (Attachment Status).");
       return;
     }
 
