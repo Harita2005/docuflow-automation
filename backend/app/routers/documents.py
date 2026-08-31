@@ -19,6 +19,7 @@ from app.models import (
     ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig,
     ChecklistRule, BusinessRule, InAppNotification
 )
+from app.services.pdf_compressor import compress_pdf
 from app.schemas import (
     InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest,
     NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
@@ -1327,6 +1328,9 @@ async def upload_document(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
+    if ext.lower() == 'pdf':
+        compress_pdf(file_path)
+    
     from app.services.ocr_service import extract_text_from_pdf
     ocr_data = extract_text_from_pdf(file_path) if ext.lower() == 'pdf' else {}
 
@@ -1466,6 +1470,9 @@ async def upload_and_route(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    if ext.lower() == 'pdf':
+        compress_pdf(file_path)
+
     inv.file_url = f"/uploads/{filename}"
     inv.file_name = file.filename
     if document_type: inv.document_type = document_type
@@ -1576,6 +1583,9 @@ async def upload_invoice_version(
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    if ext.lower() == 'pdf':
+        compress_pdf(file_path)
 
     inv.file_url = f"/uploads/{filename}"
     inv.file_name = file.filename
