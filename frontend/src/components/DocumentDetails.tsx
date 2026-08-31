@@ -220,12 +220,18 @@ export default function DocumentDetails({
         onRefreshDocument();
       } else {
         let errDetail = "Failed to upload physical document.";
-        try {
-          const errData = await res.json();
-          errDetail = errData.detail || errData.message || errDetail;
-        } catch {
-          const txt = await res.text();
-          if (txt) errDetail = txt;
+        if (res.status === 413) {
+          errDetail = "File size exceeds server limit (413 Request Entity Too Large). Please upload a smaller file or increase server max body size.";
+        } else {
+          try {
+            const txt = await res.text();
+            try {
+              const errData = JSON.parse(txt);
+              errDetail = errData.detail || errData.message || txt || errDetail;
+            } catch {
+              if (txt) errDetail = txt;
+            }
+          } catch {}
         }
         setActionError(errDetail);
       }
@@ -697,12 +703,14 @@ export default function DocumentDetails({
       } else {
         let errDetail = "Rejection failed";
         try {
-          const err = await response.json();
-          errDetail = err.detail || err.error || err.message || errDetail;
-        } catch {
           const txt = await response.text();
-          if (txt) errDetail = txt;
-        }
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
         setActionError(errDetail);
       }
     } catch (err: any) {
@@ -746,12 +754,14 @@ export default function DocumentDetails({
       } else {
         let errDetail = "Hold action failed";
         try {
-          const err = await response.json();
-          errDetail = err.detail || err.error || err.message || errDetail;
-        } catch {
           const txt = await response.text();
-          if (txt) errDetail = txt;
-        }
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
         setActionError(errDetail);
       }
     } catch (err: any) {
@@ -854,12 +864,14 @@ export default function DocumentDetails({
       } else {
         let errDetail = "Approval action failed";
         try {
-          const err = await response.json();
-          errDetail = err.detail || err.error || err.message || errDetail;
-        } catch {
           const txt = await response.text();
-          if (txt) errDetail = txt;
-        }
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
         setActionError(errDetail);
       }
     } catch (err: any) {

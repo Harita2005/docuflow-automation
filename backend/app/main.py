@@ -151,8 +151,8 @@ def startup_event():
         user_count = db.query(User).count()
         wf_count = db.query(WorkflowProfile).count()
         inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
-        if user_count < 10 or wf_count == 0 or inv_count < 5:
-            print(f"[Startup] Seeding complete dataset (Found {user_count} users, {wf_count} workflows, {inv_count} invoices)...")
+        if wf_count == 0:
+            print(f"[Startup] Seeding complete dataset (Found {wf_count} workflows, {inv_count} invoices)...")
             try:
                 from seed_sd_workflow_matrix import seed_sd_workflow_matrix
                 seed_sd_workflow_matrix()
@@ -184,6 +184,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations
+
 # Enterprise Security Headers & Rate Limiting Middleware
 from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
@@ -206,6 +208,7 @@ app.include_router(audit.router)
 app.include_router(sync.router)
 app.include_router(sync_router.router)
 app.include_router(integrations.router)
+app.include_router(callback_integrations.router)
 app.include_router(events.router)
 
 @app.get("/")

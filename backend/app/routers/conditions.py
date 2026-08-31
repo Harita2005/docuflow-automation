@@ -23,7 +23,6 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
         rule = db.query(BusinessRule).filter(BusinessRule.id == payload.id).filter(BusinessRule.is_deleted == False).first()
     if not rule:
         rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
-
     if rule:
         rule.rule_name = payload.rule_name
         rule.rule_category = payload.rule_category
@@ -53,7 +52,6 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
     db.commit()
     db.refresh(rule)
     return rule
-
 @router.delete("/api/admin/conditions/{rule_id}")
 @router.delete("/api/admin/routing-rules/{rule_id}")
 def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
@@ -63,7 +61,6 @@ def delete_business_rule(rule_id: int, db: Session = Depends(get_db)):
     db.delete(rule)
     db.commit()
     return {"success": True, "deleted_id": rule_id}
-
 @router.post("/api/admin/rules/simulate")
 def simulate_rule_routing(payload: dict, db: Session = Depends(get_db)):
     """
@@ -71,8 +68,7 @@ def simulate_rule_routing(payload: dict, db: Session = Depends(get_db)):
     Takes mock document attributes (division, plant, category, amount, etc.) and optional draft rules.
     Returns the matched rule, target workflow, multi-stage approver pools, and condition trace.
     """
-    from app.services.rules_engine import simulate_rule_evaluation
-    
+    from app.services.rules_engine import simulate_rule_evaluation    
     mock_doc = {
         "division": payload.get("division") or "VCC",
         "plant": payload.get("plant") or payload.get("branch") or "TN-SIVAKASI",
@@ -82,11 +78,9 @@ def simulate_rule_routing(payload: dict, db: Session = Depends(get_db)):
         "tax_amount": float(payload.get("tax_amount") or 0.0),
         "vendor_name": payload.get("vendor_name") or "Test Vendor Enterprise",
         "cost_center": payload.get("cost_center") or ""
-    }
-    
+    }    
     draft_rules = payload.get("draft_rules") or []
     return simulate_rule_evaluation(db, mock_invoice=mock_doc, draft_rules=draft_rules)
-
 @router.post("/api/admin/rules/detect-conflicts")
 @router.get("/api/admin/rules/conflicts")
 def detect_conflicts_endpoint(payload: dict = None, db: Session = Depends(get_db)):

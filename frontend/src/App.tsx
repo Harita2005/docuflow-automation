@@ -11,6 +11,7 @@ import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
+import IntegrationsHub from "./components/integrations/IntegrationsHub.tsx";
 import { DbInvoice } from "./types.ts";
 import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
 import { io } from "socket.io-client";
@@ -40,8 +41,8 @@ export default function App() {
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
     employee: ["dashboard", "work-tracker"],
-    settings_editor: ["dashboard", "work-tracker", "admin"],
-    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin"]
+    settings_editor: ["dashboard", "work-tracker", "admin", "integrations", "applications", "callback-rules", "integration-logs"],
+    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin", "integrations", "applications", "callback-rules", "integration-logs"]
   });
 
   // Multi-Tab Synchronization across tabs in the same browser
@@ -544,8 +545,8 @@ export default function App() {
         />
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-y-auto px-6 pt-0 pb-2">
-          <div className="w-full max-w-[1920px] mx-auto space-y-4 animate-fadeIn">
+        <main className="flex-1 overflow-y-auto px-4 pt-1 pb-2">
+          <div className="w-full max-w-[1920px] mx-auto space-y-2 animate-fadeIn">
             {currentView === "getting-started" && (
               <GettingStartedPage
                 setCurrentView={setCurrentView}
@@ -611,6 +612,17 @@ export default function App() {
 
             {currentView === "admin" && (
               <AdminPage />
+            )}
+
+            {(currentView === "integrations" || currentView === "applications" || currentView === "callback-rules" || currentView === "integration-logs") && (
+              <IntegrationsHub
+                key={currentView}
+                initialTab={
+                  currentView === "applications" ? "applications" :
+                  currentView === "callback-rules" ? "rules" :
+                  currentView === "integration-logs" ? "logs" : "applications"
+                }
+              />
             )}
 
             {currentView === "details" && (

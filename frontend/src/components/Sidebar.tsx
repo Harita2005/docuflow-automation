@@ -14,7 +14,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Database
+  Database,
+  Globe,
+  Sliders,
+  ListFilter,
+  Share2
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -42,8 +46,8 @@ export default function Sidebar({
   const isExpanded = !collapsed || isHovered;
   
   const permissions = rolePermissions?.[currentUserRole] || (
-    currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin"] :
-    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin"] :
+    currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin", "integrations", "applications", "callback-rules", "integration-logs"] :
+    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin", "integrations", "applications", "callback-rules", "integration-logs"] :
     ["dashboard", "work-tracker"]
   );
 

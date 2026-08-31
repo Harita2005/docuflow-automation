@@ -431,4 +431,143 @@ class IntegrationAcknowledgmentResponse(BaseModel):
     message: str
 
 
+# --- APPROVAL CALLBACK INTEGRATION ENGINE SCHEMAS ---
+class ThirdPartyApplicationCreate(BaseModel):
+    name: str = Field(..., description="Application Name (e.g. Payment Application)")
+    code: str = Field(..., description="Unique Code (e.g. PAYMENT_APP)")
+    description: Optional[str] = None
+    base_url: str = Field(..., description="Base API URL e.g. https://payment.example.com/api")
+    environment: Optional[str] = Field("Production", description="Development, Testing, UAT, Production")
+    status: Optional[str] = Field("Active", description="Active or Inactive")
+    auth_type: Optional[str] = Field("None", description="None, API_KEY, BEARER_TOKEN, BASIC_AUTH, OAUTH2")
+    auth_config_json: Optional[Union[str, dict]] = None
+
+class ThirdPartyApplicationUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    description: Optional[str] = None
+    base_url: Optional[str] = None
+    environment: Optional[str] = None
+    status: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_config_json: Optional[Union[str, dict]] = None
+
+class ThirdPartyApplicationResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+    description: Optional[str] = None
+    base_url: str
+    environment: str
+    status: str
+    auth_type: str
+    auth_config_json: Optional[str] = None
+    rules_count: Optional[int] = 0
+    last_callback: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class CallbackRuleCreate(BaseModel):
+    rule_name: str = Field(..., description="Rule Name")
+    description: Optional[str] = None
+    application_id: int = Field(..., description="Target Application ID")
+    status: Optional[str] = Field("ACTIVE", description="DRAFT, ACTIVE, INACTIVE")
+    priority: Optional[int] = Field(100, description="Priority number")
+    trigger_event: Optional[str] = Field("FDO_FINAL_DECISION")
+    run_when: Optional[str] = Field("BOTH", description="APPROVED, REJECTED, BOTH")
+    conditions_json: Optional[Union[str, dict, list]] = None
+    http_method: Optional[str] = Field("POST", description="GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
+    url_mode: Optional[str] = Field("INHERIT_BASE", description="INHERIT_BASE or OVERRIDE")
+    endpoint_path: Optional[str] = None
+    custom_url: Optional[str] = None
+    body_type: Optional[str] = Field("JSON", description="NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT")
+    content_type: Optional[str] = Field("application/json")
+    payload_mapping_json: Optional[Union[str, dict, list]] = None
+    raw_payload_template: Optional[str] = None
+    query_params_json: Optional[Union[str, dict, list]] = None
+    headers_json: Optional[Union[str, dict, list]] = None
+    auth_override_type: Optional[str] = Field("INHERIT")
+    auth_override_config_json: Optional[Union[str, dict]] = None
+    timeout_seconds: Optional[int] = Field(30)
+    success_criteria_json: Optional[Union[str, list]] = None
+    follow_redirects: Optional[bool] = Field(False)
+    retry_config_json: Optional[Union[str, dict]] = None
+
+class CallbackRuleUpdate(BaseModel):
+    rule_name: Optional[str] = None
+    description: Optional[str] = None
+    application_id: Optional[int] = None
+    status: Optional[str] = None
+    priority: Optional[int] = None
+    trigger_event: Optional[str] = None
+    run_when: Optional[str] = None
+    conditions_json: Optional[Union[str, dict, list]] = None
+    http_method: Optional[str] = None
+    url_mode: Optional[str] = None
+    endpoint_path: Optional[str] = None
+    custom_url: Optional[str] = None
+    body_type: Optional[str] = None
+    content_type: Optional[str] = None
+    payload_mapping_json: Optional[Union[str, dict, list]] = None
+    raw_payload_template: Optional[str] = None
+    query_params_json: Optional[Union[str, dict, list]] = None
+    headers_json: Optional[Union[str, dict, list]] = None
+    auth_override_type: Optional[str] = None
+    auth_override_config_json: Optional[Union[str, dict]] = None
+    timeout_seconds: Optional[int] = None
+    success_criteria_json: Optional[Union[str, list]] = None
+    follow_redirects: Optional[bool] = None
+    retry_config_json: Optional[Union[str, dict]] = None
+
+class CallbackRuleResponse(BaseModel):
+    id: int
+    rule_name: str
+    description: Optional[str] = None
+    application_id: int
+    application_name: Optional[str] = None
+    application_code: Optional[str] = None
+    status: str
+    priority: int
+    trigger_event: str
+    run_when: str
+    conditions_json: Optional[str] = None
+    http_method: str
+    url_mode: str
+    endpoint_path: Optional[str] = None
+    custom_url: Optional[str] = None
+    body_type: str
+    content_type: Optional[str] = None
+    payload_mapping_json: Optional[str] = None
+    raw_payload_template: Optional[str] = None
+    query_params_json: Optional[str] = None
+    headers_json: Optional[str] = None
+    auth_override_type: str
+    auth_override_config_json: Optional[str] = None
+    timeout_seconds: int
+    success_criteria_json: Optional[str] = None
+    follow_redirects: bool
+    retry_config_json: Optional[str] = None
+    last_execution: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class TestCallbackRequest(BaseModel):
+    application_id: Optional[int] = None
+    rule_id: Optional[int] = None
+    sample_primary_key: Optional[str] = "TEST-84932"
+    sample_document_number: Optional[str] = "TEST-INV-1024"
+    sample_approval_status: Optional[str] = "APPROVED"
+    sample_company: Optional[str] = "VCC"
+    sample_document_type: Optional[str] = "AP INVOICE"
+    # Or test config directly without saving
+    rule_config: Optional[CallbackRuleCreate] = None
+
+
+
 

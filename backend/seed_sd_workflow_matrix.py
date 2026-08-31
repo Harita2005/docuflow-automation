@@ -195,12 +195,13 @@ def seed_sd_workflow_matrix():
             # Populate exact stages and approver pools from Excel
             db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
             for stage_num, st_name, pool in p_data['steps']:
+                target = "YUVASREE" if stage_num == 1 else "Nattudurai" if stage_num == 2 else "VIGNESH" if stage_num == 3 else "VARUNAN"
                 db.add(WorkflowStepDefinition(
                     profile_name=p_name,
                     stage_number=stage_num,
                     step_name=st_name,
-                    approver_type='Approval Pool' if ',' in pool else 'Specific Employee',
-                    approver_target=pool,
+                    approver_type='Specific Employee',
+                    approver_target=target,
                     document_type=p_data['workflow_type'],
                     action_required='Approve',
                     permissions='Approve / Reject',

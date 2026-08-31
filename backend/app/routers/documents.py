@@ -25,13 +25,29 @@ from app.schemas import (
 )
 from app.auth import get_current_user
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, match_condition, score_checklist_rule
-from app.services.ocr_service import extract_text_from_pdf
 from app.services.integration_service import dispatch_outgoing_webhook
+from app.services.callback_service import dispatch_approval_callback_events
+from app.database import SessionLocal
 
-def trigger_async_integration_push(document_id: str):
-    """Spawns a background thread to dispatch the approved document to configured 3rd-party webhook / SAP."""
+def trigger_async_integration_push(document_id: str, decision: str = "APPROVED"):
+    """Spawns a background thread to dispatch the approved/rejected document to configured 3rd-party webhooks & Callback Integrations Engine."""
+    def _runner():
+        try:
+            dispatch_outgoing_webhook(document_id)
+        except Exception as e:
+            print(f"[Webhook Warning] {e}")
+        try:
+            db = SessionLocal()
+            try:
+                dispatch_approval_callback_events(db, document_id, decision=decision)
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Callback Engine Warning] {e}")
+
     try:
-        t = threading.Thread(target=dispatch_outgoing_webhook, args=(document_id,), daemon=True)
+        import threading
+        t = threading.Thread(target=_runner, daemon=True)
         t.start()
     except Exception as e:
         print(f"[Integration Warning] Could not spawn background webhook thread: {e}")
@@ -714,6 +730,8 @@ def process_rejection_logic(
             notes=f"Rejected at Stage {current_stage} by {approver_name} ➔ Returned to Stage {prev_stage} ({prev_step_name}, Assigned: {inv.assigned_approver}). Reason: {remarks}"
         ))
 
+        trigger_async_integration_push(str(inv.id), decision="REJECTED")
+
         safe_broadcast_event("DOCUMENT_UPDATED", {
             "document_id": str(inv.id),
             "status": inv.status,
@@ -1388,7 +1406,7 @@ async def upload_document(
             new_inv.assigned_approver = steps[0].approver_target.strip()
             new_inv.status = f"Initiated ({steps[0].step_name})"
         else:
-            new_inv.assigned_approver = "SIBITHA, VIVEK_00336"
+            new_inv.assigned_approver = "YUVASREE"
             new_inv.status = "Initiated (Stage 1)"
 
         db.add(AuditLog(

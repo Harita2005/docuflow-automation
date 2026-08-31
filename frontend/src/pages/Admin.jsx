@@ -6,8 +6,8 @@ import AdminInApp from '../components/AdminInApp.jsx';
 import ConditionBuilder from '../components/ConditionBuilder.jsx';
 import FlowBuilder from '../components/FlowBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
-import AdminBackups from '../components/AdminBackups.jsx';
 import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
+import IntegrationsHub from '../components/integrations/IntegrationsHub.tsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -484,6 +484,12 @@ export default function Admin() {
               System Settings
             </button>
             <button
+              onClick={() => setActiveTab("callbacks")}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "callbacks" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+            >
+              Approval Callback Integrations
+            </button>
+            <button
               onClick={() => setActiveTab("backups")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "backups" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
@@ -497,7 +503,8 @@ export default function Admin() {
       <div className="flex-1 min-w-0 flex flex-col font-sans pt-2 h-full">
         
         {/* Settings Header */}
-        <div className={`mb-1.5 border rounded-lg p-2 backdrop-blur-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2 transition-colors ${hasChanges ? 'bg-amber-50/90 border-amber-200/60' : 'bg-white/80 border-slate-200/60'}`}>
+        {activeTab !== 'callbacks' && (
+          <div className={`mb-1.5 border rounded-lg p-2 backdrop-blur-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2 transition-colors ${hasChanges ? 'bg-amber-50/90 border-amber-200/60' : 'bg-white/80 border-slate-200/60'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-md flex items-center justify-center text-white shadow-sm transition-colors ${hasChanges ? 'bg-gradient-to-br from-amber-400 to-amber-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
                 {hasChanges ? <AlertTriangle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
@@ -561,6 +568,7 @@ export default function Admin() {
               )}
             </div>
           </div>
+        )}
       <div className="flex-1 min-h-0 flex flex-col gap-3 items-stretch relative overflow-y-auto custom-scrollbar pr-2">
         {publishing && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-50 rounded-xl flex items-center justify-center">
@@ -1121,6 +1129,12 @@ export default function Admin() {
     {activeTab === "backups" && (
       <div className="w-full animate-fadeIn transition-all">
         <AdminBackups />
+      </div>
+    )}
+
+    {activeTab === "callbacks" && (
+      <div className="w-full animate-fadeIn transition-all">
+        <IntegrationsHub />
       </div>
     )}
 

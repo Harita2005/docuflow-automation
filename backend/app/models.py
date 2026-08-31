@@ -440,4 +440,119 @@ class IntegrationSyncLog(Base):
     document = relationship("Document")
 
 
+# =========================================================================
+# 12. APPROVAL CALLBACK INTEGRATION ENGINE MODELS
+# =========================================================================
+class ThirdPartyApplication(Base):
+    __tablename__ = "third_party_applications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(150), nullable=False)
+    code = Column(String(50), unique=True, index=True, nullable=False) # e.g. PAYMENT_APP, ERP, FIN
+    description = Column(Text, nullable=True)
+    base_url = Column(String(500), nullable=False) # e.g. https://payment.example.com/api
+    environment = Column(String(30), default="Production") # Development, Testing, UAT, Production
+    status = Column(String(20), default="Active", index=True) # Active, Inactive
+    auth_type = Column(String(50), default="None") # None, API_KEY, BEARER_TOKEN, BASIC_AUTH, OAUTH2
+    auth_config_json = Column(Text, nullable=True) # JSON config for credentials / secrets
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    rules = relationship("CallbackRule", back_populates="application", cascade="all, delete-orphan")
+
+
+class CallbackRule(Base):
+    __tablename__ = "callback_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    application_id = Column(Integer, ForeignKey("third_party_applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), default="ACTIVE", index=True) # DRAFT, ACTIVE, INACTIVE
+    priority = Column(Integer, default=100) # Lower number = higher priority evaluation
+    trigger_event = Column(String(100), default="FDO_FINAL_DECISION") # Trigger
+    run_when = Column(String(30), default="BOTH") # APPROVED, REJECTED, BOTH
+    conditions_json = Column(Text, nullable=True) # Dynamic condition tree
+    http_method = Column(String(15), default="POST") # GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
+    url_mode = Column(String(20), default="INHERIT_BASE") # INHERIT_BASE, OVERRIDE
+    endpoint_path = Column(String(500), nullable=True) # e.g. /v1/payment/{{documentNumber}}/approval
+    custom_url = Column(String(500), nullable=True) # Used if url_mode == OVERRIDE
+    body_type = Column(String(30), default="JSON") # NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT
+    content_type = Column(String(100), default="application/json")
+    payload_mapping_json = Column(Text, nullable=True) # Table of fields mapping
+    raw_payload_template = Column(Text, nullable=True) # Template for custom JSON/XML/text
+    query_params_json = Column(Text, nullable=True) # Query parameter key/values
+    headers_json = Column(Text, nullable=True) # Custom header key/values
+    auth_override_type = Column(String(50), default="INHERIT") # INHERIT, NONE, API_KEY, BEARER_TOKEN, BASIC_AUTH, OAUTH2
+    auth_override_config_json = Column(Text, nullable=True)
+    timeout_seconds = Column(Integer, default=30)
+    success_criteria_json = Column(Text, nullable=True) # Status codes e.g. [200, 201, 202, 204]
+    follow_redirects = Column(Boolean, default=False)
+    retry_config_json = Column(Text, nullable=True) # Mode, max_attempts, initial_delay, backoff, retryable_codes
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    application = relationship("ThirdPartyApplication", back_populates="rules")
+    events = relationship("CallbackEvent", back_populates="rule", cascade="all, delete-orphan")
+
+
+class CallbackEvent(Base):
+    __tablename__ = "callback_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(String(100), unique=True, index=True, nullable=False) # e.g. APPROVAL-INV1024-84932-APPROVED
+    document_id = Column(String(100), ForeignKey("documents.id"), nullable=False, index=True)
+    rule_id = Column(Integer, ForeignKey("callback_rules.id"), nullable=False, index=True)
+    application_id = Column(Integer, ForeignKey("third_party_applications.id"), nullable=False, index=True)
+    source_primary_key = Column(String(100), nullable=True)
+    document_number = Column(String(150), nullable=True)
+    decision = Column(String(50), nullable=False) # APPROVED, REJECTED
+    status = Column(String(50), default="PENDING", index=True) # PENDING, SENDING, DELIVERED, FAILED, RETRYING
+    attempt_count = Column(Integer, default=0)
+    max_attempts = Column(Integer, default=3)
+    next_retry_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    document = relationship("Document")
+    rule = relationship("CallbackRule", back_populates="events")
+    application = relationship("ThirdPartyApplication")
+    attempts = relationship("CallbackAttempt", back_populates="callback_event", cascade="all, delete-orphan")
+
+
+class CallbackAttempt(Base):
+    __tablename__ = "callback_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    callback_event_id = Column(Integer, ForeignKey("callback_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    attempt_number = Column(Integer, nullable=False)
+    http_method = Column(String(15), nullable=False)
+    request_url = Column(String(1000), nullable=False)
+    request_headers_json = Column(Text, nullable=True) # Secret-masked headers snapshot
+    request_body = Column(Text, nullable=True)
+    response_status_code = Column(Integer, nullable=True)
+    response_headers_json = Column(Text, nullable=True)
+    response_body = Column(Text, nullable=True)
+    response_time_ms = Column(Integer, nullable=True)
+    status = Column(String(50), default="FAILED", index=True) # DELIVERED, FAILED
+    error_message = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    callback_event = relationship("CallbackEvent", back_populates="attempts")
+
+
+class IntegrationAuditHistory(Base):
+    __tablename__ = "integration_audit_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entity_type = Column(String(50), nullable=False, index=True) # APPLICATION, RULE
+    entity_id = Column(Integer, nullable=False, index=True)
+    action = Column(String(50), nullable=False) # CREATED, UPDATED, ENABLED, DISABLED, DELETED
+    previous_value_json = Column(Text, nullable=True)
+    new_value_json = Column(Text, nullable=True)
+    changed_by = Column(String(150), default="System Admin")
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+
+
 
