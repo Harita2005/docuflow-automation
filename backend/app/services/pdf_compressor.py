@@ -1,9 +1,15 @@
 import os
 import io
 import fitz  # PyMuPDF
-from PIL import Image
 from pathlib import Path
 from typing import Tuple
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    Image = None
+    HAS_PIL = False
 
 def compress_pdf(
     file_path: Path,
@@ -45,6 +51,9 @@ def compress_pdf(
             return True, original_size, new_size
 
         # Step 2: If still large, perform Image Stream Resampling & Re-compression (Lossy Scan Optimization)
+        if not HAS_PIL:
+            return True, original_size, deflated_size
+
         print(f"[PDF Compressor] Resampling scanned images for '{file_path.name}' ({original_size/1024/1024:.2f}MB)...")
         doc = fitz.open(file_path)
         
