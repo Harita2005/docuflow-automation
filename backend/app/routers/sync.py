@@ -518,7 +518,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 else:
                     target_inv.status = "Initiated (Stage 1)"
 
-                from app.routers.invoices import resolve_checklist_items
+                from app.routers.documents import resolve_checklist_items
                 current_step_name = steps[0].step_name if steps else "Attachment Status"
                 stage_items = resolve_checklist_items(db, target_inv, current_step_name)
 
