@@ -296,6 +296,12 @@ class DocumentSyncRequest(BaseModel):
     custom_data: Optional[dict] = Field(None, description="Additional arbitrary ERP custom attributes")
     auto_route: bool = Field(True, description="Immediately evaluate business rules and attach workflow")
 
+    # Optional Body Authentication (Bearer Token / API Key / Secret Key inside Raw JSON Body)
+    access_token: Optional[str] = Field(None, alias="accessToken", description="Access token passed directly inside raw JSON body")
+    token: Optional[str] = Field(None, alias="Token", description="Token string passed directly inside raw JSON body")
+    api_key: Optional[str] = Field(None, alias="apiKey", description="API Key passed directly inside raw JSON body")
+    secret_key: Optional[str] = Field(None, alias="secretKey", description="Secret Key passed directly inside raw JSON body")
+
     @model_validator(mode="before")
     @classmethod
     def populate_numbers(cls, data: Any) -> Any:
