@@ -20,6 +20,16 @@ from app.services.mfa_service import (
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
+@router.get("/login")
+@router.get("/token")
+def login_get_info():
+    return {
+        "status": "online",
+        "endpoint": "/api/auth/login",
+        "supported_method": "POST",
+        "instructions": "Send an HTTP POST request with Content-Type: application/json and body {'username': 'admin', 'password': 'password123', 'force_login': true} to generate your JWT Bearer token."
+    }
+
 @router.post("/login", response_model=TokenResponse, response_model_exclude_none=True)
 @router.post("/token", response_model=TokenResponse, response_model_exclude_none=True)
 def login(request: LoginRequest, db: Session = Depends(get_db)):

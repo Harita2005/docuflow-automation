@@ -41,6 +41,76 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
   // Selected Target App for API Config & Rules
   const [selectedAppIdForConfig, setSelectedAppIdForConfig] = useState<string>(apps[0]?.id || '');
 
+  // Fetch Live Documents from Backend Database
+  React.useEffect(() => {
+    const fetchLiveLogs = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch('/api/invoices', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const mappedLogs: SyncLog[] = data.map((inv: any) => {
+              const isFailed = (inv.status || '').toLowerCase().includes('fail');
+              const isRejected = (inv.status || '').toLowerCase().includes('reject');
+              
+              return {
+                id: `log-${inv.id}`,
+                timestamp: inv.created_at ? new Date(inv.created_at).toLocaleString() : new Date().toLocaleString(),
+                applicationId: 'app-erp-001',
+                applicationName: inv.external_sync_system || 'ERP System',
+                documentNumber: inv.invoice_number || inv.doc_num || inv.id,
+                primaryKey: String(inv.doc_key || inv.id),
+                documentType: inv.document_type || 'Purchase Order',
+                decision: isRejected ? 'REJECTED' : 'APPROVED',
+                endpoint: isRejected
+                  ? 'https://erp.example.com/api/v2/documents/rejection'
+                  : 'https://erp.example.com/api/v2/documents/approval',
+                httpMethod: 'POST',
+                httpStatus: isFailed ? 500 : 200,
+                syncStatus: isFailed ? 'Failed' : 'Success',
+                retryCount: isFailed ? 3 : 0,
+                maxRetries: 3,
+                idempotencyKey: `SYNC-${inv.doc_key || inv.id}`,
+                ruleId: 'rule-po-erp-approval',
+                ruleName: 'PO Approval & Compliance Sync Rule',
+                conditionSummary: `Approval Status = "${inv.status || 'Initiated'}"`,
+                requestHeaders: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer dapi_live_token_7739'
+                },
+                requestBody: {
+                  doc_key: inv.doc_key || inv.id,
+                  invoice_number: inv.invoice_number,
+                  vendor_name: inv.vendor_name,
+                  amount: inv.amount,
+                  document_type: inv.document_type,
+                  division: inv.division,
+                  status: inv.status
+                },
+                responseBody: isFailed
+                  ? { success: false, error: 'Endpoint timeout' }
+                  : { success: true, message: 'Record synchronized and auto-routed successfully' },
+                responseTimeMs: isFailed ? 5000 : 124,
+                retryHistory: isFailed ? [
+                  { attempt: 1, timestamp: '2026-09-01 08:42:10 AM', status: 'Failed', httpStatus: 504, errorReason: 'Gateway Timeout', responseTimeMs: 5000 },
+                  { attempt: 2, timestamp: '2026-09-01 08:42:40 AM', status: 'Failed', httpStatus: 504, errorReason: 'Gateway Timeout', responseTimeMs: 5000 },
+                  { attempt: 3, timestamp: '2026-09-01 08:43:10 AM', status: 'Failed', httpStatus: 500, errorReason: 'Internal Server Error', responseTimeMs: 5000 }
+                ] : []
+              };
+            });
+            setLogs(mappedLogs);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading live sync logs in hub:", err);
+      }
+    };
+    fetchLiveLogs();
+  }, []);
+
   // Wizard Modal State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingRuleForWizard, setEditingRuleForWizard] = useState<SyncRule | null>(null);

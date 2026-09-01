@@ -186,11 +186,13 @@ export default function App() {
           }
         } catch (_) {}
         handleLogout();
+      } else if (response.status === 503) {
+        // Backend starting up or restarting - silent retry
       } else {
         console.error("Failed to fetch documents:", await response.text());
       }
     } catch (e) {
-      console.error("Failed to fetch documents registry stats:", e);
+      // Backend temporarily offline
     } finally {
       if (!silent) setLoadingDocs(false);
     }
@@ -216,13 +218,14 @@ export default function App() {
           }
         } catch (_) {}
         handleLogout();
+      } else if (response.status === 503) {
+        setStats({ totalDocuments: 0 });
       } else {
         console.error("Failed to fetch analytical stats counters:", await response.text());
-        setStats({ totalDocuments: 0 }); // Fallback to avoid infinite loading
+        setStats({ totalDocuments: 0 });
       }
     } catch (e) {
-      console.error("Failed to fetch analytical stats counters:", e);
-      setStats({ totalDocuments: 0 }); // Fallback to avoid infinite loading
+      setStats({ totalDocuments: 0 });
     } finally {
       if (!silent) setLoadingStats(false);
     }
