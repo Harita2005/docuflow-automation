@@ -8,7 +8,7 @@ import FlowBuilder from '../components/FlowBuilder.jsx';
 import AdminRBAC from '../components/AdminRBAC.jsx';
 import AdminBackups from '../components/AdminBackups.jsx';
 import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
-import IntegrationsHub from '../components/integrations/IntegrationsHub.tsx';
+import DapiSyncBackHub from '../components/dapi-sync-back/DapiSyncBackHub.tsx';
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -1135,7 +1135,7 @@ export default function Admin() {
 
     {activeTab === "callbacks" && (
       <div className="w-full animate-fadeIn transition-all">
-        <IntegrationsHub />
+        <DapiSyncBackHub />
       </div>
     )}
 

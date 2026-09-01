@@ -12,6 +12,7 @@ import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
 import IntegrationsHub from "./components/integrations/IntegrationsHub.tsx";
+import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types.ts";
 import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
 import { io } from "socket.io-client";
@@ -40,9 +41,9 @@ export default function App() {
   const [kickedReason, setKickedReason] = useState<string | null>(() => sessionStorage.getItem("sessionKickedReason") || null);
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
-    employee: ["dashboard", "work-tracker"],
-    settings_editor: ["dashboard", "work-tracker", "admin", "integrations", "applications", "callback-rules", "integration-logs"],
-    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin", "integrations", "applications", "callback-rules", "integration-logs"]
+    employee: ["dashboard", "work-tracker", "dapi-sync-back"],
+    settings_editor: ["dashboard", "work-tracker", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
+    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
   });
 
   // Multi-Tab Synchronization across tabs in the same browser
@@ -614,12 +615,12 @@ export default function App() {
               <AdminPage />
             )}
 
-            {(currentView === "integrations" || currentView === "applications" || currentView === "callback-rules" || currentView === "integration-logs") && (
-              <IntegrationsHub
+            {(currentView === "dapi-sync-back" || currentView === "integrations" || currentView === "applications" || currentView === "callback-rules" || currentView === "integration-logs") && (
+              <DapiSyncBackHub
                 key={currentView}
                 initialTab={
                   currentView === "applications" ? "applications" :
-                  currentView === "callback-rules" ? "rules" :
+                  currentView === "callback-rules" ? "simple" :
                   currentView === "integration-logs" ? "logs" : "applications"
                 }
               />

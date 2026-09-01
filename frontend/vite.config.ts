@@ -7,6 +7,7 @@ export default defineConfig(() => {
   return {
     plugins: [react() as any, tailwindcss() as any],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },

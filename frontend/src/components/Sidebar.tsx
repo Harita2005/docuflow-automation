@@ -46,9 +46,9 @@ export default function Sidebar({
   const isExpanded = !collapsed || isHovered;
   
   const permissions = rolePermissions?.[currentUserRole] || (
-    currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin", "integrations", "applications", "callback-rules", "integration-logs"] :
-    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin", "integrations", "applications", "callback-rules", "integration-logs"] :
-    ["dashboard", "work-tracker"]
+    currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+    ["dashboard", "work-tracker", "dapi-sync-back"]
   );
 
   const menuGroups = [
