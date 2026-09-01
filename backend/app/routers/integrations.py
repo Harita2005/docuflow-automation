@@ -163,7 +163,7 @@ def download_approved_document_pdf(
     file_url = doc.file_url or ""
     
     # 1. Check direct structured path
-    from app.routers.invoices import get_archived_pdf_path
+    from app.routers.documents import get_archived_pdf_path
     structured_path = get_archived_pdf_path(doc)
 
     candidate_paths = [
