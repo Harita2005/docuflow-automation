@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, Mail, Users, Info, Plus, X } from 'lucide-react';
+import { Save, RefreshCw, Mail, Users, Plus, X, Server, ChevronDown, ChevronUp, Edit3, Sparkles } from 'lucide-react';
 
 const EVENTS = ["Approve", "Reject", "Request Clarification", "Send Back", "Escalate"];
 
@@ -9,10 +9,10 @@ export default function AdminRACI() {
   const [workflows, setWorkflows] = useState([]);
   const [workflowProfile, setWorkflowProfile] = useState("");
   const [customWorkflow, setCustomWorkflow] = useState("");
+  const [expandedTemplates, setExpandedTemplates] = useState({});
   
   // State for the grid for the current workflow
   const [grid, setGrid] = useState({});
-
   const [providerConfig, setProviderConfig] = useState({ smtp_server: '', port: 587, username: '', encrypted_password: '', sender_email: '', sender_name: '' });
 
   useEffect(() => {
@@ -22,7 +22,6 @@ export default function AdminRACI() {
   }, []);
 
   useEffect(() => {
-    // When workflow changes, update grid state from matrices
     const activeWorkflow = customWorkflow || workflowProfile;
     const newGrid = {};
     
@@ -93,7 +92,6 @@ export default function AdminRACI() {
     setLoading(true);
     const activeWorkflow = customWorkflow || workflowProfile;
     
-    // Proactively harvest any typed emails that weren't submitted via the '+' button
     const currentGrid = { ...grid };
     EVENTS.forEach(event => {
       ['R', 'A', 'C', 'I'].forEach(role => {
@@ -140,7 +138,7 @@ export default function AdminRACI() {
     setLoading(true);
     try {
       await fetch('/api/admin/notifications/provider', { method: 'POST', headers, body: JSON.stringify(providerConfig) });
-      alert('SMTP settings saved!');
+      alert('SMTP settings saved successfully!');
     } catch(e) { alert(e.message); }
     setLoading(false);
   };
@@ -158,7 +156,7 @@ export default function AdminRACI() {
         body: JSON.stringify({
           to: targetEmail.trim(),
           subject: 'DocuFlow Automation - SMTP Test',
-          html: '<p>This is a test email from the Workflow Automation Notification Module. If you received this, your SMTP settings are configured correctly!</p>'
+          html: '<p>This is a test email from DocuFlow RACI Engine. If you received this, your SMTP settings are configured correctly!</p>'
         })
       });
       if (res.ok) {
@@ -194,53 +192,111 @@ export default function AdminRACI() {
     }));
   };
 
+  const toggleTemplateExpand = (eventKey) => {
+    setExpandedTemplates(prev => ({
+      ...prev,
+      [eventKey]: !prev[eventKey]
+    }));
+  };
+
+  const insertVariable = (event, field, varName) => {
+    setGrid(prev => ({
+      ...prev,
+      [event]: {
+        ...prev[event],
+        [field]: (prev[event][field] || '') + ` {{${varName}}}`
+      }
+    }));
+  };
+
   const activeWorkflow = customWorkflow || workflowProfile;
 
   return (
-    <div className="p-4 flex flex-col gap-4">
-      <div className="flex justify-between items-center bg-white px-4 py-2.5 rounded-lg shadow-sm border border-slate-200/60">
+    <div className="p-3 flex flex-col gap-3 font-sans text-xs">
+      
+      {/* HEADER BAR */}
+      <div className="flex justify-between items-center bg-white p-2 px-3 rounded-xl shadow-2xs border border-slate-200">
         <div>
-          <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-blue-600" />
-            RACI Email Matrix
+          <h2 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 text-blue-600" />
+            RACI Email Matrix & SMTP Engine
           </h2>
-          <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-            Configure automated email notifications based on the Responsible, Accountable, Consulted, and Informed framework.
+          <p className="text-[9px] font-medium text-slate-500">
+            Configure automated email notifications (Responsible, Accountable, Consulted, Informed) and SMTP credentials.
           </p>
         </div>
-        <button 
-          onClick={saveRACI} 
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors shadow-sm disabled:opacity-50"
-        >
-          {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Save Matrix
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button 
+            onClick={testSMTPConnection} 
+            disabled={loading}
+            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-blue-700 font-bold text-[9.5px] uppercase tracking-wide rounded-md transition shadow-2xs border border-slate-200 cursor-pointer active:scale-98 h-6.5"
+          >
+            <Mail className="h-3 w-3" /> Test Email
+          </button>
+          <button 
+            onClick={saveRACI} 
+            disabled={loading}
+            className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9.5px] uppercase tracking-wide rounded-md transition shadow-2xs cursor-pointer active:scale-98 disabled:opacity-50 h-6.5"
+          >
+            {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            Save Matrix
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4">
-        <div className="flex justify-between items-center mb-3">
-          <label className="block text-xs font-black text-blue-600 uppercase tracking-wide">SMTP Email Server Configuration</label>
-          <div className="flex gap-2">
-            <button onClick={testSMTPConnection} className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Mail className="h-3 w-3" /> Send Test Email</button>
-            <button onClick={saveProviderConfig} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded font-bold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5"><Save className="h-3 w-3" /> Save SMTP Config</button>
+      {/* SMTP EMAIL SERVER CONFIGURATION CARD */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+        <div className="bg-slate-50/80 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Server className="h-3 w-3 text-blue-600" />
+            <h3 className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider">
+              SMTP Email Server Settings
+            </h3>
+          </div>
+          <button 
+            onClick={saveProviderConfig} 
+            className="px-2 py-0.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[8.5px] font-bold uppercase rounded transition shadow-2xs cursor-pointer"
+          >
+            Save SMTP Config
+          </button>
+        </div>
+
+        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">SMTP SERVER</label>
+            <input type="text" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="smtp.office365.com"/>
+          </div>
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">PORT</label>
+            <input type="number" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.port || ''} onChange={e => setProviderConfig({...providerConfig, port: parseInt(e.target.value)})} placeholder="587"/>
+          </div>
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">SENDER EMAIL</label>
+            <input type="email" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.sender_email || ''} onChange={e => setProviderConfig({...providerConfig, sender_email: e.target.value})} placeholder="noreply@company.com"/>
+          </div>
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">USERNAME</label>
+            <input type="text" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.username || ''} onChange={e => setProviderConfig({...providerConfig, username: e.target.value})} placeholder="SMTP Username"/>
+          </div>
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">PASSWORD</label>
+            <input type="password" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.encrypted_password || ''} onChange={e => setProviderConfig({...providerConfig, encrypted_password: e.target.value})} placeholder="••••••••"/>
+          </div>
+          <div>
+            <label className="block text-[8.5px] font-black text-slate-500 uppercase mb-0.5">SENDER NAME</label>
+            <input type="text" className="w-full text-[9.5px] font-mono font-bold px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-hidden h-6.5 text-slate-900" value={providerConfig.sender_name || ''} onChange={e => setProviderConfig({...providerConfig, sender_name: e.target.value})} placeholder="DocuFlow Alerts"/>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">SMTP Server</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.smtp_server || ''} onChange={e => setProviderConfig({...providerConfig, smtp_server: e.target.value})} placeholder="e.g. smtp.office365.com"/></div>
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Port</label><input type="number" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.port || ''} onChange={e => setProviderConfig({...providerConfig, port: parseInt(e.target.value)})} placeholder="587"/></div>
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Sender Email</label><input type="email" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.sender_email || ''} onChange={e => setProviderConfig({...providerConfig, sender_email: e.target.value})} placeholder="noreply@company.com"/></div>
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Username</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.username || ''} onChange={e => setProviderConfig({...providerConfig, username: e.target.value})} placeholder="SMTP Username"/></div>
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Password</label><input type="password" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.encrypted_password || ''} onChange={e => setProviderConfig({...providerConfig, encrypted_password: e.target.value})} placeholder="SMTP Password"/></div>
-          <div><label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Sender Name</label><input type="text" className="w-full text-xs p-2 border border-slate-200/70 rounded hover:border-slate-300 transition-colors focus:border-blue-500 outline-none" value={providerConfig.sender_name || ''} onChange={e => setProviderConfig({...providerConfig, sender_name: e.target.value})} placeholder="e.g. DocuFlow System"/></div>
-        </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4">
-        <label className="block text-xs font-black text-blue-600 mb-2 uppercase tracking-wide">Target Workflow Profile</label>
-        <div className="flex gap-4">
+      {/* TARGET WORKFLOW PROFILE SELECTOR BAR */}
+      <div className="bg-white p-2 px-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-3">
+        <label className="text-[9px] font-black text-slate-700 uppercase tracking-wide shrink-0">
+          Target Workflow Profile:
+        </label>
+        <div className="flex items-center gap-2 flex-1 max-w-lg">
           <select 
-            className="p-2 bg-slate-50 border border-slate-200/70 hover:border-slate-300 transition-all rounded-md text-xs w-64 outline-none focus:border-blue-500"
+            className="flex-1 px-2 py-0.5 bg-slate-50 border border-slate-200 hover:border-slate-300 transition rounded-md text-[9.5px] font-bold text-slate-900 outline-hidden focus:border-blue-500 h-6.5 cursor-pointer"
             value={workflowProfile}
             onChange={(e) => {
               setWorkflowProfile(e.target.value);
@@ -268,7 +324,7 @@ export default function AdminRACI() {
             <input 
               type="text"
               placeholder="Enter exact workflow name..."
-              className="p-2 bg-slate-50 border border-slate-200/70 hover:border-slate-300 transition-all rounded-md text-xs w-64 outline-none focus:border-blue-500"
+              className="flex-1 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md text-[9.5px] font-mono h-6.5 outline-hidden focus:border-blue-500"
               value={customWorkflow}
               onChange={(e) => setCustomWorkflow(e.target.value)}
             />
@@ -276,120 +332,179 @@ export default function AdminRACI() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200/60 rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.03)]">
+      {/* RACI MATRIX TABLE */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-48">Trigger Event</th>
-              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
-                <span className="text-blue-600">R</span>esponsible
-                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Required to take action</div>
+            <tr className="bg-slate-50/80 border-b border-slate-200 text-[8.5px] font-black text-slate-400 uppercase tracking-wider">
+              <th className="py-1.5 px-3 w-40">Trigger Event</th>
+              <th className="py-1.5 px-3 w-1/4">
+                <span className="text-blue-600 font-black">R</span>ESPONSIBLE
+                <span className="text-[7.5px] text-slate-400 block font-medium">Required to take action</span>
               </th>
-              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
-                <span className="text-purple-600">A</span>ccountable
-                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Owns the outcome</div>
+              <th className="py-1.5 px-3 w-1/4">
+                <span className="text-purple-600 font-black">A</span>CCOUNTABLE
+                <span className="text-[7.5px] text-slate-400 block font-medium">Owns the outcome</span>
               </th>
-              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
-                <span className="text-amber-600">C</span>onsulted
-                <div className="text-[8px] text-slate-400 font-medium mt-0.5">SME / Feedback provider</div>
+              <th className="py-1.5 px-3 w-1/4">
+                <span className="text-amber-600 font-black">C</span>ONSULTED
+                <span className="text-[7.5px] text-slate-400 block font-medium">SME / Feedback provider</span>
               </th>
-              <th className="px-4 py-2.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest w-1/4">
-                <span className="text-green-600">I</span>nformed
-                <div className="text-[8px] text-slate-400 font-medium mt-0.5">Kept in the loop</div>
+              <th className="py-1.5 px-3 w-1/4">
+                <span className="text-emerald-600 font-black">I</span>NFORMED
+                <span className="text-[7.5px] text-slate-400 block font-medium">Kept in the loop</span>
               </th>
             </tr>
           </thead>
-          <tbody>
-            {EVENTS.map(event => (
-              <React.Fragment key={event}>
-                <tr className="border-t border-slate-100 bg-white">
-                  <td className="px-4 py-3 text-xs font-bold text-slate-800 bg-slate-50/50 align-top">{event}</td>
-                  {['R', 'A', 'C', 'I'].map(role => (
-                    <td key={role} className="px-4 py-3 align-top border-l border-slate-100">
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap gap-1 mb-1">
-                          {grid[event] && grid[event][role] && grid[event][role].map(email => (
-                            <span key={email} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 border border-slate-200/80 rounded text-[9px] font-medium text-slate-600 hover:border-slate-300 transition-all">
-                              {email}
-                              <button onClick={() => handleRemoveEmail(event, role, email)} className="text-slate-400 hover:text-red-500">
-                                <X className="h-2.5 w-2.5" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <input 
-                            id={`input-${event}-${role}`}
-                            type="text" 
-                            placeholder="user@company.com" 
-                            className="w-full text-[10px] px-2 py-1 bg-slate-50/50 border border-slate-200/70 rounded hover:border-slate-300 transition-all outline-none focus:border-blue-500 focus:bg-white"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddEmail(event, role, e.target.value.trim());
-                                e.target.value = '';
-                              }
-                            }}
-                          />
-                          <button 
-                            className="p-1 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 border border-slate-200 rounded flex-shrink-0 transition-colors"
-                            title="Add User"
-                            onClick={() => {
-                              const input = document.getElementById(`input-${event}-${role}`);
-                              if (input && input.value.trim()) {
-                                handleAddEmail(event, role, input.value.trim());
-                                input.value = '';
-                              }
-                            }}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
+          <tbody className="divide-y divide-slate-100 text-[10px]">
+            {EVENTS.map(event => {
+              const isTemplateExpanded = !!expandedTemplates[event];
+
+              return (
+                <React.Fragment key={event}>
+                  <tr className="hover:bg-slate-50/60 transition">
+                    <td className="py-2 px-3 align-top font-bold text-slate-900 bg-slate-50/40">
+                      <div className="text-[10px] font-extrabold">{event}</div>
+                      <button
+                        type="button"
+                        onClick={() => toggleTemplateExpand(event)}
+                        className="mt-1 text-[8.5px] font-bold text-blue-600 hover:text-blue-800 transition inline-flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Edit3 className="h-2.5 w-2.5" />
+                        {isTemplateExpanded ? 'Hide Template' : 'Edit Email Body'}
+                        {isTemplateExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+                      </button>
                     </td>
-                  ))}
-                </tr>
-                {/* Expandable template editor for the event */}
-                {grid[event] && (
-                  <tr className="bg-slate-50/20 border-b border-slate-200">
-                    <td className="px-4 py-3 text-[10px] font-semibold text-slate-500 text-right align-top border-r border-slate-100">
-                      Email Content
-                      <div className="text-[8px] font-normal text-slate-400 mt-1 leading-normal">Variables:</div>
-                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{document_number}}"}</div>
-                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{vendor_name}}"}</div>
-                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{amount}}"}</div>
-                      <div className="text-[8px] font-normal text-slate-400 leading-normal">{"{{review_url}}"}</div>
-                    </td>
-                    <td colSpan={4} className="px-4 py-3 align-top">
-                      <div className="flex flex-col gap-2.5 max-w-4xl">
-                        <div>
-                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Subject Template</label>
-                          <input 
-                            type="text" 
-                            className="w-full text-xs p-1.5 bg-white border border-slate-200/70 hover:border-slate-300 transition-colors rounded outline-none focus:border-blue-500"
-                            placeholder="e.g. [ACTION REQUIRED] Invoice {{document_number}} needs your approval"
-                            value={grid[event].title_template || ''}
-                            onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], title_template: e.target.value } }))}
-                          />
+
+                    {['R', 'A', 'C', 'I'].map(role => (
+                      <td key={role} className="py-2 px-3 align-top border-l border-slate-100">
+                        <div className="flex flex-col gap-1.5">
+                          {/* Active Email Tags */}
+                          <div className="flex flex-wrap gap-1">
+                            {grid[event] && grid[event][role] && grid[event][role].map(email => (
+                              <span key={email} className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 border border-slate-200 rounded text-[8.5px] font-mono text-slate-700">
+                                {email}
+                                <button onClick={() => handleRemoveEmail(event, role, email)} className="text-slate-400 hover:text-red-500 cursor-pointer">
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Email Input */}
+                          <div className="flex items-center gap-1">
+                            <input 
+                              id={`input-${event}-${role}`}
+                              type="text" 
+                              placeholder="user@company.com" 
+                              className="w-full text-[9px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 outline-hidden h-6"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddEmail(event, role, e.target.value.trim());
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                            <button 
+                              className="p-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 border border-slate-200 rounded shrink-0 transition cursor-pointer"
+                              title="Add User Email"
+                              onClick={() => {
+                                const input = document.getElementById(`input-${event}-${role}`);
+                                if (input && input.value.trim()) {
+                                  handleAddEmail(event, role, input.value.trim());
+                                  input.value = '';
+                                }
+                              }}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Body Template</label>
-                          <textarea 
-                            className="w-full text-xs p-1.5 bg-white border border-slate-200/70 hover:border-slate-300 transition-colors rounded outline-none focus:border-blue-500 min-h-[50px]"
-                            placeholder={`e.g. Please review the invoice from {{vendor_name}} for {{amount}}.\nLast Action: {{performed_by}}\nComments: {{comments}}`}
-                            value={grid[event].message_template || ''}
-                            onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], message_template: e.target.value } }))}
-                          />
-                        </div>
-                      </div>
-                    </td>
+                      </td>
+                    ))}
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+
+                  {/* Collapsible Email Template Drawer */}
+                  {isTemplateExpanded && grid[event] && (
+                    <tr className="bg-slate-50/70 border-b border-slate-200">
+                      <td colSpan={5} className="p-3">
+                        <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-2 max-w-4xl animate-fadeIn">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                            <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                              <Sparkles className="h-2.5 w-2.5 text-blue-600" />
+                              Configure Email Template for {event}
+                            </span>
+                            <span className="text-[8.5px] font-bold text-slate-400">
+                              HTML / Dynamic Placeholders
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {/* Subject Template */}
+                            <div>
+                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
+                                SUBJECT TEMPLATE
+                              </label>
+                              <input 
+                                type="text" 
+                                className="w-full text-[9.5px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md outline-hidden focus:border-blue-500 h-6.5 font-bold text-slate-900"
+                                placeholder="e.g. [ACTION REQUIRED] Invoice {{document_number}} needs your review"
+                                value={grid[event].title_template || ''}
+                                onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], title_template: e.target.value } }))}
+                              />
+                              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
+                                {['document_number', 'vendor_name', 'amount'].map(v => (
+                                  <button
+                                    key={v}
+                                    type="button"
+                                    onClick={() => insertVariable(event, 'title_template', v)}
+                                    className="px-1 py-0.2 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
+                                  >
+                                    + {`{{${v}}}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Body Template */}
+                            <div>
+                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
+                                BODY TEMPLATE
+                              </label>
+                              <textarea 
+                                className="w-full text-[9.5px] font-mono p-1.5 bg-slate-50 border border-slate-200 rounded-md outline-hidden focus:border-blue-500 min-h-[40px] font-medium text-slate-900"
+                                placeholder={`e.g. Please review invoice {{document_number}} from {{vendor_name}} (₹{{amount}}).\nReview URL: {{review_url}}`}
+                                value={grid[event].message_template || ''}
+                                onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], message_template: e.target.value } }))}
+                              />
+                              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
+                                {['document_number', 'vendor_name', 'amount', 'review_url'].map(v => (
+                                  <button
+                                    key={v}
+                                    type="button"
+                                    onClick={() => insertVariable(event, 'message_template', v)}
+                                    className="px-1 py-0.2 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
+                                  >
+                                    + {`{{${v}}}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
     </div>
   );
 }
+
