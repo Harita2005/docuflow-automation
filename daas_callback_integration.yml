@@ -1,13 +1,13 @@
 # ===================================================================================
-# DocuFlow Automation - 3rd-Party Callback Integration Specification (YAML)
-# Description: Defines the 2-step HTTP contract between DocuFlow and 3rd-Party Systems:
+# DAAS - 3rd-Party Callback Integration Specification (YAML)
+# Description: Defines the 2-step HTTP contract between DAAS and 3rd-Party Systems:
 #              Endpoint 1: OAuth2 Token Generation API
 #              Endpoint 2: Approved Invoice Data Callback Posting API (SQL Payload)
 # ===================================================================================
 
 openapi: 3.0.3
 info:
-  title: DocuFlow 3rd-Party Callback Integration API
+  title: DAAS 3rd-Party Callback Integration API
   description: OpenAPI contract for 3rd-party ERP / Payment System integration.
   version: 2.0.0
 

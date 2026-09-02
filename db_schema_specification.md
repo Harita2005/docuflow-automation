@@ -1,6 +1,6 @@
 # Configurable Approval Workflow Database Schema Design Document
 
-This document provides a comprehensive database schema specification and relationship design for the multi-tenant **Configurable Approval Workflow Engine** in DocuFlow.
+This document provides a comprehensive database schema specification and relationship design for the multi-tenant **Configurable Approval Workflow Engine** in DAAS.
 
 ---
 
