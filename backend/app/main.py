@@ -123,11 +123,19 @@ try:
     for col_name, col_type in line_cols:
         run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='document_line_items' AND COLUMN_NAME='{col_name}') ALTER TABLE document_line_items ADD {col_name} {col_type};")
 
-    # 9. Audit & system logs type conversions
+    # 9. Callback rules table column additions
+    callback_cols = [
+        ("payload_source", "VARCHAR(50) NOT NULL DEFAULT 'MAPPING'"),
+        ("stored_procedure_name", "VARCHAR(200) NULL")
+    ]
+    for col_name, col_type in callback_cols:
+        run_migration_sql(f"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='callback_rules' AND COLUMN_NAME='{col_name}') ALTER TABLE callback_rules ADD {col_name} {col_type};")
+
+    # 10. Audit & system logs type conversions
     run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
     run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
 
-    # 10. Default cleanups for NULL values
+    # 11. Default cleanups for NULL values
     run_migration_sql("UPDATE documents SET is_deleted = 0 WHERE is_deleted IS NULL;")
     run_migration_sql("UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;")
     run_migration_sql("UPDATE workflow_profiles SET is_deleted = 0 WHERE is_deleted IS NULL;")

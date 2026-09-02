@@ -477,7 +477,9 @@ class CallbackRule(Base):
     url_mode = Column(String(20), default="INHERIT_BASE") # INHERIT_BASE, OVERRIDE
     endpoint_path = Column(String(500), nullable=True) # e.g. /v1/payment/{{documentNumber}}/approval
     custom_url = Column(String(500), nullable=True) # Used if url_mode == OVERRIDE
-    body_type = Column(String(30), default="JSON") # NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT
+    body_type = Column(String(30), default="JSON") # NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT, SQL_PROCEDURE
+    payload_source = Column(String(50), default="MAPPING") # MAPPING, RAW_TEMPLATE, SQL_PROCEDURE
+    stored_procedure_name = Column(String(200), nullable=True) # e.g. sp_GetApprovalCallbackPayload
     content_type = Column(String(100), default="application/json")
     payload_mapping_json = Column(Text, nullable=True) # Table of fields mapping
     raw_payload_template = Column(Text, nullable=True) # Template for custom JSON/XML/text

@@ -105,11 +105,11 @@ export default function SyncLogsTab({ logs, onRetrySync }: SyncLogsTabProps) {
                 <th className="py-2 px-3">Method</th>
                 <th className="py-2 px-3">HTTP Code</th>
                 <th className="py-2 px-3">Sync Status</th>
-                <th className="py-2 px-3">Retries</th>
+                <th className="py-2 px-3">Attempt / Retries</th>
                 <th className="py-2 px-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-[10px] font-medium">
+            <tbody className="divide-y divide-slate-100 text-[10px]">
               {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-8 text-center text-slate-400">
@@ -187,14 +187,14 @@ export default function SyncLogsTab({ logs, onRetrySync }: SyncLogsTabProps) {
                       </span>
                     </td>
 
-                    {/* Retry Count */}
+                    {/* Attempt / Retry Count */}
                     <td className="py-2 px-3 font-mono text-[9.5px]">
-                      <span className={log.retryCount >= log.maxRetries && log.syncStatus === 'Failed' ? 'text-rose-700 font-extrabold' : 'text-slate-600 font-semibold'}>
-                        {log.retryCount} / {log.maxRetries}
+                      <span className={log.syncStatus === 'Failed' && log.retryCount >= log.maxRetries ? 'text-rose-700 font-black' : 'text-slate-800 font-extrabold'}>
+                        {log.retryCount === 0 ? 1 : log.retryCount} / {log.maxRetries}
                       </span>
-                      {log.retryCount >= log.maxRetries && log.syncStatus === 'Failed' && (
-                        <span className="block text-[7.5px] font-sans font-extrabold text-rose-500 uppercase tracking-tight">Max Retries</span>
-                      )}
+                      <span className="block text-[7.5px] font-sans font-bold text-slate-400 uppercase tracking-tight">
+                        {log.syncStatus === 'Failed' && log.retryCount >= log.maxRetries ? 'Max Retries' : `Attempt ${log.retryCount === 0 ? 1 : log.retryCount}`}
+                      </span>
                     </td>
 
                     {/* Actions */}

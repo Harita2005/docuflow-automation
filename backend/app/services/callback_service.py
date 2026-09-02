@@ -300,14 +300,88 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
 
     return headers
 
+def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key: str, doc_context: Dict[str, Any]) -> str:
+    """
+    Executes a SQL Stored Procedure (e.g. sp_GetApprovalCallbackPayload) passing @DocKey as parameter.
+    If running on MS SQL Server, executes `EXEC {sp_name} @DocKey = :doc_key` and returns the SQL FOR JSON string.
+    If running on local SQLite dev database, executes an equivalent fallback query that constructs line items array dynamically.
+    """
+    clean_sp_name = re.sub(r'[^a-zA-Z0-9_]', '', (sp_name or "sp_GetApprovalCallbackPayload").strip()) or "sp_GetApprovalCallbackPayload"
+    
+    if db:
+        try:
+            from sqlalchemy import text
+            db_bind_url = str(db.bind.url) if db.bind else ""
+            
+            if "sqlite" not in db_bind_url:
+                # MS SQL Server execution
+                sql_cmd = text(f"EXEC {clean_sp_name} @DocKey = :doc_key")
+                res = db.execute(sql_cmd, {"doc_key": str(doc_key)}).fetchone()
+                if res and res[0]:
+                    return str(res[0])
+        except Exception as err:
+            print(f"[Stored Procedure Execution Notice] Execution of '{clean_sp_name}' returned notice: {err}")
+
+    # Fallback & Local Dev Engine: Construct dynamic payload with Document + Line Items
+    try:
+        from app.models import Document, DocumentLineItem
+        doc = None
+        if db:
+            doc = db.query(Document).filter(
+                (Document.id == str(doc_key)) | (Document.doc_key == str(doc_key)) | (Document.invoice_number == str(doc_key))
+            ).first()
+            
+        line_items = []
+        if doc and doc.line_items:
+            for item in doc.line_items:
+                line_items.append({
+                    "itemCode": item.item_code or "ITEM-001",
+                    "itemDescription": item.description,
+                    "quantity": float(item.quantity or 1.0),
+                    "unitPrice": float(item.unit_price or 0.0),
+                    "lineAmount": float(item.amount or 0.0)
+                })
+                
+        payload_data = {
+            "documentId": str(doc.id if doc else doc_key),
+            "externalDocKey": str(doc.doc_key if doc else doc_context.get("primaryKey")),
+            "invoiceNumber": str(doc.invoice_number if doc else doc_context.get("documentNumber")),
+            "vendorName": str(doc.party_name or doc.vendor_name if doc else doc_context.get("party_name")),
+            "vendorCode": str(doc.party_code or doc.vendor_code if doc else doc_context.get("party_code")),
+            "grandTotal": float(doc.amount if doc else doc_context.get("amount", 0.0)),
+            "baseAmount": float(doc.base_amount if doc else 0.0),
+            "totalTax": float(doc.tax_amount if doc else 0.0),
+            "cgst": float(doc.cgst if doc else 0.0),
+            "sgst": float(doc.sgst if doc else 0.0),
+            "igst": float(doc.igst if doc else 0.0),
+            "companyCode": str(doc.division if doc else doc_context.get("company")),
+            "branchCode": str(doc.plant if doc else doc_context.get("branch")),
+            "costCenter": str(doc.cost_center if doc else doc_context.get("costCenter")),
+            "approvalStatus": str(doc.status if doc else doc_context.get("approvalStatus")),
+            "approvedBy": str(doc_context.get("approvedBy", "System Admin")),
+            "approvalDate": str(doc_context.get("approvalDate", datetime.datetime.utcnow().isoformat())),
+            "executedStoredProcedure": clean_sp_name,
+            "items": line_items
+        }
+        return json.dumps(payload_data, indent=2)
+    except Exception as ex:
+        print(f"[SP Dynamic Generator Error] {ex}")
+        return json.dumps({
+            "docKey": str(doc_key),
+            "status": str(doc_context.get("approvalStatus", "APPROVED")),
+            "sp_name": clean_sp_name
+        })
+
 def build_callback_request(
     rule: CallbackRule,
     app: ThirdPartyApplication,
-    doc_context: Dict[str, Any]
+    doc_context: Dict[str, Any],
+    db: Optional[Session] = None
 ) -> Tuple[str, str, Dict[str, str], Optional[bytes]]:
     """
     Constructs full HTTP request parameters: (method, final_url, final_headers, body_bytes).
     Resolves variables in URL, Query Params, Headers, and Payload.
+    Supports SQL Stored Procedure dynamic payload generation (@DocKey parameter).
     """
     method = (rule.http_method or "POST").upper()
 
@@ -381,6 +455,8 @@ def build_callback_request(
 
     body_bytes = None
     body_type = (rule.body_type or "NONE").upper()
+    payload_src = (getattr(rule, "payload_source", "") or "MAPPING").upper()
+    sp_name = getattr(rule, "stored_procedure_name", None)
 
     if method in ["GET", "HEAD", "OPTIONS"] and body_type == "NONE":
         return method, final_url, final_headers, None
@@ -388,7 +464,15 @@ def build_callback_request(
     if body_type != "NONE":
         content_type = rule.content_type or "application/json"
         
-        if rule.raw_payload_template:
+        # SQL Stored Procedure dynamic payload generation mode
+        if payload_src == "SQL_PROCEDURE" or body_type == "SQL_PROCEDURE" or sp_name:
+            content_type = "application/json"
+            sp_target_name = sp_name or "sp_GetApprovalCallbackPayload"
+            doc_key_val = doc_context.get("primaryKey") or doc_context.get("documentNumber") or ""
+            sp_json_payload = execute_sp_for_callback_payload(db, sp_target_name, doc_key_val, doc_context)
+            body_bytes = sp_json_payload.encode("utf-8")
+
+        elif rule.raw_payload_template:
             resolved_template = resolve_dynamic_variables(rule.raw_payload_template, doc_context)
             body_bytes = resolved_template.encode("utf-8")
         elif body_type == "JSON":
@@ -498,7 +582,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
     resp_headers_str = ""
 
     try:
-        method, final_url, final_headers, body_bytes = build_callback_request(rule, app, doc_context)
+        method, final_url, final_headers, body_bytes = build_callback_request(rule, app, doc_context, db=db)
 
         timeout = rule.timeout_seconds or 30
         req = urllib.request.Request(

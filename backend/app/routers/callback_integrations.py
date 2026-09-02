@@ -257,6 +257,8 @@ def create_callback_rule(body: CallbackRuleCreate, db: Session = Depends(get_db)
         endpoint_path=body.endpoint_path,
         custom_url=body.custom_url,
         body_type=body.body_type or "JSON",
+        payload_source=body.payload_source or "MAPPING",
+        stored_procedure_name=body.stored_procedure_name,
         content_type=body.content_type or "application/json",
         payload_mapping_json=helper_serialize_json_field(body.payload_mapping_json),
         raw_payload_template=body.raw_payload_template,
@@ -322,6 +324,10 @@ def update_callback_rule(rule_id: int, body: CallbackRuleUpdate, db: Session = D
         rule.custom_url = body.custom_url
     if body.body_type is not None:
         rule.body_type = body.body_type
+    if body.payload_source is not None:
+        rule.payload_source = body.payload_source
+    if body.stored_procedure_name is not None:
+        rule.stored_procedure_name = body.stored_procedure_name
     if body.content_type is not None:
         rule.content_type = body.content_type
     if body.payload_mapping_json is not None:
@@ -502,7 +508,7 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
     }
 
     try:
-        method, final_url, final_headers, body_bytes = build_callback_request(rule_obj, app_obj, sample_ctx)
+        method, final_url, final_headers, body_bytes = build_callback_request(rule_obj, app_obj, sample_ctx, db=db)
 
         request_preview = {
             "method": method,

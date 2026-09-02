@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, Mail, Users, Plus, X, Server, ChevronDown, ChevronUp, Edit3, Sparkles } from 'lucide-react';
+import { Save, RefreshCw, Mail, Users, Plus, X, Server, Edit3, Sparkles } from 'lucide-react';
 
 const EVENTS = ["Approve", "Reject", "Request Clarification", "Send Back", "Escalate"];
 
@@ -9,7 +9,7 @@ export default function AdminRACI() {
   const [workflows, setWorkflows] = useState([]);
   const [workflowProfile, setWorkflowProfile] = useState("");
   const [customWorkflow, setCustomWorkflow] = useState("");
-  const [expandedTemplates, setExpandedTemplates] = useState({});
+  const [activeModalEvent, setActiveModalEvent] = useState(null);
   
   // State for the grid for the current workflow
   const [grid, setGrid] = useState({});
@@ -192,13 +192,6 @@ export default function AdminRACI() {
     }));
   };
 
-  const toggleTemplateExpand = (eventKey) => {
-    setExpandedTemplates(prev => ({
-      ...prev,
-      [eventKey]: !prev[eventKey]
-    }));
-  };
-
   const insertVariable = (event, field, varName) => {
     setGrid(prev => ({
       ...prev,
@@ -208,8 +201,6 @@ export default function AdminRACI() {
       }
     }));
   };
-
-  const activeWorkflow = customWorkflow || workflowProfile;
 
   return (
     <div className="p-3 flex flex-col gap-3 font-sans text-xs">
@@ -357,154 +348,169 @@ export default function AdminRACI() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[10px]">
-            {EVENTS.map(event => {
-              const isTemplateExpanded = !!expandedTemplates[event];
+            {EVENTS.map(event => (
+              <tr key={event} className="hover:bg-slate-50/60 transition">
+                <td className="py-2 px-3 align-top font-bold text-slate-900 bg-slate-50/40">
+                  <div className="text-[10px] font-extrabold">{event}</div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveModalEvent(event)}
+                    className="mt-1.5 px-2 py-0.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-blue-700 rounded text-[8.5px] font-bold transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                  >
+                    <Edit3 className="h-2.5 w-2.5 text-blue-600" />
+                    Configure Template
+                  </button>
+                </td>
 
-              return (
-                <React.Fragment key={event}>
-                  <tr className="hover:bg-slate-50/60 transition">
-                    <td className="py-2 px-3 align-top font-bold text-slate-900 bg-slate-50/40">
-                      <div className="text-[10px] font-extrabold">{event}</div>
-                      <button
-                        type="button"
-                        onClick={() => toggleTemplateExpand(event)}
-                        className="mt-1 text-[8.5px] font-bold text-blue-600 hover:text-blue-800 transition inline-flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <Edit3 className="h-2.5 w-2.5" />
-                        {isTemplateExpanded ? 'Hide Template' : 'Edit Email Body'}
-                        {isTemplateExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
-                      </button>
-                    </td>
-
-                    {['R', 'A', 'C', 'I'].map(role => (
-                      <td key={role} className="py-2 px-3 align-top border-l border-slate-100">
-                        <div className="flex flex-col gap-1.5">
-                          {/* Active Email Tags */}
-                          <div className="flex flex-wrap gap-1">
-                            {grid[event] && grid[event][role] && grid[event][role].map(email => (
-                              <span key={email} className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 border border-slate-200 rounded text-[8.5px] font-mono text-slate-700">
-                                {email}
-                                <button onClick={() => handleRemoveEmail(event, role, email)} className="text-slate-400 hover:text-red-500 cursor-pointer">
-                                  <X className="h-2.5 w-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-
-                          {/* Email Input */}
-                          <div className="flex items-center gap-1">
-                            <input 
-                              id={`input-${event}-${role}`}
-                              type="text" 
-                              placeholder="user@company.com" 
-                              className="w-full text-[9px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 outline-hidden h-6"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddEmail(event, role, e.target.value.trim());
-                                  e.target.value = '';
-                                }
-                              }}
-                            />
-                            <button 
-                              className="p-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 border border-slate-200 rounded shrink-0 transition cursor-pointer"
-                              title="Add User Email"
-                              onClick={() => {
-                                const input = document.getElementById(`input-${event}-${role}`);
-                                if (input && input.value.trim()) {
-                                  handleAddEmail(event, role, input.value.trim());
-                                  input.value = '';
-                                }
-                              }}
-                            >
-                              <Plus className="h-3 w-3" />
+                {['R', 'A', 'C', 'I'].map(role => (
+                  <td key={role} className="py-2 px-3 align-top border-l border-slate-100">
+                    <div className="flex flex-col gap-1.5">
+                      {/* Active Email Tags */}
+                      <div className="flex flex-wrap gap-1">
+                        {grid[event] && grid[event][role] && grid[event][role].map(email => (
+                          <span key={email} className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 border border-slate-200 rounded text-[8.5px] font-mono text-slate-700">
+                            {email}
+                            <button onClick={() => handleRemoveEmail(event, role, email)} className="text-slate-400 hover:text-red-500 cursor-pointer">
+                              <X className="h-2.5 w-2.5" />
                             </button>
-                          </div>
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
+                          </span>
+                        ))}
+                      </div>
 
-                  {/* Collapsible Email Template Drawer */}
-                  {isTemplateExpanded && grid[event] && (
-                    <tr className="bg-slate-50/70 border-b border-slate-200">
-                      <td colSpan={5} className="p-3">
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-2 max-w-4xl animate-fadeIn">
-                          <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                            <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                              <Sparkles className="h-2.5 w-2.5 text-blue-600" />
-                              Configure Email Template for {event}
-                            </span>
-                            <span className="text-[8.5px] font-bold text-slate-400">
-                              HTML / Dynamic Placeholders
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {/* Subject Template */}
-                            <div>
-                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
-                                SUBJECT TEMPLATE
-                              </label>
-                              <input 
-                                type="text" 
-                                className="w-full text-[9.5px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md outline-hidden focus:border-blue-500 h-6.5 font-bold text-slate-900"
-                                placeholder="e.g. [ACTION REQUIRED] Invoice {{document_number}} needs your review"
-                                value={grid[event].title_template || ''}
-                                onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], title_template: e.target.value } }))}
-                              />
-                              <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
-                                {['document_number', 'vendor_name', 'amount'].map(v => (
-                                  <button
-                                    key={v}
-                                    type="button"
-                                    onClick={() => insertVariable(event, 'title_template', v)}
-                                    className="px-1 py-0.2 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
-                                  >
-                                    + {`{{${v}}}`}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Body Template */}
-                            <div>
-                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
-                                BODY TEMPLATE
-                              </label>
-                              <textarea 
-                                className="w-full text-[9.5px] font-mono p-1.5 bg-slate-50 border border-slate-200 rounded-md outline-hidden focus:border-blue-500 min-h-[40px] font-medium text-slate-900"
-                                placeholder={`e.g. Please review invoice {{document_number}} from {{vendor_name}} (₹{{amount}}).\nReview URL: {{review_url}}`}
-                                value={grid[event].message_template || ''}
-                                onChange={(e) => setGrid(prev => ({ ...prev, [event]: { ...prev[event], message_template: e.target.value } }))}
-                              />
-                              <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
-                                {['document_number', 'vendor_name', 'amount', 'review_url'].map(v => (
-                                  <button
-                                    key={v}
-                                    type="button"
-                                    onClick={() => insertVariable(event, 'message_template', v)}
-                                    className="px-1 py-0.2 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
-                                  >
-                                    + {`{{${v}}}`}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
+                      {/* Email Input */}
+                      <div className="flex items-center gap-1">
+                        <input 
+                          id={`input-${event}-${role}`}
+                          type="text" 
+                          placeholder="user@company.com" 
+                          className="w-full text-[9px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 rounded focus:border-blue-500 outline-hidden h-6"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddEmail(event, role, e.target.value.trim());
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                        <button 
+                          className="p-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 border border-slate-200 rounded shrink-0 transition cursor-pointer"
+                          title="Add User Email"
+                          onClick={() => {
+                            const input = document.getElementById(`input-${event}-${role}`);
+                            if (input && input.value.trim()) {
+                              handleAddEmail(event, role, input.value.trim());
+                              input.value = '';
+                            }
+                          }}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
+      {/* EMAIL TEMPLATE MODAL DIALOG POPUP */}
+      {activeModalEvent && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-blue-600" />
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                  Configure Email Template ({activeModalEvent})
+                </h3>
+              </div>
+              <button
+                onClick={() => setActiveModalEvent(null)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-md transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-3.5">
+              {/* Subject Template */}
+              <div>
+                <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-1">
+                  SUBJECT TEMPLATE
+                </label>
+                <input
+                  type="text"
+                  className="w-full text-xs font-mono font-bold px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-hidden focus:border-blue-500 text-slate-900 h-8"
+                  placeholder="e.g. [ACTION REQUIRED] Invoice {{document_number}} needs your review"
+                  value={grid[activeModalEvent]?.title_template || ''}
+                  onChange={(e) => setGrid(prev => ({
+                    ...prev,
+                    [activeModalEvent]: { ...prev[activeModalEvent], title_template: e.target.value }
+                  }))}
+                />
+                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                  <span className="text-[8px] font-extrabold text-slate-400">Insert Variable:</span>
+                  {['document_number', 'vendor_name', 'amount'].map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => insertVariable(activeModalEvent, 'title_template', v)}
+                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800 rounded-md text-[8.5px] font-mono font-semibold transition border border-slate-200 cursor-pointer"
+                    >
+                      + {`{{${v}}}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Body Template */}
+              <div>
+                <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-1">
+                  BODY TEMPLATE
+                </label>
+                <textarea
+                  className="w-full text-xs font-mono p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-hidden focus:border-blue-500 min-h-[110px] font-medium text-slate-900 leading-relaxed"
+                  placeholder={`e.g. Please review invoice {{document_number}} from {{vendor_name}} (₹{{amount}}).\nReview URL: {{review_url}}`}
+                  value={grid[activeModalEvent]?.message_template || ''}
+                  onChange={(e) => setGrid(prev => ({
+                    ...prev,
+                    [activeModalEvent]: { ...prev[activeModalEvent], message_template: e.target.value }
+                  }))}
+                />
+                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                  <span className="text-[8px] font-extrabold text-slate-400">Insert Variable:</span>
+                  {['document_number', 'vendor_name', 'amount', 'review_url'].map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => insertVariable(activeModalEvent, 'message_template', v)}
+                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800 rounded-md text-[8.5px] font-mono font-semibold transition border border-slate-200 cursor-pointer"
+                    >
+                      + {`{{${v}}}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-4 py-2 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setActiveModalEvent(null)}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[9.5px] uppercase tracking-wide rounded-md transition shadow-2xs cursor-pointer active:scale-98"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 

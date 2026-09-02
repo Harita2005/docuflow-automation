@@ -88,6 +88,15 @@ export interface SyncRule {
   lastModified?: string;
 }
 
+export interface ConditionalEndpointRule {
+  id: string;
+  field: string;
+  operator: string;
+  value: string;
+  decision: 'APPROVED' | 'REJECTED' | 'BOTH';
+  targetEndpoint: string;
+}
+
 export interface ThirdPartyApplication {
   id: string;
   name: string;
@@ -98,6 +107,14 @@ export interface ThirdPartyApplication {
   syncStatus: 'Enabled' | 'Disabled';
   approvalEndpoint: string;
   rejectionEndpoint: string;
+  tokenUrl?: string;
+  authType?: AuthType;
+  apiKeyHeader?: string;
+  apiKeyValue?: string;
+  bearerToken?: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  conditionalRules?: ConditionalEndpointRule[];
   lastSync?: string;
   rulesCount?: number;
   environment?: string;

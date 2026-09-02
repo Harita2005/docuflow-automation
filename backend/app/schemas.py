@@ -489,7 +489,9 @@ class CallbackRuleCreate(BaseModel):
     url_mode: Optional[str] = Field("INHERIT_BASE", description="INHERIT_BASE or OVERRIDE")
     endpoint_path: Optional[str] = None
     custom_url: Optional[str] = None
-    body_type: Optional[str] = Field("JSON", description="NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT")
+    body_type: Optional[str] = Field("JSON", description="NONE, JSON, XML, FORM_URLENCODED, MULTIPART, RAW_TEXT, SQL_PROCEDURE")
+    payload_source: Optional[str] = Field("MAPPING", description="MAPPING, RAW_TEMPLATE, SQL_PROCEDURE")
+    stored_procedure_name: Optional[str] = Field(None, description="e.g. sp_GetApprovalCallbackPayload")
     content_type: Optional[str] = Field("application/json")
     payload_mapping_json: Optional[Union[str, dict, list]] = None
     raw_payload_template: Optional[str] = None
@@ -516,6 +518,8 @@ class CallbackRuleUpdate(BaseModel):
     endpoint_path: Optional[str] = None
     custom_url: Optional[str] = None
     body_type: Optional[str] = None
+    payload_source: Optional[str] = None
+    stored_procedure_name: Optional[str] = None
     content_type: Optional[str] = None
     payload_mapping_json: Optional[Union[str, dict, list]] = None
     raw_payload_template: Optional[str] = None
@@ -545,6 +549,8 @@ class CallbackRuleResponse(BaseModel):
     endpoint_path: Optional[str] = None
     custom_url: Optional[str] = None
     body_type: str
+    payload_source: Optional[str] = "MAPPING"
+    stored_procedure_name: Optional[str] = None
     content_type: Optional[str] = None
     payload_mapping_json: Optional[str] = None
     raw_payload_template: Optional[str] = None

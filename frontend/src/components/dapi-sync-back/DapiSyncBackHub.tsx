@@ -4,7 +4,8 @@ import {
   ListFilter,
   Share2,
   Zap,
-  CheckCircle
+  CheckCircle,
+  Sliders
 } from 'lucide-react';
 import {
   ThirdPartyApplication,
@@ -21,9 +22,9 @@ import {
 
 import ApplicationsTab from './ApplicationsTab';
 import SyncLogsTab from './SyncLogsTab';
-import SimpleSyncConfigurator from './SimpleSyncConfigurator';
+import ApplicationStudioPage from './ApplicationStudioPage';
 
-export type SyncBackTab = 'applications' | 'simple' | 'logs';
+export type SyncBackTab = 'applications' | 'studio' | 'simple' | 'logs';
 
 interface DapiSyncBackHubProps {
   initialTab?: SyncBackTab;
@@ -38,7 +39,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
   const [logs, setLogs] = useState<SyncLog[]>(INITIAL_SYNC_LOGS);
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>(DEFAULT_FIELD_MAPPINGS);
 
-  // Selected Target App for API Config & Rules
+  // Selected Target App for API Config & Rules Studio
   const [selectedAppIdForConfig, setSelectedAppIdForConfig] = useState<string>(apps[0]?.id || '');
 
   // Fetch Live Documents from Backend Database
@@ -111,10 +112,6 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
     fetchLiveLogs();
   }, []);
 
-  // Wizard Modal State
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [editingRuleForWizard, setEditingRuleForWizard] = useState<SyncRule | null>(null);
-
   // Toast Banner State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -178,55 +175,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
     showNotification(`Rule "${rule.ruleName}" saved as ${status}.`);
   };
 
-  const handleDeleteRule = (ruleId: string) => {
-    const rule = rules.find(r => r.id === ruleId);
-    setRules(prev => prev.filter(r => r.id !== ruleId));
-    showNotification(`Rule "${rule?.ruleName}" deleted.`);
-  };
-
-  const handleDuplicateRule = (rule: SyncRule) => {
-    const dup: SyncRule = {
-      ...rule,
-      id: `rule-${Date.now()}`,
-      ruleName: `${rule.ruleName} (Copy)`,
-      priority: rule.priority + 1,
-      status: 'Draft',
-      currentVersion: 1,
-      versions: [
-        {
-          version: 1,
-          status: 'Draft',
-          createdAt: new Date().toLocaleString(),
-          createdBy: 'admin@docuflow.com',
-          changeLog: 'Duplicated from existing rule.',
-          conditionsCount: rule.conditions.length
-        }
-      ]
-    };
-    setRules(prev => [...prev, dup]);
-    showNotification(`Duplicated rule as "${dup.ruleName}".`);
-  };
-
-  const handleReorderPriority = (ruleId: string, direction: 'up' | 'down') => {
-    setRules(prev => {
-      const sorted = [...prev].sort((a, b) => a.priority - b.priority);
-      const index = sorted.findIndex(r => r.id === ruleId);
-      if (index === -1) return prev;
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= sorted.length) return prev;
-
-      // Swap priorities
-      const tempP = sorted[index].priority;
-      sorted[index].priority = sorted[targetIndex].priority;
-      sorted[targetIndex].priority = tempP;
-
-      return [...sorted];
-    });
-    showNotification('Rule priority re-ordered.');
-  };
-
-  // Retry Sync Handler (Requirement 18)
+  // Retry Sync Handler
   const handleRetrySync = (logId: string) => {
     setLogs(prev => prev.map(l => {
       if (l.id === logId) {
@@ -286,7 +235,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
           </div>
         </div>
 
-        {/* Clean, Compact 3-Page Navigation Bar */}
+        {/* Clean 3-Page Navigation Bar */}
         <div className="flex bg-slate-100/90 p-0.5 rounded-lg border border-slate-200 shrink-0">
           <button
             onClick={() => setActiveTab('applications')}
@@ -299,14 +248,14 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
             <Server className="h-3 w-3" /> Target Applications ({apps.length})
           </button>
           <button
-            onClick={() => setActiveTab('simple')}
+            onClick={() => setActiveTab('studio')}
             className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer whitespace-nowrap ${
-              activeTab === 'simple'
+              activeTab === 'studio'
                 ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Zap className="h-3 w-3 text-blue-600" /> App Sync Configurator
+            <Sliders className="h-3 w-3 text-blue-600" /> Application Studio & Rules
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -321,7 +270,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
         </div>
       </div>
 
-      {/* Render Active View Page (Only the 3 Clean Pages) */}
+      {/* Render Active View Page */}
       <div>
         {activeTab === 'applications' && (
           <ApplicationsTab
@@ -331,24 +280,22 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
             onDeleteApp={handleDeleteApp}
             onConfigureSync={(appId) => {
               setSelectedAppIdForConfig(appId);
-              setActiveTab('simple');
+              setActiveTab('studio');
             }}
             onTestConnection={(app) => {
               setSelectedAppIdForConfig(app.id);
-              setActiveTab('simple');
+              setActiveTab('studio');
             }}
           />
         )}
 
-        {activeTab === 'simple' && (
-          <SimpleSyncConfigurator
+        {(activeTab === 'studio' || activeTab === 'simple') && (
+          <ApplicationStudioPage
             apps={apps}
             rules={rules}
             selectedAppId={selectedAppIdForConfig}
+            onBackToApps={() => setActiveTab('applications')}
             onSaveRule={handleSaveRule}
-            onUpdateApp={handleUpdateApp}
-            onAddAppClick={() => setActiveTab('applications')}
-            onViewLogsClick={() => setActiveTab('logs')}
           />
         )}
 

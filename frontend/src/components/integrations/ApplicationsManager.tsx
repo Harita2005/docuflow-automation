@@ -613,6 +613,49 @@ export default function ApplicationsManager({ onConfigureRules }: ApplicationsMa
                     />
                   </div>
                 )}
+
+                {formData.auth_type === "OAUTH2" && (
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                        Token Endpoint URL (Endpoint 1 that generates token) *
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://payment.example.com/api/v1/auth/token"
+                        value={formData.oauthTokenUrl}
+                        onChange={(e) => setFormData({ ...formData, oauthTokenUrl: e.target.value })}
+                        className="w-full text-[11px] px-2.5 py-1 bg-white border border-slate-200 rounded outline-none font-mono"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                          Client ID
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Client ID..."
+                          value={formData.oauthClientId}
+                          onChange={(e) => setFormData({ ...formData, oauthClientId: e.target.value })}
+                          className="w-full text-[11px] px-2.5 py-1 bg-white border border-slate-200 rounded outline-none font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                          Client Secret
+                        </label>
+                        <input
+                          type={showSecret ? "text" : "password"}
+                          placeholder="Client Secret..."
+                          value={formData.oauthClientSecret}
+                          onChange={(e) => setFormData({ ...formData, oauthClientSecret: e.target.value })}
+                          className="w-full text-[11px] px-2.5 py-1 bg-white border border-slate-200 rounded outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Form Buttons */}
