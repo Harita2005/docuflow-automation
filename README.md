@@ -34,17 +34,17 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 ---
 
-## Installation & Setup Guide
+## System Configuration & Deployment Guide
 
-### Prerequisites
+### Environment Prerequisites
 * Python 3.10 or higher
 * Node.js v18.0 or higher
-* MS SQL Server (for production database storage)
+* MS SQL Server Database Instance
 * Git
 
 ---
 
-### Backend Setup
+### Backend Service Setup
 
 1. Navigate to the backend directory:
    ```bash
@@ -69,23 +69,22 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 4. Configure environment variables in `.env`:
    ```env
-   PROJECT_NAME="DocuFlow Automation API"
-   DATABASE_URL="mssql+pyodbc://sa:YourPassword@localhost:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server"
+   PROJECT_NAME="Document Approval Automation System - DAAS"
+   DATABASE_URL="mssql+pyodbc://<db_user>:<db_password>@<db_host>:1433/DAAS_DB?driver=ODBC+Driver+17+for+SQL+Server"
    SECRET_KEY="your-corporate-jwt-secret-key"
    ACCESS_TOKEN_EXPIRE_MINUTES=43200
    ```
 
-5. Launch the backend server:
+5. Launch the backend API service:
    ```bash
    python run.py
    ```
-   *The FastAPI server runs on port 3000.*
 
 ---
 
-### Frontend Setup
+### Frontend Web Service Setup
 
-1. Open a new terminal and navigate to the frontend directory:
+1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
@@ -95,13 +94,7 @@ The platform combines a modern React interface with a high-performance Python Fa
    npm install
    ```
 
-3. Start the Vite development server:
-   ```bash
-   npm run dev
-   ```
-   *The application will run at http://localhost:5173.*
-
-4. Build for production deployment:
+3. Build production web assets:
    ```bash
    npm run build
    ```
@@ -110,10 +103,10 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 ## Production Deployment Architecture
 
-For corporate production deployments, DocuFlow recommends:
-* **Web Server / Reverse Proxy**: Nginx configured with SSL/TLS termination, proxying requests to Uvicorn and serving static React assets.
-* **Application Server**: Uvicorn running under Gunicorn supervisor process.
-* **Database**: High-availability MS SQL Server instance with automated backup retention schedules.
+For corporate production environments, DAAS recommends:
+* **Web Server / Reverse Proxy**: Nginx configured with SSL/TLS termination, proxying requests to ASGI Uvicorn workers and serving compiled React application assets.
+* **Application Server**: Uvicorn running under Gunicorn process supervisor.
+* **Database Infrastructure**: High-availability MS SQL Server cluster with automated backup retention schedules.
 
 ---
 
@@ -132,9 +125,9 @@ For corporate production deployments, DocuFlow recommends:
 
 ## Data Privacy & Corporate Compliance
 
-DocuFlow Automation is designed for enterprise data security:
+DAAS is designed for enterprise data security:
 * **On-Premise Infrastructure**: All document extraction, business logic, and database operations execute locally within corporate network boundaries.
-* **No Unsanctioned Third-Party API Calls**: External data transmission is restricted to configured internal corporate ERP hosts.
+* **No Unsanctioned External API Calls**: Data transmission is strictly confined to authorized corporate ERP host systems.
 * **Session Persistence**: Access tokens utilize configurable corporate expiry periods (default 30 days) to prevent session interruption during active document review.
 
 ---
