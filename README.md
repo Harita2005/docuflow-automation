@@ -2,7 +2,7 @@
 
 Document Approval Automation System (DAAS) is an enterprise-grade Document Processing, Policy Compliance Engine, and Multi-Stage Workflow Orchestration Platform designed for high-volume corporate document processing, financial verification, and ERP ledger reconciliation.
 
-The platform combines a modern React interface with a high-performance Python FastAPI backend, offering real-time workflow execution, condition-based policy matrix routing, strict field-level access control, and seamless ERP data integration (SAP S/4HANA and MS SQL Server).
+The platform combines a modern React interface with a high-performance Python FastAPI backend, offering real-time workflow execution, condition-based policy matrix routing, strict field-level access control, and seamless enterprise ERP data integration.
 
 ---
 
@@ -10,7 +10,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 * **Multi-Stage Workflow Orchestration**: Enables customizable, multi-tier approval chains with role assignment, delegated approvers, SLA monitoring, and dynamic stage routing.
 * **Policy Compliance & Condition Matrix Engine**: Dynamically evaluates routing rules based on organizational metadata including Company Division, Branch / Plant Location, Document Category, and Invoice Financial Amounts.
-* **Enterprise ERP Integration**: Bidirectional data synchronization supporting live reconciliation with SAP S/4HANA and MS SQL Server database ledgers.
+* **Enterprise ERP Integration**: Bidirectional data synchronization supporting live reconciliation with enterprise ERP systems and database ledgers.
 * **Security & Access Control (RBAC & FLAC)**: Implements Role-Based Access Control and Field-Level Access Control to enforce field visibility, edit rights, and active reviewer collision locking.
 * **Document Management & Compression**: Native PDF processing powered by PyMuPDF, providing document viewing, attachment management, and stream optimization.
 * **Auditability & Traceability**: Comprehensive audit logging recording user actions, sign-offs, timestamps, and compliance verification checkpoints.
@@ -22,7 +22,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 ### Backend Services
 * **Framework**: Python FastAPI 0.110+
 * **ORM & Database Connection**: SQLAlchemy 2.0+
-* **Database Management System**: MS SQL Server (Production) / SQLite (Development)
+* **Database Management System**: Enterprise Relational DBMS (SQLAlchemy supported)
 * **Authentication**: OAuth2 JWT Bearer Tokens with bcrypt password encryption
 * **Document & Image Engine**: PyMuPDF (fitz), Pillow, ReportLab
 
@@ -39,7 +39,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 ### Environment Prerequisites
 * Python 3.10 or higher
 * Node.js v18.0 or higher
-* MS SQL Server Database Instance
+* Enterprise Database Instance
 * Git
 
 ---
@@ -70,7 +70,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 4. Configure environment variables in `.env`:
    ```env
    PROJECT_NAME="Document Approval Automation System - DAAS"
-   DATABASE_URL="mssql+pyodbc://<db_user>:<db_password>@<db_host>:1433/DAAS_DB?driver=ODBC+Driver+17+for+SQL+Server"
+   DATABASE_URL="postgresql://<db_user>:<db_password>@<db_host>:5432/DAAS_DB"
    SECRET_KEY="your-corporate-jwt-secret-key"
    ACCESS_TOKEN_EXPIRE_MINUTES=43200
    ```
@@ -106,7 +106,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 For corporate production environments, DAAS recommends:
 * **Web Server / Reverse Proxy**: Nginx configured with SSL/TLS termination, proxying requests to ASGI Uvicorn workers and serving compiled React application assets.
 * **Application Server**: Uvicorn running under Gunicorn process supervisor.
-* **Database Infrastructure**: High-availability MS SQL Server cluster with automated backup retention schedules.
+* **Database Infrastructure**: High-availability database cluster with automated backup retention schedules.
 
 ---
 
