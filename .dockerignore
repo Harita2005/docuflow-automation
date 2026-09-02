@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+frontend/node_modules
+backend/venv
+venv
+*.log
+*.db
+.env
+stored_pdfs
+__pycache__
+*.pyc
+coverage
+dist
+build
