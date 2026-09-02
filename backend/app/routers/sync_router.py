@@ -15,7 +15,7 @@ SERVICE_API_USER = os.getenv("SERVICE_API_USER", "backend_sync_client")
 SERVICE_API_PASS = os.getenv("SERVICE_API_PASS", "SecretPassword987654321!")
 JWT_SECRET_KEY = settings.SECRET_KEY  # same secret used by /api/auth/login
 JWT_ALGORITHM = settings.ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
 
 router = APIRouter(prefix="/m2m", tags=["M2M Machine-to-Machine"])
 bearer_scheme = HTTPBearer()

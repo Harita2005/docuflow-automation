@@ -18,34 +18,46 @@ def get_business_rules(db: Session = Depends(get_db)):
 @router.post("/api/admin/conditions/save")
 @router.post("/api/admin/routing-rules")
 def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db)):
-    rule = None
+    rule_id = None
     if payload.id:
-        rule = db.query(BusinessRule).filter(BusinessRule.id == payload.id).filter(BusinessRule.is_deleted == False).first()
+        try:
+            if not str(payload.id).startswith("tmp-"):
+                rule_id = int(payload.id)
+        except ValueError:
+            pass
+
+    rule = None
+    if rule_id:
+        rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
     if not rule:
         rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
+
+    target_wf = payload.target_workflow_id or payload.workflow_code or "WF-837"
+    conds = payload.conditions_json or "[]"
+
     if rule:
         rule.rule_name = payload.rule_name
-        rule.rule_category = payload.rule_category
-        rule.document_type = payload.document_type
-        rule.priority = payload.priority
-        rule.target_workflow_id = payload.target_workflow_id
-        rule.conditions_json = payload.conditions_json
+        rule.rule_category = payload.rule_category or "Vendor Payment Workflows"
+        rule.document_type = payload.document_type or "AP INVOICE"
+        rule.priority = payload.priority or 10
+        rule.target_workflow_id = target_wf
+        rule.conditions_json = conds
         rule.description = payload.description
         rule.rule_action = payload.rule_action or "WORKFLOW_ROUTE"
         rule.cancel_reason = payload.cancel_reason
-        rule.is_active = payload.is_active
+        rule.is_active = payload.is_active if payload.is_active is not None else True
     else:
         rule = BusinessRule(
             rule_name=payload.rule_name,
-            rule_category=payload.rule_category,
-            document_type=payload.document_type,
-            priority=payload.priority,
-            target_workflow_id=payload.target_workflow_id,
-            conditions_json=payload.conditions_json,
+            rule_category=payload.rule_category or "Vendor Payment Workflows",
+            document_type=payload.document_type or "AP INVOICE",
+            priority=payload.priority or 10,
+            target_workflow_id=target_wf,
+            conditions_json=conds,
             description=payload.description,
             rule_action=payload.rule_action or "WORKFLOW_ROUTE",
             cancel_reason=payload.cancel_reason,
-            is_active=payload.is_active
+            is_active=payload.is_active if payload.is_active is not None else True
         )
         db.add(rule)
 

@@ -47,7 +47,7 @@ def compress_pdf(
         if deflated_size < original_size * 0.95:
             temp_compressed_path.replace(file_path)
             new_size = file_path.stat().st_size
-            print(f"[PDF Compressor] Lossless Compress: {file_path.name} ({original_size/1024:.1f}KB ➔ {new_size/1024:.1f}KB)")
+            print(f"[PDF Compressor] Lossless Compress: {file_path.name} ({original_size/1024:.1f}KB -> {new_size/1024:.1f}KB)")
             return True, original_size, new_size
 
         # Step 2: If still large, perform Image Stream Resampling & Re-compression (Lossy Scan Optimization)
@@ -85,7 +85,7 @@ def compress_pdf(
 
                     # Only replace if compressed version is smaller
                     if len(compressed_img_bytes) < len(image_bytes):
-                        doc.update_stream(xref, compressed_img_bytes)
+                        page.replace_image(xref, stream=compressed_img_bytes)
                 except Exception as img_err:
                     continue
 
@@ -96,7 +96,7 @@ def compress_pdf(
         if resampled_size < original_size:
             temp_compressed_path.replace(file_path)
             new_size = file_path.stat().st_size
-            print(f"[PDF Compressor SUCCESS] {file_path.name}: {original_size/1024/1024:.2f}MB ➔ {new_size/1024/1024:.2f}MB")
+            print(f"[PDF Compressor SUCCESS] {file_path.name}: {original_size/1024/1024:.2f}MB -> {new_size/1024/1024:.2f}MB")
             return True, original_size, new_size
         else:
             if temp_compressed_path.exists():

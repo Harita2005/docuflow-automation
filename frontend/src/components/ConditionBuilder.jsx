@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, CornerDownRight, Search, AlertTriangle, Folder } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, CornerDownRight, Search, AlertTriangle, Folder, GitMerge } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
 export default function ConditionBuilder({ rules, setRules, setHasChanges, handleDeleteRuleLocal }) {
@@ -99,11 +99,14 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
     fetchWf();
   }, []);
 
+  const [wfCategoryFilter, setWfCategoryFilter] = useState('ALL');
+
   const openEditor = (r = null, defaultDocType = null) => {
+    let targetRule = null;
     if (r) {
-      setEditingRule(JSON.parse(JSON.stringify(r)));
+      targetRule = JSON.parse(JSON.stringify(r));
     } else {
-      setEditingRule({
+      targetRule = {
         id: 'tmp-' + Date.now(),
         rule_name: '',
         description: '',
@@ -121,8 +124,11 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
         target_workflow_id: workflows.length > 0 ? workflows[0].profile_name : '',
         rule_category: selectedCategory || 'Vendor Payment Workflows',
         document_type: defaultDocType || 'Invoice'
-      });
+      };
     }
+    const matchedWf = workflows.find(w => w.profile_name === targetRule.target_workflow_id || w.workflow_code === targetRule.target_workflow_id);
+    setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
+    setEditingRule(targetRule);
   };
 
   const handleDelete = (id) => {
@@ -411,6 +417,9 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                           ) : (
                             <>
                               <Network className="h-3 w-3 flex-shrink-0 text-blue-600" />
+                              <span className="text-[9.5px] font-mono font-black bg-blue-50 text-blue-700 border border-blue-200/80 px-1.5 py-0.2 rounded shrink-0">
+                                {targetWf?.workflow_code || 'WF-837'}
+                              </span>
                               <span className="text-[10px] font-bold truncate" title={targetName}>
                                 {targetName}
                               </span>
@@ -517,11 +526,13 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                 />
               </div>
               <div>
-                <label htmlFor="ruleCategory" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Category</label>
+                <label htmlFor="ruleCategory" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Rule Policy Group (Matrix Folder)
+                </label>
                 <select id="ruleCategory" 
                   value={editingRule.rule_category || ''}
                   onChange={e => setEditingRule({...editingRule, rule_category: e.target.value})}
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 outline-none bg-white"
+                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 outline-none bg-white font-medium"
                 >
                   {Array.from(new Set([...Object.keys(groupedRules), 'Vendor Payment Workflows'])).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
@@ -558,6 +569,80 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                   placeholder="Rule for invoice approval based on condition..."
                 />
               </div>
+
+              {/* TARGET WORKFLOW 3-WAY MAPPING BLOCK */}
+              {(() => {
+                const targetWfObj = workflows.find(w => w.profile_name === editingRule.target_workflow_id || w.workflow_code === editingRule.target_workflow_id);
+                const categories = Array.from(new Set(workflows.map(w => w.workflow_category).filter(Boolean)));
+                return (
+                  <div className="md:col-span-2 bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 mt-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <GitMerge className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="text-[10px] font-black text-blue-950 uppercase tracking-wider">
+                          Target Workflow 3-Way Mapping (Category ➔ Workflow ➔ Code)
+                        </span>
+                      </div>
+                      {targetWfObj && (
+                        <span className="text-[9.5px] font-mono font-black bg-blue-600 text-white px-2 py-0.5 rounded shadow-2xs">
+                          Code: {targetWfObj.workflow_code || 'WF-837'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* 1. WORKFLOW CATEGORY */}
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          1. Target Workflow Category (Filter)
+                        </label>
+                        <select
+                          value={wfCategoryFilter}
+                          onChange={e => setWfCategoryFilter(e.target.value)}
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-slate-800 focus:border-blue-500 outline-none shadow-2xs"
+                        >
+                          <option value="ALL">All Categories ({workflows.length})</option>
+                          {categories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 2. TARGET WORKFLOW PROFILE */}
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          2. Target Workflow Profile <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={editingRule.target_workflow_id || ''}
+                          onChange={e => setEditingRule({ ...editingRule, target_workflow_id: e.target.value })}
+                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-blue-900 focus:border-blue-500 outline-none shadow-2xs"
+                        >
+                          <option value="">-- Select Target Workflow --</option>
+                          {workflows
+                            .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
+                            .map(w => (
+                              <option key={w.profile_name} value={w.profile_name}>
+                                [{w.workflow_code || 'WF-837'}] {w.profile_name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {/* 3. WORKFLOW CODE */}
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          3. Workflow Code (Mapped)
+                        </label>
+                        <div className="w-full text-xs p-2 border border-blue-200/80 rounded-lg bg-white font-mono font-black text-blue-700 flex items-center justify-between shadow-2xs">
+                          <span>{targetWfObj ? (targetWfObj.workflow_code || 'WF-837') : 'Unmapped'}</span>
+                          <span className="text-[8px] font-sans text-emerald-600 font-bold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">Linked</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div className="mt-3">
               <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Condition Type <span className="text-rose-500">*</span></label>

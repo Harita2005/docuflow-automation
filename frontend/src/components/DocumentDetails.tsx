@@ -172,6 +172,15 @@ export default function DocumentDetails({
 
   const [showNextActionModal, setShowNextActionModal] = useState(false);
   const [pendingNextId, setPendingNextId] = useState<string | null>(null);
+  const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold'>('approve');
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'amber' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' | 'info' | 'amber' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
 
   // Field-Level Access Control (FLAC) Configuration
   const [fieldPermissions, setFieldPermissions] = useState<Record<string, Record<string, "hidden" | "view" | "edit">>>(DEFAULT_FIELD_PERMS);
@@ -217,6 +226,12 @@ export default function DocumentDetails({
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const newPath = data.file_url || data.file_path;
+        if (newPath) {
+          setIframeSrc(encodeURI(newPath.startsWith('/') ? newPath : `/${newPath}`));
+        }
+        showToast("✓ Physical PDF Attached & Saved Successfully!", "success");
         onRefreshDocument();
       } else {
         let errDetail = "Failed to upload physical document.";
@@ -599,6 +614,47 @@ export default function DocumentDetails({
     fetchChecklist();
   }, [document?.id, document?.current_stage, activeApprovalLog?.current_stage_number]);
 
+  // Auto-Restore Draft Verification Inputs & Comments
+  useEffect(() => {
+    if (!document?.id) return;
+    const draftKey = `docuflow_draft_${document.id}`;
+    try {
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.approvalComment) setApprovalComment(parsed.approvalComment);
+        if (parsed.vendorName) setVendorName(parsed.vendorName);
+        if (parsed.invoiceNumber) setInvoiceNumber(parsed.invoiceNumber);
+        if (parsed.poNumber) setPoNumber(parsed.poNumber);
+      }
+    } catch (_) {}
+  }, [document?.id]);
+
+  // Auto-Save Draft Verification Inputs on Changes
+  useEffect(() => {
+    if (!document?.id) return;
+    const draftKey = `docuflow_draft_${document.id}`;
+    if (approvalComment || vendorName || invoiceNumber || poNumber) {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          approvalComment,
+          vendorName,
+          invoiceNumber,
+          poNumber,
+          updatedAt: new Date().toISOString()
+        }));
+      } catch (_) {}
+    }
+  }, [document?.id, approvalComment, vendorName, invoiceNumber, poNumber]);
+
+  const clearDraft = () => {
+    if (document?.id) {
+      try {
+        localStorage.removeItem(`docuflow_draft_${document.id}`);
+      } catch (_) {}
+    }
+  };
+
   useEffect(() => {
     if (!document) {
       onGoBack();
@@ -624,25 +680,23 @@ export default function DocumentDetails({
       const path = isAbsolute ? rawPath : `/${rawPath}`;
       
       let isMounted = true;
-      fetch(path, { method: 'HEAD' })
+      fetch(encodeURI(path), { method: 'HEAD' })
         .then(res => {
           if (!isMounted) return;
           const ctype = res.headers.get('content-type') || '';
           if (res.ok && !ctype.includes('text/html')) {
             setIframeSrc(encodeURI(path));
           } else {
-            // Fallback to sample invoice PDF so document is ALWAYS viewable
-            setIframeSrc('/uploads/sample_invoice.pdf');
+            setIframeSrc("");
           }
         })
         .catch(() => {
-          if (isMounted) setIframeSrc('/uploads/sample_invoice.pdf');
+          if (isMounted) setIframeSrc("");
         });
 
       return () => { isMounted = false; };
     } else {
-      // Default fallback PDF for records synced from ERP without prior upload
-      setIframeSrc('/uploads/sample_invoice.pdf');
+      setIframeSrc("");
     }
   }, [document?.id, document?.file_url, document?.file_path]);
 
@@ -693,16 +747,15 @@ export default function DocumentDetails({
         }),
       });
       if (response.ok) {
+        clearDraft();
         setApprovalComment("");
+        showToast("✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
+        onRefreshDocument();
         const nextId = getNextPendingDocId();
-        if (nextId && onSelectDocument) {
-          setPendingNextId(nextId);
-          setShowNextActionModal(true);
-        } else {
-          onRefreshDocument();
-          onGoBack();
-        }
+        setPendingNextId(nextId);
+        setActionModalType('reject');
+        setShowNextActionModal(true);
       } else {
         let errDetail = "Rejection failed";
         try {
@@ -744,16 +797,15 @@ export default function DocumentDetails({
         }),
       });
       if (response.ok) {
+        clearDraft();
         setApprovalComment("");
+        showToast("✓ Document Placed on Hold!", "info");
         await fetchWorkflowData();
+        onRefreshDocument();
         const nextId = getNextPendingDocId();
-        if (nextId && onSelectDocument) {
-          setPendingNextId(nextId);
-          setShowNextActionModal(true);
-        } else {
-          onRefreshDocument();
-          onGoBack();
-        }
+        setPendingNextId(nextId);
+        setActionModalType('hold');
+        setShowNextActionModal(true);
       } else {
         let errDetail = "Hold action failed";
         try {
@@ -854,16 +906,15 @@ export default function DocumentDetails({
         }),
       });
       if (response.ok) {
+        clearDraft();
         setApprovalComment("");
+        showToast("✓ Document Approved & Forwarded Successfully!", "success");
         await fetchWorkflowData();
+        onRefreshDocument();
         const nextId = getNextPendingDocId();
-        if (nextId && onSelectDocument) {
-          setPendingNextId(nextId);
-          setShowNextActionModal(true);
-        } else {
-          onRefreshDocument();
-          onGoBack();
-        }
+        setPendingNextId(nextId);
+        setActionModalType('approve');
+        setShowNextActionModal(true);
       } else {
         let errDetail = "Approval action failed";
         try {
@@ -944,7 +995,25 @@ export default function DocumentDetails({
   };
 
   return (
-    <div className="animate-fadeIn">
+    <div className="animate-fadeIn relative">
+      {/* FLOATING ACTION TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none">
+          <div className={`px-4 py-2.5 rounded-xl shadow-2xl border flex items-center gap-2.5 font-bold text-xs ${
+            toastMessage.type === 'success' 
+              ? 'bg-slate-900 text-emerald-300 border-emerald-500/50 shadow-emerald-950/30'
+              : toastMessage.type === 'amber'
+              ? 'bg-slate-900 text-amber-300 border-amber-500/50 shadow-amber-950/30'
+              : toastMessage.type === 'error'
+              ? 'bg-slate-900 text-rose-300 border-rose-500/50 shadow-rose-950/30'
+              : 'bg-slate-900 text-slate-200 border-indigo-500/50 shadow-indigo-950/30'
+          }`}>
+            <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-400" />
+            <span>{toastMessage.text}</span>
+          </div>
+        </div>
+      )}
+
       {/* Action Error Alert */}
       {actionError && (
         <div className="w-full mb-2 flex items-center px-4 py-2 bg-red-50 border border-red-200 text-red-700 font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm">
@@ -965,7 +1034,7 @@ export default function DocumentDetails({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-xs tracking-tight text-white font-display">
-                  Review & Compliance Action
+                  Document Review
                 </span>
                 <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[9px] font-mono font-bold text-indigo-200">
                   {formatDocNumber(document.id, document.document_type, (document as any).category)}
@@ -977,39 +1046,20 @@ export default function DocumentDetails({
 
                 {/* Subtle Status Badge */}
                 {getStatusBadge()}
-
-                {/* ERP Synced Status Pill (Visible if Role has access to ERP Sync Data) */}
-                {getFieldPerm("erp_sync_data") !== "hidden" && (
-                  <button
-                    type="button"
-                    onClick={() => setShowErpSyncModal(true)}
-                    className="px-2 py-0.5 rounded-md bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-[9px] font-extrabold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                    title="Click to view ERP Synchronization & Live Ledger Reconciliation"
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>ERP Synced {document.doc_key ? `(#${document.doc_key})` : `(#${document.id})`}</span>
-                  </button>
-                )}
-
-                {document.vendor_name && (
-                  <span className="text-[10px] font-semibold text-slate-300 hidden sm:inline truncate max-w-[200px]">
-                    • {document.vendor_name}
-                  </span>
-                )}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Sync Button: Opens ERP Data Sync & Reconciliation Modal */}
+            {/* ERP Data Sync Button: Opens ERP Data Sync & Reconciliation Modal */}
             {getFieldPerm("erp_sync_data") !== "hidden" ? (
               <button
                 onClick={() => setShowErpSyncModal(true)}
-                className="p-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white transition text-[10px] font-bold flex items-center gap-1 px-2.5 py-0.5 border border-indigo-400/40 shadow-xs cursor-pointer"
-                title="View ERP Data Sync & Ledger Reconciliation"
+                className="p-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white transition text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-0.5 border border-indigo-400/40 shadow-xs cursor-pointer"
+                title="View Enterprise ERP Data Sync & Ledger Reconciliation"
               >
-                <RotateCw className="h-3 w-3" />
-                <span>Sync</span>
+                <Database className="h-3 w-3 text-indigo-200" />
+                <span>ERP Data Sync</span>
               </button>
             ) : (
               <button
@@ -1689,7 +1739,7 @@ export default function DocumentDetails({
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
+                {!isDocumentLocked && (
                   <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
                     <Upload className="h-3 w-3" />
                     <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
@@ -1814,14 +1864,14 @@ export default function DocumentDetails({
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-extrabold text-sm text-white font-display">
-                      Enterprise ERP Data Sync & Ledger Reconciliation
+                      ERP Data Sync
                     </h3>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[9px] font-mono font-bold text-emerald-300">
-                      LIVE 200 OK
+                      Connected
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-300">
-                    Live bidirectional synchronization with SAP S/4HANA, MS SQL DocTrans & Tally
+                    Live SAP & MS SQL Sync
                   </p>
                 </div>
               </div>
@@ -1852,7 +1902,7 @@ export default function DocumentDetails({
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
                     <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wider">
-                      Target ERP Host System: SAP S/4HANA & MS SQL DocTrans
+                      Target ERP: SAP / MS SQL
                     </span>
                   </div>
                   <span className="text-[9.5px] font-mono text-slate-400">
@@ -1993,36 +2043,14 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Actions Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setShowErpSyncModal(false)}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10.5px] rounded-lg border border-slate-300 transition cursor-pointer"
+                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
               </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isReSyncingErp}
-                  onClick={handleManualErpReSync}
-                  className="px-3.5 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 font-bold text-[10.5px] rounded-lg border border-indigo-200 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isReSyncingErp ? "animate-spin" : ""}`} />
-                  <span>{isReSyncingErp ? "Re-syncing..." : "Re-sync from ERP"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isReSyncingErp}
-                  onClick={handlePushToErpLedger}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Database className="h-3 w-3" />
-                  <span>Push to ERP Ledger</span>
-                </button>
-              </div>
             </div>
 
           </div>
@@ -2330,6 +2358,73 @@ export default function DocumentDetails({
                 className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* APPROVAL SUCCESS / NEXT ACTION MODAL */}
+      {showNextActionModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 p-6 text-center animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            
+            {actionModalType === 'approve' ? (
+              <div className="h-14 w-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+            ) : actionModalType === 'reject' ? (
+              <div className="h-14 w-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                <XCircle className="h-8 w-8" />
+              </div>
+            ) : (
+              <div className="h-14 w-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center mx-auto shadow-inner">
+                <PauseCircle className="h-8 w-8" />
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-slate-900 text-lg tracking-tight">
+                {actionModalType === 'approve' ? 'Document Approved Successfully!' : actionModalType === 'reject' ? 'Document Rejection Saved' : 'Document Placed On Hold'}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Stage sign-off recorded for <span className="font-bold text-slate-800">{document?.invoice_number || document?.id}</span>. What would you like to do next?
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-2">
+              {pendingNextId && onSelectDocument ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNextActionModal(false);
+                    onSelectDocument(pendingNextId);
+                  }}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Move to Next Document ➔</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-2.5 px-4 bg-slate-100 text-slate-400 font-bold text-xs rounded-xl border border-slate-200 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <span>No More Pending Docs in Queue</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNextActionModal(false);
+                  onRefreshDocument();
+                  onGoBack();
+                }}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <span>Back to Dashboard 🏠</span>
               </button>
             </div>
 

@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -61,11 +62,22 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
 
 from collections import defaultdict
 
+def ensure_workflow_code(p: WorkflowProfile, db: Session = None) -> str:
+    """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-837)."""
+    if p.workflow_code and str(p.workflow_code).strip() and re.match(r'^WF-\d{3,5}$', str(p.workflow_code).strip()):
+        return str(p.workflow_code).strip()
+    code_id = p.id if p.id else abs(hash(p.profile_name or "WF"))
+    code = f"WF-{(code_id * 13 + 107) % 900 + 100}"
+    p.workflow_code = code
+    if db:
+        try: db.commit()
+        except Exception: db.rollback()
+    return code
+
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
-def get_workflow_profiles(db: Session = Depends(get_db)):
-    # 1. Fetch all active profiles in 1 query
-    profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.id.asc()).all()
+def get_all_workflow_profiles(db: Session = Depends(get_db)):
+    profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.created_at.desc()).all()
     if not profiles:
         return []
 
@@ -85,6 +97,7 @@ def get_workflow_profiles(db: Session = Depends(get_db)):
 
     result = []
     for p in profiles:
+        wf_code = ensure_workflow_code(p, db)
         raw_steps = steps_by_profile.get(p.profile_name, [])
         steps = []
         for st in raw_steps:
@@ -127,7 +140,7 @@ def get_workflow_profiles(db: Session = Depends(get_db)):
 
         p_dict = {
             "profile_name": p.profile_name,
-            "workflow_code": p.workflow_code,
+            "workflow_code": wf_code,
             "workflow_category": p.workflow_category,
             "workflow_type": p.workflow_type,
             "description": p.description,
@@ -241,7 +254,8 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session = Depends(
 
         db.commit()
         db.refresh(existing)
-        return {"success": True, "profile_name": payload.profile_name}
+        wf_code = ensure_workflow_code(existing, db)
+        return {"success": True, "profile_name": payload.profile_name, "workflow_code": wf_code}
     except Exception as e:
         db.rollback()
         print(f"[Workflow Save Error] Failed to save workflow '{payload.profile_name}': {e}")
@@ -348,10 +362,22 @@ def save_workflow_step(payload: dict, db: Session = Depends(get_db)):
     profile_name = payload.get("profile_name")
     
     if not profile_name:
-        raise HTTPException(status_code=400, detail="Missing profile_name in payload")
+        wf_code = payload.get("workflow_code") or payload.get("workflow_id")
+        if wf_code:
+            prof = db.query(WorkflowProfile).filter(
+                (WorkflowProfile.workflow_code == str(wf_code)) | (WorkflowProfile.profile_name == str(wf_code))
+            ).first()
+            if prof:
+                profile_name = prof.profile_name
+        if not profile_name:
+            first_prof = db.query(WorkflowProfile).first()
+            if first_prof:
+                profile_name = first_prof.profile_name
+            else:
+                profile_name = "DEFAULT_WORKFLOW"
         
     step_obj = None
-    if step_id:
+    if step_id and not str(step_id).startswith("tmp-"):
         try:
             int_id = int(step_id)
             step_obj = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == int_id).first()
@@ -362,10 +388,11 @@ def save_workflow_step(payload: dict, db: Session = Depends(get_db)):
         step_obj = WorkflowStepDefinition(profile_name=profile_name)
         db.add(step_obj)
         
-    step_obj.stage_number = int(payload.get("stage_number") or 1)
+    step_obj.profile_name = profile_name
+    step_obj.stage_number = int(payload.get("stage_number") or payload.get("step_order") or 1)
     step_obj.step_name = payload.get("step_name") or "New Step"
-    step_obj.approver_type = payload.get("approver_type") or "Approval Pool"
-    step_obj.approver_target = payload.get("approver_target")
+    step_obj.approver_type = payload.get("approver_type") or payload.get("role") or "Approval Pool"
+    step_obj.approver_target = payload.get("approver_target") or payload.get("approver")
     step_obj.delegate_approver = payload.get("delegate_approver")
     step_obj.document_type = payload.get("document_type") or "AP INVOICE"
     step_obj.action_required = payload.get("action_required") or "Approve"

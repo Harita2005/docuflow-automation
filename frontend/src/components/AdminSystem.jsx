@@ -1,49 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Server, BrainCircuit, RefreshCw, Zap, Check, Shield, Sliders } from 'lucide-react';
+import { Settings, Save, Server, BrainCircuit, RefreshCw, Zap, Check, Shield, Sliders, FolderArchive } from 'lucide-react';
+
+// Default editable keys with their human readable info
+const SYSTEM_KEYS = [
+  { key: "AI_PROVIDER", default: "Ollama", desc: "Cognitive AI provider ('Ollama' or 'Gemini'). If set to Gemini, ensure GEMINI_API_KEY is in .env.", category: "AI", type: "select", options: ["Ollama", "Gemini"] },
+  { key: "AI_PRIMARY_MODEL", default: "llama3.2-vision:latest", desc: "Preferred Ollama model for primary OCR extraction (Vision preferred)", category: "AI", type: "select", options: ["llama3.2-vision:latest", "llama3.1:latest", "mistral:latest", "gemini-1.5-flash"] },
+  { key: "AI_FALLBACK_MODEL", default: "llama3.2:latest", desc: "Stable fallback text-only model", category: "AI", type: "select", options: ["llama3.2:latest", "llama3:latest", "qwen2.5:latest"] },
+  { key: "AUTO_APPROVE_THRESHOLD", default: "0.95", desc: "Confidence score required for straight-through processing (0.0 to 1.0)", category: "System", type: "text" },
+  { key: "OCR_ENGINE", default: "Tesseract+Ollama", desc: "Active OCR Pipeline Engine", category: "System", type: "select", options: ["Tesseract+Ollama", "Vision API", "Tesseract Only", "Ollama Only"] },
+  { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System", type: "text" },
+  { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System", type: "text" },
+  { key: "ORGANIZATION_NAME", default: "DocuFlow Automation", desc: "Organization / Company display name displayed on top header", category: "System", type: "text" },
+  { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System", type: "select", options: ["true", "false"] },
+  { key: "MAX_WORKFLOWS_PER_COMPANY", default: "50", desc: "Maximum active workflows allowed per organization", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_APPROVAL_STEPS", default: "10", desc: "Maximum approval stages allowed per workflow", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_CONDITIONS_PER_RULE", default: "10", desc: "Maximum combination conditions allowed per rule", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_CHECKLIST_ITEMS_PER_STAGE", default: "15", desc: "Maximum checklist verification items allowed per stage", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_ATTACHMENT_SIZE_MB", default: "25", desc: "Maximum file size limit per document/attachment in Megabytes", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_ATTACHMENTS_PER_DOC", default: "10", desc: "Maximum supporting attachments allowed per invoice", category: "Limits & Thresholds", type: "text" },
+  { key: "MAX_LINE_ITEMS_PER_DOC", default: "500", desc: "Maximum line items displayed per document table", category: "Limits & Thresholds", type: "text" },
+  { key: "STORAGE_ROOT_DIR", default: "stored_pdfs", desc: "Absolute OS path (e.g. 'C:/DocuFlow_Storage' or 'D:/Invoices') or relative web folder name ('stored_pdfs')", category: "Physical Storage & Archival", type: "text" },
+  { key: "STORAGE_FOLDER_PATTERN", default: "{YEAR}/{MONTH}/{DOC_TYPE}", desc: "Free-form configurable folder hierarchy. Tokens: {YEAR}, {MONTH}, {DAY}, {DOC_TYPE}, {VENDOR_NAME}, {COMPANY_CODE}, {DOC_NUM}, {ID}", category: "Physical Storage & Archival", type: "text" }
+];
 
 export default function AdminSystem() {
-  const [configs, setConfigs] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Default editable keys with their human readable info
-  const SYSTEM_KEYS = [
-    { key: "AI_PROVIDER", default: "Ollama", desc: "Cognitive AI provider ('Ollama' or 'Gemini'). If set to Gemini, ensure GEMINI_API_KEY is in .env.", category: "AI", type: "select", options: ["Ollama", "Gemini"] },
-    { key: "AI_PRIMARY_MODEL", default: "llama3.2-vision:latest", desc: "Preferred Ollama model for primary OCR extraction (Vision preferred)", category: "AI", type: "select", options: ["llama3.2-vision:latest", "llama3.1:latest", "mistral:latest", "gemini-1.5-flash"] },
-    { key: "AI_FALLBACK_MODEL", default: "llama3.2:latest", desc: "Stable fallback text-only model", category: "AI", type: "select", options: ["llama3.2:latest", "llama3:latest", "qwen2.5:latest"] },
-    { key: "AUTO_APPROVE_THRESHOLD", default: "0.95", desc: "Confidence score required for straight-through processing (0.0 to 1.0)", category: "System", type: "text" },
-    { key: "OCR_ENGINE", default: "Tesseract+Ollama", desc: "Active OCR Pipeline Engine", category: "System", type: "select", options: ["Tesseract+Ollama", "Vision API", "Tesseract Only", "Ollama Only"] },
-    { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System", type: "text" },
-    { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System", type: "text" },
-    { key: "ORGANIZATION_NAME", default: "DocuFlow Automation", desc: "Organization / Company display name displayed on top header", category: "System", type: "text" },
-    { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System", type: "select", options: ["true", "false"] },
-    { key: "MAX_WORKFLOWS_PER_COMPANY", default: "50", desc: "Maximum active workflows allowed per organization", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_APPROVAL_STEPS", default: "10", desc: "Maximum approval stages allowed per workflow", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_CONDITIONS_PER_RULE", default: "10", desc: "Maximum combination conditions allowed per rule", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_CHECKLIST_ITEMS_PER_STAGE", default: "15", desc: "Maximum checklist verification items allowed per stage", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_ATTACHMENT_SIZE_MB", default: "25", desc: "Maximum file size limit per document/attachment in Megabytes", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_ATTACHMENTS_PER_DOC", default: "10", desc: "Maximum supporting attachments allowed per invoice", category: "Limits & Thresholds", type: "text" },
-    { key: "MAX_LINE_ITEMS_PER_DOC", default: "500", desc: "Maximum line items displayed per document table", category: "Limits & Thresholds", type: "text" }
-  ];
+  const [configs, setConfigs] = useState(() => 
+    SYSTEM_KEYS.map(sk => ({ ...sk, value: sk.default, isDirty: false }))
+  );
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => { 
     fetchConfigs(); 
   }, []);
 
   const fetchConfigs = async () => {
-    setLoading(true);
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch('/api/admin/config', { headers: { "Authorization": `Bearer ${token}` } });
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/config', { headers });
       if (res.ok) {
         const data = await res.json();
-        const merged = SYSTEM_KEYS.map(sk => {
+        setConfigs(prev => prev.map(sk => {
           const found = data.find(d => d.key === sk.key);
-          return found ? { ...sk, ...found, isDirty: false } : { ...sk, value: sk.default, isDirty: false };
-        });
-        setConfigs(merged);
+          return {
+            ...sk,
+            value: (found && found.value !== undefined) ? found.value : (sk.value || sk.default),
+            isDirty: false
+          };
+        }));
       }
-    } catch (e) { console.error(e); }
-    setLoading(false);
+    } catch (e) {
+      console.error("Config fetch error:", e);
+    }
   };
 
   const handleValueChange = (idx, val) => {
@@ -113,18 +121,20 @@ export default function AdminSystem() {
 
       {/* SETTINGS CARDS GROUPS */}
       <div className="space-y-3">
-        {['AI', 'System', 'Limits & Thresholds'].map(category => (
+        {['Physical Storage & Archival', 'Limits & Thresholds', 'System', 'AI'].map(category => (
           <div key={category} className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
             {/* Section Header */}
             <div className="bg-slate-50/80 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                {category === 'AI' ? <BrainCircuit className="h-3 w-3 text-purple-600" /> : 
-                 category === 'System' ? <Server className="h-3 w-3 text-blue-600" /> : 
-                 <Sliders className="h-3 w-3 text-amber-600" />}
+                {category === 'Physical Storage & Archival' ? <FolderArchive className="h-3 w-3 text-indigo-600" /> : 
+                 category === 'Limits & Thresholds' ? <Sliders className="h-3 w-3 text-amber-600" /> : 
+                 category === 'System' ? <Server className="h-3 w-3 text-blue-600" /> :
+                 <BrainCircuit className="h-3 w-3 text-purple-600" />}
                 <h3 className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider">
-                  {category === 'AI' ? '1. COGNITIVE AI MODELS' : 
-                   category === 'System' ? '2. PLATFORM THRESHOLDS & OCR' : 
-                   '3. CONFIGURABLE SAFEGUARDS & LIMITS'}
+                  {category === 'Physical Storage & Archival' ? '1. PHYSICAL STORAGE & ARCHIVAL' : 
+                   category === 'Limits & Thresholds' ? '2. CONFIGURABLE SAFEGUARDS & LIMITS' : 
+                   category === 'System' ? '3. PLATFORM THRESHOLDS & OCR' :
+                   '4. COGNITIVE AI MODELS'}
                 </h3>
               </div>
               <span className="text-[8px] font-bold text-slate-400">

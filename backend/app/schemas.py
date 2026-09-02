@@ -225,13 +225,14 @@ class ConditionItem(BaseModel):
     logicalOperator: Optional[str] = "AND"
 
 class BusinessRuleSchema(BaseModel):
-    id: Optional[int] = None
+    id: Optional[Union[int, str]] = None
     rule_name: str
-    rule_category: str = "Vendor Payment Workflows"
-    document_type: str = "AP INVOICE"
-    priority: int = 10
-    target_workflow_id: str
-    conditions_json: str
+    rule_category: Optional[str] = "Vendor Payment Workflows"
+    document_type: Optional[str] = "AP INVOICE"
+    priority: Optional[int] = 10
+    target_workflow_id: Optional[str] = ""
+    workflow_code: Optional[str] = None
+    conditions_json: Optional[str] = "[]"
     description: Optional[str] = None
     rule_action: Optional[str] = "WORKFLOW_ROUTE"
     cancel_reason: Optional[str] = None
@@ -239,10 +240,11 @@ class BusinessRuleSchema(BaseModel):
     auto_approve_condition: Optional[str] = None
     auto_cancel_enabled: Optional[bool] = False
     auto_cancel_condition: Optional[str] = None
-    is_active: bool = True
+    is_active: Optional[bool] = True
 
     class Config:
         from_attributes = True
+        extra = "allow"
 
 # --- AUDIT SCHEMAS ---
 class AuditLogResponse(BaseModel):

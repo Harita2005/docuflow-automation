@@ -555,9 +555,13 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
                   </optgroup>
                   <optgroup label="🔵 Workflow Profiles">
                     <option value="">-- Select Flow --</option>
-                    {uniqueWorkflows.map(wf => (
-                      <option key={wf} value={wf}>{wf}</option>
-                    ))}
+                    {uniqueWorkflows.map(wf => {
+                      const matched = steps.find(s => s.profile_name === wf || s.workflow_code === wf);
+                      const code = matched?.workflow_code || 'WF-837';
+                      return (
+                        <option key={wf} value={wf}>[{code}] {wf}</option>
+                      );
+                    })}
                   </optgroup>
                 </select>
                 <button 

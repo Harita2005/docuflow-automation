@@ -308,28 +308,7 @@ export default function Dashboard({
       {/* UNIFIED 6-CARD METRICS ROW */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
         
-        {/* 1. Total Documents */}
-        <div 
-          onClick={() => { setListFilter('all'); setDocTypeFilter('All'); setCurrentPage(1); }}
-          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
-            listFilter === 'all' ? 'border-blue-500 bg-blue-50/5 ring-1 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-2 relative z-10">
-            <div className="bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
-              <FileText className="h-4.5 w-4.5" />
-            </div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Documents</span>
-          </div>
-          <div className="relative z-10 flex flex-col items-center gap-0.5">
-            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-600 transition-colors">
-              {stats?.totalDocuments ?? documents.length}
-            </span>
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">All time</span>
-          </div>
-        </div>
-
-        {/* 2. Pending */}
+        {/* 1. Pending */}
         <div 
           onClick={() => { setListFilter('pending'); setDocTypeFilter('All'); setCurrentPage(1); }}
           className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
@@ -350,28 +329,28 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* 3. In Progress */}
+        {/* 2. Hold (On Hold) */}
         <div 
-          onClick={() => { setListFilter('inprogress'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          onClick={() => { setListFilter('onhold'); setDocTypeFilter('All'); setCurrentPage(1); }}
           className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
-            listFilter === 'inprogress' ? 'border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
+            listFilter === 'onhold' ? 'border-purple-500 bg-purple-50/5 ring-1 ring-purple-500/20' : 'border-slate-200 hover:border-purple-300 hover:-translate-y-0.5'
           }`}
         >
           <div className="flex items-center gap-2 mb-2 relative z-10">
-            <div className="bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
-              <Activity className="h-4.5 w-4.5" />
+            <div className="bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center p-1.5 border border-purple-100/50 shadow-2xs">
+              <PauseCircle className="h-4.5 w-4.5" />
             </div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">In Progress</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Hold</span>
           </div>
           <div className="relative z-10 flex flex-col items-center gap-0.5">
-            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-500 transition-colors">
-              {inProgressCount}
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-purple-600 transition-colors">
+              {onHoldCount}
             </span>
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">In workflow</span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">On hold</span>
           </div>
         </div>
 
-        {/* 4. Approved */}
+        {/* 3. Approved */}
         <div 
           onClick={() => { setListFilter('approved'); setDocTypeFilter('All'); setCurrentPage(1); }}
           className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
@@ -389,6 +368,27 @@ export default function Dashboard({
               {approvedCount}
             </span>
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Successfully completed</span>
+          </div>
+        </div>
+
+        {/* 4. Progress (In Progress) */}
+        <div 
+          onClick={() => { setListFilter('inprogress'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
+            listFilter === 'inprogress' ? 'border-blue-400 bg-blue-50/5 ring-1 ring-blue-400/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2 relative z-10">
+            <div className="bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
+              <Activity className="h-4.5 w-4.5" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Progress</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-0.5">
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-500 transition-colors">
+              {inProgressCount}
+            </span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">In workflow</span>
           </div>
         </div>
 
@@ -413,26 +413,27 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* 6. On Hold */}
+        {/* 6. Total Doc */}
         <div 
-          onClick={() => { setListFilter('onhold'); setDocTypeFilter('All'); setCurrentPage(1); }}
+          onClick={() => { setListFilter('all'); setDocTypeFilter('All'); setCurrentPage(1); }}
           className={`bg-white border p-3.5 rounded-xl flex flex-col items-center justify-center text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all duration-200 cursor-pointer relative overflow-hidden group min-h-[100px] ${
-            listFilter === 'onhold' ? 'border-purple-500 bg-purple-50/5 ring-1 ring-purple-500/20' : 'border-slate-200 hover:border-purple-300 hover:-translate-y-0.5'
+            listFilter === 'all' ? 'border-blue-500 bg-blue-50/5 ring-1 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300 hover:-translate-y-0.5'
           }`}
         >
           <div className="flex items-center gap-2 mb-2 relative z-10">
-            <div className="bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center p-1.5 border border-purple-100/50 shadow-2xs">
-              <PauseCircle className="h-4.5 w-4.5" />
+            <div className="bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center p-1.5 border border-blue-100/50 shadow-2xs">
+              <FileText className="h-4.5 w-4.5" />
             </div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">On Hold</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Doc</span>
           </div>
           <div className="relative z-10 flex flex-col items-center gap-0.5">
-            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-purple-600 transition-colors">
-              {onHoldCount}
+            <span className="block text-2.5xl font-black text-slate-800 tracking-tight font-display group-hover:text-blue-600 transition-colors">
+              {stats?.totalDocuments ?? documents.length}
             </span>
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">On hold</span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">All time</span>
           </div>
         </div>
+
       </div>
 
 

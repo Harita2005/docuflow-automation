@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # JWT Auth
     SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-docuflow-jwt-key-2026-production")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))  # 30 minutes expiry
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))  # 30 days session validity
         # Uploads & Physical PDF Storage inside project folder (Stores ONLY Approved Documents)
     PDF_STORAGE_DIR: Path = Path(os.getenv("PDF_STORAGE_PATH", str(BASE_DIR.parent / "stored_pdfs")))
     APPROVED_PDF_DIR: Path = Path(os.getenv("APPROVED_PDF_PATH", str(BASE_DIR.parent / "stored_pdfs" / "approved")))

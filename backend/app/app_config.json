@@ -28,5 +28,20 @@
     "key": "RBAC_PERMISSION_DEFINITIONS",
     "value": "[{\"id\":\"cat_docs\",\"category\":\"Documents & OCR Extraction\",\"icon\":\"Folder\",\"items\":[{\"id\":\"doc:upload\",\"label\":\"Upload Documents\",\"desc\":\"Upload and batch ingest vendor invoices\",\"iconName\":\"FileText\",\"iconColor\":\"bg-purple-50 text-purple-600 border-purple-100\"},{\"id\":\"doc:verify\",\"label\":\"OCR Verification Desk\",\"desc\":\"Verify extracted fields & line items\",\"iconName\":\"BarChart3\",\"iconColor\":\"bg-blue-50 text-blue-600 border-blue-100\"},{\"id\":\"doc:edit\",\"label\":\"Edit & Field Overrides\",\"desc\":\"Modify monetary values, HSN, and tax codes\",\"iconName\":\"CheckSquare\",\"iconColor\":\"bg-sky-50 text-sky-600 border-sky-100\"},{\"id\":\"doc:delete\",\"label\":\"Delete / Purge Drafts\",\"desc\":\"Remove draft records and recalled files\",\"iconName\":\"Trash2\",\"iconColor\":\"bg-rose-50 text-rose-600 border-rose-100\"}]},{\"id\":\"cat_wf\",\"category\":\"Workflow & Approvals Routing\",\"icon\":\"Folder\",\"items\":[{\"id\":\"wf:view\",\"label\":\"View Task Queue\",\"desc\":\"Access pending task list and SLA timers\",\"iconName\":\"Eye\",\"iconColor\":\"bg-slate-50 text-slate-600 border-slate-200\"},{\"id\":\"wf:approve\",\"label\":\"Approve / Reject Action\",\"desc\":\"Sign off or return workflow approval stages\",\"iconName\":\"ShieldCheck\",\"iconColor\":\"bg-emerald-50 text-emerald-600 border-emerald-100\"},{\"id\":\"wf:delegate\",\"label\":\"Delegate Signoff\",\"desc\":\"Assign approval duties to backup peers\",\"iconName\":\"Users\",\"iconColor\":\"bg-blue-50 text-blue-600 border-blue-100\"},{\"id\":\"wf:force\",\"label\":\"Fast-Track & Emergency Route\",\"desc\":\"Emergency route bypass & manual escalation\",\"iconName\":\"AlertTriangle\",\"iconColor\":\"bg-amber-50 text-amber-600 border-amber-100\"}]},{\"id\":\"cat_audit\",\"category\":\"Financial System Audits & Tax\",\"icon\":\"Folder\",\"items\":[{\"id\":\"audit:trail\",\"label\":\"Audit Log Inspection\",\"desc\":\"View system immutable event trail and IP logs\",\"iconName\":\"Layers\",\"iconColor\":\"bg-slate-50 text-slate-600 border-slate-200\"},{\"id\":\"audit:signoff\",\"label\":\"Internal Audit (IA) Signoff\",\"desc\":\"Final pre-posting audit verification\",\"iconName\":\"DollarSign\",\"iconColor\":\"bg-amber-50 text-amber-600 border-amber-100\"},{\"id\":\"audit:export\",\"label\":\"Export Financial Reports\",\"desc\":\"Download ledger CSV & tax data schedules\",\"iconName\":\"FileSpreadsheet\",\"iconColor\":\"bg-blue-50 text-blue-600 border-blue-100\"}]},{\"id\":\"cat_sys\",\"category\":\"IAM & System Governance\",\"icon\":\"Folder\",\"items\":[{\"id\":\"sys:flows\",\"label\":\"Flow Builder Engine\",\"desc\":\"Create and edit multi-stage workflow routes\",\"iconName\":\"Sliders\",\"iconColor\":\"bg-blue-50 text-blue-600 border-blue-100\"},{\"id\":\"sys:rules\",\"label\":\"Routing Rule Matrix\",\"desc\":\"Configure conditional AND/OR routing rules\",\"iconName\":\"Filter\",\"iconColor\":\"bg-slate-50 text-slate-600 border-slate-200\"},{\"id\":\"sys:rbac\",\"label\":\"IAM Role & Access Matrix\",\"desc\":\"Modify roles and user clearance permissions\",\"iconName\":\"Shield\",\"iconColor\":\"bg-blue-50 text-blue-600 border-blue-100\"}]}]",
     "description": "Categorized list of system permission definitions"
+  },
+  {
+    "key": "STORAGE_ROOT_DIR",
+    "value": "stored_pdfs",
+    "description": "Default"
+  },
+  {
+    "key": "STORAGE_FOLDER_PATTERN",
+    "value": "{YEAR}/{MONTH}/{DOC_TYPE}",
+    "description": "Default"
+  },
+  {
+    "key": "ORGANIZATION_NAME",
+    "value": "DAAS",
+    "description": "Organization / Company display name displayed on top header"
   }
 ]

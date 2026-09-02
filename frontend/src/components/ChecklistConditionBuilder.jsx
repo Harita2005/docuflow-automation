@@ -3,7 +3,7 @@ import {
   CheckSquare, Plus, Edit2, Trash2, Search, Save, X, AlertTriangle, 
   ShieldCheck, CheckCircle2, RefreshCw, Filter, Layers, ChevronLeft, 
   ChevronRight, Sparkles, Copy, SlidersHorizontal, Eye, Tag, Building2, 
-  MapPin, Check, ListChecks, ArrowRight, ShieldAlert
+  MapPin, Check, ListChecks, ArrowRight, ShieldAlert, GitMerge
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -72,6 +72,41 @@ export default function ChecklistConditionBuilder() {
   // Modal item input state
   const [newChecklistText, setNewChecklistText] = useState('');
 
+  const availableDivisions = useMemo(() => {
+    const set = new Set(matrixOptions?.divisions || ['ACC', 'ACM', 'ATC', 'ENES', 'RR', 'RRF', 'RHL', 'AKG', 'VT', 'VG', 'VPM', 'TARA', 'VCC']);
+    rules.forEach(r => { if (r.division) set.add(r.division); });
+    return ['ALL', ...Array.from(set).filter(d => d !== 'ALL').sort()];
+  }, [rules]);
+
+  const availableCategories = useMemo(() => {
+    const defaultDocTypes = [
+      'AP INVOICE',
+      'GRN Header',
+      'Freight Charges',
+      'CAPEX / Fixed Asset',
+      'OPEX / General Expense',
+      'Asset Purchase',
+      'Interstate Purchase',
+      'Vendor Payment Voucher',
+      'Debit / Credit Note',
+      'Service Invoice',
+      'Advance Voucher'
+    ];
+    const set = new Set(defaultDocTypes);
+    rules.forEach(r => {
+      if (r.category && r.category !== 'ALL') {
+        set.add(r.category);
+      }
+    });
+    return ['ALL', ...Array.from(set).sort()];
+  }, [rules]);
+
+  const availableBranches = useMemo(() => {
+    const set = new Set(matrixOptions?.plants || ['TN-CBE-PROZONE-MALL', 'TN-OOTY', 'TN-SIVAKASI', 'TN-NAGERCOIL', 'TN-UDUMALPET', 'ANTS', 'MKT_MDU']);
+    rules.forEach(r => { if (r.branch) set.add(r.branch); });
+    return ['ALL', ...Array.from(set).filter(b => b !== 'ALL').sort()];
+  }, [rules]);
+
   const fetchChecklistRules = async () => {
     setLoading(true);
     try {
@@ -88,11 +123,29 @@ export default function ChecklistConditionBuilder() {
     setLoading(false);
   };
 
+  const [workflows, setWorkflows] = useState([]);
+  const [chkWfCategoryFilter, setChkWfCategoryFilter] = useState('ALL');
+
   useEffect(() => {
     fetchChecklistRules();
+    const fetchWf = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+        const res = await fetch('/api/admin/workflows', { headers });
+        if (res.ok) {
+          setWorkflows(await res.json());
+        }
+      } catch(e) {}
+    };
+    fetchWf();
   }, []);
 
   const openEditor = (r = null, isDuplicate = false) => {
+    let targetProfile = r ? r.workflow_profile : 'ALL';
+    const targetWfObj = workflows.find(w => w.profile_name === targetProfile || w.workflow_code === targetProfile);
+    setChkWfCategoryFilter(targetWfObj?.workflow_category || 'ALL');
+
     if (r) {
       let parsedItems = [];
       const txt = (r.item_text || '').trim();
@@ -527,6 +580,17 @@ export default function ChecklistConditionBuilder() {
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                           <span className="truncate max-w-[170px]" title={r.rule_name}>{r.rule_name}</span>
+                          {(() => {
+                            const matched = workflows.find(w => w.profile_name === r.workflow_profile || w.workflow_code === r.workflow_profile);
+                            if (matched?.workflow_code) {
+                              return (
+                                <span className="text-[7.5px] font-mono font-black text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0" title={`Mapped Workflow Code: ${matched.workflow_code}`}>
+                                  {matched.workflow_code}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                           {r.is_mandatory !== false ? (
                             <span className="text-[7.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 shrink-0">
                               REQ
@@ -721,7 +785,7 @@ export default function ChecklistConditionBuilder() {
       {/* CREATE / EDIT CHECKLIST RULE MODAL */}
       {editingRule && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
             
             {/* Modal Header */}
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
@@ -736,7 +800,7 @@ export default function ChecklistConditionBuilder() {
                   <p className="text-[10.5px] text-slate-500">Configure stage-specific verification checkpoints</p>
                 </div>
               </div>
-              <button onClick={() => setEditingRule(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+              <button type="button" onClick={() => setEditingRule(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -747,21 +811,23 @@ export default function ChecklistConditionBuilder() {
               {/* SECTION 1: MATCHING CRITERIA */}
               <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
-                  1. Matching Criteria (Conditions)
+                  1. Matching Criteria & Target Mapping
                 </span>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Rule Name <span className="text-rose-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider">
+                        Rule Identifier Name
+                      </label>
+                      <span className="text-[8.5px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">Auto-Derived (Editable)</span>
+                    </div>
                     <input 
                       type="text"
                       value={editingRule.rule_name}
                       onChange={e => setEditingRule({ ...editingRule, rule_name: e.target.value })}
-                      placeholder="e.g. CHK_ACM_GRN_Header"
-                      required
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      placeholder="Auto-generated e.g. CHK_VCC_CASHFLOW_Attachment_Status"
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     />
                   </div>
 
@@ -771,8 +837,17 @@ export default function ChecklistConditionBuilder() {
                     </label>
                     <select 
                       value={editingRule.stage_name}
-                      onChange={e => setEditingRule({ ...editingRule, stage_name: e.target.value })}
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-blue-700 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      onChange={e => {
+                        const newStage = e.target.value;
+                        const wfProf = editingRule.workflow_profile || 'GLOBAL';
+                        const autoName = `CHK_${wfProf.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)}_${newStage.replace(/\s+/g, '_')}`;
+                        setEditingRule(prev => ({
+                          ...prev,
+                          stage_name: newStage,
+                          rule_name: (!prev.rule_name || prev.rule_name.startsWith('CHK_') || prev.rule_name.startsWith('tmp-')) ? autoName : prev.rule_name
+                        }));
+                      }}
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-blue-700 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     >
                       {STAGES_LIST.map(stg => (
                         <option key={stg} value={stg}>{stg}</option>
@@ -784,50 +859,138 @@ export default function ChecklistConditionBuilder() {
                     <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       Company / Division
                     </label>
-                    <input 
-                      list="divisions-list"
-                      value={editingRule.division}
+                    <select 
+                      value={editingRule.division || 'ALL'}
                       onChange={e => setEditingRule({ ...editingRule, division: e.target.value })}
-                      placeholder="e.g. ACC, ACM, VCC, ALL..."
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                    >
+                      {availableDivisions.map(div => (
+                        <option key={div} value={div}>{div === 'ALL' ? 'ALL Divisions' : div}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       Category / Document Type
                     </label>
-                    <input 
-                      list="categories-list"
-                      value={editingRule.category}
+                    <select 
+                      value={editingRule.category || 'ALL'}
                       onChange={e => setEditingRule({ ...editingRule, category: e.target.value })}
-                      placeholder="e.g. GRN Header, Freight Charges, ALL..."
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                    >
+                      {availableCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat === 'ALL' ? 'ALL Categories' : cat}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Branch / Plant Location (Comma separated or ALL)
+                      Branch / Plant Location
                     </label>
-                    <input 
-                      list="branches-list"
-                      value={editingRule.branch}
+                    <select 
+                      value={editingRule.branch || 'ALL'}
                       onChange={e => setEditingRule({ ...editingRule, branch: e.target.value })}
-                      placeholder="e.g. TN-CBE-PROZONE-MALL, TN-OOTY, ALL..."
-                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                    >
+                      {availableBranches.map(br => (
+                        <option key={br} value={br}>{br === 'ALL' ? 'ALL Locations' : br}</option>
+                      ))}
+                    </select>
                   </div>
+
+                  {/* TARGET WORKFLOW 3-WAY MAPPING BLOCK FOR CHECKLIST */}
+                  {(() => {
+                    const targetWfObj = workflows.find(w => w.profile_name === editingRule.workflow_profile || w.workflow_code === editingRule.workflow_profile);
+                    const categories = Array.from(new Set(workflows.map(w => w.workflow_category).filter(Boolean)));
+                    return (
+                      <div className="md:col-span-2 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 mt-1 space-y-2.5">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
+                          <div className="flex items-center gap-1.5">
+                            <GitMerge className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider">
+                              Target Workflow 3-Way Mapping
+                            </span>
+                          </div>
+                          {targetWfObj && (
+                            <span className="text-[9px] font-mono font-black bg-emerald-600 text-white px-2 py-0.5 rounded shadow-2xs">
+                              Code: {targetWfObj.workflow_code || 'WF-837'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* ROW 1: WORKFLOW CATEGORY FILTER */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            1. Target Workflow Category (Filter)
+                          </label>
+                          <select
+                            value={chkWfCategoryFilter}
+                            onChange={e => setChkWfCategoryFilter(e.target.value)}
+                            className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 focus:border-emerald-500 outline-none shadow-2xs"
+                          >
+                            <option value="ALL">All Categories ({workflows.length} Workflows)</option>
+                            {categories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* ROW 2: TARGET WORKFLOW PROFILE & MAPPED CODE */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                          <div className="md:col-span-2">
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              2. Target Workflow Profile
+                            </label>
+                            <select
+                              value={editingRule.workflow_profile || 'ALL'}
+                              onChange={e => {
+                                const newWfProf = e.target.value;
+                                const stg = editingRule.stage_name || 'Attachment Status';
+                                const autoName = `CHK_${newWfProf.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)}_${stg.replace(/\s+/g, '_')}`;
+                                setEditingRule(prev => ({
+                                  ...prev,
+                                  workflow_profile: newWfProf,
+                                  rule_name: (!prev.rule_name || prev.rule_name.startsWith('CHK_') || prev.rule_name.startsWith('tmp-')) ? autoName : prev.rule_name
+                                }));
+                              }}
+                              className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-emerald-900 focus:border-emerald-500 outline-none shadow-2xs"
+                            >
+                              <option value="ALL">ALL Workflows (Global)</option>
+                              {workflows
+                                .filter(w => chkWfCategoryFilter === 'ALL' || w.workflow_category === chkWfCategoryFilter)
+                                .map(w => (
+                                  <option key={w.profile_name} value={w.profile_name}>
+                                    [{w.workflow_code || 'WF-837'}] {w.profile_name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              3. Workflow Code
+                            </label>
+                            <div className="w-full text-[11px] py-1.5 px-2.5 border border-emerald-200/80 rounded-lg bg-white font-mono font-black text-emerald-700 flex items-center justify-between shadow-2xs h-7.5">
+                              <span className="truncate">{targetWfObj ? (targetWfObj.workflow_code || 'WF-837') : (editingRule.workflow_profile === 'ALL' ? 'GLOBAL (ALL)' : 'Unmapped')}</span>
+                              <span className="text-[7.5px] font-sans text-emerald-600 font-bold bg-emerald-100 px-1 py-0.2 rounded border border-emerald-300 shrink-0">Linked</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* SECTION 2: CHECKLIST ITEMS */}
-              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
                     2. Verification Checklist Items ({(editingRule.itemsList || []).length})
                   </span>
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 cursor-pointer select-none">
                     <input 
                       type="checkbox"
                       checked={editingRule.is_mandatory !== false}
@@ -846,38 +1009,38 @@ export default function ChecklistConditionBuilder() {
                     onChange={e => setNewChecklistText(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(newChecklistText); } }}
                     placeholder="Type new verification requirement (e.g. Verify Seal and Signature)..."
-                    className="flex-1 text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    className="flex-1 text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                   <button 
                     type="button"
                     onClick={() => addChecklistItem(newChecklistText)}
                     disabled={!newChecklistText.trim()}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs disabled:opacity-50 cursor-pointer shrink-0 transition"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-xs disabled:opacity-50 cursor-pointer shrink-0 transition"
                   >
                     + Add Item
                   </button>
                 </div>
 
                 {/* Current Items List */}
-                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                   {(editingRule.itemsList || []).length === 0 ? (
-                    <div className="p-4 text-center text-slate-400 text-xs italic bg-white rounded-lg border border-slate-200">
+                    <div className="p-3 text-center text-slate-400 text-[11px] italic bg-white rounded-lg border border-slate-200">
                       No checklist items added yet. Pick from the presets below or type above.
                     </div>
                   ) : (
                     editingRule.itemsList.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-3xs group">
+                      <div key={idx} className="flex items-center justify-between bg-white py-1.5 px-2.5 rounded-lg border border-slate-200/80 shadow-3xs group">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                          <span className="text-xs font-medium text-slate-800">{item}</span>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="text-[11px] font-semibold text-slate-800">{item}</span>
                         </div>
                         <button 
                           type="button" 
                           onClick={() => removeChecklistItem(idx)}
-                          className="p-1 text-rose-400 hover:text-rose-600 rounded transition cursor-pointer"
+                          className="p-0.5 text-rose-400 hover:text-rose-600 rounded transition cursor-pointer"
                           title="Remove Item"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     ))
@@ -885,17 +1048,17 @@ export default function ChecklistConditionBuilder() {
                 </div>
 
                 {/* Quick Insert from Master Library */}
-                <div className="pt-2.5 border-t border-slate-200/80">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">
+                <div className="pt-2 border-t border-slate-200/80">
+                  <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
                     Quick Pick from Master Checklist Library:
                   </span>
-                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
                     {MASTER_CHECKLIST_LIBRARY.map((libItem, idx) => (
                       <button 
                         key={idx}
                         type="button"
                         onClick={() => addChecklistItem(libItem)}
-                        className="text-[9px] font-bold text-slate-700 hover:text-emerald-700 bg-white hover:bg-emerald-50 px-2 py-1 rounded-md border border-slate-200/80 transition-colors shadow-3xs cursor-pointer"
+                        className="text-[8.5px] font-semibold text-slate-700 hover:text-emerald-700 bg-white hover:bg-emerald-50 px-1.5 py-0.5 rounded border border-slate-200/80 transition-colors shadow-3xs cursor-pointer"
                       >
                         + {libItem}
                       </button>
