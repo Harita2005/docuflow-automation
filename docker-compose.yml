@@ -8,7 +8,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=mssql+pymssql://sa:Admin%401234@host.docker.internal:1433/DAAS_DB
+      - DATABASE_URL=${DATABASE_URL:-mssql+pymssql://sa:Admin%401234@host.docker.internal:1433/DocuFlowDB}
       - SECRET_KEY=super-secret-daas-jwt-key-2026-production
       - FRONTEND_URL=http://localhost:8085
       - PDF_STORAGE_PATH=/app/stored_pdfs

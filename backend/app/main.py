@@ -156,6 +156,30 @@ app = FastAPI(
 def startup_event():
     try:
         db = SessionLocal()
+        
+        # Seed core default users if missing
+        from app.auth import get_password_hash
+        seed_users = [
+            ("admin", "admin@company.com", "Admin"),
+            ("YUVASREE", "yuvasree@company.com", "Employee"),
+            ("Nattudurai", "nattudurai@company.com", "Approver"),
+            ("VIGNESH", "vignesh@company.com", "Finance"),
+            ("VARUNAN", "varunan@company.com", "Audit"),
+            ("KUMAR", "kumar@company.com", "Approver"),
+            ("ANBU", "anbu@company.com", "Approver")
+        ]
+        for uname, uemail, urole in seed_users:
+            u_exists = db.query(User).filter(User.username == uname).first()
+            if not u_exists:
+                db.add(User(
+                    username=uname,
+                    email=uemail,
+                    hashed_password=get_password_hash("password123"),
+                    role=urole,
+                    is_active=True
+                ))
+        db.commit()
+
         user_count = db.query(User).count()
         wf_count = db.query(WorkflowProfile).count()
         inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
