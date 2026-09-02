@@ -354,18 +354,19 @@ export default function DocumentDetails({
     }
 
     // 1. Check matched scope override
-    if (fieldPermissions[matchedScope]?.[role]?.[fieldId]) {
-      return fieldPermissions[matchedScope][role][fieldId];
+    const perms = fieldPermissions as Record<string, any>;
+    if (perms[matchedScope]?.[role]?.[fieldId]) {
+      return perms[matchedScope][role][fieldId];
     }
 
     // 2. Check Global Master policy
-    if (fieldPermissions.GLOBAL?.[role]?.[fieldId]) {
-      return fieldPermissions.GLOBAL[role][fieldId];
+    if (perms.GLOBAL?.[role]?.[fieldId]) {
+      return perms.GLOBAL[role][fieldId];
     }
 
     // 3. Fallback for legacy flat config
-    if (fieldPermissions[role]?.[fieldId]) {
-      return fieldPermissions[role][fieldId];
+    if (perms[role]?.[fieldId]) {
+      return perms[role][fieldId];
     }
 
     // 4. Safe baseline fallback

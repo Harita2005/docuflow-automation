@@ -549,7 +549,7 @@ export default function WorkTrackerPage({
                           {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
                         </span>
                         <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                          {displayPaymentTerms(doc.payment_terms)}
+                          {displayPaymentTerms(doc.payment_terms || "")}
                         </span>
                       </div>
                     </td>
