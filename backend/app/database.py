@@ -56,8 +56,8 @@ if "mssql" in db_url:
                 fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
                 engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
             else:
-                print(f"[Database] MS SQL Server container initializing (attempt {attempt}/{max_attempts}: {e}). Waiting 5 seconds...")
-                time.sleep(5)
+                print(f"[Database] MS SQL Server container initializing (attempt {attempt}/{max_attempts}: {e}). Waiting 2 seconds...")
+                time.sleep(2)
 else:
     try:
         engine = create_engine(db_url, **engine_kwargs)
