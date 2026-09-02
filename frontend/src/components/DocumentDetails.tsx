@@ -39,7 +39,9 @@ import {
   ExternalLink,
   RefreshCw,
   FileSpreadsheet,
-  Upload
+  Upload,
+  XCircle,
+  PauseCircle
 } from "lucide-react";
 import { DbInvoice, InvoiceLineItem, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDateTime, formatTimeOnly } from "../utils/formatters";
