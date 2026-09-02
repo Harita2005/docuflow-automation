@@ -1,90 +1,144 @@
-# 🚀 Docuflow Automation
+# DocuFlow Automation Enterprise Platform
 
-<p align="center">
-  <strong>An Enterprise-Grade, AI-Powered Intelligent Document Processing & Workflow Engine</strong>
-</p>
+DocuFlow Automation is an enterprise-grade Document Processing, Policy Compliance Engine, and Multi-Stage Workflow Orchestration Platform designed for high-volume corporate document processing, financial verification, and ERP ledger reconciliation.
 
-Docuflow Automation is a full-stack, state-of-the-art platform designed to completely automate document-heavy workflows. By combining a beautiful modern UI with local, privacy-first Large Language Models (LLMs), Docuflow extracts critical data from unstructured documents and routes them through custom, visual business logic—all without your sensitive data ever leaving your infrastructure.
-
-## ✨ Why Docuflow?
-
-* 🔒 **100% Data Privacy (On-Prem AI):** Powered by local LLMs via Ollama, ensuring compliance with strict data privacy regulations (GDPR, HIPAA). No API keys, no data sharing.
-* 🧠 **Zero-Shot AI Extraction:** Say goodbye to brittle OCR templates. Our Python-based extraction engine uses Llama-3.2 to intelligently understand and extract data from unstructured PDFs and images.
-* ⚡ **Visual Workflow Builder:** A powerful drag-and-drop interface (built on React Flow) to construct complex, conditional routing and approval chains without writing a single line of code.
-* 📊 **Real-Time Analytics:** Live dashboard with instant WebSocket (Socket.io) updates, giving you a bird's-eye view of your organization's entire operational pipeline.
-* 🚀 **Modern Tech Stack:** Built for performance and scale using React 19, Node.js, Prisma, and a sleek Tailwind CSS / Material UI design system.
-
-## 🛠️ Architecture & Tech Stack
-
-**Frontend:** React 19, Vite, TailwindCSS v4, Material UI, React Flow, Zustand, Recharts, Framer Motion  
-**Backend:** Node.js, Express, Prisma (ORM), Socket.io, JWT Authentication  
-**AI & Processing:** Python, Local LLM (Ollama - Llama 3.2 / 3.1:8b)
+The platform combines a modern React interface with a high-performance Python FastAPI backend, offering real-time workflow execution, condition-based policy matrix routing, strict field-level access control, and seamless ERP data integration (SAP S/4HANA and MS SQL Server).
 
 ---
 
-## 🚀 Getting Started
+## Executive System Overview
 
-This repository contains both the React frontend and the Node.js/Python backend. Because the database file (`dev.db`) is included, you do not need to run any seeding scripts—it will work perfectly with all test users, templates, and rules pre-configured right out of the box!
+* **Multi-Stage Workflow Orchestration**: Enables customizable, multi-tier approval chains with role assignment, delegated approvers, SLA monitoring, and dynamic stage routing.
+* **Policy Compliance & Condition Matrix Engine**: Dynamically evaluates routing rules based on organizational metadata including Company Division, Branch / Plant Location, Document Category, and Invoice Financial Amounts.
+* **Enterprise ERP Integration**: Bidirectional data synchronization supporting live reconciliation with SAP S/4HANA and MS SQL Server database ledgers.
+* **Security & Access Control (RBAC & FLAC)**: Implements Role-Based Access Control and Field-Level Access Control to enforce field visibility, edit rights, and active reviewer collision locking.
+* **Document Management & Compression**: Native PDF processing powered by PyMuPDF, providing document viewing, attachment management, and stream optimization.
+* **Auditability & Traceability**: Comprehensive audit logging recording user actions, sign-offs, timestamps, and compliance verification checkpoints.
+
+---
+
+## Technical Stack Architecture
+
+### Backend Services
+* **Framework**: Python FastAPI 0.110+
+* **ORM & Database Connection**: SQLAlchemy 2.0+
+* **Database Management System**: MS SQL Server (Production) / SQLite (Development)
+* **Authentication**: OAuth2 JWT Bearer Tokens with bcrypt password encryption
+* **Document & Image Engine**: PyMuPDF (fitz), Pillow, ReportLab
+
+### Frontend Services
+* **Core Framework**: React 19, TypeScript
+* **Build Tooling**: Vite 6
+* **Styling**: Tailwind CSS v4, Lucide React Icon Library
+* **Visualization & Analytics**: Recharts, React Flow
+
+---
+
+## Installation & Setup Guide
 
 ### Prerequisites
-- Node.js (v18+)
-- Python 3.9+
-- Git
-- **Ollama** (Required for the local AI Extraction Engine. You must have Ollama installed and running `llama3.2` or `llama3.1:8b` locally).
-
-### 1. Backend Setup (Server & AI Extractor)
-
-Open a terminal and navigate to the `backend` folder:
-```bash
-cd backend
-```
-
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-2. **Set up Python for Local AI OCR:**
-   ```bash
-   python -m venv venv
-   # Activate the virtual environment:
-   # On Windows:
-   venv\Scripts\activate
-   # On Mac/Linux:
-   source venv/bin/activate
-   
-   pip install -r requirements.txt
-   ```
-3. **Environment Variables:**
-   Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-4. **Start the backend server:**
-   ```bash
-   npm start
-   ```
-   *The server will start on port 3000.*
+* Python 3.10 or higher
+* Node.js v18.0 or higher
+* MS SQL Server (for production database storage)
+* Git
 
 ---
 
-### 2. Frontend Setup (React UI)
+### Backend Setup
 
-Open a **new** terminal and navigate to the `frontend` folder:
-```bash
-cd frontend
-```
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
 
-1. **Install dependencies:**
+2. Create and activate a Python virtual environment:
+   ```bash
+   python -m venv venv
+   
+   # Windows (PowerShell):
+   .\venv\Scripts\Activate.ps1
+   
+   # Linux / macOS:
+   source venv/bin/activate
+   ```
+
+3. Install required Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Configure environment variables in `.env`:
+   ```env
+   PROJECT_NAME="DocuFlow Automation API"
+   DATABASE_URL="mssql+pyodbc://sa:YourPassword@localhost:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server"
+   SECRET_KEY="your-corporate-jwt-secret-key"
+   ACCESS_TOKEN_EXPIRE_MINUTES=43200
+   ```
+
+5. Launch the backend server:
+   ```bash
+   python run.py
+   ```
+   *The FastAPI server runs on port 3000.*
+
+---
+
+### Frontend Setup
+
+1. Open a new terminal and navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+
+2. Install Node dependencies:
    ```bash
    npm install
    ```
-2. **Start the development server:**
+
+3. Start the Vite development server:
    ```bash
    npm run dev
    ```
-   *The UI will run on port 5173 (usually http://localhost:5173).*
+   *The application will run at http://localhost:5173.*
 
-### 🔐 Default Login Credentials
-Since the database is pre-populated, you can log in immediately to explore the platform:
-- **Username:** `admin@initech.com`
-- **Password:** `password123`
+4. Build for production deployment:
+   ```bash
+   npm run build
+   ```
+
+---
+
+## Production Deployment Architecture
+
+For corporate production deployments, DocuFlow recommends:
+* **Web Server / Reverse Proxy**: Nginx configured with SSL/TLS termination, proxying requests to Uvicorn and serving static React assets.
+* **Application Server**: Uvicorn running under Gunicorn supervisor process.
+* **Database**: High-availability MS SQL Server instance with automated backup retention schedules.
+
+---
+
+## API Architecture Overview
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/auth/login` | `POST` | Authenticates users and issues JWT access tokens. |
+| `/api/documents` | `GET` / `POST` | Fetches document ledgers or uploads new invoice records. |
+| `/api/workflows/approve` | `POST` | Records stage sign-offs and advances workflow routing. |
+| `/api/workflows/reject` | `POST` | Executes rejection rules and returns documents to prior stages. |
+| `/api/admin/routing-rules` | `GET` / `POST` | Manages policy matrix routing rules and company thresholds. |
+| `/api/admin/publish` | `POST` | Publishes draft workflow and condition matrices to live production. |
+
+---
+
+## Data Privacy & Corporate Compliance
+
+DocuFlow Automation is designed for enterprise data security:
+* **On-Premise Infrastructure**: All document extraction, business logic, and database operations execute locally within corporate network boundaries.
+* **No Unsanctioned Third-Party API Calls**: External data transmission is restricted to configured internal corporate ERP hosts.
+* **Session Persistence**: Access tokens utilize configurable corporate expiry periods (default 30 days) to prevent session interruption during active document review.
+
+---
+
+## License & Corporate Information
+
+Confidential and Proprietary. Copyright (c) Enterprise Operations. All rights reserved.
