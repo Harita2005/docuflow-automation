@@ -1,6 +1,6 @@
-# DocuFlow Automation Enterprise Platform
+# Document Approval Automation System - DAAS
 
-DocuFlow Automation is an enterprise-grade Document Processing, Policy Compliance Engine, and Multi-Stage Workflow Orchestration Platform designed for high-volume corporate document processing, financial verification, and ERP ledger reconciliation.
+Document Approval Automation System (DAAS) is an enterprise-grade Document Processing, Policy Compliance Engine, and Multi-Stage Workflow Orchestration Platform designed for high-volume corporate document processing, financial verification, and ERP ledger reconciliation.
 
 The platform combines a modern React interface with a high-performance Python FastAPI backend, offering real-time workflow execution, condition-based policy matrix routing, strict field-level access control, and seamless ERP data integration (SAP S/4HANA and MS SQL Server).
 

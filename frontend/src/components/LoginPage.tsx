@@ -313,10 +313,10 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
             <Layers className="h-8 w-8" />
           </div>
           <span className="font-extrabold tracking-widest text-2xl text-white font-display uppercase mt-2 drop-shadow-sm">
-            DocuFlow
+            DAAS
           </span>
           <p className="text-blue-200/80 text-xs font-medium tracking-wide max-w-xs">
-            Enterprise Invoice Lifecycle & Automated Multi-Level Approval Engine
+            Document Approval Automation System - Enterprise Engine
           </p>
         </div>
       </div>
@@ -329,7 +329,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
             <Layers className="h-5 w-5" />
           </div>
           <span className="font-extrabold text-slate-900 tracking-tight text-base font-display">
-            DocuFlow
+            DAAS
           </span>
         </div>
 

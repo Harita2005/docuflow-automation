@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "DocuFlow Automation API"
+    PROJECT_NAME: str = "Document Approval Automation System - DAAS"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"    
     # Database URL - Defaults to local SQLite, or configure MS SQL via .env

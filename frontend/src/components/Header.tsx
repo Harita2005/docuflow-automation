@@ -148,7 +148,7 @@ export default function Header({
       <div className="flex flex-col relative pl-3">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></div>
         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
-          {orgName || "DocuFlow Automation"}
+          {orgName || "DAAS - Document Approval Automation System"}
         </span>
         <h1 className="text-[12px] font-extrabold text-slate-800 tracking-tight flex items-center font-display uppercase">
           {getViewTitle()}
