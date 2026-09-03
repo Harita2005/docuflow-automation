@@ -191,17 +191,26 @@ def startup_event():
             except Exception as e:
                 print(f"[Startup] Seed notice: {e}")
 
-        # Always synchronize active stage approvers for all documents
+        # Always synchronize workflow stage definitions to designated 4 demo approvers
         from app.models import WorkflowStepDefinition
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN'}, synchronize_session=False)
+        db.commit()
+
+        # Always synchronize active stage approvers for all documents
         active_docs = db.query(Invoice).filter(Invoice.is_deleted == False).all()
         for d in active_docs:
-            if d.workflow_profile_id:
-                st = db.query(WorkflowStepDefinition).filter(
-                    WorkflowStepDefinition.profile_name == d.workflow_profile_id,
-                    WorkflowStepDefinition.stage_number == (d.current_stage or 1)
-                ).first()
-                if st and st.approver_target and st.approver_target.strip() != (d.assigned_approver or '').strip():
-                    d.assigned_approver = st.approver_target.strip()
+            stage_num = d.current_stage or 1
+            if stage_num == 1:
+                d.assigned_approver = "YUVASREE"
+            elif stage_num == 2:
+                d.assigned_approver = "Nattudurai"
+            elif stage_num == 3:
+                d.assigned_approver = "VIGNESH"
+            elif stage_num >= 4:
+                d.assigned_approver = "VARUNAN"
         db.commit()
         db.close()
     except Exception as e:

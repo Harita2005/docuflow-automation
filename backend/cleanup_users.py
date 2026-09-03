@@ -18,11 +18,16 @@ def run_server_cleanup():
     print(">>> RUNNING SERVER USER CLEANUP & WORKFLOW APPROVERS SYNC")
     print("==================================================================")
 
-    # 1. Soft-delete all sample users except the 5 designated members
-    keep_usernames = ["admin", "YUVASREE", "Nattudurai", "VIGNESH", "VARUNAN"]
-    deleted_count = db.query(User).filter(~User.username.in_(keep_usernames)).update(
-        {"is_deleted": True}, synchronize_session=False
-    )
+    # 1. Soft-delete all sample users except the 5 designated members (admin + 4 approvers)
+    keep_usernames_lower = ["admin", "yuvasree", "nattudurai", "vignesh", "varunan"]
+    all_users = db.query(User).all()
+    deleted_count = 0
+    for u in all_users:
+        if u.username and u.username.lower() not in keep_usernames_lower:
+            u.is_deleted = True
+            deleted_count += 1
+        elif u.username and u.username.lower() in keep_usernames_lower:
+            u.is_deleted = False
     db.commit()
 
     active_users = [u.username for u in db.query(User).filter(User.is_deleted == False).all()]

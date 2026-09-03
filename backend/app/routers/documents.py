@@ -729,11 +729,9 @@ def process_rejection_logic(
                 inv.assigned_approver = prev_step.approver_target
                 prev_step_name = prev_step.step_name
             else:
-                if prev_stage == 1:
-                    inv.assigned_approver = "admin, ap_executive"
+                inv.assigned_approver = "YUVASREE" if prev_stage == 1 else "Nattudurai" if prev_stage == 2 else "VIGNESH" if prev_stage == 3 else "VARUNAN"
         else:
-            if prev_stage == 1:
-                inv.assigned_approver = "admin, ap_executive"
+            inv.assigned_approver = "YUVASREE" if prev_stage == 1 else "Nattudurai" if prev_stage == 2 else "VIGNESH" if prev_stage == 3 else "VARUNAN"
                 
         if prev_stage == 1:
             inv.status = "Rejected / Returned (Attachment Status)"
