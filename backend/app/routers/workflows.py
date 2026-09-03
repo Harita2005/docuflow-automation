@@ -74,9 +74,26 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session = None) -> str:
         except Exception: db.rollback()
     return code
 
+def enforce_designated_approvers(db: Session):
+    """Ensure all workflow step definitions map to designated 4 approvers in database."""
+    try:
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+@router.post("/api/admin/workflows/sync-approvers")
+def sync_all_workflow_approvers(db: Session = Depends(get_db)):
+    enforce_designated_approvers(db)
+    return {"status": "success", "message": "All workflow step definitions synchronized to designated 4 approvers."}
+
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
 def get_all_workflow_profiles(db: Session = Depends(get_db)):
+    enforce_designated_approvers(db)
     profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.created_at.desc()).all()
     if not profiles:
         return []
