@@ -193,10 +193,10 @@ def startup_event():
 
         # Always synchronize workflow stage definitions to designated 4 demo approvers
         from app.models import WorkflowStepDefinition
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH', 'approver_type': 'Specific Employee'}, synchronize_session=False)
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN', 'approver_type': 'Specific Employee'}, synchronize_session=False)
         db.commit()
 
         # Always synchronize active stage approvers for all documents
