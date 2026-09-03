@@ -493,6 +493,7 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
     return base_root / "approved" / Path(subfolder) / filename
 
 @router.get("/stored_pdfs/{filepath:path}")
+@router.head("/stored_pdfs/{filepath:path}")
 def serve_stored_pdf(filepath: str):
     """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
     base_root = get_storage_root_path()

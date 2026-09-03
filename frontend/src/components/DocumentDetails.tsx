@@ -681,23 +681,7 @@ export default function DocumentDetails({
     ) {
       const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
       const path = isAbsolute ? rawPath : `/${rawPath}`;
-      
-      let isMounted = true;
-      fetch(encodeURI(path), { method: 'HEAD' })
-        .then(res => {
-          if (!isMounted) return;
-          const ctype = res.headers.get('content-type') || '';
-          if (res.ok && !ctype.includes('text/html')) {
-            setIframeSrc(encodeURI(path));
-          } else {
-            setIframeSrc("");
-          }
-        })
-        .catch(() => {
-          if (isMounted) setIframeSrc("");
-        });
-
-      return () => { isMounted = false; };
+      setIframeSrc(encodeURI(path));
     } else {
       setIframeSrc("");
     }
