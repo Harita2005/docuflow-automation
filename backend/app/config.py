@@ -7,12 +7,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Document Approval Automation System - DAAS"
+    PROJECT_NAME: str = "DocuFlow Automation System"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"    
-    # Database URL - Defaults to local SQLite, or configure MS SQL via .env
-    # MS SQL Example: mssql+pyodbc://sa:password@localhost:1433/SmartDocLive?driver=ODBC+Driver+17+for+SQL+Server
-    # Or pymssql: mssql+pymssql://sa:password@localhost:1433/SmartDocLive
+    # Database URL - Defaults to DocuFlowDB on MS SQL Server 192.168.179.22 or local SQLite fallback
+    # MS SQL Example: mssql+pyodbc://@192.168.179.22/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         f"sqlite:///{BASE_DIR / 'docuflow.db'}"

@@ -41,7 +41,7 @@
   },
   {
     "key": "ORGANIZATION_NAME",
-    "value": "DAAS",
+    "value": "DocuFlow",
     "description": "Organization / Company display name displayed on top header"
   }
 ]

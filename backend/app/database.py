@@ -44,13 +44,24 @@ if "mssql" in db_url:
     max_attempts = 15
     for attempt in range(1, max_attempts + 1):
         try:
-            ensure_mssql_database_exists(db_url)
+            # Connect directly to target database without altering or creating DBs
             engine = create_engine(db_url, **engine_kwargs)
             with engine.connect() as conn:
                 pass
             print(f"[Database] Successfully connected to PRIMARY MS SQL Server ({db_url.split('@')[-1]}) on attempt {attempt}.")
             break
         except Exception as e:
+            # Fallback to existence check if database is missing locally
+            try:
+                ensure_mssql_database_exists(db_url)
+                engine = create_engine(db_url, **engine_kwargs)
+                with engine.connect() as conn:
+                    pass
+                print(f"[Database] Connected to MS SQL Server after verifying database existence.")
+                break
+            except Exception:
+                pass
+            
             if attempt == max_attempts:
                 print(f"[Database ERROR] Could not connect to primary MS SQL Server after {max_attempts} attempts ({e}). Falling back to SQLite.")
                 fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
