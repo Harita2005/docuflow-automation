@@ -41,34 +41,28 @@ else:
 import time
 
 if "mssql" in db_url:
-    max_attempts = 15
-    for attempt in range(1, max_attempts + 1):
+    candidate_urls = [db_url]
+    if "mssql+pyodbc" in db_url:
+        base_clean = db_url.split("?")[0]
+        pymssql_alt = base_clean.replace("mssql+pyodbc://", "mssql+pymssql://")
+        candidate_urls.append(pymssql_alt)
+
+    connected = False
+    for target_url in candidate_urls:
         try:
-            # Connect directly to target database without altering or creating DBs
-            engine = create_engine(db_url, **engine_kwargs)
+            engine = create_engine(target_url, **engine_kwargs)
             with engine.connect() as conn:
                 pass
-            print(f"[Database] Successfully connected to PRIMARY MS SQL Server ({db_url.split('@')[-1]}) on attempt {attempt}.")
+            print(f"[Database] Successfully connected to MS SQL Server ({target_url.split('@')[-1]}).")
+            connected = True
             break
-        except Exception as e:
-            # Fallback to existence check if database is missing locally
-            try:
-                ensure_mssql_database_exists(db_url)
-                engine = create_engine(db_url, **engine_kwargs)
-                with engine.connect() as conn:
-                    pass
-                print(f"[Database] Connected to MS SQL Server after verifying database existence.")
-                break
-            except Exception:
-                pass
-            
-            if attempt == max_attempts:
-                print(f"[Database ERROR] Could not connect to primary MS SQL Server after {max_attempts} attempts ({e}). Falling back to SQLite.")
-                fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
-                engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
-            else:
-                print(f"[Database] MS SQL Server container initializing (attempt {attempt}/{max_attempts}: {e}). Waiting 2 seconds...")
-                time.sleep(2)
+        except Exception as err:
+            print(f"[Database] Connect attempt failed for target ({target_url.split('@')[-1]}): {err}")
+
+    if not connected:
+        print(f"[Database Warning] Could not connect to MS SQL Server. Falling back to SQLite.")
+        fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
+        engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
 else:
     try:
         engine = create_engine(db_url, **engine_kwargs)
