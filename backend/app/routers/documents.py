@@ -154,7 +154,10 @@ def get_all_invoices(db: Session = Depends(get_db), current_user: Optional[User]
                 WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
             ).first()
             if step_def and step_def.approver_target:
-                inv.assigned_approver = step_def.approver_target
+                targets = [step_def.approver_target.strip()]
+                if step_def.delegate_approver and step_def.delegate_approver.strip():
+                    targets.append(step_def.delegate_approver.strip())
+                inv.assigned_approver = ", ".join(targets)
 
         if not current_user or current_user.role == "admin":
             filtered_invoices.append(inv)
@@ -281,7 +284,10 @@ def get_invoice_by_id(invoice_id: str, db: Session = Depends(get_db), current_us
             WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
         ).first()
         if step_def and step_def.approver_target:
-            inv.assigned_approver = step_def.approver_target
+            targets = [step_def.approver_target.strip()]
+            if step_def.delegate_approver and step_def.delegate_approver.strip():
+                targets.append(step_def.delegate_approver.strip())
+            inv.assigned_approver = ", ".join(targets)
 
     is_curr = False
     if current_user and inv.assigned_approver:
