@@ -2421,3 +2421,71 @@ def delete_checklist_template(rule_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"success": True}
 
+
+@router.get("/api/documents/approved")
+@router.get("/api/v1/approved-documents")
+@router.get("/api/admin/approved-documents")
+def get_approved_documents(db: Session = Depends(get_db)):
+    """
+    Dedicated endpoint for demo & 3rd-party integration reading:
+    Returns all fully approved & settled documents with document numbers,
+    vendor details, totals, line items, and PDF URLs.
+    """
+    approved_docs = db.query(Invoice).filter(
+        Invoice.is_deleted == False,
+        or_(
+            Invoice.status.ilike("%approved%"),
+            Invoice.status.ilike("%settled%"),
+            Invoice.current_stage >= 4
+        )
+    ).order_by(Invoice.updated_at.desc()).all()
+
+    results = []
+    for d in approved_docs:
+        items = []
+        if isinstance(d.items, str):
+            try:
+                items = json.loads(d.items)
+            except Exception:
+                items = []
+        elif isinstance(d.items, list):
+            items = d.items
+
+        doc_num = d.invoice_number or d.doc_num or str(d.id)
+        total_tax = (d.cgst or 0.0) + (d.sgst or 0.0) + (d.igst or 0.0)
+        base_amt = (d.amount or 0.0) - total_tax if (d.amount or 0.0) >= total_tax else (d.amount or 0.0)
+
+        results.append({
+            "document_id": str(d.id),
+            "doc_key": d.doc_key or str(d.id),
+            "document_number": doc_num,
+            "document_type": d.document_type or d.category or "ACCOUNTS PAYABLE",
+            "approval_status": "APPROVED",
+            "settled": True,
+            "vendor_name": d.vendor_name or d.party_name or "N/A",
+            "vendor_code": d.vendor_code or d.party_code or "",
+            "vendor_gstin": d.vendor_gstin or d.gstin or "",
+            "grand_total": d.amount or 0.0,
+            "base_amount": round(base_amt, 2),
+            "cgst": d.cgst or 0.0,
+            "sgst": d.sgst or 0.0,
+            "igst": d.igst or 0.0,
+            "total_tax": round(total_tax, 2),
+            "invoice_date": d.invoice_date or (d.created_at.strftime("%Y-%m-%d") if d.created_at else ""),
+            "approved_by": d.assigned_approver or "VARUNAN",
+            "approved_at": d.updated_at.isoformat() if d.updated_at else "",
+            "company_code": d.division or "VCC",
+            "cost_center": d.cost_center or "CC-GENERAL",
+            "po_number": d.po_number or "N/A",
+            "pdf_url": d.file_url or f"/stored_pdfs/approved/{doc_num}.pdf",
+            "external_sync_status": d.external_sync_status or "SYNCED",
+            "external_sync_ref": d.external_sync_ref or doc_num,
+            "line_items": items
+        })
+
+    return {
+        "status": "success",
+        "total_approved": len(results),
+        "documents": results
+    }
+
