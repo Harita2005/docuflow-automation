@@ -254,14 +254,22 @@ app.include_router(events.router)
 
 @app.get("/")
 def root():
+    db_raw = settings.DATABASE_URL
+    db_target = db_raw.split("@")[-1] if "@" in db_raw else db_raw
     return {
         "status": "online",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "database": "MS SQL Server" if not settings.DATABASE_URL.startswith("sqlite") else "SQLite (Local)",
+        "database": f"MS SQL Server ({db_target})" if not db_raw.startswith("sqlite") else "SQLite (Local)",
+        "database_target": db_target,
         "docs": "/docs"
     }
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy"}
+    db_raw = settings.DATABASE_URL
+    db_target = db_raw.split("@")[-1] if "@" in db_raw else db_raw
+    return {
+        "status": "healthy",
+        "database_connected": db_target
+    }
