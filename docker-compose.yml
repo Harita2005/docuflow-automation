@@ -6,14 +6,14 @@ services:
     container_name: daas-backend
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=mssql+pyodbc://sa:Admin%401234@192.168.179.22/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes
-      - SECRET_KEY=super-secret-daas-jwt-key-2026-production
-      - FRONTEND_URL=http://localhost:8085
+      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://sa:Admin%401234@192.168.179.22/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes}
+      - SECRET_KEY=${SECRET_KEY:-super-secret-daas-jwt-key-2026-production}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8085}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
-    depends_on:
-      - db
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
