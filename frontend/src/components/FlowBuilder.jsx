@@ -14,6 +14,15 @@ const STAGE_CHECKLIST_LIBRARY = [
   "Inspect Quality Inspection Certificate & Warranty Terms"
 ];
 
+const STAGE_PRESET_OPTIONS = [
+  "Attachment Status",
+  "First Approval",
+  "Second Approval",
+  "3rd APPROVAL",
+  "IA Approval",
+  "Final Approval"
+];
+
 const getPrefixCode = (category, subCat) => {
   if (!category && !subCat) return "";
   const n = `${category || ""} ${subCat || ""}`.toUpperCase();
@@ -31,24 +40,8 @@ const getPrefixCode = (category, subCat) => {
   return "WF";
 };
 
-const getWorkflowPrefixCode = (category, subCat, index) => {
-  if (!category && !subCat) return "";
-  const n = `${category || ""} ${subCat || ""}`.toUpperCase();
-  const num = String(index + 1).padStart(3, '0');
-  
-  if (n.includes("CAPEX") || n.includes("ASSET")) return `CAPEX-${num}`;
-  if (n.includes("PURCHASE")) return `PUR-${num}`;
-  if (n.includes("SERVICE") || n.includes("MAINTENANCE")) return `SRV-${num}`;
-  if (n.includes("FREIGHT") || n.includes("LOGISTICS")) return `FRT-${num}`;
-  if (n.includes("UTILITY") || n.includes("RENT")) return `UTL-${num}`;
-  if (n.includes("STAFF") || n.includes("EXPENSE")) return `EXP-${num}`;
-  if (n.includes("GRN") || n.includes("GOODS")) return `GRN-${num}`;
-  if (n.includes("ADVANCE")) return `ADV-${num}`;
-  if (n.includes("CASH")) return `CSH-${num}`;
-  if (n.includes("EVOUCHER") || n.includes("E-VOUCHER")) return `EV-${num}`;
-  if (n.includes("JOURNAL") || n.includes("JRNL")) return `JRNL-${num}`;
-  if (n.includes("CREDITNOTE") || n.includes("CREDIT NOTE")) return `CN-${num}`;
-  if (n.includes("DEBITNOTE") || n.includes("DEBIT NOTE")) return `DN-${num}`;
+const getWorkflowPrefixCode = (category, subCat, totalWorkflowsCount = 0) => {
+  const num = String((totalWorkflowsCount || 0) + 1).padStart(3, '0');
   return `WF-${num}`;
 };
 
@@ -68,11 +61,26 @@ export default function FlowBuilder({ users = [] }) {
     }
   });
 
+  const [customStageOptions, setCustomStageOptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("docuflow_custom_stage_names");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem("docuflow_custom_categories", JSON.stringify(addedCategories));
     } catch {}
   }, [addedCategories]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("docuflow_custom_stage_names", JSON.stringify(customStageOptions));
+    } catch {}
+  }, [customStageOptions]);
 
   const [saving, setSaving] = useState(false);
   const [draggedStepIdx, setDraggedStepIdx] = useState(null);
@@ -215,12 +223,8 @@ export default function FlowBuilder({ users = [] }) {
   };
 
   const openEditor = (wf, category = null, index = 0) => {
-    let generatedCode = "";
-    if (selectedCategory && selectedSubCategory) {
-       generatedCode = getWorkflowPrefixCode(selectedCategory, selectedSubCategory, index);
-    } else if (category && selectedSubCategory) {
-       generatedCode = getWorkflowPrefixCode(category, selectedSubCategory, index);
-    }
+    const nextSeq = (workflows || []).length;
+    const generatedCode = getWorkflowPrefixCode(category || selectedCategory, selectedSubCategory, nextSeq);
 
     if (wf) {
       const cloned = JSON.parse(JSON.stringify(wf));
@@ -232,11 +236,7 @@ export default function FlowBuilder({ users = [] }) {
           ...st,
           checklist_items: Array.isArray(st.checklist_items) 
             ? st.checklist_items 
-            : (st.checklist_json ? JSON.parse(st.checklist_json) : [
-                "Verify PO & Line Items Match Invoice",
-                "Validate Tax Calculations & HSN/SAC Code",
-                "Verify Goods Receipt (GRN) & Delivery Acceptance"
-              ])
+            : (st.checklist_json ? JSON.parse(st.checklist_json) : [])
         }));
       }
       cloned.rule_action = wf.rule_action || 'WORKFLOW_ROUTE';
@@ -267,7 +267,7 @@ export default function FlowBuilder({ users = [] }) {
         auto_cancel_condition: JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'gt', value: '500000' }),
         steps: [{
           stage_number: 1,
-          step_name: 'Initial Review',
+          step_name: 'Attachment Status',
           role: 'Employee',
           approver_type: 'Specific Employee',
           approver_target: '',
@@ -277,11 +277,7 @@ export default function FlowBuilder({ users = [] }) {
           escalation_rule: '',
           target_division: '',
           target_department: '',
-          checklist_items: [
-            "Verify PO & Line Items Match Invoice",
-            "Validate Tax Calculations & HSN/SAC Code",
-            "Verify Goods Receipt (GRN) & Delivery Acceptance"
-          ]
+          checklist_items: []
         }]
       });
     }
@@ -380,9 +376,11 @@ export default function FlowBuilder({ users = [] }) {
       alert("Maximum limit of 10 approval steps reached per workflow.");
       return;
     }
+    const nextIdx = editingWorkflow.steps.length;
+    const defaultName = STAGE_PRESET_OPTIONS[nextIdx] || "Final Approval";
     const newSteps = [...editingWorkflow.steps, {
-      stage_number: editingWorkflow.steps.length + 1,
-      step_name: `Stage ${editingWorkflow.steps.length + 1}: Review`,
+      stage_number: nextIdx + 1,
+      step_name: defaultName,
       role: 'Manager',
       approver_type: 'Role Based',
       approver_target: '',
@@ -392,10 +390,7 @@ export default function FlowBuilder({ users = [] }) {
       escalation_rule: '',
       target_division: '',
       target_department: '',
-      checklist_items: [
-        "Verify Line Items & Price Calculations",
-        "Confirm Department Approval & Budget Signoff"
-      ]
+      checklist_items: []
     }];
     setEditingWorkflow({ ...editingWorkflow, steps: newSteps });
   };
@@ -754,25 +749,13 @@ export default function FlowBuilder({ users = [] }) {
               <span className="bg-blue-600 text-white h-4 w-4 rounded-full flex items-center justify-center text-[10px]">1</span> Workflow Information
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1">
+              <div className="md:col-span-2">
                 <label htmlFor="wfName" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Workflow Name <span className="text-rose-500">*</span></label>
                 <input id="wfName" required value={editingWorkflow.profile_name} onChange={e => setEditingWorkflow({...editingWorkflow, profile_name: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Invoice Approval Workflow" />
               </div>
               <div className="md:col-span-1">
                 <label htmlFor="wfCode" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Workflow Code</label>
                 <input id="wfCode" value={editingWorkflow.workflow_code || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_code: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-mono text-slate-800" placeholder="INV-APP-001" />
-              </div>
-              <div className="md:col-span-1">
-                <label htmlFor="wfCategory" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Category</label>
-                <select id="wfCategory" value={editingWorkflow.workflow_category || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_category: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800">
-                  {Array.from(new Set([...Object.keys(groupedWorkflows), 'Vendor Payment Workflows'])).map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-1">
-                <label htmlFor="wfType" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Document Type</label>
-                <input id="wfType" value={editingWorkflow.workflow_type || ''} onChange={e => setEditingWorkflow({...editingWorkflow, workflow_type: e.target.value})} className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. AP INVOICE" />
               </div>
               <div className="md:col-span-2">
                 <label htmlFor="wfDesc" className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1">Description</label>
@@ -807,13 +790,13 @@ export default function FlowBuilder({ users = [] }) {
             </div>
             
             <div className="w-full overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="pb-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-12 text-center">Step</th>
-                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-40">Stage Title</th>
-                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Assignment Strategy & Target</th>
-                    <th className="pb-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-16 text-right">Actions</th>
+                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-48">Stage Title</th>
+                    <th className="pb-2 px-4 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Assignment Strategy & Target</th>
+                    <th className="pb-2 px-2 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest w-36 text-right pr-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -835,7 +818,83 @@ export default function FlowBuilder({ users = [] }) {
                         </div>
                       </td>
                       <td className="py-2.5 px-2 align-top">
-                        <input value={step.step_name} onChange={e => updateStep(idx, 'step_name', e.target.value)} className="w-full text-xs px-2 py-1.5 bg-slate-50/50 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-semibold text-slate-800" placeholder="e.g. Finance Review" />
+                        {(() => {
+                          const allPresets = Array.from(new Set([...STAGE_PRESET_OPTIONS, ...customStageOptions]));
+                          const isUnknown = step.step_name && !allPresets.includes(step.step_name);
+                          const isCustomMode = step._isCustomInput || isUnknown;
+
+                          if (isCustomMode) {
+                            return (
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  value={step.step_name || ''}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    updateStep(idx, 'step_name', val);
+                                    if (val.trim() && !customStageOptions.includes(val.trim())) {
+                                      setCustomStageOptions(prev => [...prev, val.trim()]);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (step.step_name && step.step_name.trim()) {
+                                      const clean = step.step_name.trim();
+                                      if (!customStageOptions.includes(clean)) {
+                                        setCustomStageOptions(prev => [...prev, clean]);
+                                      }
+                                    }
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      if (step.step_name && step.step_name.trim()) {
+                                        const clean = step.step_name.trim();
+                                        if (!customStageOptions.includes(clean)) {
+                                          setCustomStageOptions(prev => [...prev, clean]);
+                                        }
+                                        updateStep(idx, '_isCustomInput', false);
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Type new custom stage name..."
+                                  className="w-full text-xs px-2 py-1.5 bg-white border border-blue-500 rounded outline-none font-bold text-blue-900 shadow-2xs"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateStep(idx, '_isCustomInput', false)}
+                                  className="text-[9px] font-bold text-blue-600 hover:text-blue-800 underline block"
+                                >
+                                  ← Back to Stage Presets
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <select
+                              value={step.step_name || 'Attachment Status'}
+                              onChange={e => {
+                                if (e.target.value === '__ADD_CUSTOM__') {
+                                  updateStep(idx, '_isCustomInput', true);
+                                  updateStep(idx, 'step_name', '');
+                                } else {
+                                  updateStep(idx, 'step_name', e.target.value);
+                                }
+                              }}
+                              className="w-full text-xs px-2 py-1.5 bg-slate-50/90 border border-slate-200 rounded focus:bg-white focus:border-blue-500 outline-none font-bold text-blue-900 cursor-pointer shadow-2xs"
+                            >
+                              <optgroup label="Standard Stage Statuses">
+                                {allPresets.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Custom Option">
+                                <option value="__ADD_CUSTOM__">+ Add Custom Stage Name...</option>
+                              </optgroup>
+                            </select>
+                          );
+                        })()}
                         <div className="flex items-center gap-1.5 mt-1">
                           <button
                             type="button"
@@ -852,7 +911,7 @@ export default function FlowBuilder({ users = [] }) {
                           </button>
                         </div>
                       </td>
-                      <td className="py-2.5 px-2 align-middle">
+                      <td className="py-2.5 px-4 align-middle">
                         {(() => {
                           const target = step.approver_target || '';
                           const isPool = target.includes(',') || step.approver_type === 'Approval Pool';
@@ -893,7 +952,7 @@ export default function FlowBuilder({ users = [] }) {
                           );
                         })()}
                       </td>
-                      <td className="py-3 align-top text-right pr-2">
+                      <td className="py-2.5 px-2 align-middle text-right pr-3 w-36">
                         <div className="flex items-center justify-end gap-1">
                           <button type="button" onClick={() => setConfiguringStepIndex(idx)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label="Configure Step">
                             <Settings2 className="h-4 w-4" />

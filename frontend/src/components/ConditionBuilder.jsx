@@ -127,6 +127,9 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
       };
     }
     const matchedWf = workflows.find(w => w.profile_name === targetRule.target_workflow_id || w.workflow_code === targetRule.target_workflow_id);
+    if (matchedWf) {
+      targetRule.rule_name = matchedWf.profile_name;
+    }
     setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
     setEditingRule(targetRule);
   };
@@ -525,20 +528,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                   className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="ruleCategory" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Rule Policy Group (Matrix Folder)
-                </label>
-                <select id="ruleCategory" 
-                  value={editingRule.rule_category || ''}
-                  onChange={e => setEditingRule({...editingRule, rule_category: e.target.value})}
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 outline-none bg-white font-medium"
-                >
-                  {Array.from(new Set([...Object.keys(groupedRules), 'Vendor Payment Workflows'])).map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+
               <div>
                 <label htmlFor="docType" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Document Type</label>
                 <input id="docType" 
@@ -548,18 +538,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                   placeholder="e.g. AP INVOICE"
                 />
               </div>
-              <div>
-                <label htmlFor="evalOn" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Evaluate On <span className="text-rose-500">*</span></label>
-                <select id="evalOn" 
-                  value={parsedJson.evaluate_on || 'Invoice Amount'}
-                  onChange={e => updateJson({ evaluate_on: e.target.value })}
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 outline-none bg-white"
-                >
-                  <option>Invoice Amount</option>
-                  <option>Vendor Name</option>
-                  <option>Cost Center</option>
-                </select>
-              </div>
+
               <div className="md:col-span-2">
                 <label htmlFor="condDesc" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Description</label>
                 <input id="condDesc" 
@@ -615,7 +594,12 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         </label>
                         <select
                           value={editingRule.target_workflow_id || ''}
-                          onChange={e => setEditingRule({ ...editingRule, target_workflow_id: e.target.value })}
+                          onChange={e => {
+                            const newTarget = e.target.value;
+                            const matchedWf = workflows.find(w => w.profile_name === newTarget || w.workflow_code === newTarget);
+                            const updatedName = matchedWf ? matchedWf.profile_name : newTarget;
+                            setEditingRule({ ...editingRule, target_workflow_id: newTarget, rule_name: updatedName });
+                          }}
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-blue-900 focus:border-blue-500 outline-none shadow-2xs"
                         >
                           <option value="">-- Select Target Workflow --</option>
@@ -735,7 +719,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                           ))}
                         </optgroup>
                         <optgroup label="Custom Actions">
-                          <option value="__ADD_NEW_FIELD__">➕ + Add Custom Field...</option>
+                          <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
                         </optgroup>
                       </select>
                     </div>
@@ -901,10 +885,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Name</p>
               <p className="text-xs font-bold text-slate-800">{editingRule.rule_name || '-'}</p>
             </div>
-            <div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Evaluate On</p>
-              <p className="text-xs font-bold text-slate-800">{parsedJson.evaluate_on || '-'}</p>
-            </div>
+
             <div>
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Type</p>
               <p className="text-xs font-bold text-slate-800">{parsedJson.condition_type || '-'}</p>

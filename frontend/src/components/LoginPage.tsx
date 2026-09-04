@@ -313,7 +313,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
             <Layers className="h-8 w-8" />
           </div>
           <span className="font-extrabold tracking-widest text-2xl text-white font-display uppercase mt-2 drop-shadow-sm">
-            DAAS
+            DocuFlow
           </span>
           <p className="text-blue-200/80 text-xs font-medium tracking-wide max-w-xs">
             Document Approval Automation System - Enterprise Engine
@@ -329,7 +329,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
             <Layers className="h-5 w-5" />
           </div>
           <span className="font-extrabold text-slate-900 tracking-tight text-base font-display">
-            DAAS
+            DocuFlow
           </span>
         </div>
 
@@ -393,7 +393,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3.5 mt-4 bg-slate-900 hover:bg-blue-600 disabled:bg-slate-400 text-white font-semibold text-sm rounded-xl transition-all duration-300 shadow-lg shadow-slate-900/20 hover:shadow-blue-600/30 flex items-center justify-center space-x-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-500/30 group"
+                  className="w-full py-3.5 mt-4 bg-blue-900 hover:bg-blue-800 disabled:bg-slate-400 text-white font-semibold text-sm rounded-xl transition-all duration-300 shadow-lg shadow-blue-900/30 hover:shadow-blue-800/40 flex items-center justify-center space-x-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-500/30 group"
                 >
                   {loading ? (
                     <div className="flex items-center space-x-2">
@@ -638,7 +638,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
                   disabled={loading || otpCode.length < 6}
                   className={`w-full py-3.5 mt-2 text-white font-bold text-sm rounded-xl transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-500/30 ${
                     otpCode.length === 6
-                      ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/30 ring-2 ring-blue-400/50"
+                      ? "bg-blue-900 hover:bg-blue-800 shadow-blue-900/30 ring-2 ring-blue-500/50"
                       : "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
                   }`}
                 >

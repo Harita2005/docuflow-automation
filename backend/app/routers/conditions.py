@@ -63,6 +63,28 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
 
     db.commit()
     db.refresh(rule)
+
+    # Re-evaluate all pending unapproved documents against updated rules
+    try:
+        from app.models import Document, WorkflowStepDefinition
+        from app.services.rules_engine import evaluate_business_rules_full
+
+        pending_docs = db.query(Document).filter(Document.status == "Pending Approval", Document.is_deleted == False).all()
+        for p_doc in pending_docs:
+            rule_res = evaluate_business_rules_full(db, p_doc)
+            if rule_res and rule_res.get("target_workflow_id"):
+                wf_name = rule_res["target_workflow_id"]
+                p_doc.workflow_profile_id = wf_name
+                steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == wf_name).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+                p_doc.total_stages = len(steps) if steps else 2
+                if steps:
+                    cur_stage = p_doc.current_stage or 1
+                    stage_idx = max(0, min(cur_stage - 1, len(steps) - 1))
+                    p_doc.assigned_approver = steps[stage_idx].approver_target
+        db.commit()
+    except Exception as eval_err:
+        print("[Conditions Router] Notice during pending doc re-evaluation:", eval_err)
+
     return rule
 @router.delete("/api/admin/conditions/{rule_id}")
 @router.delete("/api/admin/routing-rules/{rule_id}")

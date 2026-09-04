@@ -736,9 +736,9 @@ def process_rejection_logic(
                 inv.assigned_approver = prev_step.approver_target
                 prev_step_name = prev_step.step_name
             else:
-                inv.assigned_approver = "YUVASREE" if prev_stage == 1 else "Nattudurai" if prev_stage == 2 else "VIGNESH" if prev_stage == 3 else "VARUNAN"
+                inv.assigned_approver = None
         else:
-            inv.assigned_approver = "YUVASREE" if prev_stage == 1 else "Nattudurai" if prev_stage == 2 else "VIGNESH" if prev_stage == 3 else "VARUNAN"
+            inv.assigned_approver = None
                 
         if prev_stage == 1:
             inv.status = "Rejected / Returned (Attachment Status)"
@@ -849,26 +849,30 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions."
         )
     
-    # 2. Check if current user is authorized to act on the current stage
-    if user and user.role != "admin" and inv.assigned_approver:
+    # 2. Strict assigned approver enforcement: ONLY the assigned person/pool member can approve
+    if inv.assigned_approver and inv.assigned_approver.strip():
         approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
-        user_handles = [
-            user.username.lower(),
-            user.employee_id.lower(),
-            user.employee_name.lower(),
-            user.email.lower()
-        ]
+        user_handles = []
+        if user:
+            user_handles = [
+                (user.username or "").lower(),
+                (user.employee_id or "").lower(),
+                (user.employee_name or "").lower(),
+                (user.name or "").lower(),
+                (user.email or "").lower()
+            ]
+            user_handles = [h for h in user_handles if h]
         
         is_authorized = False
         for handle in user_handles:
-            if handle in approvers or any(handle in app or app in handle for app in approvers):
+            if handle in approvers or any(handle == app or handle in app or app in handle for app in approvers):
                 is_authorized = True
                 break
                 
         if not is_authorized:
             raise HTTPException(
                 status_code=403,
-                detail=f"You are not authorized to approve this document at Stage {inv.current_stage or 1}. It is currently assigned to: {inv.assigned_approver}. Either another pool member has already signed off, or the workflow has advanced."
+                detail=f"Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document."
             )
 
     if require_compliance and db:
@@ -1429,8 +1433,7 @@ async def upload_document(
     rule_name = rule_eval.get("rule_name", "Default Policy") if rule_eval else "Default Policy"
 
     if not matched_wf:
-        default_wf = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
-        matched_wf = default_wf.profile_name if default_wf else "VCC_PURCHASE_SR10"
+        matched_wf = None
 
     new_inv.workflow_profile_id = matched_wf
     new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
@@ -1482,14 +1485,10 @@ async def upload_document(
             notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
         ))
 
-    from app.routers.sync import generate_compliance_checklist_for_category
-    checklist_items = generate_compliance_checklist_for_category(
-        new_inv.category, 
-        new_inv.document_type, 
-        new_inv.division, 
-        new_inv.plant,
-        document_id=new_inv.id
-    )
+    first_stage = "Attachment Status"
+    if steps and len(steps) > 0 and steps[0].step_name:
+        first_stage = steps[0].step_name
+    checklist_items = resolve_checklist_items(db, new_inv, first_stage)
     new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
     db.add(new_inv)
@@ -1604,13 +1603,15 @@ async def upload_and_route(
             stage="Stage 1",
             notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."
         ))
-    checklist_items = generate_compliance_checklist_for_category(
-        inv.category, 
-        inv.document_type, 
-        inv.division, 
-        inv.plant,
-        document_id=inv.id
-    )
+    first_stage = "Attachment Status"
+    if inv.current_stage and inv.workflow_profile_id:
+        curr_step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == inv.current_stage
+        ).first()
+        if curr_step and curr_step.step_name:
+            first_stage = curr_step.step_name
+    checklist_items = resolve_checklist_items(db, inv, first_stage)
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
     db.commit()
@@ -2168,9 +2169,10 @@ def get_erp_po_details(po_number: str, db: Session = Depends(get_db)):
 
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
+    combined_items: List[str] = []
+
     # =========================================================================
-    # PRIORITY 0 (DIRECT WORKFLOW STAGE CONFIGURATION):
-    # Direct stage checklist configured on the workflow step in FlowBuilder UI
+    # 1. DIRECT WORKFLOW STAGE CONFIGURATION (FlowBuilder UI)
     # =========================================================================
     if inv.workflow_profile_id:
         step_def = db.query(WorkflowStepDefinition).filter(
@@ -2180,16 +2182,16 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         if step_def and step_def.checklist_json:
             try:
                 parsed = json.loads(step_def.checklist_json)
-                if isinstance(parsed, list) and len(parsed) > 0:
-                    clean_items = [str(x).strip() for x in parsed if str(x).strip()]
-                    if clean_items:
-                        return clean_items
+                if isinstance(parsed, list):
+                    for x in parsed:
+                        clean = str(x).strip()
+                        if clean and clean not in combined_items:
+                            combined_items.append(clean)
             except Exception:
                 pass
 
     # =========================================================================
-    # PRIORITY 1: Specific Category / Company Condition Rules
-    # (Matches Company == X, DocType/Category == Y, Branch == Z, Stage/Status == S)
+    # 2. CHECKLIST MATRIX RULES (Matches Company, Category, Cost Center, Branch)
     # =========================================================================
     matching_rules = db.query(ChecklistRule).filter(
         ChecklistRule.stage_name.ilike(stage_name.strip()),
@@ -2199,14 +2201,12 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
     scored_rules = []
     for r in matching_rules:
         score = score_checklist_rule(r, inv)
-        # Only consider condition rules with actual matching specificity (score > 0)
         if score > 0:
             scored_rules.append((score, r))
         
     if scored_rules:
         max_score = max(s[0] for s in scored_rules)
         best_rules = [r for score, r in scored_rules if score == max_score]
-        res_items = []
         for r in best_rules:
             txt = (r.item_text or "").strip()
             if " || " in txt:
@@ -2218,54 +2218,47 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
 
             for sub_it in sub_items:
                 clean = sub_it.strip()
-                if clean and clean not in res_items:
-                    res_items.append(clean)
-        if res_items:
-            return res_items
+                if clean and clean not in combined_items:
+                    combined_items.append(clean)
 
     # =========================================================================
-    # PRIORITY 2 (FALLBACK): Workflow-Based Default Checklist (Sheet 4)
-    # (Matches WorkflowProfile == P, Stage/Status == S)
+    # 3. WORKFLOW PROFILE TEMPLATES (If no items found yet)
     # =========================================================================
-    if inv.workflow_profile_id:
+    if not combined_items and inv.workflow_profile_id:
         tpl_items = db.query(ChecklistTemplate).filter(
             ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
             ChecklistTemplate.stage_name.ilike(stage_name.strip()),
             ChecklistTemplate.is_active == True
         ).order_by(ChecklistTemplate.sequence_order.asc()).all()
         if tpl_items:
-            res = []
             for it in tpl_items:
                 c = (it.item_text or "").strip()
-                if c and c not in res:
-                    res.append(c)
-            if res:
-                return res
+                if c and c not in combined_items:
+                    combined_items.append(c)
 
-    # =========================================================================
-    # PRIORITY 3 (UNIVERSAL BASE): Standard Compliance Checklist
-    # =========================================================================
-    from app.routers.sync import generate_compliance_checklist_for_category
-    return generate_compliance_checklist_for_category(
-        inv.category, 
-        inv.document_type, 
-        inv.division, 
-        inv.plant,
-        document_id=inv.id
-    )
+    return combined_items
 
 
 @router.get("/api/invoices/{invoice_id}/checklist")
-def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
+def get_invoice_checklist(
+    invoice_id: str,
+    stage_num: Optional[int] = None,
+    stage_name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    current_step_name = "Attachment Status" if (inv.current_stage or 1) == 1 else f"Stage {inv.current_stage or 1}"
-    if inv.workflow_profile_id:
+    target_stage = stage_num or inv.current_stage or 1
+    
+    current_step_name = "Attachment Status" if target_stage == 1 else f"Stage {target_stage}"
+    if stage_name:
+        current_step_name = stage_name
+    elif inv.workflow_profile_id:
         step = db.query(WorkflowStepDefinition).filter(
             WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+            WorkflowStepDefinition.stage_number == target_stage
         ).first()
         if step and step.step_name:
             current_step_name = step.step_name
@@ -2291,6 +2284,7 @@ def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
     return [
         {
             "id": item.id,
+            "stage_name": item.stage_name,
             "item_text": item.item_text,
             "is_checked": item.is_checked,
             "checked_by": item.checked_by,
@@ -2298,6 +2292,7 @@ def get_invoice_checklist(invoice_id: str, db: Session = Depends(get_db)):
         }
         for item in items
     ]
+
 
 @router.post("/api/invoices/{invoice_id}/checklist")
 def update_invoice_checklist(
@@ -2311,12 +2306,15 @@ def update_invoice_checklist(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     checked_items = payload.get("checked_items", [])
+    req_stage_num = payload.get("stage_num") or inv.current_stage or 1
     
-    current_step_name = "Attachment Status" if (inv.current_stage or 1) == 1 else f"Stage {inv.current_stage or 1}"
-    if inv.workflow_profile_id:
+    current_step_name = "Attachment Status" if req_stage_num == 1 else f"Stage {req_stage_num}"
+    if payload.get("stage_name"):
+        current_step_name = payload.get("stage_name")
+    elif inv.workflow_profile_id:
         step = db.query(WorkflowStepDefinition).filter(
             WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+            WorkflowStepDefinition.stage_number == req_stage_num
         ).first()
         if step and step.step_name:
             current_step_name = step.step_name

@@ -4,7 +4,7 @@ import base64
 import datetime
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -27,85 +27,40 @@ def generate_compliance_checklist_for_category(
     doc_type: Optional[str], 
     division: Optional[str] = None, 
     plant: Optional[str] = None,
-    document_id: Optional[str] = None
+    document_id: Optional[str] = None,
+    workflow_profile: Optional[str] = None,
+    stage_name: Optional[str] = None,
+    db: Optional[Any] = None
 ) -> List[str]:
-    # --- BRANCH / DIVISION SPECIFIC CHECKLIST CONDITIONS ---
-    # Define custom checklist conditions based on division or branch (plant) here.
-    
-    cat = (category or "").lower()
-    matched_keyword = None
-    
-    rent_keywords = ["rent", "eb", "deposit", "electricity", "tel"]
-    asset_keywords = ["asset", "capex", "machinery", "equipment"]
-    freight_keywords = ["freight", "transport", "logistics", "courier"]
+    """
+    Strict rule-based checklist resolution.
+    Queries database rules from FlowBuilder, ChecklistRule and ChecklistTemplate.
+    Returns empty list [] if no checklist items are configured by admin.
+    """
+    try:
+        from app.database import SessionLocal
+        from app.routers.documents import resolve_checklist_items
+        
+        local_db = db or SessionLocal()
+        try:
+            # Build a lightweight mock invoice for resolution
+            mock_inv = Invoice(
+                division=division or "VCC",
+                category=category,
+                document_type=doc_type or "AP INVOICE",
+                plant=plant,
+                workflow_profile_id=workflow_profile
+            )
+            items = resolve_checklist_items(local_db, mock_inv, stage_name or "Attachment Status")
+            if items:
+                return items
+        finally:
+            if not db:
+                local_db.close()
+    except Exception as e:
+        logger.warning(f"[Checklist Resolution] Notice during DB checklist query: {e}")
 
-    for k in rent_keywords:
-        if k in cat:
-            matched_keyword = k
-            break
-
-    if matched_keyword:
-        checklist = [
-            "Rental Agreement / EB Bill Copy Attached",
-            "Meter Reading & Tariff Slab Verified",
-            "Premises / Branch Address Verified",
-            "Landlord / Service Provider Bank Details Verified",
-            "TDS Deduction (Sec 194I / 194C) Calculated",
-            "Prior Month Advance / Arrears Reconciled",
-            "Cost Center & Plant GL Code Validated",
-            "Authorized Signatory Sign-off Verified"
-        ]
-    else:
-        for k in asset_keywords:
-            if k in cat:
-                matched_keyword = k
-                break
-        if matched_keyword:
-            checklist = [
-                "Asset Purchase Order & Approval Attached",
-                "Physical Asset Delivery & Serial No. Verified",
-                "Vendor GSTIN & Tax Invoice Verified",
-                "Plant & Cost Center Tagging Verified",
-                "Gate Inward / GRN Verified",
-                "Asset Capitalization & Depreciation GL Validated",
-                "Advance / Retention Amount Adjusted",
-                "Authorized Signatory & HOD Approval Verified"
-            ]
-        else:
-            for k in freight_keywords:
-                if k in cat:
-                    matched_keyword = k
-                    break
-            if matched_keyword:
-                checklist = [
-                    "Consignment Note / Lorry Receipt (LR) Attached",
-                    "Trip Sheet & Vehicle Number Verified",
-                    "Weight, Distance & Freight Rate Verified",
-                    "Vendor GSTIN & Tax Invoice Verified",
-                    "RCM (Reverse Charge Mechanism) Applicability Verified",
-                    "Gate Inward Verification Completed",
-                    "Cost Center & Plant Accounting Verified"
-                ]
-            else:
-                checklist = [
-                    "Documents Attached",
-                    "Party Name & Total Amount Verified",
-                    "Vendor GST no, Signaure Verified",
-                    "Bill No ,Date & Address Verified",
-                    "Tax portion verified (GST, TDS, etc..)",
-                    "RO/PO Verified",
-                    "Gate Inward, GRN, Debit/Credit Note Verified",
-                    "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
-                    "Advance, Narration, Supportive Copy (If Any)"
-                ]
-
-    doc_str = f"document_id='{document_id}'" if document_id else "document_id=N/A"
-    keyword_str = f"matched_keyword='{matched_keyword}'" if matched_keyword else "matched_keyword=None (defaulting to standard checklist)"
-    logger.warning(
-        f"[Compliance Checklist Fallback] Triggered category compliance checklist fallback: {doc_str}, category='{category}', {keyword_str}"
-    )
-
-    return checklist
+    return []
 
 def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv: Invoice):
     try:

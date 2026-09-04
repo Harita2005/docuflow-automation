@@ -275,6 +275,7 @@ class ChecklistRule(Base):
     rule_name = Column(String(200), nullable=False)
     division = Column(String(100), nullable=True)         # Division/Company
     category = Column(String(200), nullable=True)         # Category
+    cost_center = Column(String(200), nullable=True)      # Cost Center
     branch = Column(String(200), nullable=True)           # Branch/Plant
     workflow_profile = Column(String(200), nullable=True)  # Workflow Profile
     stage_name = Column(String(200), nullable=False)      # Stage Name

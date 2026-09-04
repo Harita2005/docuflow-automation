@@ -78,6 +78,14 @@ def is_wildcard(val: Optional[str]) -> bool:
     items = [x.strip().lower() for x in s.split(",") if x.strip()]
     return "all" in items or "*" in items
 
+def sanitize_text(val: Any) -> str:
+    if val is None:
+        return ""
+    s = str(val).strip().lower()
+    for char in ["-", "_", " ", "/", "\\", ".", ",", "(", ")"]:
+        s = s.replace(char, "")
+    return s
+
 def match_field_value(rule_val: Any, doc_val: Any, operator: str = "equals") -> bool:
     if is_wildcard(rule_val):
         return True
@@ -102,15 +110,26 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str = "equals") -> 
     if "all" in rule_items or "*" in rule_items:
         return True
 
+    # Ultra-flexible sanitization: removes hyphens, spaces, underscores, slashes, dots
+    clean_doc = sanitize_text(doc_val)
+    clean_rule_items = [sanitize_text(it) for it in rule_items]
+
     op = operator.strip().lower()
     if op in ["equals", "==", "="]:
-        return str_doc in rule_items or any(str_doc == it for it in rule_items)
+        return (
+            str_doc in rule_items or
+            clean_doc in clean_rule_items or
+            any(clean_doc == cit for cit in clean_rule_items)
+        )
 
     if op in ["not equals", "!=", "!=="]:
-        return str_doc not in rule_items and not any(str_doc == it for it in rule_items)
+        return str_doc not in rule_items and clean_doc not in clean_rule_items
 
     if op in ["contains any of", "contains any of (or)", "contains"]:
-        return any(it in str_doc or str_doc in it for it in rule_items)
+        return any(
+            it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit)
+            for it, cit in zip(rule_items, clean_rule_items)
+        )
 
     return True
 
@@ -205,7 +224,7 @@ def match_condition(rule: Any, document: Any) -> bool:
 def score_checklist_rule(rule: Any, document: Any) -> int:
     """
     Scores a ChecklistRule against a document based on specificity:
-    Division (+20), Category (+30), Branch (+10), WorkflowProfile (+10).
+    Division (+20), Category (+30), CostCenter (+15), Branch (+10), WorkflowProfile / CategoryName (+10).
     Returns 0 if any non-wildcard field fails to match.
     """
     def get_val(obj: Any, attr: str) -> Any:
@@ -215,16 +234,18 @@ def score_checklist_rule(rule: Any, document: Any) -> int:
 
     div_val = get_val(rule, "division")
     cat_val = get_val(rule, "category")
+    cc_val = get_val(rule, "cost_center")
     branch_val = get_val(rule, "branch")
-    wf_val = get_val(rule, "workflow_profile")
+    wf_val = get_val(rule, "workflow_profile") or get_val(rule, "category_name")
 
     doc_div = get_val(document, "division")
     doc_cat = get_val(document, "category")
+    doc_cc = get_val(document, "cost_center")
     doc_type = get_val(document, "document_type")
     doc_branch = get_val(document, "plant") or get_val(document, "branch")
     doc_wf = get_val(document, "workflow_profile_id")
 
-    score = 0
+    score = 1
 
     if div_val and not is_wildcard(div_val):
         if match_field_value(div_val, doc_div, "contains any of" if "," in str(div_val) else "equals"):
@@ -240,6 +261,12 @@ def score_checklist_rule(rule: Any, document: Any) -> int:
         else:
             return 0
 
+    if cc_val and not is_wildcard(cc_val):
+        if match_field_value(cc_val, doc_cc, "contains any of" if "," in str(cc_val) else "equals"):
+            score += 15
+        else:
+            return 0
+
     if branch_val and not is_wildcard(branch_val):
         if match_field_value(branch_val, doc_branch, "contains any of" if "," in str(branch_val) else "equals"):
             score += 10
@@ -249,8 +276,8 @@ def score_checklist_rule(rule: Any, document: Any) -> int:
     if wf_val and not is_wildcard(wf_val):
         if str(wf_val).strip().upper() == str(doc_wf or "").strip().upper():
             score += 10
-        else:
-            return 0
+        elif match_field_value(wf_val, doc_cat, "contains any of" if "," in str(wf_val) else "equals"):
+            score += 5
 
     return score
 

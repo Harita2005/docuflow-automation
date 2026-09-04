@@ -41,7 +41,7 @@ export default function Admin() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem("adminActiveTab");
-    return (stored === "masterdata" || stored === "recycle" || !stored) ? "routing" : stored;
+    return (stored === "masterdata" || stored === "recycle" || stored === "backups" || !stored) ? "routing" : stored;
   });
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -488,13 +488,7 @@ export default function Admin() {
               onClick={() => setActiveTab("callbacks")}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "callbacks" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
             >
-              Approval Callback Integrations
-            </button>
-            <button
-              onClick={() => setActiveTab("backups")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "backups" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
-            >
-              System Backups
+              Third-Party App Sync
             </button>
           </div>
         </div>

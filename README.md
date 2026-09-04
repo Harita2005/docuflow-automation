@@ -69,8 +69,8 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 4. Configure environment variables in `.env`:
    ```env
-   PROJECT_NAME="Document Approval Automation System - DAAS"
-   DATABASE_URL="postgresql://<db_user>:<db_password>@<db_host>:5432/DAAS_DB"
+   PROJECT_NAME="Strivh Professional Enterprises - DocuFlow Automation System"
+   DATABASE_URL="mssql+pyodbc://@localhost/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
    SECRET_KEY="your-corporate-jwt-secret-key"
    ACCESS_TOKEN_EXPIRE_MINUTES=43200
    ```

@@ -933,7 +933,7 @@ export default function DocumentDetails({
     "Advance, Narration, Supportive Copy (If Any)"
   ];
 
-  const effectiveChecklist = checklistItems.length > 0 ? checklistItems : defaultSDChecklist;
+  const effectiveChecklist = checklistItems;
 
   const currentStageDef = activeApprovalLog && workflowStepDefinitions
     ? workflowStepDefinitions.find((s: any) => s.stage_number === activeApprovalLog.current_stage_number)
@@ -1628,35 +1628,41 @@ export default function DocumentDetails({
 
               {/* Checklist Items Matrix */}
               <div className="space-y-1.5">
-                {effectiveChecklist.map((item, idx) => {
-                  const isChecked = !!checkedStates[item];
-                  return (
-                    <div
-                      key={idx}
-                      onClick={isDocumentLocked ? undefined : () => handleToggleChecklist(item)}
-                      className={`p-2 rounded-lg border transition-all flex items-center gap-2.5 select-none shadow-2xs ${
-                        isDocumentLocked
-                          ? isChecked
-                            ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 font-bold cursor-default"
-                            : "bg-slate-50 border-slate-200 text-slate-500 cursor-default"
-                          : isChecked
-                          ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold cursor-pointer hover:shadow-xs active:scale-[0.99]"
-                          : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 cursor-pointer active:scale-[0.99]"
-                      }`}
-                    >
+                {effectiveChecklist.length === 0 ? (
+                  <div className="p-3 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-xl text-center text-[10px] font-medium italic">
+                    No checklist requirements for this workflow stage.
+                  </div>
+                ) : (
+                  effectiveChecklist.map((item, idx) => {
+                    const isChecked = !!checkedStates[item];
+                    return (
                       <div
-                        className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                          isChecked
-                            ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
-                            : "bg-white border-slate-300"
+                        key={idx}
+                        onClick={isDocumentLocked ? undefined : () => handleToggleChecklist(item)}
+                        className={`p-2 rounded-lg border transition-all flex items-center gap-2.5 select-none shadow-2xs ${
+                          isDocumentLocked
+                            ? isChecked
+                              ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 font-bold cursor-default"
+                              : "bg-slate-50 border-slate-200 text-slate-500 cursor-default"
+                            : isChecked
+                            ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold cursor-pointer hover:shadow-xs active:scale-[0.99]"
+                            : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 cursor-pointer active:scale-[0.99]"
                         }`}
                       >
-                        {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                        <div
+                          className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                            isChecked
+                              ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                              : "bg-white border-slate-300"
+                          }`}
+                        >
+                          {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                        </div>
+                        <span className="text-[10px] leading-tight font-bold" title={item}>{item}</span>
                       </div>
-                      <span className="text-[10px] leading-tight font-bold" title={item}>{item}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
 
               {/* Decision Remarks & Audit Notes Box */}
@@ -2235,7 +2241,7 @@ export default function DocumentDetails({
                               <div className="flex items-center gap-1.5">
                                 <span className="h-3.5 w-3.5 rounded-full bg-emerald-600 text-white font-bold text-[8.5px] flex items-center justify-center">✓</span>
                                 <span>
-                                  <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : (step.approver_target || "Stage Approver")}
+                                  <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : "Authorized Approver"}
                                 </span>
                               </div>
                               {matchingApprovalLog?.created_at && (

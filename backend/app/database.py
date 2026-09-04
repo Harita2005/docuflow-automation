@@ -37,17 +37,25 @@ else:
     engine_kwargs["pool_size"] = 10
     engine_kwargs["max_overflow"] = 20
     engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
 
 import time
 
 if "mssql" in db_url:
-    candidate_urls = [db_url]
+    candidate_urls = []
+    for u in [db_url]:
+        if "login_timeout=" not in u.lower():
+            delim = "&" if "?" in u else "?"
+            candidate_urls.append(f"{u}{delim}login_timeout=5")
+        else:
+            candidate_urls.append(u)
     if "mssql+pyodbc" in db_url:
         base_clean = db_url.split("?")[0]
-        pymssql_alt = base_clean.replace("mssql+pyodbc://", "mssql+pymssql://")
+        pymssql_alt = base_clean.replace("mssql+pyodbc://", "mssql+pymssql://") + "?login_timeout=5"
         candidate_urls.append(pymssql_alt)
 
     connected = False
+    last_err = None
     for target_url in candidate_urls:
         try:
             engine = create_engine(target_url, **engine_kwargs)
@@ -57,20 +65,14 @@ if "mssql" in db_url:
             connected = True
             break
         except Exception as err:
+            last_err = err
             print(f"[Database] Connect attempt failed for target ({target_url.split('@')[-1]}): {err}")
 
     if not connected:
-        print(f"[Database Warning] Could not connect to MS SQL Server. Falling back to SQLite.")
-        fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
-        engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
+        raise RuntimeError(f"[Database Error] Failed to connect to MS SQL Server DocuFlowDB: {last_err}")
 else:
-    try:
-        engine = create_engine(db_url, **engine_kwargs)
-        print(f"[Database] Successfully connected to DATABASE_URL: {db_url}")
-    except Exception as e:
-        print(f"[Database Warning] Could not connect to primary DATABASE_URL ({e}). Falling back to SQLite.")
-        fallback_url = f"sqlite:///{BASE_DIR / 'docuflow.db'}"
-        engine = create_engine(fallback_url, connect_args={"check_same_thread": False})
+    engine = create_engine(db_url, **engine_kwargs)
+    print(f"[Database] Successfully connected to DATABASE_URL: {db_url}")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -80,4 +82,10 @@ def get_db():
     try:
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            try:
+                db.invalidate()
+            except Exception:
+                pass

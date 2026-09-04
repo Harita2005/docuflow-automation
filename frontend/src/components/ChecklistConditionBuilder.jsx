@@ -72,6 +72,21 @@ export default function ChecklistConditionBuilder() {
   // Modal item input state
   const [newChecklistText, setNewChecklistText] = useState('');
 
+  const [customStageOptions, setCustomStageOptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("docuflow_custom_stage_names");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("docuflow_custom_stage_names", JSON.stringify(customStageOptions));
+    } catch {}
+  }, [customStageOptions]);
+
   const availableDivisions = useMemo(() => {
     const set = new Set(matrixOptions?.divisions || ['ACC', 'ACM', 'ATC', 'ENES', 'RR', 'RRF', 'RHL', 'AKG', 'VT', 'VG', 'VPM', 'TARA', 'VCC']);
     rules.forEach(r => { if (r.division) set.add(r.division); });
@@ -158,16 +173,17 @@ export default function ChecklistConditionBuilder() {
       } else {
         parsedItems = txt ? [txt] : [];
       }
+      const updatedRuleName = targetWfObj ? targetWfObj.profile_name : (r.workflow_profile && r.workflow_profile !== 'ALL' ? r.workflow_profile : r.rule_name);
       setEditingRule({
         ...r,
         id: isDuplicate ? `tmp-${Date.now()}` : r.id,
-        rule_name: isDuplicate ? `${r.rule_name} (Copy)` : r.rule_name,
+        rule_name: isDuplicate ? `${updatedRuleName} (Copy)` : updatedRuleName,
         itemsList: parsedItems.length > 0 ? parsedItems : ['Documents Attached']
       });
     } else {
       setEditingRule({
         id: `tmp-${Date.now()}`,
-        rule_name: '',
+        rule_name: targetWfObj ? targetWfObj.profile_name : '',
         division: 'ALL',
         category: 'ALL',
         branch: 'ALL',
@@ -580,17 +596,7 @@ export default function ChecklistConditionBuilder() {
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                           <span className="truncate max-w-[170px]" title={r.rule_name}>{r.rule_name}</span>
-                          {(() => {
-                            const matched = workflows.find(w => w.profile_name === r.workflow_profile || w.workflow_code === r.workflow_profile);
-                            if (matched?.workflow_code) {
-                              return (
-                                <span className="text-[7.5px] font-mono font-black text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0" title={`Mapped Workflow Code: ${matched.workflow_code}`}>
-                                  {matched.workflow_code}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })()}
+
                           {r.is_mandatory !== false ? (
                             <span className="text-[7.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 shrink-0">
                               REQ
@@ -835,24 +841,82 @@ export default function ChecklistConditionBuilder() {
                     <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       Stage Name <span className="text-rose-500">*</span>
                     </label>
-                    <select 
-                      value={editingRule.stage_name}
-                      onChange={e => {
-                        const newStage = e.target.value;
-                        const wfProf = editingRule.workflow_profile || 'GLOBAL';
-                        const autoName = `CHK_${wfProf.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)}_${newStage.replace(/\s+/g, '_')}`;
-                        setEditingRule(prev => ({
-                          ...prev,
-                          stage_name: newStage,
-                          rule_name: (!prev.rule_name || prev.rule_name.startsWith('CHK_') || prev.rule_name.startsWith('tmp-')) ? autoName : prev.rule_name
-                        }));
-                      }}
-                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-blue-700 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    >
-                      {STAGES_LIST.map(stg => (
-                        <option key={stg} value={stg}>{stg}</option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const allStages = Array.from(new Set([...STAGES_LIST, ...customStageOptions]));
+                      const isUnknown = editingRule.stage_name && !allStages.includes(editingRule.stage_name);
+                      const isCustomMode = editingRule._isCustomInput || isUnknown;
+
+                      if (isCustomMode) {
+                        return (
+                          <div className="space-y-1">
+                            <input 
+                              type="text"
+                              value={editingRule.stage_name || ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setEditingRule({ ...editingRule, stage_name: val });
+                                if (val.trim() && !customStageOptions.includes(val.trim())) {
+                                  setCustomStageOptions(prev => [...prev, val.trim()]);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (editingRule.stage_name && editingRule.stage_name.trim()) {
+                                  const clean = editingRule.stage_name.trim();
+                                  if (!customStageOptions.includes(clean)) {
+                                    setCustomStageOptions(prev => [...prev, clean]);
+                                  }
+                                }
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (editingRule.stage_name && editingRule.stage_name.trim()) {
+                                    const clean = editingRule.stage_name.trim();
+                                    if (!customStageOptions.includes(clean)) {
+                                      setCustomStageOptions(prev => [...prev, clean]);
+                                    }
+                                    setEditingRule(prev => ({ ...prev, _isCustomInput: false }));
+                                  }
+                                }
+                              }}
+                              placeholder="Type new custom stage name..."
+                              className="w-full text-[11px] py-1.5 px-2.5 border border-blue-500 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditingRule({ ...editingRule, _isCustomInput: false })}
+                              className="text-[9px] font-bold text-emerald-700 hover:underline block"
+                            >
+                              ← Back to Stage Presets
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <select 
+                          value={editingRule.stage_name || 'Attachment Status'}
+                          onChange={e => {
+                            if (e.target.value === '__ADD_CUSTOM__') {
+                              setEditingRule({ ...editingRule, _isCustomInput: true, stage_name: '' });
+                            } else {
+                              setEditingRule({ ...editingRule, stage_name: e.target.value });
+                            }
+                          }}
+                          className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-blue-700 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer shadow-2xs"
+                        >
+                          <optgroup label="Standard Stages">
+                            {allStages.map(stg => (
+                              <option key={stg} value={stg}>{stg}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Custom Option">
+                            <option value="__ADD_CUSTOM__">+ Add Custom Stage Name...</option>
+                          </optgroup>
+                        </select>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -899,88 +963,6 @@ export default function ChecklistConditionBuilder() {
                       ))}
                     </select>
                   </div>
-
-                  {/* TARGET WORKFLOW 3-WAY MAPPING BLOCK FOR CHECKLIST */}
-                  {(() => {
-                    const targetWfObj = workflows.find(w => w.profile_name === editingRule.workflow_profile || w.workflow_code === editingRule.workflow_profile);
-                    const categories = Array.from(new Set(workflows.map(w => w.workflow_category).filter(Boolean)));
-                    return (
-                      <div className="md:col-span-2 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 mt-1 space-y-2.5">
-                        <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
-                          <div className="flex items-center gap-1.5">
-                            <GitMerge className="h-3.5 w-3.5 text-emerald-600" />
-                            <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider">
-                              Target Workflow 3-Way Mapping
-                            </span>
-                          </div>
-                          {targetWfObj && (
-                            <span className="text-[9px] font-mono font-black bg-emerald-600 text-white px-2 py-0.5 rounded shadow-2xs">
-                              Code: {targetWfObj.workflow_code || 'WF-837'}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* ROW 1: WORKFLOW CATEGORY FILTER */}
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                            1. Target Workflow Category (Filter)
-                          </label>
-                          <select
-                            value={chkWfCategoryFilter}
-                            onChange={e => setChkWfCategoryFilter(e.target.value)}
-                            className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 focus:border-emerald-500 outline-none shadow-2xs"
-                          >
-                            <option value="ALL">All Categories ({workflows.length} Workflows)</option>
-                            {categories.map(cat => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* ROW 2: TARGET WORKFLOW PROFILE & MAPPED CODE */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                          <div className="md:col-span-2">
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                              2. Target Workflow Profile
-                            </label>
-                            <select
-                              value={editingRule.workflow_profile || 'ALL'}
-                              onChange={e => {
-                                const newWfProf = e.target.value;
-                                const stg = editingRule.stage_name || 'Attachment Status';
-                                const autoName = `CHK_${newWfProf.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)}_${stg.replace(/\s+/g, '_')}`;
-                                setEditingRule(prev => ({
-                                  ...prev,
-                                  workflow_profile: newWfProf,
-                                  rule_name: (!prev.rule_name || prev.rule_name.startsWith('CHK_') || prev.rule_name.startsWith('tmp-')) ? autoName : prev.rule_name
-                                }));
-                              }}
-                              className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-emerald-900 focus:border-emerald-500 outline-none shadow-2xs"
-                            >
-                              <option value="ALL">ALL Workflows (Global)</option>
-                              {workflows
-                                .filter(w => chkWfCategoryFilter === 'ALL' || w.workflow_category === chkWfCategoryFilter)
-                                .map(w => (
-                                  <option key={w.profile_name} value={w.profile_name}>
-                                    [{w.workflow_code || 'WF-837'}] {w.profile_name}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                              3. Workflow Code
-                            </label>
-                            <div className="w-full text-[11px] py-1.5 px-2.5 border border-emerald-200/80 rounded-lg bg-white font-mono font-black text-emerald-700 flex items-center justify-between shadow-2xs h-7.5">
-                              <span className="truncate">{targetWfObj ? (targetWfObj.workflow_code || 'WF-837') : (editingRule.workflow_profile === 'ALL' ? 'GLOBAL (ALL)' : 'Unmapped')}</span>
-                              <span className="text-[7.5px] font-sans text-emerald-600 font-bold bg-emerald-100 px-1 py-0.2 rounded border border-emerald-300 shrink-0">Linked</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               </div>
 

@@ -149,7 +149,7 @@ export default function App() {
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const isDocumentPendingForUser = (doc: DbInvoice) => {
-    const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+    const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
     if (terminalStates.includes(doc.status)) return false;
 
     // Check if the user is explicitly assigned to it
@@ -337,7 +337,7 @@ export default function App() {
   }, [currentView, selectedDocId]);
 
   const [requireGRN, setRequireGRN] = useState(true);
-  const [orgName, setOrgName] = useState("DAAS - Document Approval Automation System");
+  const [orgName, setOrgName] = useState("DocuFlow - Document Approval Automation System");
 
   // Fetch dynamic role permissions from DB
   const fetchRolePermissions = async () => {

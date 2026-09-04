@@ -84,7 +84,7 @@ export default function Sidebar({
           </div>
           {isExpanded && (
             <div className="flex flex-col">
-              <span className="font-extrabold text-white text-base tracking-tight font-display">DAAS</span>
+              <span className="font-extrabold text-white text-base tracking-tight font-display">DocuFlow</span>
               <span className="text-[10px] text-blue-400 font-medium tracking-widest uppercase">Document Approval Engine</span>
             </div>
           )}

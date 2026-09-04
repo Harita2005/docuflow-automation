@@ -63,11 +63,15 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
 from collections import defaultdict
 
 def ensure_workflow_code(p: WorkflowProfile, db: Session = None) -> str:
-    """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-837)."""
-    if p.workflow_code and str(p.workflow_code).strip() and re.match(r'^WF-\d{3,5}$', str(p.workflow_code).strip()):
+    """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-001, WF-002)."""
+    if p.workflow_code and str(p.workflow_code).strip() and re.match(r'^(WF|CAPEX|PUR|SRV|FRT|UTL|EXP|GRN|ADV|CSH|EV|JRNL|CN|DN)-\d{3,5}$', str(p.workflow_code).strip(), re.IGNORECASE):
         return str(p.workflow_code).strip()
-    code_id = p.id if p.id else abs(hash(p.profile_name or "WF"))
-    code = f"WF-{(code_id * 13 + 107) % 900 + 100}"
+    if db:
+        total = db.query(WorkflowProfile).count()
+        code = f"WF-{str(total + 1).zfill(3)}"
+    else:
+        code_id = p.id if p.id else abs(hash(p.profile_name or "WF"))
+        code = f"WF-{str((code_id % 999) + 1).zfill(3)}"
     p.workflow_code = code
     if db:
         try: db.commit()
@@ -75,25 +79,15 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session = None) -> str:
     return code
 
 def enforce_designated_approvers(db: Session):
-    """Ensure all workflow step definitions map to designated 4 approvers in database."""
-    try:
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        db.commit()
-    except Exception:
-        db.rollback()
+    pass
 
 @router.post("/api/admin/workflows/sync-approvers")
 def sync_all_workflow_approvers(db: Session = Depends(get_db)):
-    enforce_designated_approvers(db)
-    return {"status": "success", "message": "All workflow step definitions synchronized to designated 4 approvers."}
+    return {"status": "success", "message": "FlowBuilder custom approvers preserved."}
 
 @router.get("/api/workflows", response_model=List[WorkflowProfileSchema])
 @router.get("/api/admin/workflows", response_model=List[WorkflowProfileSchema])
 def get_all_workflow_profiles(db: Session = Depends(get_db)):
-    enforce_designated_approvers(db)
     profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.created_at.desc()).all()
     if not profiles:
         return []

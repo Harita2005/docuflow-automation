@@ -46,7 +46,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
 
         const matched = docsWithWorkflows.filter((inv: any) => {
           // Hide already approved and terminal states from the pending queue
-          const terminalStates = ["Approved", "Paid", "Ready for Payment", "Rejected", "Failed"];
+          const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
           if (terminalStates.includes(inv.status)) return false;
 
           if (currentUserRole === "admin") return true; // Admins can view all pending queue items

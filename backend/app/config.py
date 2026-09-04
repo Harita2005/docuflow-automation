@@ -7,14 +7,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "DocuFlow Automation System"
+    PROJECT_NAME: str = "Strivh Professional Enterprises - DocuFlow Automation System"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"    
-    # Database URL - Defaults to DocuFlowDB on MS SQL Server 192.168.179.22 or local SQLite fallback
-    # MS SQL Example: mssql+pyodbc://@192.168.179.22/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes
+    # Database URL - Defaults to DocuFlowDB on MS SQL Server
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        f"sqlite:///{BASE_DIR / 'docuflow.db'}"
+        "mssql+pyodbc://@localhost/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
     )    
     # JWT Auth
     SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-docuflow-jwt-key-2026-production")
