@@ -3,8 +3,10 @@ import os
 import shutil
 from pathlib import Path
 
-# Add backend directory to sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = BASE_DIR.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from app.database import SessionLocal, engine
 from app.config import settings

@@ -30,7 +30,10 @@ def get_users(
     # Auto-seed full 223 enterprise users if table is empty
     if db.query(User).count() == 0:
         try:
-            from seed_sd_workflow_matrix import seed_sd_workflow_matrix
+            try:
+                from scripts.seed_sd_workflow_matrix import seed_sd_workflow_matrix
+            except ImportError:
+                from seed_sd_workflow_matrix import seed_sd_workflow_matrix
             seed_sd_workflow_matrix()
         except Exception as e:
             print(f"[User Master] Auto-seed warning: {e}")

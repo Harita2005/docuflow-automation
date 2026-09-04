@@ -65,9 +65,31 @@ def generate_compliance_checklist_for_category(
 def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv: Invoice):
     try:
         from sqlalchemy import text
-        # Avoid running if using SQLite fallback
-        if "sqlite" in str(db.bind.url):
-            return
+
+        if db.bind and db.bind.dialect.name == "mssql":
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'integration') EXEC('CREATE SCHEMA integration');"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'core') EXEC('CREATE SCHEMA core');"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'security') EXEC('CREATE SCHEMA security');"))
+            db.execute(text("IF OBJECT_ID('integration.source_systems', 'U') IS NULL CREATE TABLE integration.source_systems (source_system_id INT IDENTITY(1,1) PRIMARY KEY, system_code VARCHAR(50) NOT NULL UNIQUE, system_name VARCHAR(200) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('integration.sync_runs', 'U') IS NULL CREATE TABLE integration.sync_runs (sync_run_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, idempotency_key VARCHAR(100) NOT NULL, sync_status VARCHAR(50) NOT NULL DEFAULT 'COMPLETED', records_processed INT NOT NULL DEFAULT 1, started_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('integration.source_records', 'U') IS NULL CREATE TABLE integration.source_records (source_record_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, sync_run_id INT NULL, canonical_document_id INT NULL, external_record_key VARCHAR(100) NOT NULL, payload_json NVARCHAR(MAX) NULL, status VARCHAR(50) NULL DEFAULT 'RECEIVED', ingested_at DATETIME2 NULL DEFAULT SYSUTCDATETIME(), created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='sync_run_id') ALTER TABLE integration.source_records ADD sync_run_id INT NULL;"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='canonical_document_id') ALTER TABLE integration.source_records ADD canonical_document_id INT NULL;"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='status') ALTER TABLE integration.source_records ADD status VARCHAR(50) NULL DEFAULT 'RECEIVED';"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='ingested_at') ALTER TABLE integration.source_records ADD ingested_at DATETIME2 NULL DEFAULT SYSUTCDATETIME();"))
+            db.execute(text("IF OBJECT_ID('integration.source_record_versions', 'U') IS NULL CREATE TABLE integration.source_record_versions (version_id INT IDENTITY(1,1) PRIMARY KEY, source_record_id INT NOT NULL, version_number INT NOT NULL, payload_snapshot_json NVARCHAR(MAX) NULL, received_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('core.document_types', 'U') IS NULL CREATE TABLE core.document_types (document_type_id INT IDENTITY(1,1) PRIMARY KEY, type_code VARCHAR(50) NOT NULL UNIQUE, type_name VARCHAR(100) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('core.documents', 'U') IS NULL CREATE TABLE core.documents (document_id INT IDENTITY(1,1) PRIMARY KEY, document_type_id INT NOT NULL, source_record_id INT NULL, document_number VARCHAR(100) NOT NULL, created_by_user_id INT NULL, status VARCHAR(50) NOT NULL DEFAULT 'NEW', correlation_id UNIQUEIDENTIFIER NULL, is_deleted BIT NOT NULL DEFAULT 0, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), updated_at DATETIME2 NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='created_by_user_id') ALTER TABLE core.documents ADD created_by_user_id INT NULL;"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='correlation_id') ALTER TABLE core.documents ADD correlation_id UNIQUEIDENTIFIER NULL;"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='updated_at') ALTER TABLE core.documents ADD updated_at DATETIME2 NULL DEFAULT SYSUTCDATETIME();"))
+            db.execute(text("IF OBJECT_ID('core.document_versions', 'U') IS NULL CREATE TABLE core.document_versions (version_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, version_number INT NOT NULL, document_snapshot_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('core.document_metadata', 'U') IS NULL CREATE TABLE core.document_metadata (metadata_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, meta_key VARCHAR(100) NOT NULL, meta_value NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('security.app_users', 'U') IS NULL CREATE TABLE security.app_users (user_id INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE, email VARCHAR(255) NULL, password_hash VARCHAR(255) NULL, external_user_key VARCHAR(100) NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'audit') EXEC('CREATE SCHEMA audit');"))
+            db.execute(text("IF OBJECT_ID('audit.audit_events', 'U') IS NULL CREATE TABLE audit.audit_events (event_id INT IDENTITY(1,1) PRIMARY KEY, correlation_id UNIQUEIDENTIFIER NULL, actor_user_id INT NULL, source_system_id INT NULL, event_category VARCHAR(50) NULL, event_type VARCHAR(100) NULL, entity_schema VARCHAR(50) NULL, entity_table VARCHAR(100) NULL, entity_id VARCHAR(100) NULL, action_type VARCHAR(50) NULL, before_json NVARCHAR(MAX) NULL, after_json NVARCHAR(MAX) NULL, metadata_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
+            db.execute(text("IF OBJECT_ID('rules.rule_evaluation_runs', 'U') IS NULL CREATE TABLE rules.rule_evaluation_runs (evaluation_run_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, run_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), correlation_id UNIQUEIDENTIFIER NULL);"))
+            db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='evaluation_run_id') AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='run_id') EXEC sp_rename 'rules.rule_evaluation_runs.run_id', 'evaluation_run_id', 'COLUMN';"))
 
         # 1. Ensure source system exists
         sys_code = req.company_code or req.division or "APP_A"
@@ -195,17 +217,17 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
         db.execute(text("DELETE FROM core.document_metadata WHERE document_id = :doc_id"), {"doc_id": doc_id})
         
         metadata_items = [
-            ("amount", str(req.amount)),
-            ("base_amount", str(req.base_amount or 0.0)),
-            ("tax_amount", str(req.tax_amount or 0.0)),
-            ("cgst", str(req.cgst or 0.0)),
-            ("sgst", str(req.sgst or 0.0)),
-            ("igst", str(req.igst or 0.0)),
-            ("vendor_code", req.vendor_code or ""),
-            ("vendor_name", req.vendor_name or ""),
-            ("cost_center", req.cost_center or ""),
-            ("plant", req.plant or ""),
-            ("payment_terms", req.payment_terms or "")
+            ("amount", str(getattr(req, "amount", 0.0))),
+            ("base_amount", str(getattr(req, "base_amount", 0.0) or 0.0)),
+            ("tax_amount", str(getattr(req, "tax_amount", 0.0) or 0.0)),
+            ("cgst", str(getattr(req, "cgst", 0.0) or 0.0)),
+            ("sgst", str(getattr(req, "sgst", 0.0) or 0.0)),
+            ("igst", str(getattr(req, "igst", 0.0) or 0.0)),
+            ("vendor_code", getattr(req, "vendor_code", "") or ""),
+            ("vendor_name", getattr(req, "vendor_name", "") or ""),
+            ("cost_center", getattr(req, "cost_center", "") or ""),
+            ("plant", getattr(req, "plant", "") or ""),
+            ("payment_terms", getattr(req, "payment_terms", "") or "")
         ]
         
         for k, v in metadata_items:
@@ -224,85 +246,95 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
         eval_run_id = run_row_new[0] if run_row_new else 1
 
         if target_inv.workflow_profile_id:
-            rule_row = db.execute(text("SELECT rule_id FROM rules.business_rules r JOIN workflow.workflow_definitions d ON r.target_workflow_definition_id = d.workflow_definition_id WHERE d.definition_name = :wf_name"), {"wf_name": target_inv.workflow_profile_id}).fetchone()
-            if rule_row:
-                db.execute(text("""
-                    INSERT INTO rules.rule_evaluation_results (evaluation_run_id, rule_id, evaluation_status, created_at)
-                    VALUES (:run_id, :rule_id, 'MATCHED', SYSUTCDATETIME())
-                """), {"run_id": eval_run_id, "rule_id": rule_row[0]})
+            try:
+                has_rules_table = db.execute(text("SELECT OBJECT_ID('rules.business_rules', 'U')")).scalar()
+                if has_rules_table:
+                    rule_row = db.execute(text("SELECT rule_id FROM rules.business_rules r JOIN workflow.workflow_definitions d ON r.target_workflow_definition_id = d.workflow_definition_id WHERE d.definition_name = :wf_name"), {"wf_name": target_inv.workflow_profile_id}).fetchone()
+                    if rule_row:
+                        db.execute(text("""
+                            INSERT INTO rules.rule_evaluation_results (evaluation_run_id, rule_id, evaluation_status, created_at)
+                            VALUES (:run_id, :rule_id, 'MATCHED', SYSUTCDATETIME())
+                        """), {"run_id": eval_run_id, "rule_id": rule_row[0]})
+            except Exception:
+                pass
 
         # 10. Instantiate Workflow execution runtime
         if target_inv.workflow_profile_id:
-            wf_name = target_inv.workflow_profile_id
-            ver_row = db.execute(text("""
-                SELECT v.workflow_version_id 
-                FROM workflow.workflow_versions v 
-                JOIN workflow.workflow_definitions d ON v.workflow_definition_id = d.workflow_definition_id 
-                WHERE d.definition_name = :wf_name AND v.is_published = 1
-            """), {"wf_name": wf_name}).fetchone()
-            
-            if ver_row:
-                wf_ver_id = ver_row[0]
-                inst_row = db.execute(text("SELECT workflow_instance_id FROM workflow.workflow_instances WHERE document_id = :doc_id AND status = 'ACTIVE'"), {"doc_id": doc_id}).fetchone()
-                
-                wf_inst_id = None
-                if inst_row:
-                    wf_inst_id = inst_row[0]
-                else:
-                    db.execute(text("""
-                        INSERT INTO workflow.workflow_instances (document_id, workflow_version_id, status, started_at)
-                        VALUES (:doc_id, :ver_id, 'ACTIVE', SYSUTCDATETIME())
-                    """), {"doc_id": doc_id, "ver_id": wf_ver_id})
-                    inst_row_new = db.execute(text("SELECT workflow_instance_id FROM workflow.workflow_instances WHERE document_id = :doc_id AND status = 'ACTIVE'"), {"doc_id": doc_id}).fetchone()
-                    wf_inst_id = inst_row_new[0] if inst_row_new else 1
-
-                stage_code = f"STAGE_{target_inv.current_stage or 1}"
-                stage_row = db.execute(text("""
-                    SELECT workflow_stage_id, stage_name 
-                    FROM workflow.workflow_stages 
-                    WHERE workflow_version_id = :ver_id AND stage_code = :code
-                """), {"ver_id": wf_ver_id, "code": stage_code}).fetchone()
-                
-                if stage_row:
-                    stage_id = stage_row[0]
-                    stage_name = stage_row[1]
-                    stage_inst_row = db.execute(text("SELECT stage_instance_id FROM workflow.stage_instances WHERE workflow_instance_id = :inst_id AND workflow_stage_id = :stage_id AND status = 'ACTIVE'"), {"inst_id": wf_inst_id, "stage_id": stage_id}).fetchone()
+            try:
+                has_wf_table = db.execute(text("SELECT OBJECT_ID('workflow.workflow_definitions', 'U')")).scalar()
+                if has_wf_table:
+                    wf_name = target_inv.workflow_profile_id
+                    ver_row = db.execute(text("""
+                        SELECT v.workflow_version_id 
+                        FROM workflow.workflow_versions v 
+                        JOIN workflow.workflow_definitions d ON v.workflow_definition_id = d.workflow_definition_id 
+                        WHERE d.definition_name = :wf_name AND v.is_published = 1
+                    """), {"wf_name": wf_name}).fetchone()
                     
-                    stage_inst_id = None
-                    if stage_inst_row:
-                        stage_inst_id = stage_inst_row[0]
-                    else:
-                        db.execute(text("""
-                            INSERT INTO workflow.stage_instances (workflow_instance_id, workflow_stage_id, status, started_at)
-                            VALUES (:inst_id, :stage_id, 'ACTIVE', SYSUTCDATETIME())
-                        """), {"inst_id": wf_inst_id, "stage_id": stage_id})
-                        stage_inst_row_new = db.execute(text("SELECT stage_instance_id FROM workflow.stage_instances WHERE workflow_instance_id = :inst_id AND workflow_stage_id = :stage_id AND status = 'ACTIVE'"), {"inst_id": wf_inst_id, "stage_id": stage_id}).fetchone()
-                        stage_inst_id = stage_inst_row_new[0] if stage_inst_row_new else 1
+                    if ver_row:
+                        wf_ver_id = ver_row[0]
+                        inst_row = db.execute(text("SELECT workflow_instance_id FROM workflow.workflow_instances WHERE document_id = :doc_id AND status = 'ACTIVE'"), {"doc_id": doc_id}).fetchone()
+                        
+                        wf_inst_id = None
+                        if inst_row:
+                            wf_inst_id = inst_row[0]
+                        else:
+                            db.execute(text("""
+                                INSERT INTO workflow.workflow_instances (document_id, workflow_version_id, status, started_at)
+                                VALUES (:doc_id, :ver_id, 'ACTIVE', SYSUTCDATETIME())
+                            """), {"doc_id": doc_id, "ver_id": wf_ver_id})
+                            inst_row_new = db.execute(text("SELECT workflow_instance_id FROM workflow.workflow_instances WHERE document_id = :doc_id AND status = 'ACTIVE'"), {"doc_id": doc_id}).fetchone()
+                            wf_inst_id = inst_row_new[0] if inst_row_new else 1
 
-                    if target_inv.assigned_approver:
-                        approver_uname = target_inv.assigned_approver
-                        app_user_row = db.execute(text("SELECT user_id FROM security.app_users WHERE username = :uname"), {"uname": approver_uname}).fetchone()
-                        if app_user_row:
-                            app_user_id = app_user_row[0]
-                            assign_row = db.execute(text("SELECT task_assignment_id FROM workflow.task_assignments WHERE stage_instance_id = :inst_id AND assigned_user_id = :u_id AND status = 'ASSIGNED'"), {"inst_id": stage_inst_id, "u_id": app_user_id}).fetchone()
-                            if not assign_row:
+                        stage_code = f"STAGE_{target_inv.current_stage or 1}"
+                        stage_row = db.execute(text("""
+                            SELECT workflow_stage_id, stage_name 
+                            FROM workflow.workflow_stages 
+                            WHERE workflow_version_id = :ver_id AND stage_code = :code
+                        """), {"ver_id": wf_ver_id, "code": stage_code}).fetchone()
+                        
+                        if stage_row:
+                            stage_id = stage_row[0]
+                            stage_name = stage_row[1]
+                            stage_inst_row = db.execute(text("SELECT stage_instance_id FROM workflow.stage_instances WHERE workflow_instance_id = :inst_id AND workflow_stage_id = :stage_id AND status = 'ACTIVE'"), {"inst_id": wf_inst_id, "stage_id": stage_id}).fetchone()
+                            
+                            stage_inst_id = None
+                            if stage_inst_row:
+                                stage_inst_id = stage_inst_row[0]
+                            else:
                                 db.execute(text("""
-                                    INSERT INTO workflow.task_assignments (stage_instance_id, assigned_user_id, status, due_date)
-                                    VALUES (:inst_id, :u_id, 'ASSIGNED', DATEADD(day, 2, SYSUTCDATETIME()))
-                                """), {"inst_id": stage_inst_id, "u_id": app_user_id})
+                                    INSERT INTO workflow.stage_instances (workflow_instance_id, workflow_stage_id, status, started_at)
+                                    VALUES (:inst_id, :stage_id, 'ACTIVE', SYSUTCDATETIME())
+                                """), {"inst_id": wf_inst_id, "stage_id": stage_id})
+                                stage_inst_row_new = db.execute(text("SELECT stage_instance_id FROM workflow.stage_instances WHERE workflow_instance_id = :inst_id AND workflow_stage_id = :stage_id AND status = 'ACTIVE'"), {"inst_id": wf_inst_id, "stage_id": stage_id}).fetchone()
+                                stage_inst_id = stage_inst_row_new[0] if stage_inst_row_new else 1
 
-                    # Seed Checklist Items
-                    db.execute(text("""
-                        INSERT INTO workflow.checklist_items (stage_instance_id, item_text, is_mandatory, is_checked)
-                        SELECT :stage_inst_id, t.item_text, t.is_mandatory, 0
-                        FROM workflow.workflow_checklist_templates t
-                        WHERE t.workflow_stage_id = :stage_id
-                          AND NOT EXISTS (
-                              SELECT 1 FROM workflow.checklist_items i 
-                              WHERE i.stage_instance_id = :stage_inst_id 
-                                AND i.item_text = t.item_text
-                          )
-                    """), {"stage_inst_id": stage_inst_id, "stage_id": stage_id})
+                            if target_inv.assigned_approver:
+                                approver_uname = target_inv.assigned_approver
+                                app_user_row = db.execute(text("SELECT user_id FROM security.app_users WHERE username = :uname"), {"uname": approver_uname}).fetchone()
+                                if app_user_row:
+                                    app_user_id = app_user_row[0]
+                                    assign_row = db.execute(text("SELECT task_assignment_id FROM workflow.task_assignments WHERE stage_instance_id = :inst_id AND assigned_user_id = :u_id AND status = 'ASSIGNED'"), {"inst_id": stage_inst_id, "u_id": app_user_id}).fetchone()
+                                    if not assign_row:
+                                        db.execute(text("""
+                                            INSERT INTO workflow.task_assignments (stage_instance_id, assigned_user_id, status, due_date)
+                                            VALUES (:inst_id, :u_id, 'ASSIGNED', DATEADD(day, 2, SYSUTCDATETIME()))
+                                        """), {"inst_id": stage_inst_id, "u_id": app_user_id})
+
+                            # Seed Checklist Items
+                            db.execute(text("""
+                                INSERT INTO workflow.checklist_items (stage_instance_id, item_text, is_mandatory, is_checked)
+                                SELECT :stage_inst_id, t.item_text, t.is_mandatory, 0
+                                FROM workflow.workflow_checklist_templates t
+                                WHERE t.workflow_stage_id = :stage_id
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM workflow.checklist_items i 
+                                      WHERE i.stage_instance_id = :stage_inst_id 
+                                        AND i.item_text = t.item_text
+                                  )
+                            """), {"stage_inst_id": stage_inst_id, "stage_id": stage_id})
+            except Exception:
+                pass
 
         # 11. Log immutable audit event
         db.execute(text("""
@@ -420,8 +452,8 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             ))
     db.commit()
 
-    # 2. Automated Business Rules Evaluation & Flow Initiation
-    if req.auto_route:
+    # 2. Automated Business Rules Evaluation & Flow Initiation (Preserve Approved/Cancelled status on re-sync)
+    if req.auto_route and target_inv.status not in ["Approved", "Cancelled"]:
         from app.services.rules_engine import evaluate_business_rules_full
         rule_eval_res = evaluate_business_rules_full(db, target_inv)
         target_wf = rule_eval_res.get("target_workflow_id") if rule_eval_res else None
@@ -429,10 +461,10 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         cancel_reason = rule_eval_res.get("cancel_reason", "Auto-cancelled by Policy Engine") if rule_eval_res else None
         matched_rule_name = rule_eval_res.get("rule_name", "Default Policy") if rule_eval_res else "Default Policy"
 
-        if not target_wf:
-            target_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
+        profile = None
+        if target_wf:
+            profile = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == target_wf).first()
 
-        profile = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == target_wf).first()
         if profile:
             from app.services.rules_engine import infer_document_type
             target_inv.workflow_profile_id = profile.profile_name
@@ -488,9 +520,25 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                     ))
                 
                 target_inv.checklist_state = json.dumps({it_text: False for it_text in stage_items})
+        else:
+            # NO RULE MATCHED: Strict compliance - do NOT start any random workflow or default approver
+            target_inv.workflow_profile_id = None
+            target_inv.assigned_approver = "Unassigned (No Rule Matched)"
+            target_inv.status = "Unrouted (No Rule Matched)"
+            target_inv.total_stages = 0
+            target_inv.current_stage = 0
+            db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == target_inv.id).delete()
+            target_inv.checklist_state = json.dumps({})
+            db.add(AuditLog(
+                invoice_id=target_inv.id,
+                user="Policy Engine (Unrouted)",
+                action="UNROUTED",
+                stage="Rule Evaluation",
+                notes="Document ingested but no active business rule matched the document criteria. Pending rule creation."
+            ))
 
-            db.commit()
-            db.refresh(target_inv)
+        db.commit()
+        db.refresh(target_inv)
 
     # 3. Log Sync Audit Entry (Pure Ingestion, not an approval)
     db.add(AuditLog(
@@ -974,8 +1022,10 @@ def sync_record_attachment_by_pk_base64(
 @router.post("/seed-demo")
 def seed_demo_invoices_endpoint(db: Session = Depends(get_db)):
     """API endpoint to seed/sync the 10 standard multi-category demo documents directly into the database on demand."""
-    from pathlib import Path
-    data_path = Path(__file__).resolve().parent.parent.parent / "production_data.json"
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    data_path = base_dir / "data" / "production_data.json"
+    if not data_path.exists():
+        data_path = base_dir / "production_data.json"
     if not data_path.exists():
         raise HTTPException(status_code=404, detail="production_data.json not found")
     

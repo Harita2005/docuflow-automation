@@ -37,7 +37,6 @@ try:
     from sqlalchemy import text, inspect
     
     is_mssql = engine.dialect.name == "mssql"
-    is_sqlite = engine.dialect.name == "sqlite"
 
     def run_migration_sql(sql_cmd: str):
         try:
@@ -47,6 +46,13 @@ try:
             print(f"[Database Migration Notice] {err}")
 
     if is_mssql:
+        # 0. Ensure integration schema & tables exist
+        run_migration_sql("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'integration') EXEC('CREATE SCHEMA integration');")
+        run_migration_sql("IF OBJECT_ID('integration.source_systems', 'U') IS NULL CREATE TABLE integration.source_systems (source_system_id INT IDENTITY(1,1) PRIMARY KEY, system_code VARCHAR(50) NOT NULL UNIQUE, system_name VARCHAR(200) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());")
+        run_migration_sql("IF OBJECT_ID('integration.sync_runs', 'U') IS NULL CREATE TABLE integration.sync_runs (sync_run_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, idempotency_key VARCHAR(100) NOT NULL, sync_status VARCHAR(50) NOT NULL DEFAULT 'COMPLETED', records_processed INT NOT NULL DEFAULT 1, started_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());")
+        run_migration_sql("IF OBJECT_ID('integration.source_records', 'U') IS NULL CREATE TABLE integration.source_records (source_record_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, external_record_key VARCHAR(100) NOT NULL, payload_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());")
+        run_migration_sql("IF OBJECT_ID('integration.source_record_versions', 'U') IS NULL CREATE TABLE integration.source_record_versions (version_id INT IDENTITY(1,1) PRIMARY KEY, source_record_id INT NOT NULL, version_number INT NOT NULL, payload_snapshot_json NVARCHAR(MAX) NULL, received_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());")
+
         # 1. Rename legacy tables if present
         run_migration_sql("IF OBJECT_ID('invoices', 'U') IS NOT NULL AND OBJECT_ID('documents', 'U') IS NULL EXEC sp_rename 'invoices', 'documents';")
         run_migration_sql("IF OBJECT_ID('invoice_line_items', 'U') IS NOT NULL AND OBJECT_ID('document_line_items', 'U') IS NULL EXEC sp_rename 'invoice_line_items', 'document_line_items';")
@@ -161,96 +167,6 @@ try:
         run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='audit_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE audit_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
         run_migration_sql("IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='system_logs' AND COLUMN_NAME='invoice_id' AND DATA_TYPE IN ('int', 'bigint')) ALTER TABLE system_logs ALTER COLUMN invoice_id VARCHAR(100) NULL;")
 
-    elif is_sqlite:
-        inspector = inspect(engine)
-        tables = inspector.get_table_names()
-
-        def add_sqlite_col_if_missing(table_name: str, col_name: str, col_def: str):
-            if table_name in tables:
-                cols = [c["name"] for c in inspector.get_columns(table_name)]
-                if col_name not in cols:
-                    run_migration_sql(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def};")
-
-        sqlite_doc_cols = [
-            ("party_name", "VARCHAR(250)"),
-            ("party_code", "VARCHAR(100)"),
-            ("party_tax_id", "VARCHAR(50)"),
-            ("vendor_name", "VARCHAR(250)"),
-            ("vendor_code", "VARCHAR(100)"),
-            ("vendor_gstin", "VARCHAR(50)"),
-            ("cgst", "FLOAT"),
-            ("sgst", "FLOAT"),
-            ("igst", "FLOAT"),
-            ("is_deleted", "INTEGER DEFAULT 0"),
-            ("deleted_at", "DATETIME"),
-            ("pi_indicator", "VARCHAR(10)"),
-            ("trans_type", "VARCHAR(20)"),
-            ("gstin", "VARCHAR(15)"),
-            ("doc_status", "INTEGER DEFAULT 0"),
-            ("doc_due_date", "DATE"),
-            ("contact_person", "VARCHAR(100)"),
-            ("pay_mode", "VARCHAR(10) DEFAULT 'BANK'"),
-            ("link_column", "VARCHAR(500)"),
-            ("external_sync_status", "VARCHAR(50) DEFAULT 'UNSYNCED'"),
-            ("external_sync_ref", "VARCHAR(100)"),
-            ("external_synced_at", "DATETIME"),
-            ("external_sync_system", "VARCHAR(100)"),
-            ("external_sync_error", "TEXT")
-        ]
-        for col_name, col_def in sqlite_doc_cols:
-            add_sqlite_col_if_missing("documents", col_name, col_def)
-
-        sqlite_user_cols = [
-            ("is_deleted", "INTEGER DEFAULT 0"),
-            ("deleted_at", "DATETIME"),
-            ("mfa_enabled", "INTEGER DEFAULT 0"),
-            ("mfa_type", "VARCHAR(50) DEFAULT 'EMAIL'"),
-            ("mfa_secret", "VARCHAR(100)"),
-            ("last_login", "DATETIME"),
-            ("active_session_id", "VARCHAR(100)"),
-            ("active_device_info", "VARCHAR(255)"),
-            ("session_created_at", "DATETIME"),
-            ("last_activity_at", "DATETIME")
-        ]
-        for col_name, col_def in sqlite_user_cols:
-            add_sqlite_col_if_missing("users", col_name, col_def)
-
-        sqlite_wf_cols = [
-            ("is_deleted", "INTEGER DEFAULT 0"),
-            ("deleted_at", "DATETIME"),
-            ("rule_action", "VARCHAR(50) DEFAULT 'WORKFLOW_ROUTE'"),
-            ("cancel_reason", "TEXT"),
-            ("auto_approve_enabled", "INTEGER DEFAULT 0"),
-            ("auto_approve_condition", "TEXT"),
-            ("auto_cancel_enabled", "INTEGER DEFAULT 0"),
-            ("auto_cancel_condition", "TEXT")
-        ]
-        for col_name, col_def in sqlite_wf_cols:
-            add_sqlite_col_if_missing("workflow_profiles", col_name, col_def)
-
-        add_sqlite_col_if_missing("workflow_step_definitions", "checklist_json", "TEXT")
-
-        for col_name, col_def in sqlite_wf_cols:
-            add_sqlite_col_if_missing("business_rules", col_name, col_def)
-
-        sqlite_line_cols = [
-            ("item_code", "VARCHAR(100)"),
-            ("warranty_text", "VARCHAR(500)"),
-            ("serial_numbers", "VARCHAR(1000)"),
-            ("quantity", "NUMERIC(12, 2) DEFAULT 1.0"),
-            ("unit_price", "NUMERIC(18, 2) DEFAULT 0.0"),
-            ("amount", "NUMERIC(18, 2) DEFAULT 0.0")
-        ]
-        for col_name, col_def in sqlite_line_cols:
-            add_sqlite_col_if_missing("document_line_items", col_name, col_def)
-
-        sqlite_callback_cols = [
-            ("payload_source", "VARCHAR(50) DEFAULT 'MAPPING'"),
-            ("stored_procedure_name", "VARCHAR(200)")
-        ]
-        for col_name, col_def in sqlite_callback_cols:
-            add_sqlite_col_if_missing("callback_rules", col_name, col_def)
-
     # 11. Default cleanups for NULL values
     run_migration_sql("UPDATE documents SET is_deleted = 0 WHERE is_deleted IS NULL;")
     run_migration_sql("UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;")
@@ -302,7 +218,10 @@ def startup_event():
         if wf_count == 0:
             print(f"[Startup] Seeding complete dataset (Found {wf_count} workflows, {inv_count} invoices)...")
             try:
-                from seed_sd_workflow_matrix import seed_sd_workflow_matrix
+                try:
+                    from scripts.seed_sd_workflow_matrix import seed_sd_workflow_matrix
+                except ImportError:
+                    from seed_sd_workflow_matrix import seed_sd_workflow_matrix
                 seed_sd_workflow_matrix()
             except Exception as e:
                 print(f"[Startup] Seed notice: {e}")
@@ -355,7 +274,7 @@ def root():
         "status": "online",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "database": f"MS SQL Server ({db_target})" if not db_raw.startswith("sqlite") else "SQLite (Local)",
+        "database": f"MS SQL Server ({db_target})",
         "database_target": db_target,
         "docs": "/docs"
     }

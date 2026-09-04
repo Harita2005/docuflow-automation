@@ -5,21 +5,24 @@ import zipfile
 import xml.etree.cElementTree as ET
 from pathlib import Path
 from collections import defaultdict
+BASE_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = BASE_DIR.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
 from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
 from app.services.rules_engine import calculate_rule_priority, is_wildcard
 
-BASE_DIR = Path(__file__).resolve().parent
 candidate_paths = [
+    BACKEND_DIR / "data" / "SD Checklists.xlsx",
+    BACKEND_DIR / "data" / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
     BASE_DIR / "SD Checklists.xlsx",
-    BASE_DIR / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
+    Path("/app/data/SD Checklists.xlsx"),
     Path("/app/SD Checklists.xlsx"),
-    Path("/app/SD SCHEMA AND WORKFLOW DETAILS.xlsx"),
     Path.cwd() / "SD Checklists.xlsx",
-    Path.cwd() / "SD SCHEMA AND WORKFLOW DETAILS.xlsx",
-    BASE_DIR.parent / "SD Checklists.xlsx",
-    BASE_DIR.parent / "SD SCHEMA AND WORKFLOW DETAILS.xlsx"
+    BACKEND_DIR / "SD Checklists.xlsx"
 ]
 EXCEL_PATH = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
 

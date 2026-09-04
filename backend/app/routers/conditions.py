@@ -32,7 +32,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
     if not rule:
         rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
 
-    target_wf = payload.target_workflow_id or payload.workflow_code or "WF-837"
+    target_wf = payload.target_workflow_id or payload.workflow_code or ""
     conds = payload.conditions_json or "[]"
 
     if rule:

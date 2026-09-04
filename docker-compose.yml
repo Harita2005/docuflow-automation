@@ -9,8 +9,6 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://@localhost/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes}
-      - SECRET_KEY=${SECRET_KEY:-super-secret-docuflow-jwt-key-2026-production}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8085}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
@@ -37,7 +35,7 @@ services:
     container_name: docuflow-db
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=Admin@1234
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-Admin@1234}
     ports:
       - "1443:1433"
     volumes:

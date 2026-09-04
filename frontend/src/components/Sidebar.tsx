@@ -85,7 +85,7 @@ export default function Sidebar({
           {isExpanded && (
             <div className="flex flex-col">
               <span className="font-extrabold text-white text-base tracking-tight font-display">DocuFlow</span>
-              <span className="text-[10px] text-blue-400 font-medium tracking-widest uppercase">Document Approval Engine</span>
+              <span className="text-[9px] text-blue-400 font-medium tracking-wider uppercase">Document Automation & Approval System</span>
             </div>
           )}
         </div>

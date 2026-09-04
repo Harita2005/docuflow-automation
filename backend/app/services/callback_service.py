@@ -303,22 +303,18 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
 def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key: str, doc_context: Dict[str, Any]) -> str:
     """
     Executes a SQL Stored Procedure (e.g. sp_GetApprovalCallbackPayload) passing @DocKey as parameter.
-    If running on MS SQL Server, executes `EXEC {sp_name} @DocKey = :doc_key` and returns the SQL FOR JSON string.
-    If running on local SQLite dev database, executes an equivalent fallback query that constructs line items array dynamically.
+    Executes `EXEC {sp_name} @DocKey = :doc_key` and returns the SQL FOR JSON string, or constructs line items payload dynamically.
     """
     clean_sp_name = re.sub(r'[^a-zA-Z0-9_]', '', (sp_name or "sp_GetApprovalCallbackPayload").strip()) or "sp_GetApprovalCallbackPayload"
     
     if db:
         try:
             from sqlalchemy import text
-            db_bind_url = str(db.bind.url) if db.bind else ""
-            
-            if "sqlite" not in db_bind_url:
-                # MS SQL Server execution
-                sql_cmd = text(f"EXEC {clean_sp_name} @DocKey = :doc_key")
-                res = db.execute(sql_cmd, {"doc_key": str(doc_key)}).fetchone()
-                if res and res[0]:
-                    return str(res[0])
+            # MS SQL Server execution
+            sql_cmd = text(f"EXEC {clean_sp_name} @DocKey = :doc_key")
+            res = db.execute(sql_cmd, {"doc_key": str(doc_key)}).fetchone()
+            if res and res[0]:
+                return str(res[0])
         except Exception as err:
             print(f"[Stored Procedure Execution Notice] Execution of '{clean_sp_name}' returned notice: {err}")
 

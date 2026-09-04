@@ -1433,63 +1433,75 @@ async def upload_document(
     rule_name = rule_eval.get("rule_name", "Default Policy") if rule_eval else "Default Policy"
 
     if not matched_wf:
-        matched_wf = None
-
-    new_inv.workflow_profile_id = matched_wf
-    new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
-    
-    steps = db.query(WorkflowStepDefinition).filter(
-        WorkflowStepDefinition.profile_name == matched_wf
-    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
-    
-    new_inv.total_stages = len(steps) if steps else 2
-
-    if rule_act == "AUTO_APPROVE":
-        new_inv.status = "Approved"
-        new_inv.current_stage = new_inv.total_stages
-        new_inv.assigned_approver = "System Auto-Approved"
-        db.add(AuditLog(
-            invoice_id=new_inv.id,
-            user="Policy Engine (STP)",
-            action="AUTO_APPROVED",
-            stage="Straight-Through Processing",
-            notes=f"Document uploaded and auto-approved by rule '{rule_name}'."
-        ))
-        archive_approved_pdf(new_inv)
-    elif rule_act == "AUTO_CANCEL":
-        new_inv.status = "Cancelled"
-        new_inv.current_stage = 1
-        new_inv.assigned_approver = "System Auto-Cancelled"
-        db.add(AuditLog(
-            invoice_id=new_inv.id,
-            user="Policy Engine (Auto-Reject)",
-            action="AUTO_CANCELLED",
-            stage="Auto-Rejection Guard",
-            notes=f"Document uploaded and auto-cancelled by rule '{rule_name}'. Reason: {cancel_res or 'Policy Violation'}"
-        ))
-        archive_rejected_pdf(new_inv)
-    else:
-        new_inv.current_stage = 1
-        if steps and steps[0].approver_target:
-            new_inv.assigned_approver = steps[0].approver_target.strip()
-            new_inv.status = f"Initiated ({steps[0].step_name})"
-        else:
-            new_inv.assigned_approver = "YUVASREE"
-            new_inv.status = "Initiated (Stage 1)"
-
+        new_inv.workflow_profile_id = None
+        new_inv.assigned_approver = "Unassigned (No Rule Matched)"
+        new_inv.status = "Unrouted (No Rule Matched)"
+        new_inv.total_stages = 0
+        new_inv.current_stage = 0
+        new_inv.checklist_state = json.dumps({})
         db.add(AuditLog(
             invoice_id=new_inv.id,
             user="Document Uploader",
-            action="Created & Uploaded",
-            stage="Stage 1",
-            notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
+            action="UNROUTED",
+            stage="Rule Evaluation",
+            notes="Document uploaded but no active business rule matched the document criteria. Pending rule creation."
         ))
+    else:
+        new_inv.workflow_profile_id = matched_wf
+        new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
+        
+        steps = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == matched_wf
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        
+        new_inv.total_stages = len(steps) if steps else 2
 
-    first_stage = "Attachment Status"
-    if steps and len(steps) > 0 and steps[0].step_name:
-        first_stage = steps[0].step_name
-    checklist_items = resolve_checklist_items(db, new_inv, first_stage)
-    new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
+        if rule_act == "AUTO_APPROVE":
+            new_inv.status = "Approved"
+            new_inv.current_stage = new_inv.total_stages
+            new_inv.assigned_approver = "System Auto-Approved"
+            db.add(AuditLog(
+                invoice_id=new_inv.id,
+                user="Policy Engine (STP)",
+                action="AUTO_APPROVED",
+                stage="Straight-Through Processing",
+                notes=f"Document uploaded and auto-approved by rule '{rule_name}'."
+            ))
+            archive_approved_pdf(new_inv)
+        elif rule_act == "AUTO_CANCEL":
+            new_inv.status = "Cancelled"
+            new_inv.current_stage = 1
+            new_inv.assigned_approver = "System Auto-Cancelled"
+            db.add(AuditLog(
+                invoice_id=new_inv.id,
+                user="Policy Engine (Auto-Reject)",
+                action="AUTO_CANCELLED",
+                stage="Auto-Rejection Guard",
+                notes=f"Document uploaded and auto-cancelled by rule '{rule_name}'. Reason: {cancel_res or 'Policy Violation'}"
+            ))
+            archive_rejected_pdf(new_inv)
+        else:
+            new_inv.current_stage = 1
+            if steps and steps[0].approver_target:
+                new_inv.assigned_approver = steps[0].approver_target.strip()
+                new_inv.status = f"Initiated ({steps[0].step_name})"
+            else:
+                new_inv.assigned_approver = "Unassigned (No Step Approvers)"
+                new_inv.status = "Initiated (Stage 1)"
+
+            db.add(AuditLog(
+                invoice_id=new_inv.id,
+                user="Document Uploader",
+                action="Created & Uploaded",
+                stage="Stage 1",
+                notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
+            ))
+
+        first_stage = "Attachment Status"
+        if steps and len(steps) > 0 and steps[0].step_name:
+            first_stage = steps[0].step_name
+        checklist_items = resolve_checklist_items(db, new_inv, first_stage)
+        new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
     db.add(new_inv)
     db.commit()
@@ -1555,14 +1567,12 @@ async def upload_and_route(
     cancel_res2 = rule_eval2.get("cancel_reason", "Auto-cancelled by policy") if rule_eval2 else None
     rule_name2 = rule_eval2.get("rule_name", "Default Policy") if rule_eval2 else "Default Policy"
 
-    if not matched_wf:
-        matched_wf = "VCC_EB_DEPOSIT_POST&TEL_CAM_RENT_NEW2"
-
-    inv.workflow_profile_id = matched_wf
-    inv.document_type = infer_document_type(category=inv.category, wf_name=matched_wf, doc_type=document_type)
-    steps = db.query(WorkflowStepDefinition).filter(
-        WorkflowStepDefinition.profile_name == matched_wf
-    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    if matched_wf:
+        inv.workflow_profile_id = matched_wf
+        inv.document_type = infer_document_type(category=inv.category, wf_name=matched_wf, doc_type=document_type)
+        steps = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == matched_wf
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
     
     inv.total_stages = len(steps) if steps else 2
 

@@ -1,19 +1,23 @@
-﻿import sys
+import sys
 import os
 import json
 from pathlib import Path
 from datetime import datetime
 
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from sqlalchemy import create_engine, MetaData, text
 from app.config import settings
 from app.database import Base, engine
 
-JSON_PATH = BASE_DIR / "seed_data.json"
+JSON_PATH = BASE_DIR / "data" / "seed_data.json"
 if not JSON_PATH.exists():
-    JSON_PATH = Path("/app/seed_data.json")
+    JSON_PATH = SCRIPT_DIR / "seed_data.json"
+if not JSON_PATH.exists():
+    JSON_PATH = Path("/app/data/seed_data.json")
 
 ALL_WIPE_TABLES = [
     "system_logs",

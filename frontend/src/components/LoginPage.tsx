@@ -316,7 +316,7 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
             DocuFlow
           </span>
           <p className="text-blue-200/80 text-xs font-medium tracking-wide max-w-xs">
-            Document Approval Automation System - Enterprise Engine
+            Document Automation & Approval System - Enterprise Engine
           </p>
         </div>
       </div>

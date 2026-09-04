@@ -337,7 +337,7 @@ export default function App() {
   }, [currentView, selectedDocId]);
 
   const [requireGRN, setRequireGRN] = useState(true);
-  const [orgName, setOrgName] = useState("DocuFlow - Document Approval Automation System");
+  const [orgName, setOrgName] = useState("Document Automation & Approval System");
 
   // Fetch dynamic role permissions from DB
   const fetchRolePermissions = async () => {

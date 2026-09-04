@@ -10,7 +10,7 @@ const SYSTEM_KEYS = [
   { key: "OCR_ENGINE", default: "Tesseract+Ollama", desc: "Active OCR Pipeline Engine", category: "System", type: "select", options: ["Tesseract+Ollama", "Vision API", "Tesseract Only", "Ollama Only"] },
   { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System", type: "text" },
   { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System", type: "text" },
-  { key: "ORGANIZATION_NAME", default: "DocuFlow Automation", desc: "Organization / Company display name displayed on top header", category: "System", type: "text" },
+  { key: "ORGANIZATION_NAME", default: "Document Automation & Approval System", desc: "Organization / Company display name displayed on top header", category: "System", type: "text" },
   { key: "GLOBAL_REQUIRE_GRN", default: "true", desc: "If true, invoices require physical Gate Entry verification. If false, skips to Approval.", category: "System", type: "select", options: ["true", "false"] },
   { key: "MAX_WORKFLOWS_PER_COMPANY", default: "50", desc: "Maximum active workflows allowed per organization", category: "Limits & Thresholds", type: "text" },
   { key: "MAX_APPROVAL_STEPS", default: "10", desc: "Maximum approval stages allowed per workflow", category: "Limits & Thresholds", type: "text" },
