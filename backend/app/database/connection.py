@@ -19,6 +19,26 @@ engine_kwargs = {
     "pool_recycle": 300,
 }
 
+def ensure_mssql_database_exists(url: str):
+    """Auto-create target database (e.g. DocuFlowDB) on MS SQL Server if missing."""
+    if "mssql" not in url.lower():
+        return
+    try:
+        from sqlalchemy import text
+        db_name = settings.DB_NAME or "DocuFlowDB"
+        if f"/{db_name}" in url:
+            master_url = url.replace(f"/{db_name}", "/master", 1)
+            master_engine = create_engine(master_url, isolation_level="AUTOCOMMIT")
+            with master_engine.connect() as conn:
+                conn.execute(text(f"IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'{db_name}') CREATE DATABASE [{db_name}];"))
+            master_engine.dispose()
+            print(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
+    except Exception as create_err:
+        print(f"[Database Auto-Create Notice] Could not auto-create database '{settings.DB_NAME}': {create_err}")
+
+# Auto-create database on master if missing
+ensure_mssql_database_exists(db_url)
+
 # Create SQL engine cleanly based on configured DATABASE_URL without fallback
 try:
     engine = create_engine(db_url, **engine_kwargs)
