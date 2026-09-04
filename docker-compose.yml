@@ -10,6 +10,11 @@ services:
       - .env
     environment:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8085}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=1433
+      - DB_NAME=${DB_NAME:-DocuFlowDB}
+      - DB_USER=${DB_USER:-sa}
+      - DB_PASSWORD=${DB_PASSWORD:-Admin@1234}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
     restart: unless-stopped
