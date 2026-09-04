@@ -3,14 +3,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: daas-backend
+    container_name: docuflow-backend
     ports:
       - "3000:3000"
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://sa:Admin%401234@192.168.179.22/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes}
-      - SECRET_KEY=${SECRET_KEY:-super-secret-daas-jwt-key-2026-production}
+      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://@localhost/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes}
+      - SECRET_KEY=${SECRET_KEY:-super-secret-docuflow-jwt-key-2026-production}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8085}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
@@ -25,7 +25,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: daas-frontend
+    container_name: docuflow-frontend
     ports:
       - "8085:80"
     depends_on:
@@ -34,7 +34,7 @@ services:
 
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: daas-db
+    container_name: docuflow-db
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=Admin@1234
