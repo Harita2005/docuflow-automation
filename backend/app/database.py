@@ -54,6 +54,16 @@ if "mssql" in db_url:
         pymssql_alt = base_clean.replace("mssql+pyodbc://", "mssql+pymssql://") + "?login_timeout=5"
         candidate_urls.append(pymssql_alt)
 
+    docker_candidates = [
+        "mssql+pyodbc://sa:Admin%401234@host.docker.internal:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes&login_timeout=5",
+        "mssql+pyodbc://sa:Admin%401234@192.168.179.22:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes&login_timeout=5",
+        "mssql+pyodbc://sa:Admin%401234@docuflow-db:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes&login_timeout=5",
+        "mssql+pyodbc://sa:Admin%401234@localhost:1433/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes&login_timeout=5"
+    ]
+    for dc in docker_candidates:
+        if dc not in candidate_urls:
+            candidate_urls.append(dc)
+
     connected = False
     last_err = None
     for target_url in candidate_urls:

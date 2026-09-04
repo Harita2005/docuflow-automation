@@ -11,6 +11,28 @@ from app.routers import auth, users, documents, workflows, conditions, audit, sy
 # Initialize database schema tables and run migrations on import
 try:
     Base.metadata.create_all(bind=engine)
+
+    # Automatically ensure core 5 users exist in database if empty
+    db_init = SessionLocal()
+    try:
+        if db_init.query(User).count() == 0:
+            from app.auth import get_password_hash
+            hashed_pass = get_password_hash("password123")
+            core_users = [
+                User(id=1, user_uid="U-ADMIN", employee_id="EMP001", employee_name="System Administrator", name="System Administrator", username="admin", email="harita010905@gmail.com", role="admin", password_hash=hashed_pass, is_active=True, is_deleted=False),
+                User(id=214, user_uid="U-214", employee_id="EMP214", employee_name="VIGNESH M", name="VIGNESH", username="VIGNESH", email="vignesh.m@ramrajcotton.net", role="manager", password_hash=hashed_pass, is_active=True, is_deleted=False),
+                User(id=222, user_uid="U-222", employee_id="EMP222", employee_name="YUVASREE", name="YUVASREE", username="YUVASREE", email="wmssupport@ramrajcotton.net", role="employee", password_hash=hashed_pass, is_active=True, is_deleted=False),
+                User(id=1002, user_uid="U-1002", employee_id="EMP1002", employee_name="VARUNAN R", name="VARUNAN", username="VARUNAN", email="varunan.r@ramrajcotton.net", role="employee", password_hash=hashed_pass, is_active=True, is_deleted=False),
+                User(id=1226, user_uid="U-1226", employee_id="EMP1226", employee_name="NATTUDURAI S", name="Nattudurai", username="Nattudurai", email="Nattudurai.s@ramrajcotton.net", role="manager", password_hash=hashed_pass, is_active=True, is_deleted=False),
+            ]
+            for u in core_users:
+                db_init.add(u)
+            db_init.commit()
+            print("[Database Seeding] Core 5 users initialized successfully.")
+    except Exception as seed_err:
+        print(f"[Database Seeding Notice] {seed_err}")
+    finally:
+        db_init.close()
     
     from sqlalchemy import text, inspect
     
