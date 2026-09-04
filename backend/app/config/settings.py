@@ -43,7 +43,9 @@ class Settings(BaseSettings):
         if self.DATABASE_URL:
             return self.DATABASE_URL
         if self.DB_USER and self.DB_PASSWORD:
-            return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes"
+            from urllib.parse import quote_plus
+            safe_pass = quote_plus(self.DB_PASSWORD)
+            return f"mssql+pyodbc://{self.DB_USER}:{safe_pass}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes"
         elif self.DB_HOST:
             return f"mssql+pyodbc://@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
         raise ValueError("Enterprise Configuration Error: DB_HOST or DATABASE_URL must be specified in environment settings (.env).")
