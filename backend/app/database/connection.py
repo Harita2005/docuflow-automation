@@ -23,18 +23,29 @@ def ensure_mssql_database_exists(url: str):
     """Auto-create target database (e.g. DocuFlowDB) on MS SQL Server if missing."""
     if "mssql" not in url.lower():
         return
-    try:
-        from sqlalchemy import text
-        db_name = settings.DB_NAME or "DocuFlowDB"
-        if f"/{db_name}" in url:
-            master_url = url.replace(f"/{db_name}", "/master", 1)
+    db_name = settings.DB_NAME or "DocuFlowDB"
+    if db_name.lower() == "master":
+        return
+
+    for attempt in range(5):
+        try:
+            from sqlalchemy import text
+            from urllib.parse import quote_plus
+            safe_pass = quote_plus(settings.DB_PASSWORD) if settings.DB_PASSWORD else ""
+            user_part = f"{settings.DB_USER}:{safe_pass}@" if settings.DB_USER else ""
+            master_url = f"mssql+pyodbc://{user_part}{settings.DB_HOST}:{settings.DB_PORT}/master?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes"
+            
             master_engine = create_engine(master_url, isolation_level="AUTOCOMMIT")
             with master_engine.connect() as conn:
                 conn.execute(text(f"IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'{db_name}') CREATE DATABASE [{db_name}];"))
             master_engine.dispose()
             print(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
-    except Exception as create_err:
-        print(f"[Database Auto-Create Notice] Could not auto-create database '{settings.DB_NAME}': {create_err}")
+            break
+        except Exception as create_err:
+            if attempt < 4:
+                time.sleep(3)
+            else:
+                print(f"[Database Auto-Create Notice] Could not auto-create database '{db_name}': {create_err}")
 
 # Auto-create database on master if missing
 ensure_mssql_database_exists(db_url)
