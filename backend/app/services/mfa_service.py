@@ -131,14 +131,14 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
                 </div>
                 <p style="color: #64748b; font-size: 13px; line-height: 1.5;">
                     Hello <strong>{employee_name}</strong>,<br>
-                    You received this email because a login request was initiated for your DocuFlow account. If you did not initiate this request, please contact IT immediately.
+                    You received this email because a login request was initiated for your DAAS account. If you did not initiate this request, please contact IT immediately.
                 </p>
                 <div style="border-top: 1px solid #f1f5f9; margin-top: 20px; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center;">
-                    &copy; 2026 DocuFlow Solutions LLC. Automated security dispatch.
+                    &copy; 2026 DAAS - Document Approval & Automation System. Automated security dispatch.
                 </div>
             </div>
             """
-            plain_body = f"Hello {employee_name},\n\nYour DocuFlow 6-digit verification code is: {otp_code}\n\nValid for 5 minutes."
+            plain_body = f"Hello {employee_name},\n\nYour DAAS 6-digit verification code is: {otp_code}\n\nValid for 5 minutes."
 
             msg.attach(MIMEText(plain_body, "plain"))
             msg.attach(MIMEText(html_body, "html"))

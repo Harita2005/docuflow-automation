@@ -14,7 +14,7 @@ if not env_path.exists():
 load_dotenv(env_path)
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Strivh Professional Enterprises - Document Automation & Approval System"
+    PROJECT_NAME: str = "Strivh Professional Enterprises - Document Approval & Automation System - DAAS"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"
 
