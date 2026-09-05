@@ -852,25 +852,30 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions."
         )
     
-    # 2. Strict assigned approver enforcement: ONLY the assigned person/pool member can approve
+    # 2. Strict assigned approver enforcement: ONLY the assigned person/pool member or System Admin can approve
     if inv.assigned_approver and inv.assigned_approver.strip():
         approvers = [s.strip().lower() for s in inv.assigned_approver.split(",") if s.strip()]
         user_handles = []
+        is_admin = False
         if user:
             user_handles = [
                 (user.username or "").lower(),
                 (user.employee_id or "").lower(),
                 (user.employee_name or "").lower(),
                 (user.name or "").lower(),
-                (user.email or "").lower()
+                (user.email or "").lower(),
+                (user.role or "").lower()
             ]
             user_handles = [h for h in user_handles if h]
+            if (user.role or "").lower() in ["admin", "administrator", "system_admin", "superadmin"]:
+                is_admin = True
         
-        is_authorized = False
-        for handle in user_handles:
-            if handle in approvers or any(handle == app or handle in app or app in handle for app in approvers):
-                is_authorized = True
-                break
+        is_authorized = is_admin
+        if not is_authorized:
+            for handle in user_handles:
+                if handle in approvers or any(handle == app or handle in app or app in handle for app in approvers):
+                    is_authorized = True
+                    break
                 
         if not is_authorized:
             raise HTTPException(
