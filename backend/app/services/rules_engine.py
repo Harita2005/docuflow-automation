@@ -154,22 +154,42 @@ def match_condition(rule: Any, document: Any) -> bool:
         wf_val = get_val(document, "workflow_profile_id") or ""
         inferred_doc_type = infer_document_type(category=cat_val, wf_name=wf_val, doc_type=raw_doc_type)
 
-        field_mapping = {
-            "Division": get_val(document, "division") or "",
-            "Company": get_val(document, "division") or "",
-            "Plant": get_val(document, "plant") or "",
-            "Branch": get_val(document, "plant") or "",
-            "Category": cat_val or inferred_doc_type,
-            "Cost Center": get_val(document, "cost_center") or "",
-            "Vendor Name": get_val(document, "vendor_name") or "",
-            "Vendor Type": "Standard",
-            "Document Type": inferred_doc_type,
-            "Invoice Amount (Total)": float(get_val(document, "amount") or 0.0),
-            "Amount": float(get_val(document, "amount") or 0.0),
-            "Tax Amount": float(get_val(document, "tax_amount") or 0.0),
-        }
+        clean_field_key = sanitize_text(field)
 
-        field_val = field_mapping.get(field)
+        # Universal Field Resolution Map (handles any field naming variation)
+        if clean_field_key in ["division", "company", "companycode", "div"]:
+            field_val = get_val(document, "division") or ""
+        elif clean_field_key in ["costcenter", "cost_center", "cc", "cost_centre", "costcentre"]:
+            field_val = get_val(document, "cost_center") or ""
+        elif clean_field_key in ["plant", "branch", "location", "plantcode"]:
+            field_val = get_val(document, "plant") or ""
+        elif clean_field_key in ["category", "cat", "dept", "department"]:
+            field_val = cat_val or inferred_doc_type
+        elif clean_field_key in ["vendorname", "vendor", "vendor_name"]:
+            field_val = get_val(document, "vendor_name") or ""
+        elif clean_field_key in ["documenttype", "doctype", "type"]:
+            field_val = inferred_doc_type
+        elif clean_field_key in ["invoiceamounttotal", "amount", "invoiceamount", "totalamount", "grossamount"]:
+            field_val = float(get_val(document, "amount") or 0.0)
+        elif clean_field_key in ["taxamount", "tax", "gstamount"]:
+            field_val = float(get_val(document, "tax_amount") or 0.0)
+        else:
+            field_mapping = {
+                "Division": get_val(document, "division") or "",
+                "Company": get_val(document, "division") or "",
+                "Plant": get_val(document, "plant") or "",
+                "Branch": get_val(document, "plant") or "",
+                "Category": cat_val or inferred_doc_type,
+                "Cost Center": get_val(document, "cost_center") or "",
+                "Vendor Name": get_val(document, "vendor_name") or "",
+                "Vendor Type": "Standard",
+                "Document Type": inferred_doc_type,
+                "Invoice Amount (Total)": float(get_val(document, "amount") or 0.0),
+                "Amount": float(get_val(document, "amount") or 0.0),
+                "Tax Amount": float(get_val(document, "tax_amount") or 0.0),
+            }
+            field_val = field_mapping.get(field)
+
         if field_val is None:
             custom_data = get_val(document, "custom_data")
             if custom_data:
