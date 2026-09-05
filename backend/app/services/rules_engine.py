@@ -90,18 +90,50 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str = "equals") -> 
     if is_wildcard(rule_val):
         return True
 
-    # Numeric evaluation
-    if isinstance(doc_val, (int, float)) or (isinstance(rule_val, (int, float)) and not isinstance(rule_val, bool)):
-        try:
-            num_doc = float(doc_val or 0.0)
-            num_rule = float(rule_val or 0.0)
-            if "greater" in operator or ">" in operator:
-                return num_doc > num_rule
-            if "less" in operator or "<" in operator:
-                return num_doc < num_rule
-            return abs(num_doc - num_rule) < 0.01
-        except Exception:
-            return False
+    # Robust Numeric & Amount Evaluation (handles '10000', '> 10000', '>= 10000', 'greater than', etc.)
+    try:
+        raw_r = str(rule_val or "").strip()
+        raw_d = str(doc_val or "0").replace(",", "").strip()
+        op_str = (operator or "").strip().lower()
+
+        is_num_rule = isinstance(rule_val, (int, float)) or any(c.isdigit() for c in raw_r)
+        is_num_doc = isinstance(doc_val, (int, float)) or any(c.isdigit() for c in raw_d)
+
+        if is_num_doc and is_num_rule and not isinstance(rule_val, bool):
+            clean_r_str = re.sub(r'[^0-9\.\-]', '', raw_r)
+            clean_d_str = re.sub(r'[^0-9\.\-]', '', raw_d)
+
+            if clean_r_str and clean_d_str:
+                num_doc = float(clean_d_str)
+                num_rule = float(clean_r_str)
+
+                is_greater_or_equal = ">=" in op_str or ">=" in raw_r or "greater than or equal" in op_str or "greater_or_equal" in op_str
+                is_greater = (">" in op_str or ">" in raw_r or "greater" in op_str) and not is_greater_or_equal
+
+                is_less_or_equal = "<=" in op_str or "<=" in raw_r or "less than or equal" in op_str or "less_or_equal" in op_str
+                is_less = ("<" in op_str or "<" in raw_r or "less" in op_str) and not is_less_or_equal
+
+                if is_greater_or_equal:
+                    return num_doc >= num_rule
+                if is_greater:
+                    return num_doc > num_rule
+                if is_less_or_equal:
+                    return num_doc <= num_rule
+                if is_less:
+                    return num_doc < num_rule
+
+                if op_str in ["equals", "==", "=", ""]:
+                    if ">=" in raw_r:
+                        return num_doc >= num_rule
+                    elif ">" in raw_r or "greater" in raw_r:
+                        return num_doc > num_rule
+                    elif "<=" in raw_r:
+                        return num_doc <= num_rule
+                    elif "<" in raw_r or "less" in raw_r:
+                        return num_doc < num_rule
+                    return abs(num_doc - num_rule) < 0.01
+    except Exception:
+        pass
 
     str_doc = str(doc_val or "").strip().lower()
     str_rule = str(rule_val or "").strip().lower()
