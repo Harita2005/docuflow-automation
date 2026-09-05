@@ -73,13 +73,16 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
         (Invoice.id == raw_str) | 
         (Invoice.id == f"DOC-{id_clean}") |
         (Invoice.id == f"INV-{id_clean}") |
+        (Invoice.id == f"GRN-{id_clean}") |
         (Invoice.id == f"CV-{id_clean}") |
         (Invoice.id == id_clean) |
-        (Invoice.id.ilike(f"%{id_clean}")) |
+        (Invoice.id.ilike(f"%{id_clean}%")) |
         (Invoice.invoice_number == raw_str) |
         (Invoice.invoice_number == id_clean) |
+        (Invoice.invoice_number.ilike(f"%{id_clean}%")) |
         (Invoice.doc_key == raw_str) |
-        (Invoice.doc_key == id_clean)
+        (Invoice.doc_key == id_clean) |
+        (Invoice.doc_key.ilike(f"%{id_clean}%"))
     ).filter(Invoice.is_deleted == False).first()
         
     if not inv:
