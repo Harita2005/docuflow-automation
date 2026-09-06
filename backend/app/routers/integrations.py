@@ -280,9 +280,9 @@ def test_webhook_connection(
     if hmac_secret:
         headers["X-DocuFlow-Signature"] = f"sha256={compute_hmac_signature(payload_json, hmac_secret)}"
 
-    from app.services.security_service import validate_safe_url
+    from app.services.security_service import validate_and_reconstruct_url
     try:
-        target_url = validate_safe_url(target_url)
+        safe_target_url = validate_and_reconstruct_url(target_url)
     except Exception as url_err:
         return {
             "success": False,
@@ -292,7 +292,7 @@ def test_webhook_connection(
 
     try:
         req = urllib.request.Request(
-            target_url,
+            safe_target_url,
             data=payload_json.encode('utf-8'),
             headers=headers,
             method="POST"

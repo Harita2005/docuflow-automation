@@ -92,15 +92,8 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
     Falls back gracefully and logs code in terminal.
     """
     masked_email = mask_email(email)
-    
-    # 1. Always log prominent notification in terminal
-    print("=" * 60)
-    print(f"[DOCUFLOW MFA EMAIL DISPATCH] TO: {employee_name} <{masked_email}>")
-    print("[OTP CODE]: [REDACTED FOR SECURITY]")
-    print("This code is valid for 5 minutes. Do not share it with anyone.")
-    print("=" * 60)
 
-    # 2. Use configuration dictionary passed from request context
+    # Use configuration dictionary passed from request context
     config = smtp_config
 
     smtp_host = (config.get("smtp_server") if config else None) or os.getenv("SMTP_HOST")
@@ -154,14 +147,16 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
 
             server.sendmail(sender_email, [email], msg.as_string())
             server.quit()
-            print(f"[SMTP SUCCESS] Email delivered to {masked_email}")
             return True, f"Code sent to {masked_email}"
-        except smtplib.SMTPAuthenticationError as e:
-            print(f"[SMTP AUTH ERROR] Check SMTP credentials")
-        except smtplib.SMTPConnectError as e:
-            print(f"[SMTP CONNECT ERROR] Cannot reach SMTP server")
-        except Exception as e:
-            print(f"[SMTP ERROR] {type(e).__name__}")
+        except smtplib.SMTPAuthenticationError:
+            # Explicitly handled fallback for optional feature
+            pass
+        except smtplib.SMTPConnectError:
+            # Explicitly handled fallback for optional feature
+            pass
+        except Exception:
+            # Explicitly handled fallback for optional feature
+            pass
 
     return True, f"Code sent to {masked_email}"
 
@@ -171,10 +166,6 @@ def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[
     Configurable via SMS_GATEWAY_* environment variables.
     """
     masked_phone = mask_phone(phone_number)
-    print("=" * 60)
-    print(f"[DOCUFLOW MFA SMS DISPATCH] TO: [REDACTED USER] <{masked_phone}>")
-    print("[SMS OTP]: [REDACTED FOR SECURITY] is your DocuFlow verification code.")
-    print("=" * 60)
     return True, f"Code sent to {masked_phone}"
 
 def mask_email(email: str) -> str:

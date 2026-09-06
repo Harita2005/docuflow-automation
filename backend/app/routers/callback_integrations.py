@@ -513,9 +513,9 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
             "body": body_bytes.decode("utf-8", errors="ignore") if body_bytes else None
         }
 
-        from app.services.security_service import validate_safe_url
+        from app.services.security_service import validate_and_reconstruct_url
         try:
-            final_url = validate_safe_url(final_url)
+            safe_target_url = validate_and_reconstruct_url(final_url)
         except Exception as url_err:
             return {
                 "success": False,
@@ -526,7 +526,7 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
         # Perform actual HTTP request
         start = time.time()
         req = urllib.request.Request(
-            url=final_url,
+            url=safe_target_url,
             data=body_bytes,
             headers=final_headers,
             method=method

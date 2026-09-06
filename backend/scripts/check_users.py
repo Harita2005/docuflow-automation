@@ -14,7 +14,6 @@ print("==========================================================")
 
 users = db.query(User).all()
 for u in users:
-    masked_email = u.email[:2] + "***@" + u.email.split("@")[-1] if u.email and "@" in u.email else "[PROTECTED]"
-    print(f"ID: {u.id} | Role: '{u.role}' | Active: {u.is_active} | Email: '{masked_email}'")
+    print(f"ID: {u.id} | Role: '{u.role}' | Active: {u.is_active}")
 
 db.close()
