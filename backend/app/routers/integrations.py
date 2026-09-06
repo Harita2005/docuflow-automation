@@ -1,6 +1,5 @@
 import json
-import urllib.request
-import urllib.error
+import requests
 import datetime
 from pathlib import Path
 from typing import Optional
@@ -291,32 +290,22 @@ def test_webhook_connection(
         }
 
     try:
-        req = urllib.request.Request(
+        resp = requests.post(
             safe_target_url,
             data=payload_json.encode('utf-8'),
             headers=headers,
-            method="POST"
+            timeout=10
         )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            status_code = response.status
-            response_body = response.read().decode('utf-8', errors='ignore')
-            return {
-                "success": True,
-                "status_code": status_code,
-                "target_url": target_url,
-                "response": response_body[:1000]
-            }
-    except urllib.error.HTTPError as he:
         return {
-            "success": False,
-            "status_code": he.code,
-            "target_url": target_url,
-            "error": f"HTTP Error {he.code}"
+            "success": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "target_url": safe_target_url,
+            "response": resp.text[:1000]
         }
     except Exception as e:
         return {
             "success": False,
-            "target_url": target_url,
+            "target_url": safe_target_url,
             "error": f"Request dispatch failed: {type(e).__name__}"
         }
 

@@ -498,7 +498,7 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
 @router.head("/stored_pdfs/{filepath:path}")
 def serve_stored_pdf(filepath: str):
     """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
-    safe_filename = os.path.basename(os.path.normpath(filepath))
+    safe_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(os.path.normpath(filepath)))
     if not safe_filename or safe_filename in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid document filename")
 

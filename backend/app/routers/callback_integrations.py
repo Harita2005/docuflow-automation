@@ -1,7 +1,7 @@
 import json
 import time
 import datetime
-import urllib.request
+import requests
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -525,31 +525,26 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
 
         # Perform actual HTTP request
         start = time.time()
-        req = urllib.request.Request(
+        resp = requests.request(
+            method=method,
             url=safe_target_url,
             data=body_bytes,
             headers=final_headers,
-            method=method
+            timeout=rule_obj.timeout_seconds or 15
         )
-        with urllib.request.urlopen(req, timeout=rule_obj.timeout_seconds or 15) as resp:
-            elapsed_ms = int((time.time() - start) * 1000)
-            resp_body = resp.read().decode("utf-8", errors="ignore")
-            
-            return {
-                "success": True,
-                "status_code": resp.status,
-                "response_time_ms": elapsed_ms,
-                "request_preview": request_preview,
-                "response_body": resp_body[:2000]
-            }
-    except urllib.error.HTTPError as he:
-        resp_body = he.read().decode("utf-8", errors="ignore")
+        elapsed_ms = int((time.time() - start) * 1000)
+        return {
+            "success": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "response_time_ms": elapsed_ms,
+            "request_preview": request_preview,
+            "response_body": resp.text[:2000]
+        }
+    except requests.exceptions.RequestException as req_err:
         return {
             "success": False,
-            "status_code": he.code,
-            "error": f"HTTP Error {he.code}",
-            "request_preview": request_preview if 'request_preview' in locals() else None,
-            "response_body": resp_body[:2000]
+            "error": f"Callback HTTP request failed: {type(req_err).__name__}",
+            "request_preview": request_preview if 'request_preview' in locals() else None
         }
     except Exception as ex:
         return {
