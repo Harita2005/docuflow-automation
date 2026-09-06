@@ -22,7 +22,7 @@ db.execute(text("DELETE FROM system_engine_logs"))
 try:
     db.execute(text("DELETE FROM invoices"))
 except Exception as e:
-    import logging; logging.debug("Ignored exception in except block")
+    logging.debug("Ignored exception in except block")
 db.execute(text("DELETE FROM documents"))
 db.commit()
 
