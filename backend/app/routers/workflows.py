@@ -1,3 +1,4 @@
+import urllib.parse
 import datetime
 import json
 import re
@@ -220,7 +221,7 @@ def save_workflow_step(payload: dict, db: Session=Depends(get_db)):
             int_id = int(step_id)
             step_obj = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == int_id).first()
         except ValueError:
-            import logging
+            pass
     if not step_obj:
         step_obj = WorkflowStepDefinition(profile_name=profile_name)
         db.add(step_obj)

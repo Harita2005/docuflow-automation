@@ -1,3 +1,4 @@
+import re
 import json
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
@@ -122,7 +123,7 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
                         return num_doc < num_rule
                     return abs(num_doc - num_rule) < 0.01
     except Exception:
-        import logging
+        pass
     str_doc = str(doc_val or '').strip().lower()
     str_rule = str(rule_val or '').strip().lower()
     rule_items = [s.strip().lower() for s in str_rule.split(',') if s.strip()] if ',' in str_rule else [str_rule]

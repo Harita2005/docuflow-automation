@@ -2117,7 +2117,7 @@ export default function DocumentDetails({
                     (!terminalCancelLog && step.stage_number === currentStageNum)
                   );
 
-                  const isPassed = !isTerminalCancelledStage && (isDocSettled ? true : (matchingApprovalLog ? true : (!isDocCancelled && step.stage_number < currentStageNum)));
+                  const isPassed = !isTerminalCancelledStage && (isDocSettled || Boolean(matchingApprovalLog) || (!isDocCancelled && step.stage_number < currentStageNum));
                   const isCurrent = !isDocSettled && !isDocCancelled && !isTerminal && !isPassed && (step.stage_number === currentStageNum);
                   const isAborted = isDocCancelled && step.stage_number > currentStageNum;
 

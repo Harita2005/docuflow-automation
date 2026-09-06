@@ -39,7 +39,7 @@ ensure_mssql_database_exists(db_url)
 try:
     engine = create_engine(db_url, **engine_kwargs)
     print('[Database Connection] Successfully initialized engine.')
-except Exception as err:
+except Exception:
     print(f'[Database Error] Failed to initialize database engine.')
     raise RuntimeError('Enterprise Database Connection Error: Failed to initialize engine.')
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -56,4 +56,4 @@ def get_db():
             try:
                 db.invalidate()
             except Exception:
-                import logging
+                pass

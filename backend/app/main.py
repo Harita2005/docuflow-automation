@@ -236,7 +236,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations, callback_integrations
+from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations
 
 # Enterprise Security Headers & Rate Limiting Middleware
 from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware

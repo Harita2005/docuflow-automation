@@ -22,7 +22,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
             if not str(payload.id).startswith('tmp-'):
                 rule_id = int(payload.id)
         except ValueError:
-            import logging
+            pass
     rule = None
     if rule_id:
         rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()

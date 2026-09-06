@@ -1,3 +1,4 @@
+from app.services.rules_engine import infer_document_type, evaluate_business_rules_full
 import os
 import re
 import json
@@ -271,7 +272,7 @@ def extract_date_components(date_str: Optional[str]):
                 dt = datetime.datetime.strptime(str(date_str).strip()[:19], fmt)
                 return (dt.strftime('%Y'), dt.strftime('%m_%B'), dt.strftime('%d'))
             except Exception:
-                import logging
+                pass
     now = datetime.datetime.utcnow()
     return (now.strftime('%Y'), now.strftime('%m_%B'), now.strftime('%d'))
 
@@ -587,7 +588,6 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: O
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=True)
-    current_step_name = 'Attachment Status' if (inv.current_stage or 1) == 1 else f'Stage {inv.current_stage or 1}'
     if inv.workflow_profile_id:
         step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
         if step and step.step_name:
@@ -1288,7 +1288,7 @@ def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
             try:
                 return json.loads(c.get('value', '[]'))
             except Exception:
-                import logging
+                pass
     return [{'trigger_event': 'PENDING_APPROVAL', 'enabled': True, 'title_template': 'Action Required: {{document_number}}', 'message_template': 'Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.'}, {'trigger_event': 'ASSIGNED', 'enabled': True, 'title_template': 'Task Assigned: {{document_number}}', 'message_template': 'You have been assigned as the reviewer for {{document_number}}.'}, {'trigger_event': 'REJECTED', 'enabled': True, 'title_template': 'Document Rejected: {{document_number}}', 'message_template': 'Document {{document_number}} was rejected during workflow approval.'}, {'trigger_event': 'SENT_BACK', 'enabled': True, 'title_template': 'Document Sent Back: {{document_number}}', 'message_template': 'Document {{document_number}} was returned for clarification.'}, {'trigger_event': 'COMPLETED', 'enabled': True, 'title_template': 'Workflow Completed: {{document_number}}', 'message_template': 'Document {{document_number}} has passed final approval and is ready for payment.'}, {'trigger_event': 'CLARIFICATION', 'enabled': True, 'title_template': 'Clarification Needed: {{document_number}}', 'message_template': 'Please provide clarification for document {{document_number}}.'}]
 
 @router.post('/api/admin/notifications/inapp-config')
@@ -1322,7 +1322,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                         if clean and clean not in combined_items:
                             combined_items.append(clean)
             except Exception:
-                import logging
+                pass
     matching_rules = db.query(ChecklistRule).filter(ChecklistRule.stage_name.ilike(stage_name.strip()), ChecklistRule.is_active == True).order_by(ChecklistRule.sequence_order.asc()).all()
     scored_rules = []
     for r in matching_rules:

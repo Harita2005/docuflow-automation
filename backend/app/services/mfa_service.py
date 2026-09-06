@@ -107,11 +107,11 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
             server.quit()
             return (True, f'Code sent to {masked_email}')
         except smtplib.SMTPAuthenticationError:
-            import logging
+            pass
         except smtplib.SMTPConnectError:
-            import logging
+            pass
         except Exception:
-            import logging
+            pass
     return (True, f'Code sent to {masked_email}')
 
 def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[bool, str]:

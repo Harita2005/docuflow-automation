@@ -278,7 +278,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                 for k, v in params_list.items():
                     query_params[k] = resolve_dynamic_variables(str(v), doc_context)
         except Exception:
-            import logging
+            pass
     if query_params:
         parsed_url = urllib.parse.urlparse(final_url)
         existing_query = urllib.parse.parse_qs(parsed_url.query)
@@ -304,7 +304,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                 for hk, hv in hdrs_list.items():
                     final_headers[hk] = resolve_dynamic_variables(str(hv), doc_context)
         except Exception:
-            import logging
+            pass
     body_bytes = None
     body_type = (rule.body_type or 'NONE').upper()
     payload_src = (getattr(rule, 'payload_source', '') or 'MAPPING').upper()
@@ -338,7 +338,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                         for tp_field, src_field in mapping.items():
                             payload_dict[tp_field] = doc_context.get(src_field, resolve_dynamic_variables(str(src_field), doc_context))
                 except Exception:
-                    import logging
+                    pass
             if not payload_dict:
                 payload_dict = {'primaryKey': doc_context.get('primaryKey'), 'documentNumber': doc_context.get('documentNumber'), 'approvalStatus': doc_context.get('approvalStatus')}
             body_bytes = json.dumps(payload_dict, indent=2).encode('utf-8')
@@ -351,7 +351,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                     for m in mapping:
                         form_dict[m.get('thirdPartyField')] = doc_context.get(m.get('sourceField'), '')
                 except Exception:
-                    import logging
+                    pass
             body_bytes = urllib.parse.urlencode(form_dict).encode('utf-8')
         elif body_type == 'RAW_TEXT' or body_type == 'XML':
             content_type = rule.content_type or ('application/xml' if body_type == 'XML' else 'text/plain')
@@ -364,7 +364,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
             ac = json.loads(app.auth_config_json)
             secret_key = ac.get('api_key') or ac.get('token') or ac.get('secret')
         except Exception:
-            import logging
+            pass
     if not secret_key and app:
         secret_key = app.code
     if not secret_key:
@@ -400,7 +400,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get('max_attempts', max_attempts))
         except Exception:
-            import logging
+            pass
     doc_context['attemptNumber'] = attempt_num
     doc_context['maxAttempts'] = max_attempts
     start_time = time.time()
@@ -426,7 +426,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
                     if isinstance(sc, list) and sc:
                         valid_codes = [int(x) for x in sc]
                 except Exception:
-                    import logging
+                    pass
             is_success = status_code in valid_codes
             attempt = CallbackAttempt(callback_event_id=event.id, attempt_number=attempt_num, http_method=method, request_url=final_url, request_headers_json=json.dumps(mask_sensitive_headers(final_headers)), request_body=body_bytes.decode('utf-8', errors='ignore') if body_bytes else None, response_status_code=status_code, response_headers_json=resp_headers_str, response_body=resp_body[:4000], response_time_ms=elapsed_ms, status='DELIVERED' if is_success else 'FAILED', error_message=None if is_success else f'HTTP Status {status_code} not in expected success criteria {valid_codes}')
             db.add(attempt)
@@ -454,7 +454,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get('max_attempts', max_attempts))
         except Exception:
-            import logging
+            pass
     event.max_attempts = max_attempts
     if attempt_num < max_attempts:
         event.status = 'RETRYING'

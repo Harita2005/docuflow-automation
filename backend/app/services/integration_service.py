@@ -24,7 +24,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             if isinstance(parsed, list):
                 line_items = parsed
         except Exception:
-            import logging
+            pass
     checklists = []
     if inv.checklist_states:
         for c in inv.checklist_states:
@@ -35,7 +35,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             if isinstance(parsed_cl, dict):
                 checklists = [{'item_text': k, 'is_checked': bool(v)} for k, v in parsed_cl.items()]
         except Exception:
-            import logging
+            pass
     approval_trail = []
     if inv.approval_logs:
         for log in sorted(inv.approval_logs, key=lambda x: x.timestamp or datetime.datetime.min):

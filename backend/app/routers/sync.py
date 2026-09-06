@@ -1,3 +1,5 @@
+import os, re
+from app.routers.documents import resolve_checklist_items
 import json
 import base64
 import datetime
@@ -123,7 +125,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                     if rule_row:
                         db.execute(text("\n                            INSERT INTO rules.rule_evaluation_results (evaluation_run_id, rule_id, evaluation_status, created_at)\n                            VALUES (:run_id, :rule_id, 'MATCHED', SYSUTCDATETIME())\n                        "), {'run_id': eval_run_id, 'rule_id': rule_row[0]})
             except Exception:
-                import logging
+                pass
         if target_inv.workflow_profile_id:
             try:
                 has_wf_table = db.execute(text("SELECT OBJECT_ID('workflow.workflow_definitions', 'U')")).scalar()
@@ -163,7 +165,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                                         db.execute(text("\n                                            INSERT INTO workflow.task_assignments (stage_instance_id, assigned_user_id, status, due_date)\n                                            VALUES (:inst_id, :u_id, 'ASSIGNED', DATEADD(day, 2, SYSUTCDATETIME()))\n                                        "), {'inst_id': stage_inst_id, 'u_id': app_user_id})
                             db.execute(text('\n                                INSERT INTO workflow.checklist_items (stage_instance_id, item_text, is_mandatory, is_checked)\n                                SELECT :stage_inst_id, t.item_text, t.is_mandatory, 0\n                                FROM workflow.workflow_checklist_templates t\n                                WHERE t.workflow_stage_id = :stage_id\n                                  AND NOT EXISTS (\n                                      SELECT 1 FROM workflow.checklist_items i \n                                      WHERE i.stage_instance_id = :stage_inst_id \n                                        AND i.item_text = t.item_text\n                                  )\n                            '), {'stage_inst_id': stage_inst_id, 'stage_id': stage_id})
             except Exception:
-                import logging
+                pass
         db.execute(text("\n            INSERT INTO audit.audit_events (correlation_id, actor_user_id, source_system_id, event_category, event_type, entity_schema, entity_table, entity_id, action_type, after_json, metadata_json)\n            VALUES (NEWID(), :user_id, :sys_id, 'INGESTION', 'DOCUMENT_SYNCED', 'core', 'documents', CAST(:doc_id AS VARCHAR), 'INSERT', :snap, :meta)\n        "), {'user_id': user_id, 'sys_id': sys_id, 'doc_id': doc_id, 'snap': raw_payload, 'meta': json.dumps({'action': 'Data Sync Ingestion'})})
     except Exception as e:
         print(f'[Schema Sync Error] Failed to dual-write record: {e}')
