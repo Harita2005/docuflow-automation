@@ -485,19 +485,27 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
 def serve_stored_pdf(filepath: str):
     """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
     raw_name = os.path.basename(filepath)
-    clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
-    if not clean_filename or clean_filename in (".", ".."):
+    safe_name = "".join(c for c in raw_name if c.isalnum() or c in ("-", "_", "."))
+    if not safe_name or safe_name in (".", "..") or "/" in safe_name or "\\" in safe_name:
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    base_root = get_storage_root_path().resolve()
-    target_path = (base_root / clean_filename).resolve()
-    if target_path.is_relative_to(base_root) and target_path.is_file():
-        return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_filename)
+    base_root = get_storage_root_path()
+    try:
+        resolved_base = base_root.resolve()
+        resolved_target = (base_root / safe_name).resolve()
+        if (resolved_base in resolved_target.parents or resolved_target.parent == resolved_base) and resolved_target.is_file():
+            return FileResponse(path=str(resolved_target), media_type="application/pdf", filename=safe_name)
+    except (ValueError, RuntimeError):
+        pass
 
-    default_root = settings.PDF_STORAGE_DIR.resolve()
-    default_path = (default_root / clean_filename).resolve()
-    if default_path.is_relative_to(default_root) and default_path.is_file():
-        return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_filename)
+    default_root = settings.PDF_STORAGE_DIR
+    try:
+        resolved_default = default_root.resolve()
+        default_path = (default_root / safe_name).resolve()
+        if (resolved_default in default_path.parents or default_path.parent == resolved_default) and default_path.is_file():
+            return FileResponse(path=str(default_path), media_type="application/pdf", filename=safe_name)
+    except (ValueError, RuntimeError):
+        pass
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
 
