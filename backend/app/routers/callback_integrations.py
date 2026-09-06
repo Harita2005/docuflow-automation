@@ -678,15 +678,12 @@ def manual_retry_callback(event_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"CallbackEvent '{event_id}' not found")
 
     res = execute_callback_event(db, evt.id)
-    safe_res = {k: v for k, v in res.items() if k != "error"} if isinstance(res, dict) else {}
-    if isinstance(res, dict) and "error" in res:
-        safe_res["status"] = "failed"
-
+    is_ok = bool(res.get("success", False)) if isinstance(res, dict) else False
     return {
-        "success": res.get("success", False),
-        "event_id": evt.event_id,
-        "message": "Manual retry executed successfully" if res.get("success") else "Manual retry attempt failed",
-        "result": safe_res
+        "success": is_ok,
+        "event_id": str(evt.event_id),
+        "message": "Manual retry executed successfully" if is_ok else "Manual retry attempt failed",
+        "result": {"status": "success" if is_ok else "failed"}
     }
 
 @router.post("/logs/bulk-retry")
@@ -698,11 +695,11 @@ def bulk_retry_failed_callbacks(db: Session = Depends(get_db)):
     results = []
     for evt in failed_events:
         res = execute_callback_event(db, evt.id)
-        safe_res = {k: v for k, v in res.items() if k != "error"} if isinstance(res, dict) else {}
+        is_ok = bool(res.get("success", False)) if isinstance(res, dict) else False
         results.append({
-            "event_id": evt.event_id,
-            "success": res.get("success", False),
-            "result": safe_res
+            "event_id": str(evt.event_id),
+            "success": is_ok,
+            "result": {"status": "success" if is_ok else "failed"}
         })
     return {
         "success": True,

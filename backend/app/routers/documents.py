@@ -445,7 +445,7 @@ def sanitize_name(text: Optional[str]) -> str:
     """Removes invalid filename characters for safe filesystem naming."""
     if not text:
         return ""
-    return re.sub(r'[\\/*?:"<>| ]+', '_', str(text)).strip('_')
+    return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', str(text)).strip('_')
 
 def get_storage_config():
     """Reads system admin config for physical storage root directory and folder pattern."""
@@ -548,7 +548,8 @@ def archive_approved_pdf(inv: Invoice):
         if not inv:
             return
         
-        filename = os.path.basename(inv.file_url) if inv.file_url else ""
+        raw_filename = os.path.basename(os.path.normpath(inv.file_url)) if inv.file_url else ""
+        filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_filename)
         upload_path = settings.UPLOAD_DIR / filename if filename else None
         legacy_storage_path = settings.PDF_STORAGE_DIR / filename if filename else None
 
@@ -557,21 +558,20 @@ def archive_approved_pdf(inv: Invoice):
             src_path = upload_path
         elif legacy_storage_path and legacy_storage_path.exists():
             src_path = legacy_storage_path
-        elif inv.file_url and Path(inv.file_url).exists():
-            src_path = Path(inv.file_url)
         elif (settings.UPLOAD_DIR / "sample_invoice.pdf").exists():
             # Fallback source so approved record ALWAYS has a physical PDF file stored on disk
             src_path = settings.UPLOAD_DIR / "sample_invoice.pdf"
 
         if src_path and src_path.exists():
-            dest_approved = get_archived_pdf_path(inv).resolve()
-            dest_approved.parent.mkdir(parents=True, exist_ok=True)
-
-            # Validate destination path is within storage root
             base_root = get_storage_root_path().resolve()
+            dest_approved = get_archived_pdf_path(inv).resolve()
+
+            # Validate destination path is within storage root before any directory creation or copying
             if dest_approved.is_relative_to(base_root):
-                if src_path.resolve() != dest_approved:
-                    shutil.copy2(src_path.resolve(), dest_approved)
+                dest_approved.parent.mkdir(parents=True, exist_ok=True)
+                src_resolved = src_path.resolve()
+                if src_resolved != dest_approved:
+                    shutil.copy2(str(src_resolved), str(dest_approved))
                     print(f"[Archive] Successfully archived approved PDF")
 
                     if upload_path and upload_path.exists() and upload_path.resolve() != dest_approved and upload_path.name != "sample_invoice.pdf":

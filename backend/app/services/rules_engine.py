@@ -514,7 +514,7 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
         except Exception as err:
             trace.append({
                 "rule_name": rule_info.get("rule_name"),
-                "error": str(err),
+                "error": f"Rule evaluation error ({type(err).__name__})",
                 "matched": False
             })
 
