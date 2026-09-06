@@ -480,27 +480,27 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
     filename = f"{clean_doc_num}_{clean_id}.pdf"
     return get_storage_root_path() / "approved" / filename
 
-@router.get("/stored_pdfs/{filepath:path}")
-@router.head("/stored_pdfs/{filepath:path}")
-def serve_stored_pdf(filepath: str):
-    """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
-    clean_name = os.path.basename(filepath)
-    if clean_name != filepath or not clean_name or clean_name in (".", ".."):
+@router.get("/stored_pdfs/{filename}")
+@router.head("/stored_pdfs/{filename}")
+def serve_stored_pdf(filename: str):
+    """Secure web streaming route for archived PDF files across custom OS storage paths."""
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or not safe_name or safe_name in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    safe_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_name)
-    if safe_name != clean_name:
+    clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_name)
+    if clean_name != safe_name:
         raise HTTPException(status_code=400, detail="Invalid characters in filename")
 
     base_root = get_storage_root_path().resolve()
-    target_path = (base_root / safe_name).resolve()
+    target_path = (base_root / clean_name).resolve()
     if target_path.is_relative_to(base_root) and target_path.is_file():
-        return FileResponse(path=str(target_path), media_type="application/pdf", filename=safe_name)
+        return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_name)
 
     default_root = settings.PDF_STORAGE_DIR.resolve()
-    default_path = (default_root / safe_name).resolve()
+    default_path = (default_root / clean_name).resolve()
     if default_path.is_relative_to(default_root) and default_path.is_file():
-        return FileResponse(path=str(default_path), media_type="application/pdf", filename=safe_name)
+        return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_name)
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
 
