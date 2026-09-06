@@ -484,18 +484,19 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
 @router.head("/stored_pdfs/{filename}")
 def serve_stored_pdf(filename: str):
     """Secure web streaming route for archived PDF files across custom OS storage paths."""
-    clean_name = os.path.basename(re.sub(r'[^a-zA-Z0-9_\-\.]', '', filename))
+    safe_base = os.path.basename(filename)
+    clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_base)
     if not clean_name or clean_name in (".", "..") or clean_name != filename:
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    base_root = get_storage_root_path()
-    target_path = base_root / clean_name
-    if target_path.is_file():
+    base_root = get_storage_root_path().resolve()
+    target_path = (base_root / clean_name).resolve()
+    if target_path.is_relative_to(base_root) and target_path.is_file():
         return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_name)
 
-    default_root = settings.PDF_STORAGE_DIR
-    default_path = default_root / clean_name
-    if default_path.is_file():
+    default_root = settings.PDF_STORAGE_DIR.resolve()
+    default_path = (default_root / clean_name).resolve()
+    if default_path.is_relative_to(default_root) and default_path.is_file():
         return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_name)
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
@@ -505,14 +506,18 @@ def get_rejected_pdf_path(inv: Invoice) -> Path:
     Constructs the storage path for rejected/cancelled documents:
     stored_pdfs/rejected/{DOC_NUM}_{PRIMARY_KEY}.pdf
     """
-    clean_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or "DOC"))
-    clean_doc_num = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_doc_num)
+    safe_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or "DOC"))
+    clean_doc_num = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_doc_num)
 
-    clean_id = os.path.basename(str(inv.id) if inv.id else "0")
-    clean_id = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_id)
+    safe_id = os.path.basename(str(inv.id) if inv.id else "0")
+    clean_id = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_id)
 
     filename = f"{clean_doc_num}_{clean_id}.pdf"
-    return settings.REJECTED_PDF_DIR / filename
+    base_rejected = settings.REJECTED_PDF_DIR.resolve()
+    target_path = (base_rejected / filename).resolve()
+    if target_path.is_relative_to(base_rejected):
+        return target_path
+    return base_rejected / filename
 
 def archive_approved_pdf(inv: Invoice):
     """
@@ -526,43 +531,45 @@ def archive_approved_pdf(inv: Invoice):
         if not inv:
             return
         
-        raw_name = os.path.basename(inv.file_url) if inv.file_url else ""
-        clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
+        safe_base = os.path.basename(inv.file_url) if inv.file_url else ""
+        clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_base)
         
-        upload_root = settings.UPLOAD_DIR
-        legacy_root = settings.PDF_STORAGE_DIR
+        upload_root = settings.UPLOAD_DIR.resolve()
+        legacy_root = settings.PDF_STORAGE_DIR.resolve()
 
-        upload_path = upload_root / clean_filename if clean_filename else None
-        legacy_storage_path = legacy_root / clean_filename if clean_filename else None
+        upload_path = (upload_root / clean_filename).resolve() if clean_filename else None
+        legacy_storage_path = (legacy_root / clean_filename).resolve() if clean_filename else None
 
         src_path = None
-        if upload_path and upload_path.exists():
+        if upload_path and upload_path.is_relative_to(upload_root) and upload_path.exists():
             src_path = upload_path
-        elif legacy_storage_path and legacy_storage_path.exists():
+        elif legacy_storage_path and legacy_storage_path.is_relative_to(legacy_root) and legacy_storage_path.exists():
             src_path = legacy_storage_path
         elif (settings.UPLOAD_DIR / "sample_invoice.pdf").exists():
-            src_path = settings.UPLOAD_DIR / "sample_invoice.pdf"
+            src_path = (settings.UPLOAD_DIR / "sample_invoice.pdf").resolve()
 
         if src_path and src_path.exists():
-            dest_approved = get_archived_pdf_path(inv)
-            dest_approved.parent.mkdir(parents=True, exist_ok=True)
-            
-            if src_path != dest_approved:
-                shutil.copy2(str(src_path), str(dest_approved))
-                print(f"[Archive] Successfully archived approved PDF")
+            base_root = get_storage_root_path().resolve()
+            dest_approved = get_archived_pdf_path(inv).resolve()
 
-                if upload_path and upload_path.exists() and upload_path != dest_approved and upload_path.name != "sample_invoice.pdf":
-                    try:
-                        upload_path.unlink()
-                    except Exception:
-                        pass
+            if dest_approved.is_relative_to(base_root):
+                dest_approved.parent.mkdir(parents=True, exist_ok=True)
+                
+                if src_path != dest_approved:
+                    shutil.copy2(str(src_path), str(dest_approved))
+                    print(f"[Archive] Successfully archived approved PDF")
 
-            base_root = get_storage_root_path()
-            try:
-                rel_path = dest_approved.relative_to(base_root)
-                inv.file_url = f"/stored_pdfs/{rel_path.as_posix()}"
-            except ValueError:
-                inv.file_url = f"/stored_pdfs/approved/{dest_approved.name}"
+                    if upload_path and upload_path.exists() and upload_path != dest_approved and upload_path.name != "sample_invoice.pdf":
+                        try:
+                            upload_path.unlink()
+                        except Exception:
+                            pass
+
+                try:
+                    rel_path = dest_approved.relative_to(base_root)
+                    inv.file_url = f"/stored_pdfs/{rel_path.as_posix()}"
+                except ValueError:
+                    inv.file_url = f"/stored_pdfs/approved/{dest_approved.name}"
 
         trigger_async_integration_push(str(inv.id))
     except Exception as e:
