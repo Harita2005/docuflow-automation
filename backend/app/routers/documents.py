@@ -484,22 +484,18 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
 @router.head("/stored_pdfs/{filename}")
 def serve_stored_pdf(filename: str):
     """Secure web streaming route for archived PDF files across custom OS storage paths."""
-    safe_name = os.path.basename(filename)
-    if safe_name != filename or not safe_name or safe_name in (".", ".."):
+    clean_name = os.path.basename(re.sub(r'[^a-zA-Z0-9_\-\.]', '', filename))
+    if not clean_name or clean_name in (".", "..") or clean_name != filename:
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_name)
-    if clean_name != safe_name:
-        raise HTTPException(status_code=400, detail="Invalid characters in filename")
-
-    base_root = get_storage_root_path().resolve()
-    target_path = (base_root / clean_name).resolve()
-    if target_path.is_relative_to(base_root) and target_path.is_file():
+    base_root = get_storage_root_path()
+    target_path = base_root / clean_name
+    if target_path.is_file():
         return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_name)
 
-    default_root = settings.PDF_STORAGE_DIR.resolve()
-    default_path = (default_root / clean_name).resolve()
-    if default_path.is_relative_to(default_root) and default_path.is_file():
+    default_root = settings.PDF_STORAGE_DIR
+    default_path = default_root / clean_name
+    if default_path.is_file():
         return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_name)
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
