@@ -126,15 +126,25 @@ def simulate_rule_routing(payload: dict, db: Session = Depends(get_db)):
     Returns the matched rule, target workflow, multi-stage approver pools, and condition trace.
     """
     from app.services.rules_engine import simulate_rule_evaluation    
+    try:
+        amt = float(payload.get("amount") or 0.0)
+    except (ValueError, TypeError):
+        amt = 0.0
+
+    try:
+        tax_amt = float(payload.get("tax_amount") or 0.0)
+    except (ValueError, TypeError):
+        tax_amt = 0.0
+
     mock_doc = {
-        "division": payload.get("division") or "VCC",
-        "plant": payload.get("plant") or payload.get("branch") or "TN-SIVAKASI",
-        "category": payload.get("category") or "PURCHASE",
-        "document_type": payload.get("document_type") or "AP INVOICE",
-        "amount": float(payload.get("amount") or 0.0),
-        "tax_amount": float(payload.get("tax_amount") or 0.0),
-        "vendor_name": payload.get("vendor_name") or "Test Vendor Enterprise",
-        "cost_center": payload.get("cost_center") or ""
+        "division": str(payload.get("division") or "VCC"),
+        "plant": str(payload.get("plant") or payload.get("branch") or "TN-SIVAKASI"),
+        "category": str(payload.get("category") or "PURCHASE"),
+        "document_type": str(payload.get("document_type") or "AP INVOICE"),
+        "amount": amt,
+        "tax_amount": tax_amt,
+        "vendor_name": str(payload.get("vendor_name") or "Test Vendor Enterprise"),
+        "cost_center": str(payload.get("cost_center") or "")
     }    
     draft_rules = payload.get("draft_rules") or []
     return simulate_rule_evaluation(db, mock_invoice=mock_doc, draft_rules=draft_rules)

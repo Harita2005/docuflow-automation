@@ -14,6 +14,7 @@ print("==========================================================")
 
 users = db.query(User).all()
 for u in users:
-    print(f"ID: {u.id} | Username: '{u.username}' | Employee ID: '{u.employee_id}' | Email: '{u.email}' | Role: '{u.role}' | Password Hash: '[PROTECTED]'")
+    masked_email = u.email[:2] + "***@" + u.email.split("@")[-1] if u.email and "@" in u.email else "[PROTECTED]"
+    print(f"ID: {u.id} | Role: '{u.role}' | Active: {u.is_active} | Email: '{masked_email}'")
 
 db.close()

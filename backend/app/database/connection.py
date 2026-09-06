@@ -53,12 +53,10 @@ ensure_mssql_database_exists(db_url)
 # Create SQL engine cleanly based on configured DATABASE_URL without fallback
 try:
     engine = create_engine(db_url, **engine_kwargs)
-    db_target = db_url.split("@")[-1] if "@" in db_url else db_url.split("://")[-1]
-    print(f"[Database Connection] Successfully initialized engine for target: {db_target}")
+    print("[Database Connection] Successfully initialized engine.")
 except Exception as err:
-    db_target = db_url.split("@")[-1] if "@" in db_url else db_url.split("://")[-1]
-    print(f"[Database Error] Failed to initialize database engine for target: {err}")
-    raise RuntimeError(f"Enterprise Database Connection Error: Failed to initialize engine. Details: {err}")
+    print(f"[Database Error] Failed to initialize database engine.")
+    raise RuntimeError("Enterprise Database Connection Error: Failed to initialize engine.")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

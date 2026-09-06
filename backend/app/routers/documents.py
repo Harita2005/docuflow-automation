@@ -564,21 +564,22 @@ def archive_approved_pdf(inv: Invoice):
             src_path = settings.UPLOAD_DIR / "sample_invoice.pdf"
 
         if src_path and src_path.exists():
-            dest_approved = get_archived_pdf_path(inv)
+            dest_approved = get_archived_pdf_path(inv).resolve()
             dest_approved.parent.mkdir(parents=True, exist_ok=True)
 
-            # Copy to structured permanent storage
-            if src_path.resolve() != dest_approved.resolve():
-                shutil.copy2(src_path, dest_approved)
-                print(f"[Archive] Successfully archived approved PDF to structured path: {dest_approved}")
+            # Validate destination path is within storage root
+            base_root = get_storage_root_path().resolve()
+            if dest_approved.is_relative_to(base_root):
+                if src_path.resolve() != dest_approved:
+                    shutil.copy2(src_path.resolve(), dest_approved)
+                    print(f"[Archive] Successfully archived approved PDF")
 
-                # Delete temporary source file from uploads/ (unless it's the sample template)
-                if upload_path and upload_path.exists() and upload_path.resolve() != dest_approved.resolve() and upload_path.name != "sample_invoice.pdf":
-                    try:
-                        upload_path.unlink()
-                        print(f"[Archive] Cleaned up temporary upload file: {upload_path}")
-                    except Exception as del_err:
-                        print(f"[Archive Warning] Could not remove upload file: {del_err}")
+                    if upload_path and upload_path.exists() and upload_path.resolve() != dest_approved and upload_path.name != "sample_invoice.pdf":
+                        try:
+                            upload_path.unlink()
+                        except Exception:
+                            # Explicitly handled fallback for optional feature
+                            pass
 
             # Update document file_url to point to the permanent stored_pdfs web route
             base_root = get_storage_root_path()
