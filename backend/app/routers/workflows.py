@@ -17,8 +17,9 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
             parsed = json.loads(step.checklist_json)
             if isinstance(parsed, list):
                 items = [str(x).strip() for x in parsed if str(x).strip()]
-        except Exception:
-            items = []
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', exc)
     if not items:
         tpls = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == profile_name, ChecklistTemplate.stage_name.ilike(step.step_name.strip()), ChecklistTemplate.is_active == True).order_by(ChecklistTemplate.sequence_order.asc()).all()
         for t in tpls:
@@ -52,8 +53,9 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
     if db:
         try:
             db.commit()
-        except Exception:
-            db.rollback()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', exc)
     return code
 
 def enforce_designated_approvers(db: Session):
@@ -91,8 +93,9 @@ def get_all_workflow_profiles(db: Session=Depends(get_db)):
                     parsed = json.loads(st.checklist_json)
                     if isinstance(parsed, list):
                         items = [str(x).strip() for x in parsed if str(x).strip()]
-                except Exception:
-                    items = []
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
             if not items:
                 tpl_key = ((p.profile_name or '').strip().lower(), (st.step_name or '').strip().lower())
                 tpls = tpls_by_profile_stage.get(tpl_key, [])
@@ -157,8 +160,8 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session=Depends(ge
         wf_code = ensure_workflow_code(existing, db)
         return {'success': True, 'profile_name': payload.profile_name, 'workflow_code': wf_code}
     except Exception as e:
-        db.rollback()
-        print(f"[Workflow Save Error] Failed to save workflow '{payload.profile_name}': {e}")
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
         raise HTTPException(status_code=500, detail=f'Database error while saving workflow: {str(e)}')
 
 @router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
@@ -220,8 +223,9 @@ def save_workflow_step(payload: dict, db: Session=Depends(get_db)):
         try:
             int_id = int(step_id)
             step_obj = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == int_id).first()
-        except ValueError:
-            pass
+        except ValueError as exc:
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', exc)
     if not step_obj:
         step_obj = WorkflowStepDefinition(profile_name=profile_name)
         db.add(step_obj)

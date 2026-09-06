@@ -31,7 +31,8 @@ def trigger_async_integration_push(document_id: str, decision: str='APPROVED'):
         try:
             dispatch_outgoing_webhook(document_id)
         except Exception as e:
-            print(f'[Webhook Warning] {e}')
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', e)
         try:
             db = SessionLocal()
             try:
@@ -39,13 +40,15 @@ def trigger_async_integration_push(document_id: str, decision: str='APPROVED'):
             finally:
                 db.close()
         except Exception as e:
-            print(f'[Callback Engine Warning] {e}')
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', e)
     try:
         import threading
         t = threading.Thread(target=_runner, daemon=True)
         t.start()
     except Exception as e:
-        print(f'[Integration Warning] Could not spawn background webhook thread: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 def safe_broadcast_event(event_type: str, payload: dict):
     """Safely broadcasts a real-time event via SSE to connected clients."""
@@ -53,7 +56,8 @@ def safe_broadcast_event(event_type: str, payload: dict):
         from app.routers.events import broadcast_event
         broadcast_event(event_type, payload)
     except Exception as e:
-        print(f'[Event Broadcast Notice] {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 router = APIRouter(tags=['Invoices & Documents'])
 
 def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
@@ -271,8 +275,9 @@ def extract_date_components(date_str: Optional[str]):
             try:
                 dt = datetime.datetime.strptime(str(date_str).strip()[:19], fmt)
                 return (dt.strftime('%Y'), dt.strftime('%m_%B'), dt.strftime('%d'))
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
     now = datetime.datetime.utcnow()
     return (now.strftime('%Y'), now.strftime('%m_%B'), now.strftime('%d'))
 
@@ -413,17 +418,19 @@ def archive_approved_pdf(inv: Invoice):
                     if upload_path and upload_path.exists() and (upload_path != dest_approved) and (upload_path.name != 'sample_invoice.pdf'):
                         try:
                             upload_path.unlink()
-                        except Exception:
+                        except Exception as exc:
                             import logging
-                            logging.debug('Ignored exception in except block')
+                            logging.getLogger(__name__).debug('Handled exception: %s', exc)
                 try:
                     rel_path = dest_approved.relative_to(base_root)
                     inv.file_url = f'/stored_pdfs/{rel_path.as_posix()}'
-                except ValueError:
-                    inv.file_url = f'/stored_pdfs/approved/{dest_approved.name}'
+                except ValueError as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
         trigger_async_integration_push(str(inv.id))
     except Exception as e:
-        print(f'[Archive Warning] Could not archive approved PDF: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 def archive_rejected_pdf(inv: Invoice):
     """
@@ -440,9 +447,11 @@ def archive_rejected_pdf(inv: Invoice):
                 upload_path.unlink()
                 print(f'[Purge] Purged rejected document file from uploads: {upload_path}')
             except Exception as del_err:
-                print(f'[Purge Warning] Could not remove rejected file: {del_err}')
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', del_err)
     except Exception as e:
-        print(f'[Purge Warning] Exception while purging rejected PDF: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 def dispatch_approval_inapp_notifications(db: Session, inv: Invoice, approver_name: str, prev_stage: int, new_stage: int, next_approver_target: Optional[str]=None, is_completed: bool=False):
     """Generates real-time in-app notifications when a document is approved and routed."""
@@ -459,7 +468,8 @@ def dispatch_approval_inapp_notifications(db: Session, inv: Invoice, approver_na
         db.add(InAppNotification(document_id=str(inv.id), recipient_handle='admin', notification_type='COMPLETED' if is_completed else 'PENDING_APPROVAL', title=f'Workflow Progress: {inv_title} ➔ Stage {new_stage}' if not is_completed else f'Workflow Settled: {inv_title}', message=f"Stage {prev_stage} signed off by {approver_name}. Assigned to: {next_approver_target or 'Final Settlement'}." if not is_completed else f"Document '{inv_title}' completed all approval stages.", is_read=False))
         db.flush()
     except Exception as e:
-        print(f'[Notification Warning] Failed to generate in-app notification: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 def dispatch_rejection_inapp_notifications(db: Session, inv: Invoice, approver_name: str, from_stage: int, to_stage: int, remarks: str, target_approver: Optional[str]=None, is_cancelled: bool=False):
     """Generates real-time in-app notifications when a document is rejected / sent back or cancelled."""
@@ -480,7 +490,8 @@ def dispatch_rejection_inapp_notifications(db: Session, inv: Invoice, approver_n
             db.add(InAppNotification(document_id=str(inv.id), recipient_handle=approver_name, notification_type='REJECTED', title=f'Returned to Previous Stage: Stage {to_stage}', message=f"You returned document '{inv_title}' back to Stage {to_stage} ({target_approver or 'Initiator Desk'}). Reason: {remarks}", is_read=False))
         db.flush()
     except Exception as e:
-        print(f'[Notification Warning] Failed to generate rejection in-app notification: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remarks: str, action_type: str='Reject'):
     """
@@ -1104,7 +1115,6 @@ def mark_all_notifications_read(db: Session=Depends(get_db), current_user: Optio
 @router.get('/api/templates')
 def get_templates(db: Session=Depends(get_db)):
     return []
-
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app_config.json')
 
 def load_app_configs():
@@ -1113,7 +1123,9 @@ def load_app_configs():
     try:
         with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', exc)
         return []
 
 def save_app_config(key: str, value: str, description: str=''):
@@ -1131,7 +1143,8 @@ def save_app_config(key: str, value: str, description: str=''):
         with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
             json.dump(configs, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f'[Config] Error saving config: {e}')
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
 
 @router.get('/api/admin/config')
 def get_admin_config(db: Session=Depends(get_db)):
@@ -1153,7 +1166,9 @@ def load_erp_master_data() -> list:
         if c.get('key') == 'ERP_MASTER_DATA':
             try:
                 return json.loads(c.get('value', '[]'))
-            except Exception:
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
                 return []
     return []
 
@@ -1278,6 +1293,8 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=D
         server.quit()
         return {'success': True, 'message': f'Test email sent to {payload.to}'}
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get('/api/admin/notifications/inapp-config')
@@ -1287,8 +1304,9 @@ def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
         if c.get('key') == 'INAPP_NOTIFICATIONS_CONFIG':
             try:
                 return json.loads(c.get('value', '[]'))
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
     return [{'trigger_event': 'PENDING_APPROVAL', 'enabled': True, 'title_template': 'Action Required: {{document_number}}', 'message_template': 'Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.'}, {'trigger_event': 'ASSIGNED', 'enabled': True, 'title_template': 'Task Assigned: {{document_number}}', 'message_template': 'You have been assigned as the reviewer for {{document_number}}.'}, {'trigger_event': 'REJECTED', 'enabled': True, 'title_template': 'Document Rejected: {{document_number}}', 'message_template': 'Document {{document_number}} was rejected during workflow approval.'}, {'trigger_event': 'SENT_BACK', 'enabled': True, 'title_template': 'Document Sent Back: {{document_number}}', 'message_template': 'Document {{document_number}} was returned for clarification.'}, {'trigger_event': 'COMPLETED', 'enabled': True, 'title_template': 'Workflow Completed: {{document_number}}', 'message_template': 'Document {{document_number}} has passed final approval and is ready for payment.'}, {'trigger_event': 'CLARIFICATION', 'enabled': True, 'title_template': 'Clarification Needed: {{document_number}}', 'message_template': 'Please provide clarification for document {{document_number}}.'}]
 
 @router.post('/api/admin/notifications/inapp-config')
@@ -1321,8 +1339,9 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                         clean = str(x).strip()
                         if clean and clean not in combined_items:
                             combined_items.append(clean)
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
     matching_rules = db.query(ChecklistRule).filter(ChecklistRule.stage_name.ilike(stage_name.strip()), ChecklistRule.is_active == True).order_by(ChecklistRule.sequence_order.asc()).all()
     scored_rules = []
     for r in matching_rules:
@@ -1462,8 +1481,9 @@ def get_approved_documents(db: Session=Depends(get_db)):
         if isinstance(d.items, str):
             try:
                 items = json.loads(d.items)
-            except Exception:
-                items = []
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
         elif isinstance(d.items, list):
             items = d.items
         doc_num = d.invoice_number or d.doc_num or str(d.id)

@@ -1,19 +1,13 @@
 import sys
 import os
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from app.database import SessionLocal
 from app.models import User
-
 db = SessionLocal()
-
-print("==========================================================")
-print("  LIST OF REGISTERED USERS IN DATABASE:")
-print("==========================================================")
-
+print('==========================================================')
+print('  LIST OF REGISTERED USERS IN DATABASE:')
+print('==========================================================')
 users = db.query(User).all()
 for u in users:
     print(f"ID: {u.id} | Role: '{u.role}' | Active: {u.is_active}")
-
 db.close()

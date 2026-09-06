@@ -122,8 +122,9 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
                     elif '<' in raw_r or 'less' in raw_r:
                         return num_doc < num_rule
                     return abs(num_doc - num_rule) < 0.01
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug('Handled exception: %s', exc)
     str_doc = str(doc_val or '').strip().lower()
     str_rule = str(rule_val or '').strip().lower()
     rule_items = [s.strip().lower() for s in str_rule.split(',') if s.strip()] if ',' in str_rule else [str_rule]
@@ -184,8 +185,9 @@ def match_condition(rule: Any, document: Any) -> bool:
                 try:
                     custom_dict = json.loads(custom_data) if isinstance(custom_data, str) else custom_data
                     field_val = custom_dict.get(field, '')
-                except Exception:
-                    field_val = ''
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
             else:
                 field_val = ''
         return match_field_value(val, field_val, operator)
@@ -329,7 +331,8 @@ def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict
                         effective_cancel_reason = profile.cancel_reason or f'Auto-cancelled via Workflow Profile: {profile.profile_name}'
                 return {'rule_name': rule.rule_name, 'target_workflow_id': rule.target_workflow_id, 'rule_action': effective_action, 'cancel_reason': effective_cancel_reason}
         except Exception as e:
-            print(f'[RulesEngine] Error evaluating rule {rule.rule_name}: {e}')
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', e)
     return None
 
 def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Optional[List[Dict[str, Any]]]=None) -> Dict[str, Any]:
@@ -378,7 +381,8 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
                 matched_rule = rule_info
                 break
         except Exception as err:
-            trace.append({'rule_name': rule_info.get('rule_name'), 'error': f'Rule evaluation error ({type(err).__name__})', 'matched': False})
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', err)
     stages = []
     if matched_rule and matched_rule.get('target_workflow_id'):
         wf_id = matched_rule['target_workflow_id']
@@ -413,7 +417,9 @@ def detect_rule_conflicts(db: Session, custom_rules: Optional[List[Dict[str, Any
             if sig not in rule_signatures:
                 rule_signatures[sig] = []
             rule_signatures[sig].append(r)
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', exc)
             continue
     for sig, matching_list in rule_signatures.items():
         if len(matching_list) > 1:

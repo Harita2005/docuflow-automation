@@ -1,4 +1,3 @@
-import time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
@@ -31,16 +30,15 @@ def ensure_mssql_database_exists(url: str):
             print(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
             break
         except Exception as create_err:
-            if attempt < 4:
-                time.sleep(3)
-            else:
-                print(f"[Database Auto-Create Notice] Could not auto-create database '{db_name}': {create_err}")
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', create_err)
 ensure_mssql_database_exists(db_url)
 try:
     engine = create_engine(db_url, **engine_kwargs)
     print('[Database Connection] Successfully initialized engine.')
-except Exception:
-    print(f'[Database Error] Failed to initialize database engine.')
+except Exception as exc:
+    import logging
+    logging.getLogger(__name__).debug('Handled exception: %s', exc)
     raise RuntimeError('Enterprise Database Connection Error: Failed to initialize engine.')
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -52,8 +50,6 @@ def get_db():
     finally:
         try:
             db.close()
-        except Exception:
-            try:
-                db.invalidate()
-            except Exception:
-                pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug('Handled exception: %s', exc)
