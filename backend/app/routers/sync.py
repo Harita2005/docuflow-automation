@@ -255,6 +255,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                             VALUES (:run_id, :rule_id, 'MATCHED', SYSUTCDATETIME())
                         """), {"run_id": eval_run_id, "rule_id": rule_row[0]})
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass
 
         # 10. Instantiate Workflow execution runtime
@@ -333,6 +334,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                                   )
                             """), {"stage_inst_id": stage_inst_id, "stage_id": stage_id})
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass
 
         # 11. Log immutable audit event

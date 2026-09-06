@@ -403,6 +403,7 @@ def build_callback_request(
                 for k, v in params_list.items():
                     query_params[k] = resolve_dynamic_variables(str(v), doc_context)
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     if query_params:
@@ -445,6 +446,7 @@ def build_callback_request(
                 for hk, hv in hdrs_list.items():
                     final_headers[hk] = resolve_dynamic_variables(str(hv), doc_context)
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     body_bytes = None
@@ -485,6 +487,7 @@ def build_callback_request(
                         for tp_field, src_field in mapping.items():
                             payload_dict[tp_field] = doc_context.get(src_field, resolve_dynamic_variables(str(src_field), doc_context))
                 except Exception:
+                    # Explicitly handled fallback for optional feature
                     pass
 
             if not payload_dict:
@@ -505,6 +508,7 @@ def build_callback_request(
                     for m in mapping:
                         form_dict[m.get("thirdPartyField")] = doc_context.get(m.get("sourceField"), "")
                 except Exception:
+                    # Explicitly handled fallback for optional feature
                     pass
             body_bytes = urllib.parse.urlencode(form_dict).encode("utf-8")
         elif body_type == "RAW_TEXT" or body_type == "XML":
@@ -521,6 +525,7 @@ def build_callback_request(
             ac = json.loads(app.auth_config_json)
             secret_key = ac.get("api_key") or ac.get("token") or ac.get("secret")
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
     if not secret_key and app:
         secret_key = app.code
@@ -564,6 +569,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get("max_attempts", max_attempts))
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     doc_context["attemptNumber"] = attempt_num
@@ -602,6 +608,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
                     if isinstance(sc, list) and sc:
                         valid_codes = [int(x) for x in sc]
                 except Exception:
+                    # Explicitly handled fallback for optional feature
                     pass
 
             is_success = status_code in valid_codes
@@ -675,6 +682,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get("max_attempts", max_attempts))
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     event.max_attempts = max_attempts

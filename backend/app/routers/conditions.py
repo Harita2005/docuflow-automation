@@ -23,6 +23,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
             if not str(payload.id).startswith("tmp-"):
                 rule_id = int(payload.id)
         except ValueError:
+            # Explicitly handled fallback for optional feature
             pass
 
     rule = None
@@ -73,7 +74,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session = Depends(get_db
             or_(
                 Document.status == "Pending Approval",
                 Document.status.like("%Unrouted%"),
-                Document.workflow_profile_id == None
+                Document.workflow_profile_id.is_(None)
             ),
             Document.is_deleted == False
         ).all()

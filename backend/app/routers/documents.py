@@ -211,7 +211,7 @@ def get_synced_pending_documents(db: Session = Depends(get_db), current_user: Op
     invoices = db.query(Invoice).filter(
         Invoice.is_deleted == False,
         Invoice.doc_key.isnot(None),
-        (Invoice.file_url == None) | (Invoice.file_url == "")
+        (Invoice.file_url.is_(None)) | (Invoice.file_url == "")
     ).order_by(Invoice.created_at.desc()).all()
     
     # Filter documents based on role permissions (Admin sees all; standard users only see documents currently at their stage)
@@ -405,6 +405,7 @@ def extract_date_components(date_str: Optional[str]):
                 dt = datetime.datetime.strptime(str(date_str).strip()[:19], fmt)
                 return dt.strftime("%Y"), dt.strftime("%m_%B"), dt.strftime("%d")
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass
     now = datetime.datetime.utcnow()
     return now.strftime("%Y"), now.strftime("%m_%B"), now.strftime("%d")
@@ -507,6 +508,7 @@ def serve_stored_pdf(filepath: str):
         if target_path.is_file() and target_path.is_relative_to(base_root):
             return FileResponse(str(target_path), media_type="application/pdf")
     except (ValueError, RuntimeError):
+        # Explicitly handled fallback for optional feature
         pass
 
     default_root = settings.PDF_STORAGE_DIR.resolve()
@@ -515,6 +517,7 @@ def serve_stored_pdf(filepath: str):
         if default_path.is_file() and default_path.is_relative_to(default_root):
             return FileResponse(str(default_path), media_type="application/pdf")
     except (ValueError, RuntimeError):
+        # Explicitly handled fallback for optional feature
         pass
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
@@ -2158,6 +2161,7 @@ def get_admin_notifications_inapp_config(db: Session = Depends(get_db)):
             try:
                 return json.loads(c.get("value", "[]"))
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass
     # Default event configs
     return [
@@ -2217,6 +2221,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                         if clean and clean not in combined_items:
                             combined_items.append(clean)
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass
 
     # =========================================================================

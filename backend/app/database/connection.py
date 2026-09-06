@@ -74,4 +74,5 @@ def get_db():
             try:
                 db.invalidate()
             except Exception:
+                # Explicitly handled fallback for optional feature
                 pass

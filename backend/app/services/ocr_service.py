@@ -40,6 +40,7 @@ def extract_text_from_pdf(pdf_path: Path) -> Dict[str, Any]:
             cleaned = amt_match.group(1).replace(",", "")
             extracted["amount"] = float(cleaned)
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     return extracted

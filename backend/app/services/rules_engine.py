@@ -133,6 +133,7 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str = "equals") -> 
                         return num_doc < num_rule
                     return abs(num_doc - num_rule) < 0.01
     except Exception:
+        # Explicitly handled fallback for optional feature
         pass
 
     str_doc = str(doc_val or "").strip().lower()

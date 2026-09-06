@@ -57,7 +57,7 @@ def get_approved_documents(
 
     if sync_status and sync_status.upper() != "ALL":
         if sync_status.upper() == "UNSYNCED":
-            query = query.filter((Document.external_sync_status == "UNSYNCED") | (Document.external_sync_status == None))
+            query = query.filter((Document.external_sync_status == "UNSYNCED") | (Document.external_sync_status.is_(None)))
         else:
             query = query.filter(Document.external_sync_status == sync_status.upper())
 

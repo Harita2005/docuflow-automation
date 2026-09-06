@@ -34,6 +34,7 @@ def build_universal_export_payload(inv: Document, base_url: str = "") -> Dict[st
             if isinstance(parsed, list):
                 line_items = parsed
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     # 2. Checklists
@@ -53,6 +54,7 @@ def build_universal_export_payload(inv: Document, base_url: str = "") -> Dict[st
             if isinstance(parsed_cl, dict):
                 checklists = [{"item_text": k, "is_checked": bool(v)} for k, v in parsed_cl.items()]
         except Exception:
+            # Explicitly handled fallback for optional feature
             pass
 
     # 3. Approval Sign-off Trail

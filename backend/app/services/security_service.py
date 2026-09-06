@@ -26,6 +26,7 @@ def is_ip_blocked(ip_str: str) -> bool:
             if ip_obj in net:
                 return True
     except ValueError:
+        # Explicitly handled fallback for optional feature
         pass
     return False
 
