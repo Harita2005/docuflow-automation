@@ -122,13 +122,13 @@ export default function IntegrationLogsPage() {
       }
     } catch (e) {}
 
-    let headerStr = Object.entries(headersObj)
+    const headerStr = Object.entries(headersObj)
       .map(([k, v]) => `-H "${k}: ${v}"`)
       .join(" \\\n  ");
 
-    let bodyStr = att.request_body ? `-d '${att.request_body}'` : "";
+    const bodyStr = att.request_body ? `-d '${att.request_body}'` : "";
 
-    let curlCmd = `curl -X ${att.http_method || "POST"} "${att.request_url}" ${headerStr ? "\\\n  " + headerStr : ""} ${bodyStr ? "\\\n  " + bodyStr : ""}`.trim();
+    const curlCmd = `curl -X ${att.http_method || "POST"} "${att.request_url}" ${headerStr ? "\\\n  " + headerStr : ""} ${bodyStr ? "\\\n  " + bodyStr : ""}`.trim();
 
     navigator.clipboard.writeText(curlCmd);
     const key = `${att.id || att.attempt_number}`;

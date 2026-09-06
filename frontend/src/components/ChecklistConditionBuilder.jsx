@@ -157,7 +157,7 @@ export default function ChecklistConditionBuilder() {
   }, []);
 
   const openEditor = (r = null, isDuplicate = false) => {
-    let targetProfile = r ? r.workflow_profile : 'ALL';
+    const targetProfile = r ? r.workflow_profile : 'ALL';
     const targetWfObj = workflows.find(w => w.profile_name === targetProfile || w.workflow_code === targetProfile);
     setChkWfCategoryFilter(targetWfObj?.workflow_category || 'ALL');
 

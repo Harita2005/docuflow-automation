@@ -1,7 +1,7 @@
 import time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from app.config import settings, BASE_DIR
+from app.config import settings
 
 db_url = settings.get_database_url()
 

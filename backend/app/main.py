@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -34,7 +32,7 @@ try:
     finally:
         db_init.close()
     
-    from sqlalchemy import text, inspect
+    from sqlalchemy import text
     
     is_mssql = engine.dialect.name == "mssql"
 
@@ -212,7 +210,7 @@ def startup_event():
                 ))
         db.commit()
 
-        user_count = db.query(User).count()
+        db.query(User).count()
         wf_count = db.query(WorkflowProfile).count()
         inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
         if wf_count == 0:

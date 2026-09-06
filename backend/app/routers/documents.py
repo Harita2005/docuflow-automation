@@ -4,29 +4,27 @@ import json
 import shutil
 import datetime
 import smtplib
-import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
 from app.models import (
-    Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, User,
-    ChecklistTemplate, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig,
-    ChecklistRule, BusinessRule, InAppNotification
+    Invoice, WorkflowStepDefinition, AuditLog, User, ChecklistTemplate, InvoiceChecklistState,
+    NotificationRaciMatrix, NotificationProviderConfig, ChecklistRule, InAppNotification
 )
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import (
-    InvoiceResponse, InvoiceCreate, InvoiceUpdate, InvoiceActionRequest,
-    NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
+    InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema,
+    NotificationRaciSchema, NotificationTestSchema
 )
 from app.auth import get_current_user
-from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, match_condition, score_checklist_rule
+from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, score_checklist_rule
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.database import SessionLocal
@@ -960,7 +958,7 @@ def workflow_approve_payload(
             WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
         ).first()
         if step and step.step_name:
-            current_step_name = step.step_name
+            step.step_name
     
     # Capture exact approver identity (Employee Name + Username/Email)
     approver_name = payload.get("approver") or payload.get("user") or payload.get("username")

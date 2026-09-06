@@ -1,4 +1,3 @@
-import os
 import io
 import fitz  # PyMuPDF
 from pathlib import Path
@@ -66,7 +65,7 @@ def compress_pdf(
                 try:
                     base_image = doc.extract_image(xref)
                     image_bytes = base_image["image"]
-                    image_ext = base_image["ext"]
+                    base_image["ext"]
 
                     # Convert to PIL Image for compression
                     pil_img = Image.open(io.BytesIO(image_bytes))
@@ -86,7 +85,7 @@ def compress_pdf(
                     # Only replace if compressed version is smaller
                     if len(compressed_img_bytes) < len(image_bytes):
                         page.replace_image(xref, stream=compressed_img_bytes)
-                except Exception as img_err:
+                except Exception:
                     continue
 
         doc.save(str(temp_compressed_path), garbage=4, deflate=True, clean=True)

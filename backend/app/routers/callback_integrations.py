@@ -2,12 +2,11 @@ import json
 import time
 import datetime
 import urllib.request
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from typing import Optional, Any
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import (
-    Document,
     ThirdPartyApplication,
     CallbackRule,
     CallbackEvent,
@@ -17,14 +16,11 @@ from app.models import (
 from app.schemas import (
     ThirdPartyApplicationCreate,
     ThirdPartyApplicationUpdate,
-    ThirdPartyApplicationResponse,
     CallbackRuleCreate,
     CallbackRuleUpdate,
-    CallbackRuleResponse,
     TestCallbackRequest
 )
 from app.services.callback_service import (
-    build_document_context,
     build_callback_request,
     execute_callback_event,
     mask_sensitive_headers

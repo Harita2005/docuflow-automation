@@ -202,7 +202,7 @@ export default function WorkTrackerPage({
 
   // Filtered and sorted documents list
   const filteredAndSortedDocs = useMemo(() => {
-    let list = visibleDocs.filter(doc => {
+    const list = visibleDocs.filter(doc => {
       // Tab filter
       if (activeTab !== "All" && (doc.document_type || "").toUpperCase().trim() !== activeTab.toUpperCase().trim()) {
         return false;

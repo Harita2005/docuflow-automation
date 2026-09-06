@@ -5,8 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate, ChecklistRule
-from app.schemas import WorkflowProfileSchema, WorkflowStepSchema
+from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
+from app.schemas import WorkflowProfileSchema
 
 router = APIRouter(tags=["Workflow Administration"])
 

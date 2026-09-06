@@ -1,16 +1,15 @@
-import os
 import json
 import urllib.request
 import urllib.error
 import datetime
 from pathlib import Path
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status, Request
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
-from app.models import Document, Invoice, ThirdPartyWebhookConfig, IntegrationSyncLog, AuditLog
+from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog, AuditLog
 from app.schemas import (
     ThirdPartyWebhookConfigCreate,
     ThirdPartyWebhookConfigResponse,

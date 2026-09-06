@@ -1,21 +1,20 @@
-import os
 import json
 import base64
 import datetime
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
-from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, ChecklistTemplate, InvoiceChecklistState, InvoiceLineItem
+from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, InvoiceChecklistState, InvoiceLineItem
 from app.schemas import (
     DocumentSyncRequest, DocumentSyncResponse,
     BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult,
     Base64AttachmentSyncRequest, AttachmentSyncResponse
 )
-from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
+from app.services.rules_engine import get_doc_type_prefix
 from app.services.ocr_service import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
@@ -295,7 +294,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                         
                         if stage_row:
                             stage_id = stage_row[0]
-                            stage_name = stage_row[1]
+                            stage_row[1]
                             stage_inst_row = db.execute(text("SELECT stage_instance_id FROM workflow.stage_instances WHERE workflow_instance_id = :inst_id AND workflow_stage_id = :stage_id AND status = 'ACTIVE'"), {"inst_id": wf_inst_id, "stage_id": stage_id}).fetchone()
                             
                             stage_inst_id = None
@@ -395,7 +394,6 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         existing.deleted_at = None
         
         target_inv = existing
-        action_type = "Updated via Sync"
     else:
         # Create new record
         timestamp = int(datetime.datetime.utcnow().timestamp() * 1000)
@@ -432,7 +430,6 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         )
         db.add(new_inv)
         target_inv = new_inv
-        action_type = "Created via Sync"
 
     db.commit()
     db.refresh(target_inv)

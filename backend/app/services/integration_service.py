@@ -7,7 +7,7 @@ import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import Document, Invoice, ThirdPartyWebhookConfig, IntegrationSyncLog, AuditLog
+from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog
 
 def build_universal_export_payload(inv: Document, base_url: str = "") -> Dict[str, Any]:
     """

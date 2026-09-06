@@ -1,4 +1,3 @@
-import os
 import re
 import json
 import base64
@@ -17,8 +16,7 @@ from app.models import (
     ThirdPartyApplication,
     CallbackRule,
     CallbackEvent,
-    CallbackAttempt,
-    IntegrationAuditHistory
+    CallbackAttempt
 )
 
 # Supported dynamic variable names
@@ -320,7 +318,7 @@ def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key
 
     # Fallback & Local Dev Engine: Construct dynamic payload with Document + Line Items
     try:
-        from app.models import Document, DocumentLineItem
+        from app.models import Document
         doc = None
         if db:
             doc = db.query(Document).filter(

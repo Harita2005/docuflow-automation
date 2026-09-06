@@ -2,10 +2,9 @@ import asyncio
 import json
 import time
 from typing import Set, Optional
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 from app.services.lock_service import lock_manager
-from app.database import get_db
 
 router = APIRouter(tags=["Real-Time Events & Collision Locks"])
 
