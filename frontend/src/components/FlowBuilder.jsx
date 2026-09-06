@@ -23,23 +23,6 @@ const STAGE_PRESET_OPTIONS = [
   "Final Approval"
 ];
 
-const getPrefixCode = (category, subCat) => {
-  if (!category && !subCat) return "";
-  const n = `${category || ""} ${subCat || ""}`.toUpperCase();
-  if (n.includes("CAPEX") || n.includes("ASSET")) return "CPX";
-  if (n.includes("PURCHASE")) return "PUR";
-  if (n.includes("SERVICE") || n.includes("MAINTENANCE")) return "SRV";
-  if (n.includes("FREIGHT") || n.includes("LOGISTICS")) return "FRT";
-  if (n.includes("UTILITY") || n.includes("RENT")) return "UTL";
-  if (n.includes("STAFF") || n.includes("EXPENSE")) return "EXP";
-  if (n.includes("GRN") || n.includes("GOODS")) return "GRN";
-  if (n.includes("ADVANCE")) return "ADV";
-  if (n.includes("CASH")) return "CSH";
-  if (n.includes("EVOUCHER") || n.includes("E-VOUCHER")) return "EV";
-  if (n.includes("JOURNAL")) return "JRN";
-  return "WF";
-};
-
 const getWorkflowPrefixCode = (category, subCat, totalWorkflowsCount = 0) => {
   const num = String((totalWorkflowsCount || 0) + 1).padStart(3, '0');
   return `WF-${num}`;
@@ -446,26 +429,6 @@ export default function FlowBuilder({ users = [] }) {
   if (loading) {
     return <div className="p-8 text-center text-slate-500 font-bold">Loading Workflows...</div>;
   }
-
-  const DOC_TYPE_ORDER = [
-    "CAPEX / FIXED ASSET",
-    "PURCHASE INVOICE",
-    "SERVICE & MAINTENANCE",
-    "FREIGHT & LOGISTICS",
-    "UTILITY & RENT",
-    "STAFF & HR EXPENSE",
-    "GRN / GOODS RECEIPT",
-    "ADVANCE VOUCHER",
-    "CASH VOUCHER",
-    "E-VOUCHER",
-    "JOURNAL VOUCHER",
-    "ACCOUNTS PAYABLE (AP)",
-    "AP INVOICE",
-    "AP DEBIT NOTE",
-    "AR CREDITNOTE",
-    "PROJECT BUDGET",
-    "NON - RETURNABLE"
-  ];
 
   const groupedWorkflows = workflows.reduce((acc, wf) => {
     const category = wf.workflow_category || 'Vendor Payment Workflows';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, GitMerge, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -30,15 +30,6 @@ export default function Admin() {
   const [templateFields, setTemplateFields] = useState([]);
   const [templateInstructions, setTemplateInstructions] = useState("");
 
-  const openRuleEditor = (rule) => {
-    setEditingRule(rule);
-    if (rule) {
-      try { setRuleConditions(JSON.parse(rule.conditions_json || '[]')); } catch(e) { setRuleConditions([]); }
-    } else {
-      setRuleConditions([]);
-    }
-  };
-
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem("adminActiveTab");
     return (stored === "masterdata" || stored === "recycle" || stored === "backups" || !stored) ? "routing" : stored;
@@ -63,7 +54,6 @@ export default function Admin() {
   const [logSearchQuery, setLogSearchQuery] = useState("");
   const [auditCategoryFilter, setAuditCategoryFilter] = useState("ALL");
   const [syncingData, setSyncingData] = useState(false);
-  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
   const [templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
   const [publishConfirm, setPublishConfirm] = useState(false);
@@ -139,113 +129,6 @@ export default function Admin() {
       console.error(e);
     }
     setLoading(false);
-  };
-
-  const renderConditionChips = (jsonStr) => {
-    try {
-      const conditions = JSON.parse(jsonStr);
-      if (!Array.isArray(conditions) || conditions.length === 0) return <span className="text-[10px] text-slate-400 italic">No conditions</span>;
-      
-      return (
-        <div className="flex flex-wrap gap-1.5">
-          {conditions.map((c, i) => {
-            let opLabel = c.operator;
-            if (opLabel === 'gt') opLabel = '>';
-            else if (opLabel === 'lt') opLabel = '<';
-            else if (opLabel === 'equals') opLabel = '=';
-            else if (opLabel === 'contains') opLabel = '⊇';
-
-            return (
-              <div key={i} className="flex items-center gap-1.5">
-                {i > 0 && (
-                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${c.logicalOperator === 'OR' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>
-                    {c.logicalOperator || 'AND'}
-                  </span>
-                )}
-                <div className="flex items-center text-[9px] font-bold tracking-wide rounded-full overflow-hidden shadow-sm border border-slate-200/60">
-                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 border-r border-slate-200/60 uppercase">{c.field}</span>
-                  <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 border-r border-slate-200/60 font-mono">{opLabel}</span>
-                  <span className="bg-white text-slate-700 px-2 py-0.5">{c.value}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    } catch(e) {
-      return <span className="text-[9px] font-mono text-slate-500 truncate max-w-[200px]">{jsonStr}</span>;
-    }
-  };
-
-  const handleSaveRuleLocal = (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    
-    const rule = {
-      id: editingRule.id || `tmp-${Date.now()}`,
-      priority: parseInt(fd.get('priority') || '10'),
-      rule_name: fd.get('rule_name') || "New Rule",
-      conditions_json: JSON.stringify(ruleConditions),
-      target_workflow_id: fd.get('target_workflow_id'),
-      document_type: editingRule.document_type || 'Any',
-      rule_category: editingRule.rule_category || 'Vendor Payment Workflows'
-    };
-    if (editingRule.id) {
-      setRules(rules.map(r => r.id === rule.id ? rule : r));
-    } else {
-      setRules([...rules, rule]);
-    }
-    setEditingRule(null);
-    setHasChanges(true);
-  };
-
-  const handleDeleteRuleLocal = (id) => {
-    if (!String(id).startsWith('tmp-')) {
-      setDeletedRuleIds(prev => [...prev, id]);
-    }
-    setRules(prev => prev.filter(r => r.id !== id));
-    setHasChanges(true);
-  };
-
-  const handleSaveFlowLocal = (e) => {
-    e.preventDefault();
-    if (!editingFlow || !editingFlow.profile_name) return;
-    
-    const existingStages = steps.filter(s => s.profile_name === (editingFlow.original_profile_name || editingFlow.profile_name));
-    const newStagesIds = editingFlow.stages.map(s => s.id).filter(id => id && !String(id).startsWith('tmp-'));
-    const deletedIds = existingStages.map(s => s.id).filter(id => !newStagesIds.includes(id));
-    
-    if (deletedIds.length > 0) {
-       setDeletedStepIds([...deletedStepIds, ...deletedIds.filter(id => !String(id).startsWith('tmp-'))]);
-    }
-    
-    const flowSteps = editingFlow.stages.map((stg, idx) => ({
-      id: stg.id || `tmp-${Date.now()}-${idx}`,
-      profile_name: editingFlow.profile_name,
-      stage_number: idx + 1,
-      approver_target: stg.approver_target,
-      action_required: stg.action_required || 'Approve',
-      permissions: stg.permissions || 'Approve Only',
-      document_type: 'Any'
-    }));
-    
-    const remainingSteps = steps.filter(s => s.profile_name !== (editingFlow.original_profile_name || editingFlow.profile_name));
-    
-    setSteps([...remainingSteps, ...flowSteps]);
-    setEditingFlow(null);
-    setHasChanges(true);
-  };
-
-  const handleDeleteFlowLocal = (profile_name) => {
-    if (window.confirm(`Are you sure you want to delete the entire flow "${profile_name}"?`)) {
-      const idsToDelete = steps.filter(s => s.profile_name === profile_name).map(s => s.id);
-      const nonTmpIds = idsToDelete.filter(id => !String(id).startsWith('tmp-'));
-      if (nonTmpIds.length > 0) {
-        setDeletedStepIds([...deletedStepIds, ...nonTmpIds]);
-      }
-      setSteps(steps.filter(s => s.profile_name !== profile_name));
-      setHasChanges(true);
-    }
   };
 
   const openEditTemplate = (t) => {

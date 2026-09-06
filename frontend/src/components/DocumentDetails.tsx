@@ -921,23 +921,7 @@ export default function DocumentDetails({
     setActionLoading(false);
   };
 
-  const defaultSDChecklist = [
-    "Documents Attached",
-    "Party Name & Total Amount Verified",
-    "Vendor GST no, Signaure Verified",
-    "Bill No ,Date & Address Verified",
-    "Tax portion verified (GST, TDS, etc..)",
-    "RO/PO Verified",
-    "Gate Inward, GRN, Debit/Credit Note Verified",
-    "SAP Entry ( DR/CR & GL , COST CENTER ) Verified",
-    "Advance, Narration, Supportive Copy (If Any)"
-  ];
-
   const effectiveChecklist = checklistItems;
-
-  const currentStageDef = activeApprovalLog && workflowStepDefinitions
-    ? workflowStepDefinitions.find((s: any) => s.stage_number === activeApprovalLog.current_stage_number)
-    : null;
 
   const getStatusBadge = () => {
     const status = document.status;
@@ -2312,7 +2296,6 @@ export default function DocumentDetails({
                     {commentsList.map((comm: any, cIdx: number) => {
                       const authorName = comm.author || comm.user_name || "System Administrator";
                       const actionLabel = comm.action || "Compliance Sign-off";
-                      const stageLabel = comm.stage || "Workflow Stage";
 
                       return (
                         <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">

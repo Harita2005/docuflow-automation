@@ -115,13 +115,10 @@ export default function CallbackRuleBuilder({
 
   // Authentication Override
   const [authOverrideType, setAuthOverrideType] = useState(initialRule?.auth_override_type || "INHERIT");
-  const [authApiKeyHeader, setAuthApiKeyHeader] = useState("X-API-Key");
-  const [authApiKeyValue, setAuthApiKeyValue] = useState("");
-  const [authBearerToken, setAuthBearerToken] = useState("");
 
   // Payload Mapping
-  const [bodyType, setBodyType] = useState(initialRule?.body_type || "JSON");
-  const [contentType, setContentType] = useState(initialRule?.content_type || "application/json");
+  const bodyType = initialRule?.body_type || "JSON";
+  const contentType = initialRule?.content_type || "application/json";
   const [payloadMappings, setPayloadMappings] = useState<any[]>(() => {
     if (initialRule?.payload_mapping_json) {
       try {

@@ -139,7 +139,6 @@ export default function ChecklistConditionBuilder() {
   };
 
   const [workflows, setWorkflows] = useState([]);
-  const [chkWfCategoryFilter, setChkWfCategoryFilter] = useState('ALL');
 
   useEffect(() => {
     fetchChecklistRules();
@@ -301,10 +300,6 @@ export default function ChecklistConditionBuilder() {
       }
     });
     return counts;
-  }, [rules]);
-
-  const mandatoryCount = useMemo(() => {
-    return rules.filter(r => r.is_mandatory !== false).length;
   }, [rules]);
 
   // Filtered Rules

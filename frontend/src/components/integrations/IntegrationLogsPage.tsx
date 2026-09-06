@@ -8,13 +8,7 @@ import {
   RotateCcw,
   CheckCircle,
   XCircle,
-  Clock,
   Globe,
-  Code,
-  FileText,
-  AlertTriangle,
-  Server,
-  Copy,
   Terminal,
   Play
 } from "lucide-react";

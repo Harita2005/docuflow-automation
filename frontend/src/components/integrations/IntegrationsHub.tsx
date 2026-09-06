@@ -10,10 +10,8 @@ interface IntegrationsHubProps {
 
 export default function IntegrationsHub({ initialTab = "applications" }: IntegrationsHubProps) {
   const [activeTab, setActiveTab] = useState<"applications" | "rules" | "logs">(initialTab);
-  const [targetAppForRules, setTargetAppForRules] = useState<number | null>(null);
 
-  const handleConfigureRulesForApp = (appId: number) => {
-    setTargetAppForRules(appId);
+  const handleConfigureRulesForApp = (_appId: number) => {
     setActiveTab("rules");
   };
 
