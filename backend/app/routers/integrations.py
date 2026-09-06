@@ -280,12 +280,14 @@ def test_webhook_connection(
     if hmac_secret:
         headers["X-DocuFlow-Signature"] = f"sha256={compute_hmac_signature(payload_json, hmac_secret)}"
 
-    parsed_url = urllib.parse.urlparse(target_url)
-    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+    from app.services.security_service import validate_safe_url
+    try:
+        target_url = validate_safe_url(target_url)
+    except Exception as url_err:
         return {
             "success": False,
             "target_url": target_url,
-            "error": "Invalid or untrusted target URL scheme. Only HTTP and HTTPS are permitted."
+            "error": str(getattr(url_err, "detail", url_err))
         }
 
     try:

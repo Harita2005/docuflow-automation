@@ -36,8 +36,7 @@ print(f"Remaining users in DB count: {len(remaining_users)}\n")
 
 print("--- REMAINING 5 CORE USERS ---")
 for u in remaining_users:
-    masked_email = u.email[:2] + "***@" + u.email.split("@")[-1] if u.email and "@" in u.email else "[PROTECTED]"
-    print(f"ID: {u.id:<5} | Username: {u.username:<12} | Name: {(u.employee_name or getattr(u, 'name', '')):<22} | Role: {u.role:<10} | Email: {masked_email}")
+    print(f"ID: {u.id:<5} | Role: {u.role:<10} | Active: {u.is_active}")
 
 print("==========================================================")
 

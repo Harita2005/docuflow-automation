@@ -513,11 +513,13 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
             "body": body_bytes.decode("utf-8", errors="ignore") if body_bytes else None
         }
 
-        parsed_u = urllib.parse.urlparse(final_url)
-        if parsed_u.scheme not in ("http", "https") or not parsed_u.netloc:
+        from app.services.security_service import validate_safe_url
+        try:
+            final_url = validate_safe_url(final_url)
+        except Exception as url_err:
             return {
                 "success": False,
-                "error": "Invalid or untrusted target URL scheme. Only HTTP and HTTPS allowed.",
+                "error": str(getattr(url_err, "detail", url_err)),
                 "request_preview": request_preview
             }
 

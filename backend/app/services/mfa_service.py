@@ -154,14 +154,14 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
 
             server.sendmail(sender_email, [email], msg.as_string())
             server.quit()
-            print(f"[SMTP SUCCESS] Email delivered to {email}")
+            print(f"[SMTP SUCCESS] Email delivered to {masked_email}")
             return True, f"Code sent to {masked_email}"
         except smtplib.SMTPAuthenticationError as e:
-            print(f"[SMTP AUTH ERROR] Check SMTP_USER/SMTP_PASS credentials: {e}")
+            print(f"[SMTP AUTH ERROR] Check SMTP credentials")
         except smtplib.SMTPConnectError as e:
-            print(f"[SMTP CONNECT ERROR] Cannot reach {smtp_host}:{smtp_port} — {e}")
+            print(f"[SMTP CONNECT ERROR] Cannot reach SMTP server")
         except Exception as e:
-            print(f"[SMTP ERROR] {type(e).__name__}: {e}")
+            print(f"[SMTP ERROR] {type(e).__name__}")
 
     return True, f"Code sent to {masked_email}"
 
@@ -172,7 +172,7 @@ def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[
     """
     masked_phone = mask_phone(phone_number)
     print("=" * 60)
-    print(f"[DOCUFLOW MFA SMS DISPATCH] TO: {employee_name} <{masked_phone}>")
+    print(f"[DOCUFLOW MFA SMS DISPATCH] TO: [REDACTED USER] <{masked_phone}>")
     print("[SMS OTP]: [REDACTED FOR SECURITY] is your DocuFlow verification code.")
     print("=" * 60)
     return True, f"Code sent to {masked_phone}"
