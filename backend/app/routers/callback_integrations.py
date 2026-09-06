@@ -517,6 +517,14 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
             "body": body_bytes.decode("utf-8", errors="ignore") if body_bytes else None
         }
 
+        parsed_u = urllib.parse.urlparse(final_url)
+        if parsed_u.scheme not in ("http", "https") or not parsed_u.netloc:
+            return {
+                "success": False,
+                "error": "Invalid or untrusted target URL scheme. Only HTTP and HTTPS allowed.",
+                "request_preview": request_preview
+            }
+
         # Perform actual HTTP request
         start = time.time()
         req = urllib.request.Request(
@@ -541,14 +549,14 @@ def execute_test_callback(body: TestCallbackRequest, db: Session = Depends(get_d
         return {
             "success": False,
             "status_code": he.code,
-            "error": f"HTTP Error {he.code}: {resp_body[:500]}",
+            "error": f"HTTP Error {he.code}",
             "request_preview": request_preview if 'request_preview' in locals() else None,
             "response_body": resp_body[:2000]
         }
     except Exception as ex:
         return {
             "success": False,
-            "error": str(ex),
+            "error": f"Callback execution failed: {type(ex).__name__}",
             "request_preview": request_preview if 'request_preview' in locals() else None
         }
 

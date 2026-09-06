@@ -499,13 +499,17 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
 @router.head("/stored_pdfs/{filepath:path}")
 def serve_stored_pdf(filepath: str):
     """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
-    base_root = get_storage_root_path()
-    target_path = base_root / filepath
-    if target_path.exists() and target_path.is_file():
+    clean_relative = Path(os.path.normpath(filepath)).name
+    base_root = get_storage_root_path().resolve()
+    target_path = (base_root / clean_relative).resolve()
+    if target_path.exists() and target_path.is_file() and str(target_path).startswith(str(base_root)):
         return FileResponse(str(target_path), media_type="application/pdf")
-    default_path = settings.PDF_STORAGE_DIR / filepath
-    if default_path.exists() and default_path.is_file():
+
+    default_root = settings.PDF_STORAGE_DIR.resolve()
+    default_path = (default_root / clean_relative).resolve()
+    if default_path.exists() and default_path.is_file() and str(default_path).startswith(str(default_root)):
         return FileResponse(str(default_path), media_type="application/pdf")
+
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
 
 def get_rejected_pdf_path(inv: Invoice) -> Path:

@@ -560,7 +560,9 @@ export default function AdminUsers() {
         if (editingUser?.id && !editingUser.isNew) {
           setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...payload } : u));
         } else {
-          const newUid = `USR-${Math.floor(100000 + Math.random() * 900000)}`;
+          const randomBuf = new Uint32Array(1);
+          window.crypto.getRandomValues(randomBuf);
+          const newUid = `USR-${100000 + (randomBuf[0] % 900000)}`;
           setUsers(prev => [{ 
             ...payload, 
             id: `mock-${Date.now()}`, 
@@ -867,7 +869,11 @@ export default function AdminUsers() {
                 email: '', 
                 username: '', 
                 phone_number: '+91 98400 00000',
-                employee_id: `EMP-${Math.floor(1000 + Math.random()*9000)}`, 
+                employee_id: (() => {
+                  const buf = new Uint32Array(1);
+                  window.crypto.getRandomValues(buf);
+                  return `EMP-${1000 + (buf[0] % 9000)}`;
+                })(), 
                 role: 'employee', 
                 department: 'General Operations', 
                 division: 'VCC',

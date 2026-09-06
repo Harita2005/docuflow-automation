@@ -14,6 +14,6 @@ print("==========================================================")
 
 users = db.query(User).all()
 for u in users:
-    print(f"ID: {u.id} | Username: '{u.username}' | Employee ID: '{u.employee_id}' | Email: '{u.email}' | Role: '{u.role}' | Password Hash: '{u.password_hash}'")
+    print(f"ID: {u.id} | Username: '{u.username}' | Employee ID: '{u.employee_id}' | Email: '{u.email}' | Role: '{u.role}' | Password Hash: '[PROTECTED]'")
 
 db.close()

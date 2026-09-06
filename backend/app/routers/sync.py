@@ -977,11 +977,15 @@ def sync_record_attachment_by_pk_base64(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid Base64 payload: {str(e)}")
 
-    ext = payload.file_name.split('.')[-1] if '.' in payload.file_name else 'pdf'
-    safe_name = f"{inv.id}.{ext}"
-    file_path = Path(settings.UPLOAD_DIR) / safe_name
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    raw_ext = payload.file_name.split('.')[-1] if '.' in payload.file_name else 'pdf'
+    clean_ext = "".join(c for c in raw_ext if c.isalnum()) or "pdf"
+    safe_name = f"{inv.id}.{clean_ext}"
+    file_path = (upload_root / safe_name).resolve()
 
-    # Ensure upload directory exists
+    if not str(file_path).startswith(str(upload_root)):
+        raise HTTPException(status_code=400, detail="Invalid file path detected")
+
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(file_path, "wb") as f:

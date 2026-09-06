@@ -281,6 +281,14 @@ def test_webhook_connection(
     if hmac_secret:
         headers["X-DocuFlow-Signature"] = f"sha256={compute_hmac_signature(payload_json, hmac_secret)}"
 
+    parsed_url = urllib.parse.urlparse(target_url)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+        return {
+            "success": False,
+            "target_url": target_url,
+            "error": "Invalid or untrusted target URL scheme. Only HTTP and HTTPS are permitted."
+        }
+
     try:
         req = urllib.request.Request(
             target_url,
@@ -302,13 +310,13 @@ def test_webhook_connection(
             "success": False,
             "status_code": he.code,
             "target_url": target_url,
-            "error": f"HTTP Error {he.code}: {he.read().decode('utf-8', errors='ignore')[:1000]}"
+            "error": f"HTTP Error {he.code}"
         }
     except Exception as e:
         return {
             "success": False,
             "target_url": target_url,
-            "error": str(e)
+            "error": f"Request dispatch failed: {type(e).__name__}"
         }
 
 @router.post("/documents/{document_id}/retry-push")

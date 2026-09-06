@@ -96,8 +96,8 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
     
     # 1. Always log prominent notification in terminal
     print("=" * 60)
-    print(f"[DOCUFLOW MFA EMAIL DISPATCH] TO: {employee_name} <{email}>")
-    print(f"[OTP CODE]: {otp_code}")
+    print(f"[DOCUFLOW MFA EMAIL DISPATCH] TO: {employee_name} <{masked_email}>")
+    print("[OTP CODE]: [REDACTED FOR SECURITY]")
     print("This code is valid for 5 minutes. Do not share it with anyone.")
     print("=" * 60)
 
@@ -173,8 +173,8 @@ def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[
     """
     masked_phone = mask_phone(phone_number)
     print("=" * 60)
-    print(f"[DOCUFLOW MFA SMS DISPATCH] TO: {employee_name} <{phone_number}>")
-    print(f"[SMS OTP]: {otp_code} is your DocuFlow verification code.")
+    print(f"[DOCUFLOW MFA SMS DISPATCH] TO: {employee_name} <{masked_phone}>")
+    print("[SMS OTP]: [REDACTED FOR SECURITY] is your DocuFlow verification code.")
     print("=" * 60)
     return True, f"Code sent to {masked_phone}"
 
