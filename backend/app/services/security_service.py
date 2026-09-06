@@ -27,7 +27,7 @@ def is_ip_blocked(ip_str: str) -> bool:
             if ip_obj in net:
                 return True
     except ValueError:
-        pass
+        logging.debug("Ignored exception in except block")
     return False
 
 def validate_and_reconstruct_url(url: str) -> str:

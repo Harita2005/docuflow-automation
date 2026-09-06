@@ -1,10 +1,10 @@
+from app.auth import get_password_hash
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile, Invoice
-from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events
 
 # Initialize database schema tables and run migrations on import
 try:
@@ -14,7 +14,6 @@ try:
     db_init = SessionLocal()
     try:
         if db_init.query(User).count() == 0:
-            from app.auth import get_password_hash
             hashed_pass = get_password_hash("password123")
             core_users = [
                 User(id=1, user_uid="U-ADMIN", employee_id="EMP001", employee_name="System Administrator", name="System Administrator", username="admin", email="harita010905@gmail.com", role="admin", password_hash=hashed_pass, is_active=True, is_deleted=False),
@@ -237,7 +236,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations
+from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations, callback_integrations
 
 # Enterprise Security Headers & Rate Limiting Middleware
 from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware

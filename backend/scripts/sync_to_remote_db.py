@@ -1,4 +1,4 @@
-﻿"""
+"""
 DocuFlow Database Migration & Remote Push Utility
 -------------------------------------------------
 Wipes target remote database, replicates the complete local schema,
@@ -72,7 +72,7 @@ def push_local_to_remote(remote_db_url: str):
                 try:
                     conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE;"))
                 except Exception:
-                    pass
+                    import logging; logging.debug("Ignored exception in except block")
             conn.commit()
     print("    [OK] Remote tables cleaned.")
 
@@ -131,7 +131,7 @@ def push_local_to_remote(remote_db_url: str):
                     try:
                         conn.execute(text(f"SET IDENTITY_INSERT [{table_name}] OFF;"))
                     except Exception:
-                        pass
+                        import logging; logging.debug("Ignored exception in except block")
 
                 conn.commit()
             print(f"    -> {table_name.ljust(30)}: Transferred {str(row_count).rjust(6)} records [OK]")

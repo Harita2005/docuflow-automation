@@ -1,3 +1,5 @@
+from app.routers.events import broadcast_event
+import uuid
 import time
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
@@ -14,7 +16,7 @@ from app.auth import verify_password, create_access_token, get_current_user
 from app.services.mfa_service import (
     create_mfa_ticket, get_mfa_ticket, generate_numeric_otp,
     generate_totp_secret, generate_totp_qr_svg, verify_totp,
-    send_email_otp, send_sms_otp, mask_email, mask_phone
+    send_email_otp, send_sms_otp, mask_email, mask_phone, _MFA_TICKETS
 )
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -87,7 +89,6 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             }
 
         # Generate fresh session ID for this login
-        import uuid
         new_session_id = str(uuid.uuid4())
         device_label = request.device_info or "Web Browser"
 
@@ -101,7 +102,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         # If taking over prior session, broadcast real-time kick event to prior device
         if had_prior_session:
             try:
-                from app.routers.events import broadcast_event
+                # broadcast_event imported
                 broadcast_event("SESSION_KICKED", {
                     "user_id": user.id,
                     "username": user.username,
@@ -276,7 +277,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session = Depends(get_db)):
     if not is_valid:
         ticket_data["attempts"] = ticket_data.get("attempts", 0) + 1
         if ticket_data["attempts"] >= 5:
-            from app.services.mfa_service import _MFA_TICKETS
+            # _MFA_TICKETS imported
             _MFA_TICKETS.pop(request.ticket, None)
             raise HTTPException(status_code=400, detail="Too many invalid attempts. Session locked. Please sign in again.")
         raise HTTPException(status_code=400, detail="Invalid verification code. Please check and try again.")

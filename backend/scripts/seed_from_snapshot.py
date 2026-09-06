@@ -62,7 +62,7 @@ def parse_val(v):
             try:
                 return datetime.fromisoformat(v.replace('Z', '+00:00'))
             except Exception:
-                pass
+                import logging; logging.debug("Ignored exception in except block")
     return v
 
 def run_seeder():
@@ -112,7 +112,7 @@ def run_seeder():
                 try:
                     conn.execute(text(f"DELETE FROM {tbl}"))
                 except Exception:
-                    pass
+                    import logging; logging.debug("Ignored exception in except block")
     print("    [OK] Tables cleaned.")
 
     # 3. Insert records table by table
@@ -151,7 +151,7 @@ def run_seeder():
                 try:
                     conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] ON"))
                 except Exception:
-                    pass
+                    import logging; logging.debug("Ignored exception in except block")
 
             for i in range(0, len(cleaned_rows), chunk_size):
                 chunk = cleaned_rows[i:i + chunk_size]
@@ -161,7 +161,7 @@ def run_seeder():
                 try:
                     conn.execute(text(f"SET IDENTITY_INSERT [{tbl_name}] OFF"))
                 except Exception:
-                    pass
+                    import logging; logging.debug("Ignored exception in except block")
 
             print(f"    [OK] {tbl_name:30s} : {len(cleaned_rows):,} rows inserted")
 

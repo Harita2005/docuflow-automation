@@ -1,4 +1,4 @@
-﻿from collections import defaultdict
+from collections import defaultdict
 from sqlalchemy import create_engine, text
 from app.config import settings
 
