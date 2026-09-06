@@ -469,93 +469,58 @@ def get_storage_root_path() -> Path:
 
 def get_archived_pdf_path(inv: Invoice) -> Path:
     """
-    Constructs the hierarchical storage path using admin configured folder patterns.
-    Supported pattern tokens: {YEAR}, {MONTH}, {DAY}, {DOC_TYPE}, {VENDOR_NAME}, {COMPANY_CODE}, {DOC_NUM}, {ID}
+    Constructs the storage path for approved documents under storage root.
     """
-    root_dir_name, pattern = get_storage_config()
-    year_str, month_str, day_str = extract_date_components(inv.invoice_date or inv.doc_date)
-    doc_type_folder = normalize_doc_type_folder(inv.document_type or inv.category)
-    vendor_folder = sanitize_name(inv.vendor_name or "UNKNOWN_VENDOR")
-    company_code_folder = sanitize_name(getattr(inv, 'company_code', None) or getattr(inv, 'division', None) or "DEFAULT")
+    clean_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or "DOC"))
+    clean_doc_num = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_doc_num)
     
-    clean_doc_num = sanitize_name(inv.invoice_number or inv.doc_num or "DOC")
-    clean_id = sanitize_name(str(inv.id) if inv.id else "0")
-    
-    subfolder_str = pattern.replace("{YEAR}", year_str)\
-                           .replace("{MONTH}", month_str)\
-                           .replace("{DAY}", day_str)\
-                           .replace("{DOC_TYPE}", doc_type_folder)\
-                           .replace("{VENDOR_NAME}", vendor_folder)\
-                           .replace("{COMPANY_CODE}", company_code_folder)\
-                           .replace("{DOC_NUM}", clean_doc_num)\
-                           .replace("{ID}", clean_id)
-    
-    # Split subfolder into safe individual directory names using os.path.basename and strict whitelist regex
-    raw_parts = [p.strip() for p in subfolder_str.replace("\\", "/").split("/") if p.strip()]
-    safe_parts = [re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(p)) for p in raw_parts if p not in (".", "..")]
-    
-    clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(f"{clean_doc_num}_{clean_id}.pdf"))
-    
-    base_root = get_storage_root_path().resolve()
-    target_path = base_root / "approved"
-    for part in safe_parts:
-        if part:
-            target_path = target_path / part
-    target_path = (target_path / clean_filename).resolve()
+    clean_id = os.path.basename(str(inv.id) if inv.id else "0")
+    clean_id = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_id)
 
-    if base_root not in target_path.parents:
-        return (base_root / "approved" / clean_filename).resolve()
-
-    return target_path
+    filename = f"{clean_doc_num}_{clean_id}.pdf"
+    return get_storage_root_path() / "approved" / filename
 
 @router.get("/stored_pdfs/{filepath:path}")
 @router.head("/stored_pdfs/{filepath:path}")
 def serve_stored_pdf(filepath: str):
     """Failsafe web streaming route for archived PDF files across custom OS storage paths (e.g. C:/loc)."""
     raw_name = os.path.basename(filepath)
-    safe_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
-    if not safe_filename or safe_filename in (".", ".."):
+    clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
+    if not clean_filename or clean_filename in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    base_root = get_storage_root_path().resolve()
-    target_path = (base_root / safe_filename).resolve()
-    if target_path.is_file() and (base_root in target_path.parents or target_path.parent == base_root):
-        return FileResponse(str(target_path), media_type="application/pdf")
+    base_root = get_storage_root_path()
+    target_path = base_root / clean_filename
+    if target_path.is_file():
+        return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_filename)
 
-    default_root = settings.PDF_STORAGE_DIR.resolve()
-    default_path = (default_root / safe_filename).resolve()
-    if default_path.is_file() and (default_root in default_path.parents or default_path.parent == default_root):
-        return FileResponse(str(default_path), media_type="application/pdf")
+    default_root = settings.PDF_STORAGE_DIR
+    default_path = default_root / clean_filename
+    if default_path.is_file():
+        return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_filename)
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
 
 def get_rejected_pdf_path(inv: Invoice) -> Path:
     """
-    Constructs the hierarchical storage path for rejected/cancelled documents:
-    stored_pdfs/rejected/{YEAR}/{MONTH}/{DOC_TYPE}/{DOC_NUM}_{PRIMARY_KEY}.pdf
+    Constructs the storage path for rejected/cancelled documents:
+    stored_pdfs/rejected/{DOC_NUM}_{PRIMARY_KEY}.pdf
     """
-    year_str, month_str, _ = extract_date_components(inv.invoice_date or inv.doc_date)
-    doc_type_folder = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(normalize_doc_type_folder(inv.document_type or inv.category)))
-    
-    clean_doc_num = sanitize_name(inv.invoice_number or inv.doc_num or "DOC")
-    clean_id = sanitize_name(str(inv.id) if inv.id else "0")
-    
-    filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(f"{clean_doc_num}_{clean_id}.pdf"))
-    clean_year = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(year_str))
-    clean_month = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(month_str))
+    clean_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or "DOC"))
+    clean_doc_num = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_doc_num)
 
-    base_rejected = settings.REJECTED_PDF_DIR.resolve()
-    target_path = (base_rejected / clean_year / clean_month / doc_type_folder / filename).resolve()
-    if base_rejected not in target_path.parents:
-        return (base_rejected / filename).resolve()
-    return target_path
+    clean_id = os.path.basename(str(inv.id) if inv.id else "0")
+    clean_id = re.sub(r'[^a-zA-Z0-9_\-\.]', '', clean_id)
+
+    filename = f"{clean_doc_num}_{clean_id}.pdf"
+    return settings.REJECTED_PDF_DIR / filename
 
 def archive_approved_pdf(inv: Invoice):
     """
     Archival helper:
-    1. Saves approved physical PDF into configured hierarchical folders under stored_pdfs/approved/ (or C:/loc/approved/).
+    1. Saves approved physical PDF into configured folders under stored_pdfs/approved/.
     2. Updates inv.file_url in the database to point to the new /stored_pdfs/ web route.
-    3. Deletes temporary upload file from uploads/ directory to maintain a clean workspace.
+    3. Deletes temporary upload file from uploads/ directory.
     4. Triggers background push to 3rd-party webhook / SAP.
     """
     try:
@@ -563,48 +528,43 @@ def archive_approved_pdf(inv: Invoice):
             return
         
         raw_name = os.path.basename(inv.file_url) if inv.file_url else ""
-        filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
+        clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '', raw_name)
         
-        upload_root = settings.UPLOAD_DIR.resolve()
-        legacy_root = settings.PDF_STORAGE_DIR.resolve()
+        upload_root = settings.UPLOAD_DIR
+        legacy_root = settings.PDF_STORAGE_DIR
 
-        upload_path = (upload_root / filename).resolve() if filename else None
-        legacy_storage_path = (legacy_root / filename).resolve() if filename else None
+        upload_path = upload_root / clean_filename if clean_filename else None
+        legacy_storage_path = legacy_root / clean_filename if clean_filename else None
 
         src_path = None
-        if upload_path and (upload_root in upload_path.parents or upload_path.parent == upload_root) and upload_path.exists():
+        if upload_path and upload_path.exists():
             src_path = upload_path
-        elif legacy_storage_path and (legacy_root in legacy_storage_path.parents or legacy_storage_path.parent == legacy_root) and legacy_storage_path.exists():
+        elif legacy_storage_path and legacy_storage_path.exists():
             src_path = legacy_storage_path
         elif (settings.UPLOAD_DIR / "sample_invoice.pdf").exists():
-            src_path = (settings.UPLOAD_DIR / "sample_invoice.pdf").resolve()
+            src_path = settings.UPLOAD_DIR / "sample_invoice.pdf"
 
         if src_path and src_path.exists():
-            base_root = get_storage_root_path().resolve()
-            dest_approved = get_archived_pdf_path(inv).resolve()
+            dest_approved = get_archived_pdf_path(inv)
+            dest_approved.parent.mkdir(parents=True, exist_ok=True)
+            
+            if src_path != dest_approved:
+                shutil.copy2(str(src_path), str(dest_approved))
+                print(f"[Archive] Successfully archived approved PDF")
 
-            if base_root in dest_approved.parents:
-                parent_dir = dest_approved.parent.resolve()
-                if base_root in parent_dir.parents or parent_dir == base_root:
-                    parent_dir.mkdir(parents=True, exist_ok=True)
-                    if src_path != dest_approved:
-                        shutil.copy2(str(src_path), str(dest_approved))
-                        print(f"[Archive] Successfully archived approved PDF")
+                if upload_path and upload_path.exists() and upload_path != dest_approved and upload_path.name != "sample_invoice.pdf":
+                    try:
+                        upload_path.unlink()
+                    except Exception:
+                        pass
 
-                        if upload_path and upload_path.exists() and upload_path != dest_approved and upload_path.name != "sample_invoice.pdf":
-                            try:
-                                upload_path.unlink()
-                            except Exception:
-                                pass
-
-            # Update document file_url to point to the permanent stored_pdfs web route
+            base_root = get_storage_root_path()
             try:
                 rel_path = dest_approved.relative_to(base_root)
                 inv.file_url = f"/stored_pdfs/{rel_path.as_posix()}"
             except ValueError:
                 inv.file_url = f"/stored_pdfs/approved/{dest_approved.name}"
 
-        # Trigger real-time integration push to 3rd-party webhook / SAP
         trigger_async_integration_push(str(inv.id))
     except Exception as e:
         print(f"[Archive Warning] Could not archive approved PDF: {e}")
