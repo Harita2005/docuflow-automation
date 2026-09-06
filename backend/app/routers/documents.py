@@ -503,7 +503,7 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
             target_path = target_path / part
     target_path = (target_path / clean_filename).resolve()
 
-    if not str(target_path).startswith(str(base_root)):
+    if not (target_path.is_relative_to(base_root) and str(target_path).startswith(str(base_root))):
         return (base_root / "approved" / clean_filename).resolve()
 
     return target_path
@@ -519,12 +519,12 @@ def serve_stored_pdf(filepath: str):
 
     base_root = get_storage_root_path().resolve()
     target_path = (base_root / safe_filename).resolve()
-    if str(target_path).startswith(str(base_root)) and target_path.is_file():
+    if target_path.is_file() and target_path.is_relative_to(base_root) and str(target_path).startswith(str(base_root)):
         return FileResponse(str(target_path), media_type="application/pdf")
 
     default_root = settings.PDF_STORAGE_DIR.resolve()
     default_path = (default_root / safe_filename).resolve()
-    if str(default_path).startswith(str(default_root)) and default_path.is_file():
+    if default_path.is_file() and default_path.is_relative_to(default_root) and str(default_path).startswith(str(default_root)):
         return FileResponse(str(default_path), media_type="application/pdf")
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
@@ -546,7 +546,7 @@ def get_rejected_pdf_path(inv: Invoice) -> Path:
 
     base_rejected = settings.REJECTED_PDF_DIR.resolve()
     target_path = (base_rejected / clean_year / clean_month / doc_type_folder / filename).resolve()
-    if not str(target_path).startswith(str(base_rejected)):
+    if not (target_path.is_relative_to(base_rejected) and str(target_path).startswith(str(base_rejected))):
         return (base_rejected / filename).resolve()
     return target_path
 
@@ -572,9 +572,9 @@ def archive_approved_pdf(inv: Invoice):
         legacy_storage_path = (legacy_root / filename).resolve() if filename else None
 
         src_path = None
-        if upload_path and str(upload_path).startswith(str(upload_root)) and upload_path.exists():
+        if upload_path and upload_path.is_relative_to(upload_root) and str(upload_path).startswith(str(upload_root)) and upload_path.exists():
             src_path = upload_path
-        elif legacy_storage_path and str(legacy_storage_path).startswith(str(legacy_root)) and legacy_storage_path.exists():
+        elif legacy_storage_path and legacy_storage_path.is_relative_to(legacy_root) and str(legacy_storage_path).startswith(str(legacy_root)) and legacy_storage_path.exists():
             src_path = legacy_storage_path
         elif (settings.UPLOAD_DIR / "sample_invoice.pdf").exists():
             src_path = (settings.UPLOAD_DIR / "sample_invoice.pdf").resolve()
@@ -583,9 +583,9 @@ def archive_approved_pdf(inv: Invoice):
             base_root = get_storage_root_path().resolve()
             dest_approved = get_archived_pdf_path(inv).resolve()
 
-            if str(dest_approved).startswith(str(base_root)):
+            if dest_approved.is_relative_to(base_root) and str(dest_approved).startswith(str(base_root)):
                 parent_dir = dest_approved.parent.resolve()
-                if str(parent_dir).startswith(str(base_root)):
+                if parent_dir.is_relative_to(base_root) and str(parent_dir).startswith(str(base_root)):
                     parent_dir.mkdir(parents=True, exist_ok=True)
                     if src_path != dest_approved:
                         shutil.copy2(str(src_path), str(dest_approved))
