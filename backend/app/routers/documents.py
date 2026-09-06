@@ -489,14 +489,14 @@ def serve_stored_pdf(filepath: str):
     if not clean_filename or clean_filename in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid document filename")
 
-    base_root = get_storage_root_path()
-    target_path = base_root / clean_filename
-    if target_path.is_file():
+    base_root = get_storage_root_path().resolve()
+    target_path = (base_root / clean_filename).resolve()
+    if target_path.is_relative_to(base_root) and target_path.is_file():
         return FileResponse(path=str(target_path), media_type="application/pdf", filename=clean_filename)
 
-    default_root = settings.PDF_STORAGE_DIR
-    default_path = default_root / clean_filename
-    if default_path.is_file():
+    default_root = settings.PDF_STORAGE_DIR.resolve()
+    default_path = (default_root / clean_filename).resolve()
+    if default_path.is_relative_to(default_root) and default_path.is_file():
         return FileResponse(path=str(default_path), media_type="application/pdf", filename=clean_filename)
 
     raise HTTPException(status_code=404, detail="Archived physical document file not found on disk")
