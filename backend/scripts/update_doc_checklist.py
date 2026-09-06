@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.database import SessionLocal
 from app.models import WorkflowStepDefinition, ChecklistRule, ChecklistTemplate, Document, DocumentChecklistState
-from sqlalchemy import text
 
 db = SessionLocal()
 

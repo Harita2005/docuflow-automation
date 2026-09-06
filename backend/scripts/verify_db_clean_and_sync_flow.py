@@ -1,7 +1,4 @@
 import sys
-import json
-import os
-import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -9,11 +6,10 @@ BASE_DIR = SCRIPT_DIR.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.models import (
     User, Document, DocumentLineItem, WorkflowProfile, WorkflowStepDefinition,
-    BusinessRule, ChecklistTemplate, ChecklistRule, DocumentChecklistState,
-    DocumentApprovalLog, SystemEngineLog
+    BusinessRule, ChecklistTemplate, DocumentChecklistState, DocumentApprovalLog
 )
 from app.services.rules_engine import evaluate_business_rules_full
 from app.schemas import DocumentSyncRequest

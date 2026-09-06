@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import zipfile
@@ -12,8 +11,8 @@ if str(BACKEND_DIR) not in sys.path:
 
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
-from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
-from app.services.rules_engine import calculate_rule_priority, is_wildcard
+from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule
+from app.services.rules_engine import calculate_rule_priority
 
 candidate_paths = [
     BACKEND_DIR / "data" / "SD Checklists.xlsx",

@@ -1,6 +1,5 @@
 import sys
 import os
-import json
 import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

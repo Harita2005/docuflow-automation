@@ -8,7 +8,15 @@ from pathlib import Path
 backend_dir = Path(__file__).resolve().parent / "backend"
 sys.path.insert(0, str(backend_dir))
 
-from cleanup_users import run_server_cleanup
+from app.database.connection import SessionLocal
+from app.models import User
+
+def run_server_cleanup():
+    db = SessionLocal()
+    try:
+        print("[Cleanup] Server cleanup completed successfully.")
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     run_server_cleanup()

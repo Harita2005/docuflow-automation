@@ -13,16 +13,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-from sqlalchemy import create_engine, inspect, text, MetaData, Table
+from sqlalchemy import create_engine, text, MetaData
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.database import Base, engine as local_engine
-from app.models import (
-    User, Document, Invoice, WorkflowProfile, WorkflowStepDefinition,
-    BusinessRule, ChecklistTemplate, ChecklistRule, InvoiceChecklistState,
-    AuditLog, SystemLog, InAppNotification, NotificationProviderConfig,
-    NotificationRaciMatrix
-)
 
 # Table ordering to respect foreign key constraints during wipe & copy
 TABLES_ORDERED = [

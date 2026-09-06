@@ -1,6 +1,5 @@
 import sys
 import os
-import shutil
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -8,7 +7,7 @@ BACKEND_DIR = BASE_DIR.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.config import settings
 from app.models import (
     Document, DocumentLineItem, DocumentChecklistState, DocumentApprovalLog,

@@ -7,7 +7,7 @@ import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.database import SessionLocal
-from app.models import WorkflowProfile, BusinessRule, Document, DocumentChecklistState
+from app.models import BusinessRule, Document
 from app.services.rules_engine import evaluate_business_rules
 
 db = SessionLocal()

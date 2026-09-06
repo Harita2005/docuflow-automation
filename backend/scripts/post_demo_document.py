@@ -1,5 +1,4 @@
 import sys
-import datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -7,7 +6,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 from app.database import SessionLocal
 from app.routers.sync import _upsert_single_document, DocumentSyncRequest
-from app.models import Invoice, DocumentChecklistState
+from app.models import DocumentChecklistState
 
 print("=" * 80)
 print(">>> POSTING NEW DEMO DOCUMENT (DIVISION: VCC | COST CENTER: BATTERY VEHICLE)")

@@ -1,5 +1,4 @@
 import sys
-import os
 import json
 from pathlib import Path
 from datetime import datetime
@@ -9,7 +8,7 @@ BASE_DIR = SCRIPT_DIR.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from sqlalchemy import create_engine, MetaData, text
+from sqlalchemy import MetaData, text
 from app.config import settings
 from app.database import Base, engine
 

@@ -1,4 +1,3 @@
-import os
 import sys
 import py_compile
 from pathlib import Path
