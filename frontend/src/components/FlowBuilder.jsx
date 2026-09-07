@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, Save, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Folder, Users, ListChecks, Sparkles, CheckSquare } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks } from 'lucide-react';
 
 const STAGE_CHECKLIST_LIBRARY = [
   "Verify PO & Line Items Match Invoice",
@@ -205,7 +205,7 @@ export default function FlowBuilder({ users = [] }) {
     setLoading(false);
   };
 
-  const openEditor = (wf, category = null, index = 0) => {
+  const openEditor = (wf, category = null, _index = 0) => {
     const nextSeq = (workflows || []).length;
     const generatedCode = getWorkflowPrefixCode(category || selectedCategory, selectedSubCategory, nextSeq);
 
@@ -215,7 +215,7 @@ export default function FlowBuilder({ users = [] }) {
         cloned.workflow_code = generatedCode || cloned.workflow_code;
       }
       if (Array.isArray(cloned.steps)) {
-        cloned.steps = cloned.steps.map((st, idx) => ({
+        cloned.steps = cloned.steps.map((st, _idx) => ({
           ...st,
           checklist_items: Array.isArray(st.checklist_items) 
             ? st.checklist_items 

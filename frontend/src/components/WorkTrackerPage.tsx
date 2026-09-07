@@ -45,7 +45,7 @@ export default function WorkTrackerPage({
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
+  const [sortBy, _setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
@@ -145,7 +145,7 @@ export default function WorkTrackerPage({
     return false;
   };
 
-  const [trackerScope, setTrackerScope] = useState<'assigned' | 'all'>(() => 
+  const [trackerScope, _setTrackerScope] = useState<'assigned' | 'all'>(() => 
     currentUserRole === 'admin' ? 'all' : 'assigned'
   );
 
@@ -164,7 +164,7 @@ export default function WorkTrackerPage({
   const TABS = ["All", ...dynamicTypes];
 
   // Executive KPI summary calculations
-  const kpiStats = useMemo(() => {
+  const _kpiStats = useMemo(() => {
     let totalGrossValue = 0;
     let pendingApprovalCount = 0;
     let pendingApprovalValue = 0;
@@ -278,7 +278,7 @@ export default function WorkTrackerPage({
   };
 
   // Status Badge Helper
-  const renderStatusBadge = (doc: DbInvoice) => {
+  const _renderStatusBadge = (doc: DbInvoice) => {
     const status = (doc.status || "Pending Approval").trim();
     const stageNum = doc.current_stage || doc.activeApprovalLog?.current_stage_number || 1;
 

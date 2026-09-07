@@ -4,6 +4,8 @@ import socket
 import ipaddress
 import re
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 BLOCKED_IP_NETWORKS = [ipaddress.ip_network('127.0.0.0/8'), ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('172.16.0.0/12'), ipaddress.ip_network('192.168.0.0/16'), ipaddress.ip_network('169.254.0.0/16'), ipaddress.ip_network('0.0.0.0/8'), ipaddress.ip_network('::1/128'), ipaddress.ip_network('fc00::/7'), ipaddress.ip_network('fe80::/10')]
 
 def is_ip_blocked(ip_str: str) -> bool:
@@ -16,7 +18,7 @@ def is_ip_blocked(ip_str: str) -> bool:
             if ip_obj in net:
                 return True
     except ValueError as exc:
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
     return False
 
 def validate_and_reconstruct_url(url: str) -> str:
@@ -44,8 +46,7 @@ def validate_and_reconstruct_url(url: str) -> str:
             if is_ip_blocked(ip_addr):
                 raise HTTPException(status_code=400, detail=f"Target host '{hostname}' resolves to internal IP.")
     except socket.gaierror as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
         raise HTTPException(status_code=400, detail=f"Target DNS resolution failed for '{hostname}'.")
     port_str = f':{parsed.port}' if parsed.port else ''
     clean_url = f'{scheme}://{hostname}{port_str}{parsed.path}'

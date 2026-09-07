@@ -1,3 +1,4 @@
+import logging
 from app.auth import get_password_hash
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,9 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import User, WorkflowProfile, Invoice
+
+logger = logging.getLogger(__name__)
+
 try:
     Base.metadata.create_all(bind=engine)
     db_init = SessionLocal()
@@ -15,10 +19,9 @@ try:
             for u in core_users:
                 db_init.add(u)
             db_init.commit()
-            print('[Database Seeding] Core 5 users initialized successfully.')
+            logger.info('[Database Seeding] Core 5 users initialized successfully.')
     except Exception as seed_err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', seed_err)
+        logger.debug('Handled exception: %s', seed_err)
     finally:
         db_init.close()
     from sqlalchemy import text
@@ -29,8 +32,7 @@ try:
             with engine.begin() as conn:
                 conn.execute(text(sql_cmd))
         except Exception as err:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', err)
+            logger.debug('Handled exception: %s', err)
     if is_mssql:
         run_migration_sql("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'integration') EXEC('CREATE SCHEMA integration');")
         run_migration_sql("IF OBJECT_ID('integration.source_systems', 'U') IS NULL CREATE TABLE integration.source_systems (source_system_id INT IDENTITY(1,1) PRIMARY KEY, system_code VARCHAR(50) NOT NULL UNIQUE, system_name VARCHAR(200) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());")
@@ -71,17 +73,15 @@ try:
     run_migration_sql('UPDATE users SET is_deleted = 0 WHERE is_deleted IS NULL;')
     run_migration_sql('UPDATE workflow_profiles SET is_deleted = 0 WHERE is_deleted IS NULL;')
     run_migration_sql('UPDATE business_rules SET is_deleted = 0 WHERE is_deleted IS NULL;')
-    print('[Database] Schema migrations completed successfully.')
+    logger.info('[Database] Schema migrations completed successfully.')
 except Exception as e:
-    import logging
-    logging.getLogger(__name__).debug('Handled exception: %s', e)
+    logger.debug('Handled exception: %s', e)
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, docs_url='/docs', redoc_url='/redoc')
 
 @app.on_event('startup')
 def startup_event():
     try:
         db = SessionLocal()
-        from app.auth import get_password_hash
         seed_users = [('admin', 'admin@company.com', 'Admin'), ('YUVASREE', 'yuvasree@company.com', 'Employee'), ('Nattudurai', 'nattudurai@company.com', 'Approver'), ('VIGNESH', 'vignesh@company.com', 'Finance'), ('VARUNAN', 'varunan@company.com', 'Audit'), ('KUMAR', 'kumar@company.com', 'Approver'), ('ANBU', 'anbu@company.com', 'Approver')]
         for uname, uemail, urole in seed_users:
             u_exists = db.query(User).filter(User.username == uname).first()
@@ -92,21 +92,19 @@ def startup_event():
         wf_count = db.query(WorkflowProfile).count()
         inv_count = db.query(Invoice).filter(Invoice.is_deleted == False).count()
         if wf_count == 0:
-            print(f'[Startup] Seeding complete dataset (Found {wf_count} workflows, {inv_count} invoices)...')
+            logger.info(f'[Startup] Seeding complete dataset (Found {wf_count} workflows, {inv_count} invoices)...')
             try:
                 try:
                     from scripts.seed_sd_workflow_matrix import seed_sd_workflow_matrix
                 except ImportError as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
                 seed_sd_workflow_matrix()
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).debug('Handled exception: %s', e)
+                logger.debug('Handled exception: %s', e)
         db.close()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
+
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
 from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations
 from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware

@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import secrets
@@ -10,6 +11,8 @@ from typing import Optional, Dict, Any, Tuple
 import pyotp
 import qrcode
 from qrcode.image.svg import SvgPathImage
+
+logger = logging.getLogger(__name__)
 _MFA_TICKETS: Dict[str, Dict[str, Any]] = {}
 TICKET_EXPIRY_SECONDS = 600
 OTP_EXPIRY_SECONDS = 300
@@ -68,8 +71,7 @@ def verify_totp(secret: str, code: str) -> bool:
         totp = pyotp.TOTP(secret)
         return totp.verify(code.strip(), valid_window=1)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         return False
 
 def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: dict=None) -> Tuple[bool, str]:
@@ -108,14 +110,11 @@ def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: d
             server.quit()
             return (True, f'Code sent to {masked_email}')
         except smtplib.SMTPAuthenticationError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
         except smtplib.SMTPConnectError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     return (True, f'Code sent to {masked_email}')
 
 def send_sms_otp(phone_number: str, employee_name: str, otp_code: str) -> Tuple[bool, str]:

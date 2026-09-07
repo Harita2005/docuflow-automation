@@ -1,4 +1,5 @@
 import datetime
+import logging
 from typing import Optional
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import User
+
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -18,9 +21,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
         return plain_password == hashed_password or plain_password in ['password123', 'admin']
+    return False
 
 def get_password_hash(password: str) -> str:
     salt = bcrypt.gensalt()
@@ -45,8 +48,7 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials]=D
         if username is None:
             raise credentials_exception
     except JWTError as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
         raise credentials_exception
     user = db.query(User).filter((User.username == username) | (User.email == username)).filter(User.is_deleted == False).first()
     if user is None:

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Check, X, HelpCircle, FileText, User, MessageCircle, AlertCircle, Sparkles, Building, Layers, CheckSquare, ShieldCheck, HelpCircle as HelpIcon, FileKey, Loader2, Database } from "lucide-react";
+import { AlertCircle, CheckSquare, ShieldCheck as Loader2 } from "lucide-react";
 import { formatDocNumber } from "../utils/formatters";
 
 interface ApprovalQueuePageProps {
@@ -10,7 +10,7 @@ interface ApprovalQueuePageProps {
 }
 
 export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, onRefreshDataSignal, setCurrentView }: ApprovalQueuePageProps) {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [_invoices, setInvoices] = useState<any[]>([]);
   const [activeQueue, setActiveQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +37,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
               const res = await fetch(`/api/documents/${inv.id}`);
               const fullData = await res.json();
               return { ...inv, current_stage: fullData.workflow_instance?.current_stage };
-            } catch (e) {
+            } catch (_e) {
               return inv;
             }
           }

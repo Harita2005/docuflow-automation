@@ -22,9 +22,9 @@ export default function Admin() {
 
   const [hasChanges, setHasChanges] = useState(false);
 
-  const [editingRule, setEditingRule] = useState(null);
-  const [ruleConditions, setRuleConditions] = useState([]);
-  const [editingFlow, setEditingFlow] = useState(null);
+  const [_editingRule, _setEditingRule] = useState(null);
+  const [_ruleConditions, _setRuleConditions] = useState([]);
+  const [_editingFlow, _setEditingFlow] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [templateFields, setTemplateFields] = useState([]);
@@ -83,7 +83,7 @@ export default function Admin() {
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
       const res = await fetch('/api/admin/audit-logs', { headers });
       if (res.ok) setAuditLogs(await res.json());
-    } catch (e) {}
+    } catch (_e) {}
   };
 
   const handleTriggerSync = async () => {
@@ -153,7 +153,7 @@ export default function Admin() {
          fields = Object.keys(schemaParsed).map((k, i) => ({ id: Date.now()+i, name: k, type: 'string', description: '', required: false }));
          instrs = parsed.instructions || "";
       }
-    } catch(e) {}
+    } catch(_e) {}
     if (fields.length === 0) fields = [{ id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }];
     fields = fields.map((f, i) => ({ 
       ...f, 
@@ -170,7 +170,7 @@ export default function Admin() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const validFields = templateFields.filter(f => f.name.trim() !== '');
-    const cleanFields = validFields.map(({id, ...rest}) => rest);
+    const cleanFields = validFields.map(({_id, ...rest}) => rest);
     
     const template = {
       ...editingTemplate,
@@ -283,7 +283,7 @@ export default function Admin() {
     );
   }
 
-  const groupedSteps = Array.from(new Set(steps.map(s => s.profile_name))).map(profile => ({
+  const _groupedSteps = Array.from(new Set(steps.map(s => s.profile_name))).map(profile => ({
     profile_name: profile,
     stages: steps.filter(s => s.profile_name === profile).sort((a, b) => a.stage_number - b.stage_number)
   }));
@@ -683,7 +683,7 @@ export default function Admin() {
                      } else if (p && Array.isArray(p.fields)) {
                        parsedFields = p.fields;
                      }
-                   } catch(e) {}
+                   } catch(_e) {}
                    
                    return (
                       <div key={t.id} className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col group hover:border-blue-300 hover:shadow transition-all ${isDraft ? 'bg-amber-50/20' : ''}`}>

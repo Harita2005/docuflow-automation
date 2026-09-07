@@ -30,7 +30,7 @@ export default function AdminRACI() {
       
       const safeParse = (str) => {
         if (!str) return [];
-        try { return JSON.parse(str); } catch (e) { return []; }
+        try { return JSON.parse(str); } catch (_e) { return []; }
       };
 
       newGrid[event] = {
@@ -70,7 +70,7 @@ export default function AdminRACI() {
         const data = await res.json();
         if (data) setProviderConfig(data);
       }
-    } catch(e) {}
+    } catch(_e) {}
   };
 
   const fetchWorkflows = async () => {

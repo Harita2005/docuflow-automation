@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Plus, Edit2, Trash2, Upload, Save, X, AlertTriangle } from 'lucide-react';
+import { Database, Plus, Edit2, Trash2, Upload, Save, X } from 'lucide-react';
 
 export default function AdminMasterData() {
   const [data, setData] = useState([]);

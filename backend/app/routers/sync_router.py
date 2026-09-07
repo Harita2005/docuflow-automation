@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 import os
@@ -8,6 +9,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 load_dotenv()
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 SERVICE_API_USER = os.getenv('SERVICE_API_USER', 'backend_sync_client')
 SERVICE_API_PASS = os.getenv('SERVICE_API_PASS', 'SecretPassword987654321!')
 JWT_SECRET_KEY = settings.SECRET_KEY
@@ -28,12 +31,10 @@ def verify_m2m_token(credentials: HTTPAuthorizationCredentials=Depends(bearer_sc
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
         return payload
     except jwt.ExpiredSignatureError as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token has expired')
     except jwt.InvalidTokenError as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
 
 @router.post('/auth/login')

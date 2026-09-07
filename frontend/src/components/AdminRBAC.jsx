@@ -529,7 +529,7 @@ const DEFAULT_USERS = [
 
 export default function AdminRBAC({ onRefreshSignal }) {
   const [activeTab, setActiveTab] = useState("roles"); // "roles" | "users" | "flac"
-  const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState("ALL");
+  const [selectedCategoryDropdown, _setSelectedCategoryDropdown] = useState("ALL");
   const [collapsedFolders, setCollapsedFolders] = useState({}); // { [catId]: boolean }
 
   const [loading, setLoading] = useState(false);
@@ -545,11 +545,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [fieldPermissionsByScope, setFieldPermissionsByScope] = useState({
     GLOBAL: INITIAL_GLOBAL_PERMISSIONS
   });
-  const [selectedScope, setSelectedScope] = useState("GLOBAL");
+  const [selectedScope, _setSelectedScope] = useState("GLOBAL");
   const [customFields, setCustomFields] = useState({}); // { [scopeId]: Field[] }
-  const [showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
+  const [_showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
   const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldCategory, setNewFieldCategory] = useState("Custom Extended");
+  const [newFieldCategory, _setNewFieldCategory] = useState("Custom Extended");
   const [newFieldDesc, setNewFieldDesc] = useState("");
 
   const [users, setUsers] = useState(DEFAULT_USERS);
@@ -596,7 +596,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   // Custom permissions UI side panel state
   const [panelUserGroup, setPanelUserGroup] = useState("ap_specialist");
   const [panelPermissions, setPanelPermissions] = useState({});
-  const [selectedUserIds, setSelectedUserIds] = useState(new Set());
+  const [_selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
@@ -639,7 +639,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     return roleMap[roleId] || roleId;
   };
 
-  const handleSelectAllUsers = (e) => {
+  const _handleSelectAllUsers = (e) => {
     if (e.target.checked) {
       const ids = filteredUsers.map(u => u.id);
       setSelectedUserIds(new Set(ids));
@@ -648,7 +648,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
-  const handleSelectUserCheckbox = (e, userId) => {
+  const _handleSelectUserCheckbox = (e, userId) => {
     e.stopPropagation();
     setSelectedUserIds(prev => {
       const next = new Set(prev);
@@ -715,7 +715,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         if (Array.isArray(configs)) {
           const matrixCfg = configs.find(c => c.key === "RBAC_GRANULAR_MATRIX");
           if (matrixCfg && matrixCfg.value) {
-            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch(e) {}
+            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch(_e) {}
           }
           const flacCfg = configs.find(c => c.key === "RBAC_FIELD_PERMISSIONS");
           if (flacCfg && flacCfg.value) {
@@ -726,23 +726,23 @@ export default function AdminRBAC({ onRefreshSignal }) {
               } else {
                 setFieldPermissionsByScope(parsed);
               }
-            } catch(e) {}
+            } catch(_e) {}
           }
           const customFieldsCfg = configs.find(c => c.key === "RBAC_CUSTOM_FIELDS");
           if (customFieldsCfg && customFieldsCfg.value) {
-            try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch(e) {}
+            try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch(_e) {}
           }
           const rolesCfg = configs.find(c => c.key === "RBAC_CUSTOM_ROLES");
           if (rolesCfg && rolesCfg.value) {
-            try { setRoles(JSON.parse(rolesCfg.value)); } catch(e) {}
+            try { setRoles(JSON.parse(rolesCfg.value)); } catch(_e) {}
           }
           const overridesCfg = configs.find(c => c.key === "UBAC_USER_OVERRIDES");
           if (overridesCfg && overridesCfg.value) {
-            try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch(e) {}
+            try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch(_e) {}
           }
           const permsListCfg = configs.find(c => c.key === "RBAC_PERMISSION_DEFINITIONS");
           if (permsListCfg && permsListCfg.value) {
-            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch(e) {}
+            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch(_e) {}
           }
         }
       }
@@ -790,7 +790,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setCollapsedFolders(prev => ({ ...prev, [catId]: !prev[catId] }));
   };
 
-  const handleToggleAllFolders = (expand) => {
+  const _handleToggleAllFolders = (expand) => {
     const nextState = {};
     permissionsList.forEach(c => {
       nextState[c.id || c.category] = !expand;
@@ -820,7 +820,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   // Set field permission for current scope & role: 'hidden' | 'view' | 'edit'
-  const setFieldScopeRolePerm = (roleId, fieldId, state) => {
+  const _setFieldScopeRolePerm = (roleId, fieldId, state) => {
     if (!isAdmin) {
       setErrorMsg("Action Restricted: Only Administrators can modify field permissions.");
       setTimeout(() => setErrorMsg(""), 3500);
@@ -843,7 +843,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   // Helper to get effective field permission for current scope (with inheritance from GLOBAL)
-  const getEffectiveFieldState = (roleId, fieldId) => {
+  const _getEffectiveFieldState = (roleId, fieldId) => {
     if (selectedScope !== "GLOBAL" && fieldPermissionsByScope[selectedScope]?.[roleId]?.[fieldId]) {
       return fieldPermissionsByScope[selectedScope][roleId][fieldId];
     }
@@ -854,10 +854,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   // Check if current scope has custom overrides
-  const isCustomizedScope = selectedScope !== "GLOBAL" && !!fieldPermissionsByScope[selectedScope] && Object.keys(fieldPermissionsByScope[selectedScope]).length > 0;
+  const _isCustomizedScope = selectedScope !== "GLOBAL" && !!fieldPermissionsByScope[selectedScope] && Object.keys(fieldPermissionsByScope[selectedScope]).length > 0;
 
   // Apply current settings to all 50+ workflows
-  const handleApplyToAllFlows = () => {
+  const _handleApplyToAllFlows = () => {
     if (!isAdmin) return;
     const currentScopePerms = fieldPermissionsByScope[selectedScope] || fieldPermissionsByScope.GLOBAL;
     const updated = { ...fieldPermissionsByScope, GLOBAL: JSON.parse(JSON.stringify(currentScopePerms)) };
@@ -871,7 +871,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   // Reset selected scope back to inheriting from GLOBAL master
-  const handleResetScopeToGlobal = () => {
+  const _handleResetScopeToGlobal = () => {
     if (!isAdmin) return;
     if (selectedScope === "GLOBAL") return;
     setFieldPermissionsByScope(prev => {
@@ -884,7 +884,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   // Add Custom Field dynamically
-  const handleAddCustomField = (e) => {
+  const _handleAddCustomField = (e) => {
     e.preventDefault();
     if (!isAdmin || !newFieldName.trim()) return;
     const fieldId = newFieldName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -907,7 +907,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setTimeout(() => setSuccessMsg(""), 3500);
   };
 
-  const toggleUserPerm = (permId, level) => {
+  const _toggleUserPerm = (permId, level) => {
     if (!isAdmin) return;
     if (!selectedUser) return;
     const userKey = selectedUser.username || selectedUser.email;
@@ -930,7 +930,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }));
   };
 
-  const resetUserPerm = (permId) => {
+  const _resetUserPerm = (permId) => {
     if (!isAdmin || !selectedUser) return;
     const userKey = selectedUser.username || selectedUser.email;
     setUserOverrides(prev => {
@@ -940,7 +940,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     });
   };
 
-  const handleUserRoleChange = async (newRole) => {
+  const _handleUserRoleChange = async (newRole) => {
     if (!isAdmin || !selectedUser) return;
     setSelectedUser(prev => ({ ...prev, role: newRole }));
     setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: newRole } : u));
@@ -965,7 +965,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
           division: selectedUser.division || "VCC"
         })
       });
-    } catch(e) {}
+    } catch(_e) {}
   };
 
   const handleToggleStatus = async (user) => {
@@ -997,7 +997,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
         body: JSON.stringify({ is_active: nextStatus })
       });
-    } catch(e) {}
+    } catch(_e) {}
   };
 
   const deleteUser = async (id, name, empId) => {
@@ -1015,7 +1015,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       await fetch(`/api/users/${id}`, { method: 'DELETE', headers: token ? { "Authorization": `Bearer ${token}` } : {} });
       setUsers(prev => prev.filter(u => u.id !== id));
       if (selectedUser?.id === id) setSelectedUser(null);
-    } catch(e) { 
+    } catch(_e) { 
       setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
@@ -1232,14 +1232,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
       setSuccessMsg("✓ All permissions & 50+ workflow policies saved successfully!");
       if (onRefreshSignal) onRefreshSignal();
       setTimeout(() => setSuccessMsg(""), 3500);
-    } catch(e) {
+    } catch(_e) {
       setErrorMsg("Failed to save permissions.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleResetDefaults = () => {
+  const _handleResetDefaults = () => {
     if (!isAdmin) return;
     if (window.confirm("Reset all roles, FLAC field permissions and matrix to default baseline?")) {
       setRoles(INITIAL_ROLES);
@@ -1300,7 +1300,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         const errData = await res.json();
         setErrorMsg(errData.detail || "Failed to create user.");
       }
-    } catch (err) {
+    } catch (_err) {
       setErrorMsg("Network error trying to create user.");
     } finally {
       setIsCreatingUser(false);
@@ -1460,7 +1460,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       const updated = { ...prev };
       Object.keys(updated).forEach(roleId => {
         if (updated[roleId]) {
-          const { [permId]: removed, ...rest } = updated[roleId];
+          const { [permId]: _removed, ...rest } = updated[roleId];
           updated[roleId] = rest;
         }
       });
@@ -1472,7 +1472,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       const updated = { ...prev };
       Object.keys(updated).forEach(username => {
         if (updated[username]) {
-          const { [permId]: removed, ...rest } = updated[username];
+          const { [permId]: _removed, ...rest } = updated[username];
           updated[username] = rest;
         }
       });
@@ -1502,7 +1502,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     ...(selectedScope !== "GLOBAL" ? (customFields.GLOBAL || []) : [])
   ];
 
-  const filteredFields = activeScopeFields.filter(f => 
+  const _filteredFields = activeScopeFields.filter(f => 
     f.label.toLowerCase().includes(search.toLowerCase()) ||
     f.desc.toLowerCase().includes(search.toLowerCase()) ||
     f.category.toLowerCase().includes(search.toLowerCase())

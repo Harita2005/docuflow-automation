@@ -1,4 +1,4 @@
-import { RefreshCw, LogOut, ShieldAlert, Sparkles, User, HelpCircle, Bell, Settings, ChevronDown } from "lucide-react";
+import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface HeaderProps {

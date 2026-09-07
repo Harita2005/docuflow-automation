@@ -150,7 +150,7 @@ export default function ChecklistConditionBuilder() {
         if (res.ok) {
           setWorkflows(await res.json());
         }
-      } catch(e) {}
+      } catch(_e) {}
     };
     fetchWf();
   }, []);

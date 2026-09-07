@@ -25,7 +25,7 @@ import {
   X
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+
 interface DashboardProps {
   documents: DbInvoice[];
   stats: any | null;
@@ -53,12 +53,12 @@ export default function Dashboard({
     'all'
   );
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
-  const [activeChartTab, setActiveChartTab] = useState<'status' | 'vendors'>('status');
+  const [_activeChartTab, _setActiveChartTab] = useState<'status' | 'vendors'>('status');
   const [currentPage, setCurrentPage] = useState(1);
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
-  const [viewScope, setViewScope] = useState<'individual' | 'all'>(() => 
+  const [viewScope, _setViewScope] = useState<'individual' | 'all'>(() => 
     currentUserRole === 'admin' ? 'all' : 'individual'
   );
   const itemsPerPage = 8;
@@ -97,14 +97,14 @@ export default function Dashboard({
     const v = i.vendor_name || 'Unknown';
     vendorMap[v] = (vendorMap[v] || 0) + Number(i.amount || 0);
   });
-  const topVendorsData = Object.keys(vendorMap)
+  const _topVendorsData = Object.keys(vendorMap)
     .filter(k => k !== 'Unknown')
     .map(name => ({ name: name.length > 15 ? name.substring(0, 15) + '...' : name, value: vendorMap[name] }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
   // Formatting currency
-  const formatCurrency = (val: number) => {
+  const _formatCurrency = (val: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -117,7 +117,7 @@ export default function Dashboard({
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
 
-  const totalSpentVal = scopedDocs.reduce((acc, curr) => acc + curr.amount, 0);
+  const _totalSpentVal = scopedDocs.reduce((acc, curr) => acc + curr.amount, 0);
 
   // Dynamic Dashboard KPI Calculations for Individual Assigned vs All
   const isRejectedStatus = (st: string) => {
@@ -193,7 +193,7 @@ export default function Dashboard({
     );
   };
 
-  const totalAssignedCount = (currentUserRole !== 'admin' || viewScope === 'individual')
+  const _totalAssignedCount = (currentUserRole !== 'admin' || viewScope === 'individual')
     ? scopedDocs.length
     : (stats?.totalDocuments ?? documents.length);
 
@@ -289,7 +289,7 @@ export default function Dashboard({
   };
 
   // Render role indicator bar
-  const roleLabels: { [key: string]: string } = {
+  const _roleLabels: { [key: string]: string } = {
     md: "Managing Director (MD) - Overview Dashboard",
     gm: "General Manager (GM) - Operational Status",
     cio: "Chief Info Officer (CIO) - System Health & Verification Logs",

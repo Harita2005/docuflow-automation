@@ -1,3 +1,4 @@
+import logging
 from app.routers.events import broadcast_event
 import uuid
 import time
@@ -11,6 +12,8 @@ from app.models import User, AuditLog
 from app.schemas import LoginRequest, TokenResponse, MFASendOTPRequest, MFAVerifyRequest, MFASetupTOTPRequest, MFASetupTOTPResponse
 from app.auth import verify_password, create_access_token, get_current_user
 from app.services.mfa_service import create_mfa_ticket, get_mfa_ticket, generate_numeric_otp, generate_totp_secret, generate_totp_qr_svg, verify_totp, send_email_otp, send_sms_otp, mask_email, mask_phone, _MFA_TICKETS
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/auth', tags=['Authentication'])
 
 @router.get('/login')
@@ -49,8 +52,7 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
                 broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
                 db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.'))
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).debug('Handled exception: %s', e)
+                logger.debug('Handled exception: %s', e)
         db.commit()
         db.refresh(user)
         expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
@@ -156,16 +158,14 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
             broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
             db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.'))
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', e)
+            logger.debug('Handled exception: %s', e)
     expires_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
     access_token = create_access_token(data={'sub': user.username, 'id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
     try:
         db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='MFA Verified', stage='Authentication', notes=f'User {user.employee_name} ({user.employee_id}) completed 2FA challenge via [{method_upper}].'))
         db.commit()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
     from app.services.mfa_service import _MFA_TICKETS
     _MFA_TICKETS.pop(request.ticket, None)
     return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
@@ -179,8 +179,7 @@ def logout(db: Session=Depends(get_db), current_user: User=Depends(get_current_u
             db.add(AuditLog(invoice_id=None, user=current_user.employee_name or current_user.name or current_user.username, action='User Logged Out', stage='Authentication', notes=f'User {current_user.employee_name} ({current_user.employee_id}) session ended.'))
             db.commit()
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     return {'success': True, 'message': 'Logged out successfully'}
 
 @router.get('/me')

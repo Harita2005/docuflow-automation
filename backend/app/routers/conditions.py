@@ -1,9 +1,12 @@
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import BusinessRule
 from app.schemas import BusinessRuleSchema
+
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Policy Matrix & Conditions'])
 
 @router.get('/api/admin/conditions', response_model=List[BusinessRuleSchema])
@@ -22,8 +25,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
             if not str(payload.id).startswith('tmp-'):
                 rule_id = int(payload.id)
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     rule = None
     if rule_id:
         rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
@@ -79,8 +81,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
                             p_doc.status = f'Initiated ({steps[0].step_name})'
         db.commit()
     except Exception as eval_err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', eval_err)
+        logger.debug('Handled exception: %s', eval_err)
     return rule
 
 @router.delete('/api/admin/conditions/{rule_id}')
@@ -104,13 +105,11 @@ def simulate_rule_routing(payload: dict, db: Session=Depends(get_db)):
     try:
         amt = float(payload.get('amount') or 0.0)
     except (ValueError, TypeError) as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
     try:
         tax_amt = float(payload.get('tax_amount') or 0.0)
     except (ValueError, TypeError) as exc:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', exc)
+        logger.debug('Handled exception: %s', exc)
     mock_doc = {'division': str(payload.get('division') or 'VCC'), 'plant': str(payload.get('plant') or payload.get('branch') or 'TN-SIVAKASI'), 'category': str(payload.get('category') or 'PURCHASE'), 'document_type': str(payload.get('document_type') or 'AP INVOICE'), 'amount': amt, 'tax_amount': tax_amt, 'vendor_name': str(payload.get('vendor_name') or 'Test Vendor Enterprise'), 'cost_center': str(payload.get('cost_center') or '')}
     draft_rules = payload.get('draft_rules') or []
     return simulate_rule_evaluation(db, mock_invoice=mock_doc, draft_rules=draft_rules)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Sliders,
@@ -63,7 +63,7 @@ export default function CallbackRuleBuilder({
   const [priority, setPriority] = useState<number>(initialRule?.priority ?? 100);
 
   // Trigger & Conditions
-  const [triggerEvent, setTriggerEvent] = useState(initialRule?.trigger_event || "FDO_FINAL_DECISION");
+  const [triggerEvent, _setTriggerEvent] = useState(initialRule?.trigger_event || "FDO_FINAL_DECISION");
   const [runWhen, setRunWhen] = useState(initialRule?.run_when || "BOTH");
   const [logicalOperator, setLogicalOperator] = useState("AND");
   const [conditions, setConditions] = useState<any[]>(() => {
@@ -75,7 +75,7 @@ export default function CallbackRuleBuilder({
           if (parsed.logicalOperator) setLogicalOperator(parsed.logicalOperator);
           return parsed.conditions;
         }
-      } catch (e) {}
+      } catch (_e) {}
     }
     return [
       { field: "company", operator: "Equals", value: "VCC" }
@@ -94,7 +94,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.query_params_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
+      } catch (_e) {}
     }
     return [
       { key: "source", value: "DOCUFLOW", type: "Static" }
@@ -106,7 +106,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.headers_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
+      } catch (_e) {}
     }
     return [
       { key: "Content-Type", value: "application/json", type: "Static" }
@@ -124,7 +124,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.payload_mapping_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (e) {}
+      } catch (_e) {}
     }
     return [
       { thirdPartyField: "primaryKey", sourceField: "primaryKey" },

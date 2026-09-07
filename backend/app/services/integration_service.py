@@ -1,3 +1,4 @@
+import logging
 import json
 import hmac
 import hashlib
@@ -8,6 +9,8 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog
+
+logger = logging.getLogger(__name__)
 
 def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str, Any]:
     """
@@ -24,8 +27,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             if isinstance(parsed, list):
                 line_items = parsed
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     checklists = []
     if inv.checklist_states:
         for c in inv.checklist_states:
@@ -36,8 +38,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             if isinstance(parsed_cl, dict):
                 checklists = [{'item_text': k, 'is_checked': bool(v)} for k, v in parsed_cl.items()]
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     approval_trail = []
     if inv.approval_logs:
         for log in sorted(inv.approval_logs, key=lambda x: x.timestamp or datetime.datetime.min):
@@ -47,8 +48,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
         try:
             custom_data = json.loads(inv.custom_data) if isinstance(inv.custom_data, str) else inv.custom_data
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     clean_base = base_url.rstrip('/') if base_url else ''
     pdf_download_url = f'{clean_base}/api/integrations/v1/documents/{inv.id}/download-pdf' if clean_base else f'/api/integrations/v1/documents/{inv.id}/download-pdf'
     return {'event': 'document.settled', 'timestamp': datetime.datetime.utcnow().isoformat() + 'Z', 'docuflow_version': '2.0', 'document': {'id': inv.id, 'doc_num': inv.doc_num or inv.invoice_number, 'doc_key': inv.doc_key, 'doc_date': inv.doc_date or inv.invoice_date, 'invoice_number': inv.invoice_number, 'invoice_date': inv.invoice_date, 'po_number': inv.po_number, 'document_type': inv.document_type or 'AP INVOICE', 'status': inv.status, 'division': inv.division, 'plant': inv.plant, 'category': inv.category, 'cost_center': inv.cost_center, 'pay_mode': inv.pay_mode, 'payment_terms': inv.payment_terms, 'vendor': {'name': inv.vendor_name or inv.party_name, 'code': inv.vendor_code or inv.party_code, 'gstin': inv.vendor_gstin or inv.party_tax_id or inv.gstin}, 'financials': {'currency': inv.currency or 'INR', 'gross_amount': float(inv.amount) if inv.amount is not None else 0.0, 'base_amount': float(inv.base_amount) if inv.base_amount is not None else 0.0, 'tax_amount': float(inv.tax_amount) if inv.tax_amount is not None else 0.0, 'cgst': float(inv.cgst) if inv.cgst is not None else 0.0, 'sgst': float(inv.sgst) if inv.sgst is not None else 0.0, 'igst': float(inv.igst) if inv.igst is not None else 0.0}, 'line_items': line_items, 'compliance_checklists': checklists, 'approval_trail': approval_trail, 'custom_data': custom_data, 'pdf_url': inv.file_url, 'pdf_download_endpoint': pdf_download_url, 'sync_status': {'status': inv.external_sync_status or 'UNSYNCED', 'external_ref': inv.external_sync_ref, 'synced_at': inv.external_synced_at.isoformat() if inv.external_synced_at else None, 'target_system': inv.external_sync_system}}}
@@ -102,19 +102,16 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
                         db.commit()
                         return {'success': True, 'status_code': status_code, 'attempt': attempt, 'response': response_text}
             except urllib.error.HTTPError as he:
-                import logging
-                logging.getLogger(__name__).debug('Handled exception: %s', he)
+                logger.debug('Handled exception: %s', he)
             except Exception as ex:
-                import logging
-                logging.getLogger(__name__).debug('Handled exception: %s', ex)
+                logger.debug('Handled exception: %s', ex)
         inv.external_sync_status = 'FAILED'
         inv.external_sync_error = f'Failed after {max_attempts} attempts. Error: {last_error}'
         db.add(IntegrationSyncLog(document_id=inv.id, sync_direction='PUSH', target_system=config.name or 'ThirdPartyWebhook', request_url=config.target_url, status_code=status_code, status='FAILED', error_message=last_error, payload_snapshot=payload_json[:4000], response_body=response_text[:4000]))
         db.commit()
         return {'success': False, 'status_code': status_code, 'error': last_error, 'attempts': max_attempts}
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         return {'success': False, 'error': str(e)}
     finally:
         db.close()

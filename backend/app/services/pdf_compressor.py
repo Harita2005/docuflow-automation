@@ -1,13 +1,15 @@
 import io
+import logging
 import fitz
 from pathlib import Path
 from typing import Tuple
+
+logger = logging.getLogger(__name__)
 try:
     from PIL import Image
     HAS_PIL = True
 except ImportError as exc:
-    import logging
-    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+    logger.debug('Handled exception: %s', exc)
 
 def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_quality: int=70) -> Tuple[bool, int, int]:
     """
@@ -24,8 +26,7 @@ def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_qu
     try:
         doc = fitz.open(file_path)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         return (False, original_size, original_size)
     temp_compressed_path = file_path.with_suffix('.tmp.pdf')
     try:
@@ -62,8 +63,7 @@ def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_qu
                     if len(compressed_img_bytes) < len(image_bytes):
                         page.replace_image(xref, stream=compressed_img_bytes)
                 except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
                     continue
         doc.save(str(temp_compressed_path), garbage=4, deflate=True, clean=True)
         doc.close()
@@ -78,6 +78,5 @@ def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_qu
                 temp_compressed_path.unlink()
             return (False, original_size, original_size)
     except Exception as err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', err)
+        logger.debug('Handled exception: %s', err)
         return (False, original_size, original_size)

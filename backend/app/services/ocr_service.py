@@ -1,6 +1,9 @@
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 def extract_text_from_pdf(pdf_path: Path) -> Dict[str, Any]:
     text_content = ''
@@ -11,8 +14,7 @@ def extract_text_from_pdf(pdf_path: Path) -> Dict[str, Any]:
             text_content += page.get_text() + '\n'
         doc.close()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
     extracted = {'raw_text': text_content, 'vendor_name': None, 'invoice_number': None, 'date': None, 'amount': 0.0, 'gstin': None}
     gst_match = re.search('\\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\\b', text_content)
     if gst_match:
@@ -26,6 +28,5 @@ def extract_text_from_pdf(pdf_path: Path) -> Dict[str, Any]:
             cleaned = amt_match.group(1).replace(',', '')
             extracted['amount'] = float(cleaned)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     return extracted

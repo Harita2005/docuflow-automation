@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle, Search, Clock, FileCheck, RefreshCw, AlertCircle, FileText, Zap, ChevronRight } from "lucide-react";
+import { CheckCircle, Search, Clock, RefreshCw, ChevronRight } from "lucide-react";
 import { DbInvoice } from "../types";
 
 interface DataVerificationPageProps {
@@ -10,7 +10,7 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
   const [invoices, setInvoices] = useState<DbInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<'all' | 'priority'>('all');
+  const [activeFilter, _setActiveFilter] = useState<'all' | 'priority'>('all');
 
   const fetchData = async () => {
     setLoading(true);
@@ -40,7 +40,7 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
     );
   });
 
-  const highPriorityCount = invoices.filter(inv => inv.amount && inv.amount >= 10000).length;
+  const _highPriorityCount = invoices.filter(inv => inv.amount && inv.amount >= 10000).length;
 
   return (
     <div className="space-y-3 animate-fadeIn pb-8 w-full max-w-[1600px] mx-auto pt-1 px-2 sm:px-4">

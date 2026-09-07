@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Upload, FileText, CheckCircle2, ArrowRight, AlertCircle, Loader2, Sparkles, ShieldCheck, Database, Layers } from "lucide-react";
+import { Upload, FileText, CheckCircle2, ArrowRight, AlertCircle, Loader2, Sparkles, Database, Layers } from "lucide-react";
 
 interface DocumentUploadProps {
   onUploadSuccess: (newDoc: any) => void;
@@ -24,8 +24,8 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   const [progressMsgIndex, setProgressMsgIndex] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadedDoc, setUploadedDoc] = useState<any>(null);
-  const [useAIExtraction, setUseAIExtraction] = useState(true);
-  const [manualData, setManualData] = useState({
+  const [_useAIExtraction, _setUseAIExtraction] = useState(true);
+  const [_manualData, _setManualData] = useState({
     vendorName: "",
     invoiceNumber: "",
     amount: "",
@@ -34,7 +34,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [showExtractConfirmModal, setShowExtractConfirmModal] = useState(false);
+  const [_showExtractConfirmModal, _setShowExtractConfirmModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   // Document Ingest Templates State

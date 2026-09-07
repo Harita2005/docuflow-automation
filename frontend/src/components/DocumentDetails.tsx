@@ -43,7 +43,7 @@ import {
   XCircle,
   PauseCircle
 } from "lucide-react";
-import { DbInvoice, InvoiceLineItem, DbWorkflowInstance } from "../types";
+import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDateTime, formatTimeOnly } from "../utils/formatters";
 
 interface DocumentDetailsProps {
@@ -139,35 +139,35 @@ export default function DocumentDetails({
   onSelectDocument,
   pendingDocIds,
 }: DocumentDetailsProps) {
-  const [activeTab, setActiveTab] = useState<"original" | "layout" | "rawtext">(
+  const [_activeTab, _setActiveTab] = useState<"original" | "layout" | "rawtext">(
     "original",
   );
 
   // Metadata edit form states
-  const [isEditing, setIsEditing] = useState(false);
-  const [activeInputField, setActiveInputField] = useState<string | null>(null);
-  const [documentType, setDocumentType] = useState("");
+  const [isEditing, _setIsEditing] = useState(false);
+  const [_activeInputField, _setActiveInputField] = useState<string | null>(null);
+  const [_documentType, setDocumentType] = useState("");
   const [vendorName, setVendorName] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [amount, setAmount] = useState(0);
   const [invoiceDate, setInvoiceDate] = useState("");
-  const [cgst, setCgst] = useState(0);
-  const [sgst, setSgst] = useState(0);
-  const [igst, setIgst] = useState(0);
+  const [_cgst, setCgst] = useState(0);
+  const [_sgst, setSgst] = useState(0);
+  const [_igst, setIgst] = useState(0);
 
   // Dynamic custom fields state
-  const [templatesList, setTemplatesList] = useState<any[]>([]);
-  const [dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
+  const [_templatesList, _setTemplatesList] = useState<any[]>([]);
+  const [_dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
 
   // Custom PO fields
-  const [buyerName, setBuyerName] = useState("");
-  const [poDate, setPoDate] = useState("");
-  const [indentNumber, setIndentNumber] = useState("");
+  const [_buyerName, setBuyerName] = useState("");
+  const [_poDate, setPoDate] = useState("");
+  const [_indentNumber, setIndentNumber] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
 
-  const [itemsList, setItemsList] = useState<LocalLineItem[]>([]);
-  const [saveLoading, setSaveLoading] = useState(false);
+  const [_itemsList, setItemsList] = useState<LocalLineItem[]>([]);
+  const [_saveLoading, _setSaveLoading] = useState(false);
   const [approvalComment, setApprovalComment] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -189,12 +189,12 @@ export default function DocumentDetails({
   
   // ERP Data Sync Modal & State
   const [showErpSyncModal, setShowErpSyncModal] = useState<boolean>(false);
-  const [isReSyncingErp, setIsReSyncingErp] = useState<boolean>(false);
+  const [_isReSyncingErp, setIsReSyncingErp] = useState<boolean>(false);
   const [erpSyncToast, setErpSyncToast] = useState<string | null>(null);
   const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
   const [isUploadingVersion, setIsUploadingVersion] = useState<boolean>(false);
   const [showMoreMetadata, setShowMoreMetadata] = useState<boolean>(false);
-  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [_containerWidth, setContainerWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -307,7 +307,7 @@ export default function DocumentDetails({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_handle: userHandle, lease_seconds: 180 })
         });
-      } catch (err) {}
+      } catch (_err) {}
     }, 30000);
 
     return () => {
@@ -318,7 +318,7 @@ export default function DocumentDetails({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_handle: userHandle })
         }).catch(() => {});
-      } catch (err) {}
+      } catch (_err) {}
     };
   }, [document?.id, currentUserUsername, currentUserEmail]);
 
@@ -395,60 +395,60 @@ export default function DocumentDetails({
             if (flacCfg && flacCfg.value) {
               try {
                 setFieldPermissions(JSON.parse(flacCfg.value));
-              } catch (e) {}
+              } catch (_e) {}
             }
           }
         }
-      } catch (e) {}
+      } catch (_e) {}
     };
     loadConfig();
   }, []);
 
   // Comments State
   const [commentsList, setCommentsList] = useState<any[]>([]);
-  const [newComment, setNewComment] = useState("");
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [n8nHookUrl, setN8nHookUrl] = useState(
+  const [_newComment, _setNewComment] = useState("");
+  const [_commentsLoading, _setCommentsLoading] = useState(false);
+  const [_n8nHookUrl, _setN8nHookUrl] = useState(
     "https://n8n.your-domain.com/webhook/doc-received",
   );
-  const [n8nLoading, setN8nLoading] = useState(false);
-  const [n8nLogs, setN8nLogs] = useState<string | null>(null);
+  const [_n8nLoading, _setN8nLoading] = useState(false);
+  const [_n8nLogs, _setN8nLogs] = useState<string | null>(null);
 
   // Verification Checklist States
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'compliance' | 'metadata' | 'workflow'>('compliance');
+  const [_activeWorkspaceTab, _setActiveWorkspaceTab] = useState<'compliance' | 'metadata' | 'workflow'>('compliance');
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [checkedStates, setCheckedStates] = useState<Record<string, boolean>>({});
-  const [showChecklistModal, setShowChecklistModal] = useState(false);
-  const [showSecondLine, setShowSecondLine] = useState(false);
-  const [showAllParallelFields, setShowAllParallelFields] = useState(false);
-  const [selectedParallelField, setSelectedParallelField] = useState<string>("gstin");
-  const [activeExtraField, setActiveExtraField] = useState<string | null>(null);
+  const [_showChecklistModal, _setShowChecklistModal] = useState(false);
+  const [_showSecondLine, _setShowSecondLine] = useState(false);
+  const [_showAllParallelFields, _setShowAllParallelFields] = useState(false);
+  const [_selectedParallelField, _setSelectedParallelField] = useState<string>("gstin");
+  const [_activeExtraField, _setActiveExtraField] = useState<string | null>(null);
 
   // Synced Invoice Stage 1 Attachment States
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [_selectedFile, _setSelectedFile] = useState<File | null>(null);
+  const [_isDragOver, _setIsDragOver] = useState(false);
+  const [_isUploadingAttachment, _setIsUploadingAttachment] = useState(false);
   const [activeApprovalLog, setActiveApprovalLog] = useState<any>(null);
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
   const [iframeSrc, setIframeSrc] = useState<string>("");
   const [workflowInstance, setWorkflowInstance] =
     useState<DbWorkflowInstance | null>(null);
-  const [workflowSteps, setWorkflowSteps] = useState<any[]>([]);
-  const [availableWorkflows, setAvailableWorkflows] = useState<any[]>([]);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
-  const [customSteps, setCustomSteps] = useState<{ label: string }[]>([]);
-  const [overrideMode, setOverrideMode] = useState<"existing" | "custom">(
+  const [_workflowSteps, setWorkflowSteps] = useState<any[]>([]);
+  const [_availableWorkflows, setAvailableWorkflows] = useState<any[]>([]);
+  const [_selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
+  const [_customSteps, _setCustomSteps] = useState<{ label: string }[]>([]);
+  const [_overrideMode, _setOverrideMode] = useState<"existing" | "custom">(
     "existing",
   );
-  const [isApplying, setIsApplying] = useState(false);
+  const [_isApplying, _setIsApplying] = useState(false);
 
   // Data Protection states
-  const [versions, setVersions] = useState<any[]>([]);
-  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [_versions, setVersions] = useState<any[]>([]);
+  const [_loadingVersions, setLoadingVersions] = useState(false);
 
-  const [erpData, setErpData] = useState<any | null>(null);
-  const [erpLoading, setErpLoading] = useState(false);
+  const [_erpData, setErpData] = useState<any | null>(null);
+  const [_erpLoading, setErpLoading] = useState(false);
 
   const fetchErpData = async (poNum: string) => {
     if (!poNum || poNum === "Not Found" || poNum === "Extracting...") {
@@ -471,14 +471,14 @@ export default function DocumentDetails({
       } else {
         setErpData(null);
       }
-    } catch (e) {
+    } catch (_e) {
       setErpData(null);
     } finally {
       setErpLoading(false);
     }
   };
 
-  const handleManualErpReSync = async () => {
+  const _handleManualErpReSync = async () => {
     setIsReSyncingErp(true);
     setErpSyncToast(null);
     try {
@@ -486,21 +486,21 @@ export default function DocumentDetails({
       onRefreshDocument();
       setErpSyncToast("Live ERP Synchronization completed! DocTrans & Master Ledger data matched (200 OK).");
       setTimeout(() => setErpSyncToast(null), 4000);
-    } catch (e: any) {
+    } catch (_e: any) {
       setErpSyncToast("Failed to re-sync ERP record.");
     } finally {
       setIsReSyncingErp(false);
     }
   };
 
-  const handlePushToErpLedger = async () => {
+  const _handlePushToErpLedger = async () => {
     setIsReSyncingErp(true);
     setErpSyncToast(null);
     try {
       await new Promise(r => setTimeout(r, 700));
       setErpSyncToast(`Approval state successfully pushed to SAP/MS SQL ledger for DocKey #${document?.doc_key || document?.id}!`);
       setTimeout(() => setErpSyncToast(null), 4000);
-    } catch (e: any) {
+    } catch (_e: any) {
       setErpSyncToast("Failed to push update to ERP ledger.");
     } finally {
       setIsReSyncingErp(false);
@@ -524,7 +524,7 @@ export default function DocumentDetails({
         setAvailableWorkflows(wfs);
         if (wfs.length > 0) setSelectedWorkflowId(wfs[0].id);
       }
-    } catch (e) {}
+    } catch (_e) {}
   };
 
   const fetchComments = async () => {
@@ -568,7 +568,7 @@ export default function DocumentDetails({
       if (typeof document.items === "string") {
         try {
           parsedItems = JSON.parse(document.items);
-        } catch (e) {}
+        } catch (_e) {}
       } else if (Array.isArray(document.items)) {
         parsedItems = document.items;
       }

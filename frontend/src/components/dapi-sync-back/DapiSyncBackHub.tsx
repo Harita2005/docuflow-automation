@@ -37,7 +37,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
   const [apps, setApps] = useState<ThirdPartyApplication[]>(INITIAL_APPLICATIONS);
   const [rules, setRules] = useState<SyncRule[]>(INITIAL_RULES);
   const [logs, setLogs] = useState<SyncLog[]>(INITIAL_SYNC_LOGS);
-  const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>(DEFAULT_FIELD_MAPPINGS);
+  const [_fieldMappings, _setFieldMappings] = useState<FieldMapping[]>(DEFAULT_FIELD_MAPPINGS);
 
   // Selected Target App for API Config & Rules Studio
   const [selectedAppIdForConfig, setSelectedAppIdForConfig] = useState<string>(apps[0]?.id || '');

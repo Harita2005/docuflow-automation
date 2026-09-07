@@ -1,3 +1,4 @@
+import logging
 import json
 import time
 import datetime
@@ -9,6 +10,8 @@ from app.database import get_db
 from app.models import ThirdPartyApplication, CallbackRule, CallbackEvent, CallbackAttempt, IntegrationAuditHistory
 from app.schemas import ThirdPartyApplicationCreate, ThirdPartyApplicationUpdate, CallbackRuleCreate, CallbackRuleUpdate, TestCallbackRequest
 from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/integrations/v2', tags=['Approval Callback Integrations Engine'])
 
 def helper_serialize_json_field(val: Any) -> Optional[str]:
@@ -24,8 +27,7 @@ def record_audit(db: Session, entity_type: str, entity_id: int, action: str, pre
         db.add(audit)
         db.commit()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
 
 @router.get('/applications')
 def list_applications(db: Session=Depends(get_db)):
@@ -283,20 +285,17 @@ def execute_test_callback(body: TestCallbackRequest, db: Session=Depends(get_db)
         try:
             safe_target_url = validate_and_reconstruct_url(final_url)
         except Exception as url_err:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', url_err)
+            logger.debug('Handled exception: %s', url_err)
             return {'success': False, 'error': str(getattr(url_err, 'detail', url_err)), 'request_preview': request_preview}
         start = time.time()
         resp = requests.request(method=method, url=safe_target_url, data=body_bytes, headers=final_headers, timeout=rule_obj.timeout_seconds or 15)
         elapsed_ms = int((time.time() - start) * 1000)
         return {'success': resp.status_code < 400, 'status_code': resp.status_code, 'response_time_ms': elapsed_ms, 'request_preview': request_preview, 'response_body': resp.text[:2000]}
     except requests.exceptions.RequestException as req_err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', req_err)
+        logger.debug('Handled exception: %s', req_err)
         return {'success': False, 'error': f'Callback HTTP request failed: {type(req_err).__name__}', 'request_preview': request_preview if 'request_preview' in locals() else None}
     except Exception as ex:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', ex)
+        logger.debug('Handled exception: %s', ex)
         return {'success': False, 'error': f'Callback execution failed: {type(ex).__name__}', 'request_preview': request_preview if 'request_preview' in locals() else None}
 
 @router.get('/logs')

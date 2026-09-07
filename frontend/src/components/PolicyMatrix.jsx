@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Save, Plus, ArrowRight, Settings2, Trash2, Play, AlertTriangle, CheckCircle, ShieldAlert, Sparkles, X, ChevronRight, RefreshCw, Eye } from 'lucide-react';
+import { Save, Plus, ArrowRight, Settings2, Trash2, Play, AlertTriangle, CheckCircle, ShieldAlert, Sparkles, X, RefreshCw } from 'lucide-react';
 
 export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, setActiveTab }) {
-  const [editingId, setEditingId] = useState(null);
+  const [_editingId, setEditingId] = useState(null);
   
   // Simulator State
   const [showSimulator, setShowSimulator] = useState(false);
@@ -85,7 +85,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
       if (r.id !== ruleId) return r;
       
       let conditions = [];
-      try { conditions = JSON.parse(r.conditions_json); } catch(e) {}
+      try { conditions = JSON.parse(r.conditions_json); } catch(_e) {}
       
       // Update or add condition
       const existingIdx = conditions.findIndex(c => c.field === field);
@@ -110,7 +110,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
     setHasChanges(true);
   };
 
-  const updateRuleFlow = (ruleId, flowName) => {
+  const _updateRuleFlow = (ruleId, flowName) => {
     setRules(rules.map(r => r.id === ruleId ? { ...r, target_workflow_id: flowName } : r));
     setHasChanges(true);
   };
@@ -120,7 +120,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
       const conditions = JSON.parse(rule.conditions_json);
       const cond = conditions.find(c => c.field === field);
       return cond ? cond.value : '';
-    } catch(e) { return ''; }
+    } catch(_e) { return ''; }
   };
 
   // Group workflows by unique profile_name

@@ -1,3 +1,4 @@
+import logging
 import json
 import requests
 import datetime
@@ -11,6 +12,8 @@ from app.config import settings
 from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog, AuditLog
 from app.schemas import ThirdPartyWebhookConfigCreate, ThirdPartyWebhookConfigResponse, ThirdPartyWebhookTestRequest, IntegrationAcknowledgmentRequest, IntegrationAcknowledgmentResponse
 from app.services.integration_service import build_universal_export_payload, dispatch_outgoing_webhook, compute_hmac_signature
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/integrations/v1', tags=['Third-Party & SAP Integrations'])
 
 @router.get('/approved-documents')
@@ -147,15 +150,13 @@ def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depe
     try:
         safe_target_url = validate_and_reconstruct_url(target_url)
     except Exception as url_err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', url_err)
+        logger.debug('Handled exception: %s', url_err)
         return {'success': False, 'target_url': target_url, 'error': str(getattr(url_err, 'detail', url_err))}
     try:
         resp = requests.post(safe_target_url, data=payload_json.encode('utf-8'), headers=headers, timeout=10)
         return {'success': resp.status_code < 400, 'status_code': resp.status_code, 'target_url': safe_target_url, 'response': resp.text[:1000]}
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         return {'success': False, 'target_url': safe_target_url, 'error': f'Request dispatch failed: {type(e).__name__}'}
 
 @router.post('/documents/{document_id}/retry-push')

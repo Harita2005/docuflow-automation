@@ -34,11 +34,11 @@ export default function DashboardTab({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [dateRangeFilter, setDateRangeFilter] = useState('7d');
 
-  const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
-  const [hoveredTrendIndex, setHoveredTrendIndex] = useState<number | null>(null);
+  const [_hoveredBarIndex, _setHoveredBarIndex] = useState<number | null>(null);
+  const [_hoveredTrendIndex, _setHoveredTrendIndex] = useState<number | null>(null);
 
   // Filter logs based on dashboard selections
-  const filteredLogs = logs.filter(log => {
+  const _filteredLogs = logs.filter(log => {
     if (selectedAppFilter !== 'ALL' && log.applicationId !== selectedAppFilter) return false;
     if (selectedDocTypeFilter !== 'ALL' && log.documentType !== selectedDocTypeFilter) return false;
     if (selectedDecisionFilter !== 'ALL' && log.decision !== selectedDecisionFilter) return false;
@@ -272,7 +272,7 @@ export default function DashboardTab({
           </div>
 
           <div className="space-y-4 py-2">
-            {syncsByAppData.map((item, idx) => {
+            {syncsByAppData.map((item, _idx) => {
               const successWidth = Math.round((item.Success / maxAppTotal) * 100);
               const failedWidth = Math.max(Math.round((item.Failed / maxAppTotal) * 100), 2);
 
@@ -396,7 +396,7 @@ export default function DashboardTab({
           </div>
 
           <div className="h-44 w-full flex items-end justify-between gap-3 pt-4 px-2 border-b border-slate-100">
-            {activityTimelineData.map((d, i) => {
+            {activityTimelineData.map((d, _i) => {
               const successHeight = Math.round((d.Success / maxTimelineVal) * 120);
               const failedHeight = Math.max(Math.round((d.Failed / maxTimelineVal) * 120), 6);
 

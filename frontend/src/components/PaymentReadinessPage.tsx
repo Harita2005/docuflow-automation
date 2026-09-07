@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { DollarSign, ShieldAlert, CreditCard, Send, CheckCircle2, CloudLightning, Landmark, Calendar, RefreshCw, Send as SendIcon, CheckSquare } from "lucide-react";
+import { CheckCircle2, Landmark as SendIcon, CheckSquare } from "lucide-react";
 
 interface PaymentReadinessPageProps {
   onRefreshStats: () => void;
 }
 
 export default function PaymentReadinessPage({ onRefreshStats }: PaymentReadinessPageProps) {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [_invoices, setInvoices] = useState<any[]>([]);
   const [readyList, setReadyList] = useState<any[]>([]);
   const [paidList, setPaidList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

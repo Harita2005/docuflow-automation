@@ -1,3 +1,4 @@
+import logging
 import re
 import json
 import base64
@@ -12,6 +13,8 @@ import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models import Document, ThirdPartyApplication, CallbackRule, CallbackEvent, CallbackAttempt
+
+logger = logging.getLogger(__name__)
 DYNAMIC_VARIABLES = ['primaryKey', 'documentNumber', 'approvalStatus', 'documentType', 'applicationCode', 'company', 'category', 'branch', 'costCenter', 'approvedBy', 'approvalDate', 'rejectionReason', 'eventId']
 
 def build_document_context(doc: Document, decision: str='APPROVED', event_id: str='') -> Dict[str, Any]:
@@ -88,29 +91,25 @@ def evaluate_single_condition(condition: Dict[str, Any], doc_context: Dict[str, 
         try:
             return float(str_actual) > float(str_target)
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
             return str_actual > str_target
     elif op in ['Greater Than or Equal', '>=', 'gte']:
         try:
             return float(str_actual) >= float(str_target)
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
             return str_actual >= str_target
     elif op in ['Less Than', '<', 'lt']:
         try:
             return float(str_actual) < float(str_target)
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
             return str_actual < str_target
     elif op in ['Less Than or Equal', '<=', 'lte']:
         try:
             return float(str_actual) <= float(str_target)
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
             return str_actual <= str_target
     elif op in ['Is Empty', 'is_empty']:
         return str_actual == ''
@@ -151,8 +150,7 @@ def evaluate_rule_conditions(conditions_json: Optional[str], doc_context: Dict[s
             else:
                 return all(results)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         return True
     return True
 
@@ -222,13 +220,11 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
                         tok_body = json.loads(tok_res.read().decode('utf-8'))
                         access_token = tok_body.get('access_token') or ''
                 except Exception as ex:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', ex)
+                    logger.debug('Handled exception: %s', ex)
             if access_token:
                 headers['Authorization'] = f'Bearer {access_token}'
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
     return headers
 
 def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key: str, doc_context: Dict[str, Any]) -> str:
@@ -245,8 +241,7 @@ def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key
             if res and res[0]:
                 return str(res[0])
         except Exception as err:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', err)
+            logger.debug('Handled exception: %s', err)
     try:
         doc = None
         if db:
@@ -258,8 +253,7 @@ def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key
         payload_data = {'documentId': str(doc.id if doc else doc_key), 'externalDocKey': str(doc.doc_key if doc else doc_context.get('primaryKey')), 'invoiceNumber': str(doc.invoice_number if doc else doc_context.get('documentNumber')), 'vendorName': str(doc.party_name or doc.vendor_name if doc else doc_context.get('party_name')), 'vendorCode': str(doc.party_code or doc.vendor_code if doc else doc_context.get('party_code')), 'grandTotal': float(doc.amount if doc else doc_context.get('amount', 0.0)), 'baseAmount': float(doc.base_amount if doc else 0.0), 'totalTax': float(doc.tax_amount if doc else 0.0), 'cgst': float(doc.cgst if doc else 0.0), 'sgst': float(doc.sgst if doc else 0.0), 'igst': float(doc.igst if doc else 0.0), 'companyCode': str(doc.division if doc else doc_context.get('company')), 'branchCode': str(doc.plant if doc else doc_context.get('branch')), 'costCenter': str(doc.cost_center if doc else doc_context.get('costCenter')), 'approvalStatus': str(doc.status if doc else doc_context.get('approvalStatus')), 'approvedBy': str(doc_context.get('approvedBy', 'System Admin')), 'approvalDate': str(doc_context.get('approvalDate', datetime.datetime.utcnow().isoformat())), 'executedStoredProcedure': clean_sp_name, 'items': line_items}
         return json.dumps(payload_data, indent=2)
     except Exception as ex:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', ex)
+        logger.debug('Handled exception: %s', ex)
         return json.dumps({'docKey': str(doc_key), 'status': str(doc_context.get('approvalStatus', 'APPROVED')), 'sp_name': clean_sp_name})
 
 def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_context: Dict[str, Any], db: Optional[Session]=None) -> Tuple[str, str, Dict[str, str], Optional[bytes]]:
@@ -291,8 +285,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                 for k, v in params_list.items():
                     query_params[k] = resolve_dynamic_variables(str(v), doc_context)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     if query_params:
         parsed_url = urllib.parse.urlparse(final_url)
         existing_query = urllib.parse.parse_qs(parsed_url.query)
@@ -318,8 +311,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                 for hk, hv in hdrs_list.items():
                     final_headers[hk] = resolve_dynamic_variables(str(hv), doc_context)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     body_bytes = None
     body_type = (rule.body_type or 'NONE').upper()
     payload_src = (getattr(rule, 'payload_source', '') or 'MAPPING').upper()
@@ -353,8 +345,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                         for tp_field, src_field in mapping.items():
                             payload_dict[tp_field] = doc_context.get(src_field, resolve_dynamic_variables(str(src_field), doc_context))
                 except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
             if not payload_dict:
                 payload_dict = {'primaryKey': doc_context.get('primaryKey'), 'documentNumber': doc_context.get('documentNumber'), 'approvalStatus': doc_context.get('approvalStatus')}
             body_bytes = json.dumps(payload_dict, indent=2).encode('utf-8')
@@ -367,8 +358,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
                     for m in mapping:
                         form_dict[m.get('thirdPartyField')] = doc_context.get(m.get('sourceField'), '')
                 except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
             body_bytes = urllib.parse.urlencode(form_dict).encode('utf-8')
         elif body_type == 'RAW_TEXT' or body_type == 'XML':
             content_type = rule.content_type or ('application/xml' if body_type == 'XML' else 'text/plain')
@@ -381,8 +371,7 @@ def build_callback_request(rule: CallbackRule, app: ThirdPartyApplication, doc_c
             ac = json.loads(app.auth_config_json)
             secret_key = ac.get('api_key') or ac.get('token') or ac.get('secret')
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     if not secret_key and app:
         secret_key = app.code
     if not secret_key:
@@ -418,8 +407,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get('max_attempts', max_attempts))
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     doc_context['attemptNumber'] = attempt_num
     doc_context['maxAttempts'] = max_attempts
     start_time = time.time()
@@ -445,8 +433,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
                     if isinstance(sc, list) and sc:
                         valid_codes = [int(x) for x in sc]
                 except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
             is_success = status_code in valid_codes
             attempt = CallbackAttempt(callback_event_id=event.id, attempt_number=attempt_num, http_method=method, request_url=final_url, request_headers_json=json.dumps(mask_sensitive_headers(final_headers)), request_body=body_bytes.decode('utf-8', errors='ignore') if body_bytes else None, response_status_code=status_code, response_headers_json=resp_headers_str, response_body=resp_body[:4000], response_time_ms=elapsed_ms, status='DELIVERED' if is_success else 'FAILED', error_message=None if is_success else f'HTTP Status {status_code} not in expected success criteria {valid_codes}')
             db.add(attempt)
@@ -457,19 +444,16 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
                 return {'success': True, 'status_code': status_code, 'attempt': attempt_num, 'response': resp_body[:500]}
             last_error = f'HTTP {status_code}: {resp_body[:300]}'
     except urllib.error.HTTPError as he:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', he)
+        logger.debug('Handled exception: %s', he)
     except Exception as ex:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', ex)
+        logger.debug('Handled exception: %s', ex)
     max_attempts = event.max_attempts or 3
     if rule.retry_config_json:
         try:
             rc = json.loads(rule.retry_config_json)
             max_attempts = int(rc.get('max_attempts', max_attempts))
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     event.max_attempts = max_attempts
     if attempt_num < max_attempts:
         event.status = 'RETRYING'

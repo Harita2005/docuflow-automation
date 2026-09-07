@@ -11,11 +11,11 @@ import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
-import IntegrationsHub from "./components/integrations/IntegrationsHub.tsx";
+
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types.ts";
-import { Sparkles, ClipboardCheck, Clock, ArrowRight, X } from "lucide-react";
-import { io } from "socket.io-client";
+import { ClipboardCheck, ArrowRight, X } from "lucide-react";
+
 import { formatCurrencyINR } from "./utils/formatters.ts";
 
 export default function App() {
@@ -191,7 +191,7 @@ export default function App() {
       } else {
         console.error("Failed to fetch documents:", await response.text());
       }
-    } catch (e) {
+    } catch (_e) {
       // Backend temporarily offline
     } finally {
       if (!silent) setLoadingDocs(false);
@@ -224,7 +224,7 @@ export default function App() {
         console.error("Failed to fetch analytical stats counters:", await response.text());
         setStats({ totalDocuments: 0 });
       }
-    } catch (e) {
+    } catch (_e) {
       setStats({ totalDocuments: 0 });
     } finally {
       if (!silent) setLoadingStats(false);
@@ -257,7 +257,7 @@ export default function App() {
             fetchDocuments(true);
             fetchStats(true);
           }
-        } catch (err) {
+        } catch (_err) {
           // heartbeat or ping
         }
       };
@@ -307,7 +307,7 @@ export default function App() {
         channel.postMessage({ type: "LOGIN", role, email, username });
         channel.close();
       }
-    } catch (e) {}
+    } catch (_e) {}
   };
 
   useEffect(() => {
@@ -448,7 +448,7 @@ export default function App() {
           }
           channel.close();
         }
-      } catch (e) {}
+      } catch (_e) {}
     }
   }
 

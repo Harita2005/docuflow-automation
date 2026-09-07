@@ -477,7 +477,7 @@ export default function AdminUsers() {
       await fetchUsers();
       setToastMsg("✓ User directory successfully synchronized with database!");
       setTimeout(() => setToastMsg(""), 3500);
-    } catch (e) {
+    } catch (_e) {
       setErrorMsg("Directory sync failed.");
       setTimeout(() => setErrorMsg(""), 3500);
     } finally {
@@ -606,7 +606,7 @@ export default function AdminUsers() {
       setToastMsg(`User ${name} removed.`);
       setTimeout(() => setToastMsg(""), 3000);
       if (selectedUser?.id === id) setSelectedUser(null);
-    } catch(e) { 
+    } catch(_e) { 
       setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
@@ -646,7 +646,7 @@ export default function AdminUsers() {
       });
       setToastMsg(`Status for ${user.name} set to ${nextStatus ? 'ACTIVE' : 'INACTIVE'}.`);
       setTimeout(() => setToastMsg(""), 3000);
-    } catch(e) {}
+    } catch(_e) {}
   };
 
   // Triggered from permissions panel to toggle override

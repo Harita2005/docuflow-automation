@@ -125,7 +125,7 @@ export default function ApplicationsManager({ onConfigureRules }: ApplicationsMa
     if (app.auth_config_json) {
       try {
         parsedAuth = JSON.parse(app.auth_config_json);
-      } catch (e) {}
+      } catch (_e) {}
     }
 
     setFormData({
@@ -251,7 +251,7 @@ export default function ApplicationsManager({ onConfigureRules }: ApplicationsMa
     }
   };
 
-  const generateRandomKey = () => {
+  const _generateRandomKey = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let key = "key_live_";
     for (let i = 0; i < 24; i++) {

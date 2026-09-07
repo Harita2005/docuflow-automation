@@ -1,3 +1,4 @@
+import logging
 import random
 import datetime
 from typing import List, Optional
@@ -7,6 +8,8 @@ from app.database import get_db
 from app.models import User
 from app.schemas import UserResponse, UserMasterCreate, UserMasterUpdate, UserStatusToggleRequest
 from app.auth import get_password_hash, get_current_user
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/users', tags=['User Master Management'])
 admin_router = APIRouter(prefix='/api/admin/users', tags=['Admin User Management'])
 
@@ -23,12 +26,10 @@ def get_users(include_inactive: bool=Query(True, description='Include deactivate
             try:
                 from scripts.seed_sd_workflow_matrix import seed_sd_workflow_matrix
             except ImportError as exc:
-                import logging
-                logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                logger.debug('Handled exception: %s', exc)
             seed_sd_workflow_matrix()
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', e)
+            logger.debug('Handled exception: %s', e)
     query = db.query(User).filter(User.is_deleted == False)
     if not include_inactive:
         query = query.filter(User.is_active == True)

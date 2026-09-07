@@ -1,6 +1,10 @@
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
 db_url = settings.get_database_url()
 if db_url.startswith('sqlserver://'):
     db_url = db_url.replace('sqlserver://', 'mssql+pyodbc://', 1)
@@ -27,18 +31,16 @@ def ensure_mssql_database_exists(url: str):
             with master_engine.connect() as conn:
                 conn.execute(text(f"IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'{db_name}') CREATE DATABASE [{db_name}];"))
             master_engine.dispose()
-            print(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
+            logger.info(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
             break
         except Exception as create_err:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', create_err)
+            logger.debug('Handled exception: %s', create_err)
 ensure_mssql_database_exists(db_url)
 try:
     engine = create_engine(db_url, **engine_kwargs)
-    print('[Database Connection] Successfully initialized engine.')
+    logger.info('[Database Connection] Successfully initialized engine.')
 except Exception as exc:
-    import logging
-    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+    logger.debug('Handled exception: %s', exc)
     raise RuntimeError('Enterprise Database Connection Error: Failed to initialize engine.')
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -51,5 +53,4 @@ def get_db():
         try:
             db.close()
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)

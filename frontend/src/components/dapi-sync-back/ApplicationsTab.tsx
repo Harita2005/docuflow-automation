@@ -94,7 +94,7 @@ export default function ApplicationsTab({
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (app: ThirdPartyApplication, initialTab: 'IDENTITY' | 'AUTH' | 'ENDPOINTS' | 'CONDITIONAL' = 'IDENTITY') => {
+  const _handleOpenEditModal = (app: ThirdPartyApplication, initialTab: 'IDENTITY' | 'AUTH' | 'ENDPOINTS' | 'CONDITIONAL' = 'IDENTITY') => {
     setEditingApp(app);
     setFormData({
       name: app.name,

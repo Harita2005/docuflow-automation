@@ -11,7 +11,7 @@ import {
   Copy,
   Info
 } from 'lucide-react';
-import { FieldMapping, SystemFieldOption } from '../../types/dapiSyncBack';
+import { FieldMapping } from '../../types/dapiSyncBack';
 import { SYSTEM_FIELDS } from './mockSyncBackData';
 
 interface FieldMappingTabProps {
@@ -25,7 +25,7 @@ export default function FieldMappingTab({
 }: FieldMappingTabProps) {
   const [currentMappings, setCurrentMappings] = useState<FieldMapping[]>(mappings);
   const [copiedPreview, setCopiedPreview] = useState(false);
-  const [customFieldInput, setCustomFieldInput] = useState('');
+  const [_customFieldInput, _setCustomFieldInput] = useState('');
 
   const handleAddMapping = () => {
     const unusedSystemField = SYSTEM_FIELDS.find(

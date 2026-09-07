@@ -1,3 +1,4 @@
+import logging
 import asyncio
 import json
 import time
@@ -5,6 +6,8 @@ from typing import Set, Optional
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 from app.services.lock_service import lock_manager
+
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Real-Time Events & Collision Locks'])
 _active_listeners: Set[asyncio.Queue] = set()
 
@@ -19,8 +22,7 @@ def broadcast_event(event_type: str, payload: dict):
         try:
             q.put_nowait(encoded)
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     for dq in dead_queues:
         _active_listeners.discard(dq)
 
@@ -43,8 +45,7 @@ async def event_stream(request: Request):
                     message = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield message
                 except asyncio.TimeoutError as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
         finally:
             _active_listeners.discard(queue)
     return StreamingResponse(event_generator(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'})

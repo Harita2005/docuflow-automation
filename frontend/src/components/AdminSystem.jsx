@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Server, BrainCircuit, RefreshCw, Zap, Check, Shield, Sliders, FolderArchive } from 'lucide-react';
+import { Settings, Save, Server, BrainCircuit, Zap, Check, Sliders, FolderArchive } from 'lucide-react';
 
 // Default editable keys with their human readable info
 const SYSTEM_KEYS = [
@@ -27,7 +27,7 @@ export default function AdminSystem() {
   const [configs, setConfigs] = useState(() => 
     SYSTEM_KEYS.map(sk => ({ ...sk, value: sk.default, isDirty: false }))
   );
-  const [loading, setLoading] = useState(false);
+  const [_loading, _setLoading] = useState(false);
 
   useEffect(() => { 
     fetchConfigs(); 

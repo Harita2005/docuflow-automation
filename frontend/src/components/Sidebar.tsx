@@ -20,7 +20,7 @@ import {
   ListFilter,
   Share2
 } from "lucide-react";
-import { motion } from "motion/react";
+
 import { useState } from "react";
 
 interface SidebarProps {

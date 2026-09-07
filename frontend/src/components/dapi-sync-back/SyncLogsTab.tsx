@@ -22,7 +22,7 @@ interface SyncLogsTabProps {
 
 export default function SyncLogsTab({ logs, onRetrySync }: SyncLogsTabProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [appFilter, setAppFilter] = useState('ALL');
+  const [appFilter, _setAppFilter] = useState('ALL');
   const [decisionFilter, setDecisionFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<SyncLogStatus | 'ALL'>('ALL');
 

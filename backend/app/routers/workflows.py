@@ -1,3 +1,4 @@
+import logging
 import urllib.parse
 import datetime
 import json
@@ -18,8 +19,7 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
             if isinstance(parsed, list):
                 items = [str(x).strip() for x in parsed if str(x).strip()]
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     if not items:
         tpls = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == profile_name, ChecklistTemplate.stage_name.ilike(step.step_name.strip()), ChecklistTemplate.is_active == True).order_by(ChecklistTemplate.sequence_order.asc()).all()
         for t in tpls:
@@ -39,6 +39,8 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
     return {'stage_number': step.stage_number, 'step_name': step.step_name, 'approver_type': step.approver_type, 'approver_target': step.approver_target, 'delegate_approver': step.delegate_approver, 'document_type': step.document_type, 'action_required': step.action_required, 'permissions': step.permissions, 'sla_hours': step.sla_hours, 'checklist_items': items, 'checklist_json': json.dumps(items)}
 from collections import defaultdict
 
+logger = logging.getLogger(__name__)
+
 def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
     """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-001, WF-002)."""
     if p.workflow_code and str(p.workflow_code).strip() and re.match('^(WF|CAPEX|PUR|SRV|FRT|UTL|EXP|GRN|ADV|CSH|EV|JRNL|CN|DN)-\\d{3,5}$', str(p.workflow_code).strip(), re.IGNORECASE):
@@ -54,8 +56,7 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
         try:
             db.commit()
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     return code
 
 def enforce_designated_approvers(db: Session):
@@ -94,8 +95,7 @@ def get_all_workflow_profiles(db: Session=Depends(get_db)):
                     if isinstance(parsed, list):
                         items = [str(x).strip() for x in parsed if str(x).strip()]
                 except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+                    logger.debug('Handled exception: %s', exc)
             if not items:
                 tpl_key = ((p.profile_name or '').strip().lower(), (st.step_name or '').strip().lower())
                 tpls = tpls_by_profile_stage.get(tpl_key, [])
@@ -160,8 +160,7 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session=Depends(ge
         wf_code = ensure_workflow_code(existing, db)
         return {'success': True, 'profile_name': payload.profile_name, 'workflow_code': wf_code}
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        logger.debug('Handled exception: %s', e)
         raise HTTPException(status_code=500, detail=f'Database error while saving workflow: {str(e)}')
 
 @router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
@@ -224,8 +223,7 @@ def save_workflow_step(payload: dict, db: Session=Depends(get_db)):
             int_id = int(step_id)
             step_obj = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == int_id).first()
         except ValueError as exc:
-            import logging
-            logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            logger.debug('Handled exception: %s', exc)
     if not step_obj:
         step_obj = WorkflowStepDefinition(profile_name=profile_name)
         db.add(step_obj)
