@@ -452,9 +452,7 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
                 conds = conds['conditions']
             cond_eval_details = []
             is_match = True
-            if not isinstance(conds, list) or len(conds) == 0:
-                is_match = True
-            else:
+            if isinstance(conds, list) and conds:
                 for cIdx, cond in enumerate(conds):
                     field = cond.get('field', '')
                     op = cond.get('operator', 'equals')

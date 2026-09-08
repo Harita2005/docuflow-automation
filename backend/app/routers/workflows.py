@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, ChecklistTemplate
 from app.schemas import WorkflowProfileSchema
+from collections import defaultdict
+
 router = APIRouter(tags=['Workflow Administration'])
+logger = logging.getLogger(__name__)
 
 def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profile_name: str) -> dict:
     items: List[str] = []
@@ -23,13 +26,9 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
     if not items:
         tpls = db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == profile_name, ChecklistTemplate.stage_name.ilike(step.step_name.strip()), ChecklistTemplate.is_active == True).order_by(ChecklistTemplate.sequence_order.asc()).all()
         for t in tpls:
-            if ',' in t.item_text:
-                for sub in t.item_text.split(','):
-                    c = sub.strip()
-                    if c and c not in items:
-                        items.append(c)
-            else:
-                c = t.item_text.strip()
+            checklist_items = t.item_text.split(',') if ',' in t.item_text else [t.item_text]
+            for checklist_item in checklist_items:
+                c = checklist_item.strip()
                 if c and c not in items:
                     items.append(c)
     if not items:
@@ -37,9 +36,6 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
         wf = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == profile_name).first()
         items = generate_compliance_checklist_for_category(wf.workflow_category if wf else None, wf.workflow_type if wf else None)
     return {'stage_number': step.stage_number, 'step_name': step.step_name, 'approver_type': step.approver_type, 'approver_target': step.approver_target, 'delegate_approver': step.delegate_approver, 'document_type': step.document_type, 'action_required': step.action_required, 'permissions': step.permissions, 'sla_hours': step.sla_hours, 'checklist_items': items, 'checklist_json': json.dumps(items)}
-from collections import defaultdict
-
-logger = logging.getLogger(__name__)
 
 def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
     """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-001, WF-002)."""
@@ -100,13 +96,9 @@ def get_all_workflow_profiles(db: Session=Depends(get_db)):
                 tpl_key = ((p.profile_name or '').strip().lower(), (st.step_name or '').strip().lower())
                 tpls = tpls_by_profile_stage.get(tpl_key, [])
                 for t in tpls:
-                    if ',' in t.item_text:
-                        for sub in t.item_text.split(','):
-                            c = sub.strip()
-                            if c and c not in items:
-                                items.append(c)
-                    else:
-                        c = t.item_text.strip()
+                    checklist_items = t.item_text.split(',') if ',' in t.item_text else [t.item_text]
+                    for checklist_item in checklist_items:
+                        c = checklist_item.strip()
                         if c and c not in items:
                             items.append(c)
             steps.append({'stage_number': st.stage_number, 'step_name': st.step_name, 'approver_type': st.approver_type, 'approver_target': st.approver_target, 'delegate_approver': st.delegate_approver, 'document_type': st.document_type, 'action_required': st.action_required, 'permissions': st.permissions, 'sla_hours': st.sla_hours, 'checklist_items': items, 'checklist_json': json.dumps(items)})
