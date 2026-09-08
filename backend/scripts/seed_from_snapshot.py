@@ -1,0 +1,126 @@
+import sys
+import json
+from pathlib import Path
+from datetime import datetime
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+from sqlalchemy import MetaData, text
+from app.config import settings
+from app.database import Base, engine
+JSON_PATH = BASE_DIR / 'data' / 'seed_data.json'
+if not JSON_PATH.exists():
+    JSON_PATH = SCRIPT_DIR / 'seed_data.json'
+if not JSON_PATH.exists():
+    JSON_PATH = Path('/app/data/seed_data.json')
+ALL_WIPE_TABLES = ['system_logs', 'system_engine_logs', 'audit_logs', 'document_checklist_states', 'document_approval_logs', 'document_line_items', 'documents', 'checklist_templates', 'checklist_rules', 'business_rules', 'workflow_step_definitions', 'workflow_profiles', 'in_app_notifications', 'notification_provider_configs', 'notification_raci_matrices', 'users']
+TABLES_ORDERED = ['users', 'workflow_profiles', 'workflow_step_definitions', 'business_rules', 'checklist_templates', 'checklist_rules', 'documents', 'document_line_items', 'document_checklist_states', 'document_approval_logs', 'audit_logs', 'in_app_notifications', 'notification_provider_configs', 'notification_raci_matrices']
+
+def parse_val(v):
+    if v is None:
+        return None
+    if isinstance(v, str):
+        if len(v) >= 19 and (v[10] == 'T' or v[10] == ' ') and (v[4] == '-') and (v[7] == '-'):
+            try:
+                return datetime.fromisoformat(v.replace('Z', '+00:00'))
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', exc)
+    return v
+
+def run_seeder():
+    print('=' * 70)
+    print('>>> DOCUFLOW DIRECT SNAPSHOT DATABASE SEEDER')
+    print('=' * 70)
+    print(f"[*] Target Database: {(settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL)}")
+    print(f'[*] Data Source:     {JSON_PATH}')
+    print('=' * 70)
+    if not JSON_PATH.exists():
+        print(f'[ERROR] Snapshot file not found at: {JSON_PATH}')
+        return
+    with open(JSON_PATH, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    print('\n[Step 1/3] Ensuring database schema tables exist...')
+    Base.metadata.create_all(bind=engine)
+    print('    [OK] Schema initialized.')
+    meta = MetaData()
+    meta.reflect(bind=engine)
+    is_mssql = 'mssql' in settings.DATABASE_URL.lower() or 'sqlserver' in settings.DATABASE_URL.lower()
+    autocommit_engine = engine.execution_options(isolation_level='AUTOCOMMIT')
+    print('\n[Step 2/3] Cleaning existing table records...')
+    with autocommit_engine.connect() as conn:
+        if is_mssql:
+            try:
+                conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'"))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', e)
+            for tbl in ALL_WIPE_TABLES:
+                try:
+                    conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}]"))
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', e)
+        else:
+            for tbl in ALL_WIPE_TABLES:
+                try:
+                    conn.execute(text(f'DELETE FROM {tbl}'))
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+    print('    [OK] Tables cleaned.')
+    print('\n[Step 3/3] Inserting records from snapshot...')
+    with autocommit_engine.connect() as conn:
+        for tbl_name in TABLES_ORDERED:
+            rows = data.get(tbl_name, [])
+            if not rows:
+                print(f'    - {tbl_name:30s} : 0 rows (skipped)')
+                continue
+            tbl = meta.tables.get(tbl_name)
+            if tbl is None:
+                print(f'    [Warning] Table {tbl_name} not found in metadata.')
+                continue
+            has_identity = False
+            if is_mssql:
+                try:
+                    check_q = text(f"SELECT OBJECTPROPERTY(OBJECT_ID('{tbl_name}'), 'TableHasIdentity')")
+                    has_identity = bool(conn.execute(check_q).scalar())
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            cleaned_rows = []
+            for r in rows:
+                row_dict = {}
+                for col in tbl.columns.keys():
+                    if col in r:
+                        row_dict[col] = parse_val(r[col])
+                cleaned_rows.append(row_dict)
+            chunk_size = 500
+            if is_mssql and has_identity:
+                try:
+                    conn.execute(text(f'SET IDENTITY_INSERT [{tbl_name}] ON'))
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            for i in range(0, len(cleaned_rows), chunk_size):
+                chunk = cleaned_rows[i:i + chunk_size]
+                conn.execute(tbl.insert(), chunk)
+            if is_mssql and has_identity:
+                try:
+                    conn.execute(text(f'SET IDENTITY_INSERT [{tbl_name}] OFF'))
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).debug('Handled exception: %s', exc)
+            print(f'    [OK] {tbl_name:30s} : {len(cleaned_rows):,} rows inserted')
+        if is_mssql:
+            try:
+                conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).debug('Handled exception: %s', e)
+    print('\n' + '=' * 70)
+    print('>>> DATABASE SEEDING COMPLETED SUCCESSFULLY!')
+    print('=' * 70)
+if __name__ == '__main__':
+    run_seeder()

@@ -1,0 +1,51 @@
+{
+  "name": "daas-automation",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npx concurrently \"npm run dev -w frontend\" \"python backend/run.py\"",
+    "dev:backend": "python backend/run.py",
+    "dev:frontend": "npm run dev -w frontend",
+    "install:all": "npm install",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@tailwindcss/node": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "concurrently": "^10.0.3",
+    "husky": "^9.1.7",
+    "jiti": "^2.7.0",
+    "lint-staged": "^17.0.8",
+    "mime-db": "^1.54.0",
+    "mime-types": "^3.0.2",
+    "supertest": "^7.2.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "lint-staged": {
+    "frontend/**/*.{js,jsx,ts,tsx}": [
+      "npm run lint -w frontend"
+    ]
+  },
+  "dependencies": {
+    "@esbuild/win32-x64": "^0.28.2",
+    "@rollup/rollup-win32-x64-msvc": "^4.62.5",
+    "lucide-react": "^1.30.0",
+    "pdfjs-dist": "^6.2.108",
+    "playwright": "^1.61.1",
+    "puppeteer": "^25.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tldts": "^7.4.10"
+  },
+  "optionalDependencies": {
+    "lightningcss-win32-x64-msvc": "^1.33.0"
+  }
+}

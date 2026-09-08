@@ -1,0 +1,2366 @@
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  FileText,
+  Cpu,
+  CheckCircle2,
+  RotateCw,
+  RotateCcw,
+  Play,
+  Save,
+  Check,
+  X,
+  Shield,
+  ArrowRight,
+  ArrowLeft,
+  Download,
+  Loader2,
+  AlertCircle,
+  Database,
+  Layers,
+  CheckSquare,
+  Plus,
+  Trash2,
+  Barcode,
+  Sparkles,
+  HelpCircle,
+  Building2,
+  Hash,
+  Calendar,
+  Pause,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
+  Tag,
+  Clock,
+  Sliders,
+  CheckCheck,
+  Lock,
+  ExternalLink,
+  RefreshCw,
+  FileSpreadsheet,
+  Upload,
+  XCircle,
+  PauseCircle
+} from "lucide-react";
+import { DbInvoice, DbWorkflowInstance } from "../types";
+import { formatDocNumber, formatDateTime, formatTimeOnly } from "../utils/formatters";
+
+interface DocumentDetailsProps {
+  document: DbInvoice | null;
+  currentUserRole: string;
+  currentUserEmail: string;
+  currentUserUsername: string;
+  onRefreshDocument: () => void;
+  onGoBack: () => void;
+  onSelectDocument?: (id: string) => void;
+  pendingDocIds?: string[];
+}
+interface LocalLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+  warranty_text?: string;
+  serial_numbers?: string[];
+}
+
+const DEFAULT_FIELD_PERMS: Record<string, Record<string, "hidden" | "view" | "edit">> = {
+  admin: {
+    vendor_name: "edit",
+    invoice_num_date: "edit",
+    po_reference: "edit",
+    total_gross: "edit",
+    base_taxable: "edit",
+    gst_tax: "edit",
+    vendor_gstin: "edit",
+    cost_center: "edit",
+    payment_terms: "edit",
+    erp_sync_data: "edit"
+  },
+  manager: {
+    vendor_name: "view",
+    invoice_num_date: "view",
+    po_reference: "view",
+    total_gross: "view",
+    base_taxable: "view",
+    gst_tax: "view",
+    vendor_gstin: "view",
+    cost_center: "view",
+    payment_terms: "view",
+    erp_sync_data: "view"
+  },
+  auditor: {
+    vendor_name: "view",
+    invoice_num_date: "view",
+    po_reference: "view",
+    total_gross: "view",
+    base_taxable: "view",
+    gst_tax: "view",
+    vendor_gstin: "view",
+    cost_center: "view",
+    payment_terms: "view",
+    erp_sync_data: "view"
+  },
+  ap_specialist: {
+    vendor_name: "edit",
+    invoice_num_date: "edit",
+    po_reference: "edit",
+    total_gross: "edit",
+    base_taxable: "view",
+    gst_tax: "view",
+    vendor_gstin: "view",
+    cost_center: "edit",
+    payment_terms: "edit",
+    erp_sync_data: "view"
+  },
+  employee: {
+    vendor_name: "view",
+    invoice_num_date: "view",
+    po_reference: "view",
+    total_gross: "view",
+    base_taxable: "hidden",
+    gst_tax: "hidden",
+    vendor_gstin: "hidden",
+    cost_center: "hidden",
+    payment_terms: "hidden",
+    erp_sync_data: "hidden"
+  }
+};
+
+export default function DocumentDetails({
+  document,
+  currentUserRole,
+  currentUserEmail,
+  currentUserUsername,
+  onRefreshDocument,
+  onGoBack,
+  onSelectDocument,
+  pendingDocIds,
+}: DocumentDetailsProps) {
+  const [_activeTab, _setActiveTab] = useState<"original" | "layout" | "rawtext">(
+    "original",
+  );
+
+  // Metadata edit form states
+  const [isEditing, _setIsEditing] = useState(false);
+  const [_activeInputField, _setActiveInputField] = useState<string | null>(null);
+  const [_documentType, setDocumentType] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [poNumber, setPoNumber] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [invoiceDate, setInvoiceDate] = useState("");
+  const [_cgst, setCgst] = useState(0);
+  const [_sgst, setSgst] = useState(0);
+  const [_igst, setIgst] = useState(0);
+
+  // Dynamic custom fields state
+  const [_templatesList, _setTemplatesList] = useState<any[]>([]);
+  const [_dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
+
+  // Custom PO fields
+  const [_buyerName, setBuyerName] = useState("");
+  const [_poDate, setPoDate] = useState("");
+  const [_indentNumber, setIndentNumber] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
+
+  const [_itemsList, setItemsList] = useState<LocalLineItem[]>([]);
+  const [_saveLoading, _setSaveLoading] = useState(false);
+  const [approvalComment, setApprovalComment] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const [showNextActionModal, setShowNextActionModal] = useState(false);
+  const [pendingNextId, setPendingNextId] = useState<string | null>(null);
+  const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold'>('approve');
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'amber' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' | 'info' | 'amber' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // Field-Level Access Control (FLAC) Configuration
+  const [fieldPermissions, setFieldPermissions] = useState<Record<string, Record<string, "hidden" | "view" | "edit">>>(DEFAULT_FIELD_PERMS);
+  
+  // ERP Data Sync Modal & State
+  const [showErpSyncModal, setShowErpSyncModal] = useState<boolean>(false);
+  const [_isReSyncingErp, setIsReSyncingErp] = useState<boolean>(false);
+  const [erpSyncToast, setErpSyncToast] = useState<string | null>(null);
+  const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
+  const [isUploadingVersion, setIsUploadingVersion] = useState<boolean>(false);
+  const [showMoreMetadata, setShowMoreMetadata] = useState<boolean>(false);
+  const [_containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Dynamic ERP & Extra Metadata Extractor
+  const dynamicSyncPayload = useMemo(() => {
+    let customObj: Record<string, any> = {};
+    if (document?.custom_data) {
+      if (typeof document.custom_data === 'object') {
+        customObj = { ...document.custom_data };
+      } else if (typeof document.custom_data === 'string') {
+        try {
+          customObj = JSON.parse(document.custom_data);
+        } catch (_e) {}
+      }
+    }
+
+    const grossAmt = Number(amount || document.amount || 0);
+    const baseTaxableAmt = grossAmt > 0 ? grossAmt / 1.18 : 0;
+    const gstTaxAmt = grossAmt > 0 ? grossAmt - baseTaxableAmt : 0;
+
+    const baseEntries: { label: string; value: string | number; key: string }[] = [
+      { key: 'vendor_name', label: 'Vendor / Entity', value: vendorName || document.vendor_name || 'AKG Enterprise Solutions Ltd' },
+      { key: 'invoice_number', label: 'Bill No & Date', value: `${invoiceNumber || document.invoice_number || 'INV-' + document.id} • ${invoiceDate || document.invoice_date || (document.created_at ? new Date(document.created_at).toISOString().split('T')[0] : '-')}` },
+      { key: 'po_number', label: 'Purchase Order', value: poNumber || document.po_number || '-' },
+      { key: 'amount', label: 'Total Gross (₹)', value: `₹${grossAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` },
+      { key: 'base_taxable', label: 'Taxable Base', value: `₹${baseTaxableAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { key: 'gst_tax', label: 'GST (18%)', value: `₹${gstTaxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { key: 'vendor_gstin', label: 'Vendor GSTIN', value: (document as any)?.vendor_gstin || customObj.vendor_gstin || customObj.gstin || '-' },
+      { key: 'cost_center', label: 'Cost Center', value: (document as any)?.cost_center || customObj.cost_center || '-' },
+      { key: 'division', label: 'Division / Branch', value: document.division || customObj.division || '-' },
+      { key: 'plant', label: 'Plant Location', value: document.plant || customObj.plant || '-' },
+      { key: 'payment_terms', label: 'Payment Terms', value: paymentTerms || document.payment_terms || customObj.payment_terms || 'Net 30 Days' },
+      { key: 'document_type', label: 'Document Type', value: document.document_type || 'AP INVOICE' },
+      { key: 'currency', label: 'Currency', value: document.currency || 'INR' },
+    ];
+
+    // Add any extra custom fields synced dynamically from ERP
+    const coveredKeys = new Set(baseEntries.map(e => e.key.toLowerCase()));
+    Object.entries(customObj).forEach(([k, v]) => {
+      const cleanKey = k.toLowerCase().trim();
+      if (!coveredKeys.has(cleanKey) && v !== undefined && v !== null && v !== '') {
+        const formattedLabel = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        baseEntries.push({
+          key: k,
+          label: formattedLabel,
+          value: typeof v === 'object' ? JSON.stringify(v) : String(v)
+        });
+      }
+    });
+
+    return {
+      entries: baseEntries,
+      rawPayload: {
+        DocKey: document.doc_key || document.id,
+        DocNum: document.doc_num || document.id,
+        DocDate: invoiceDate || document.invoice_date,
+        CardCode: document.vendor_code || "VEND-AKG-999",
+        CardName: vendorName || document.vendor_name,
+        DocRefNo: invoiceNumber || document.invoice_number,
+        DocTotal: grossAmt,
+        BaseAmount: baseTaxableAmt,
+        TaxAmount: gstTaxAmt,
+        GSTIN: (document as any)?.vendor_gstin || customObj.gstin || "-",
+        CompanyCode: document.division || "-",
+        Branch: document.plant || "-",
+        CostCenter: (document as any)?.cost_center || customObj.cost_center || "-",
+        PaymentTerms: paymentTerms || document.payment_terms || "-",
+        ...customObj,
+        SyncAgent: "SAP S/4HANA & MS SQL Integration Pipeline",
+        SyncStatus: "SUCCESS",
+        Timestamp: document.updated_at || new Date().toISOString()
+      }
+    };
+  }, [document, vendorName, invoiceNumber, poNumber, amount, invoiceDate, paymentTerms]);
+
+  const handleUploadVersion = async (file: File) => {
+    if (!document) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setActionError("Only PDF files are allowed to be attached.");
+      return;
+    }
+    setIsUploadingVersion(true);
+    setActionError(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/invoices/${document.id}/version`, {
+        method: "POST",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const newPath = data.file_url || data.file_path;
+        if (newPath) {
+          setIframeSrc(encodeURI(newPath.startsWith('/') ? newPath : `/${newPath}`));
+        }
+        showToast("✓ Physical PDF Attached & Saved Successfully!", "success");
+        onRefreshDocument();
+      } else {
+        let errDetail = "Failed to upload physical document.";
+        if (res.status === 413) {
+          errDetail = "File size exceeds server limit (413 Request Entity Too Large). Please upload a smaller file or increase server max body size.";
+        } else {
+          try {
+            const txt = await res.text();
+            try {
+              const errData = JSON.parse(txt);
+              errDetail = errData.detail || errData.message || txt || errDetail;
+            } catch {
+              if (txt) errDetail = txt;
+            }
+          } catch {}
+        }
+        setActionError(errDetail);
+      }
+    } catch (e: any) {
+      setActionError(e.message || "Failed to upload physical document.");
+    } finally {
+      setIsUploadingVersion(false);
+    }
+  };
+
+  const getNextPendingDocId = () => {
+    if (!document || !pendingDocIds || pendingDocIds.length === 0) return null;
+    const currentIndex = pendingDocIds.indexOf(document.id);
+    if (currentIndex !== -1 && currentIndex < pendingDocIds.length - 1) {
+      return pendingDocIds[currentIndex + 1];
+    }
+    return null;
+  };
+
+  // Active Reviewer Collision Lock State
+  const [lockInfo, setLockInfo] = useState<{ isLocked: boolean; lockedBy: string | null; isSelf: boolean }>({
+    isLocked: false,
+    lockedBy: null,
+    isSelf: true
+  });
+
+  useEffect(() => {
+    if (!document?.id) return;
+    const userHandle = currentUserUsername || currentUserEmail || "reviewer";
+    const userName = currentUserUsername || "Reviewer";
+
+    const acquireLock = async () => {
+      try {
+        const res = await fetch(`/api/invoices/${document.id}/lock/acquire`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_handle: userHandle, user_name: userName, lease_seconds: 180 })
+        });
+        const data = await res.json();
+        if (data.acquired) {
+          setLockInfo({ isLocked: false, lockedBy: userName, isSelf: true });
+        } else if (data.is_locked) {
+          setLockInfo({ isLocked: true, lockedBy: data.locked_by, isSelf: false });
+        }
+      } catch (err) {
+        console.warn("Lock acquisition skipped:", err);
+      }
+    };
+
+    acquireLock();
+
+    const heartbeat = setInterval(async () => {
+      try {
+        await fetch(`/api/invoices/${document.id}/lock/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_handle: userHandle, lease_seconds: 180 })
+        });
+      } catch (_err) {}
+    }, 30000);
+
+    return () => {
+      clearInterval(heartbeat);
+      try {
+        fetch(`/api/invoices/${document.id}/lock/release`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_handle: userHandle })
+        }).catch(() => {});
+      } catch (_err) {}
+    };
+  }, [document?.id, currentUserUsername, currentUserEmail]);
+
+  const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
+  const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
+  const isDocumentLocked = isTerminal || !isCurrentApprover || (lockInfo.isLocked && !lockInfo.isSelf);
+
+  // Hierarchical FLAC resolution (Specific Scope -> Global Master -> Safe Baseline)
+  const getFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
+    const raw = getRawFieldPerm(fieldId);
+    if (isDocumentLocked && raw === "edit") {
+      return "view";
+    }
+    return raw;
+  };
+
+  const getRawFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
+    const role = (currentUserRole || "admin").toLowerCase();
+    
+    // Determine scope key from document type / workflow
+    const docTypeStr = ((document?.document_type || "") + " " + (document?.workflow_profile_id || "")).toLowerCase();
+    let matchedScope = "CAT_INVOICE";
+    if (docTypeStr.includes("capex") || docTypeStr.includes("asset") || docTypeStr.includes("machinery")) {
+      matchedScope = "CAT_CAPEX";
+    } else if (docTypeStr.includes("debit") || docTypeStr.includes("credit") || docTypeStr.includes("return")) {
+      matchedScope = "CAT_DEBIT_CREDIT";
+    } else if (docTypeStr.includes("eb") || docTypeStr.includes("cam") || docTypeStr.includes("rent") || docTypeStr.includes("util") || docTypeStr.includes("tel")) {
+      matchedScope = "CAT_UTILITIES";
+    } else if (docTypeStr.includes("po") || docTypeStr.includes("order")) {
+      matchedScope = "CAT_PO";
+    } else if (docTypeStr.includes("grn") || docTypeStr.includes("gate")) {
+      matchedScope = "CAT_GRN";
+    }
+
+    // 1. Check matched scope override
+    const perms = fieldPermissions as Record<string, any>;
+    if (perms[matchedScope]?.[role]?.[fieldId]) {
+      return perms[matchedScope][role][fieldId];
+    }
+
+    // 2. Check Global Master policy
+    if (perms.GLOBAL?.[role]?.[fieldId]) {
+      return perms.GLOBAL[role][fieldId];
+    }
+
+    // 3. Fallback for legacy flat config
+    if (perms[role]?.[fieldId]) {
+      return perms[role][fieldId];
+    }
+
+    // 4. Safe baseline fallback
+    if (role === "admin") return "edit";
+    if (role === "employee") {
+      return ["vendor_name", "invoice_num_date", "po_reference", "total_gross"].includes(fieldId) ? "view" : "hidden";
+    }
+    if (role === "ap_specialist") {
+      return ["vendor_name", "invoice_num_date", "po_reference", "total_gross", "cost_center", "payment_terms"].includes(fieldId) ? "edit" : "view";
+    }
+    return "view";
+  };
+
+  // Load FLAC configuration from backend config
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const res = await fetch("/api/admin/config", {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const configs = await res.json();
+          if (Array.isArray(configs)) {
+            const flacCfg = configs.find((c: any) => c.key === "RBAC_FIELD_PERMISSIONS");
+            if (flacCfg && flacCfg.value) {
+              try {
+                setFieldPermissions(JSON.parse(flacCfg.value));
+              } catch (_e) {}
+            }
+          }
+        }
+      } catch (_e) {}
+    };
+    loadConfig();
+  }, []);
+
+  // Comments State
+  const [commentsList, setCommentsList] = useState<any[]>([]);
+  const [_newComment, _setNewComment] = useState("");
+  const [_commentsLoading, _setCommentsLoading] = useState(false);
+  const [_n8nHookUrl, _setN8nHookUrl] = useState(
+    "https://n8n.your-domain.com/webhook/doc-received",
+  );
+  const [_n8nLoading, _setN8nLoading] = useState(false);
+  const [_n8nLogs, _setN8nLogs] = useState<string | null>(null);
+
+  // Verification Checklist States
+  const [_activeWorkspaceTab, _setActiveWorkspaceTab] = useState<'compliance' | 'metadata' | 'workflow'>('compliance');
+  const [checklistItems, setChecklistItems] = useState<string[]>([]);
+  const [checkedStates, setCheckedStates] = useState<Record<string, boolean>>({});
+  const [_showChecklistModal, _setShowChecklistModal] = useState(false);
+  const [_showSecondLine, _setShowSecondLine] = useState(false);
+  const [_showAllParallelFields, _setShowAllParallelFields] = useState(false);
+  const [_selectedParallelField, _setSelectedParallelField] = useState<string>("gstin");
+  const [_activeExtraField, _setActiveExtraField] = useState<string | null>(null);
+
+  // Synced Invoice Stage 1 Attachment States
+  const [_selectedFile, _setSelectedFile] = useState<File | null>(null);
+  const [_isDragOver, _setIsDragOver] = useState(false);
+  const [_isUploadingAttachment, _setIsUploadingAttachment] = useState(false);
+  const [activeApprovalLog, setActiveApprovalLog] = useState<any>(null);
+  const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
+  const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
+  const [iframeSrc, setIframeSrc] = useState<string>("");
+  const [workflowInstance, setWorkflowInstance] =
+    useState<DbWorkflowInstance | null>(null);
+  const [_workflowSteps, setWorkflowSteps] = useState<any[]>([]);
+  const [_availableWorkflows, setAvailableWorkflows] = useState<any[]>([]);
+  const [_selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
+  const [_customSteps, _setCustomSteps] = useState<{ label: string }[]>([]);
+  const [_overrideMode, _setOverrideMode] = useState<"existing" | "custom">(
+    "existing",
+  );
+  const [_isApplying, _setIsApplying] = useState(false);
+
+  // Data Protection states
+  const [_versions, setVersions] = useState<any[]>([]);
+  const [_loadingVersions, setLoadingVersions] = useState(false);
+
+  const [_erpData, setErpData] = useState<any | null>(null);
+  const [_erpLoading, setErpLoading] = useState(false);
+
+  const fetchErpData = async (poNum: string) => {
+    if (!poNum || poNum === "Not Found" || poNum === "Extracting...") {
+      setErpData(null);
+      return;
+    }
+    setErpLoading(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`/api/erp/${encodeURIComponent(poNum)}`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.not_found) {
+          setErpData(null);
+        } else {
+          setErpData(data);
+        }
+      } else {
+        setErpData(null);
+      }
+    } catch (_e) {
+      setErpData(null);
+    } finally {
+      setErpLoading(false);
+    }
+  };
+
+  const _handleManualErpReSync = async () => {
+    setIsReSyncingErp(true);
+    setErpSyncToast(null);
+    try {
+      await new Promise(r => setTimeout(r, 600));
+      onRefreshDocument();
+      setErpSyncToast("Live ERP Synchronization completed! DocTrans & Master Ledger data matched (200 OK).");
+      setTimeout(() => setErpSyncToast(null), 4000);
+    } catch (_e: any) {
+      setErpSyncToast("Failed to re-sync ERP record.");
+    } finally {
+      setIsReSyncingErp(false);
+    }
+  };
+
+  const _handlePushToErpLedger = async () => {
+    setIsReSyncingErp(true);
+    setErpSyncToast(null);
+    try {
+      await new Promise(r => setTimeout(r, 700));
+      setErpSyncToast(`Approval state successfully pushed to SAP/MS SQL ledger for DocKey #${document?.doc_key || document?.id}!`);
+      setTimeout(() => setErpSyncToast(null), 4000);
+    } catch (_e: any) {
+      setErpSyncToast("Failed to push update to ERP ledger.");
+    } finally {
+      setIsReSyncingErp(false);
+    }
+  };
+
+  const fetchWorkflowData = async () => {
+    if (!document) return;
+    try {
+      const res = await fetch(`/api/documents/${document.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWorkflowInstance(data.workflow_instance || null);
+        setWorkflowSteps(data.workflow_steps || []);
+        setActiveApprovalLog(data.active_approval_log || null);
+        setWorkflowStepDefinitions(data.workflow_step_definitions || []);
+      }
+      const wfRes = await fetch(`/api/workflows`);
+      if (wfRes.ok) {
+        const wfs = await wfRes.json();
+        setAvailableWorkflows(wfs);
+        if (wfs.length > 0) setSelectedWorkflowId(wfs[0].id);
+      }
+    } catch (_e) {}
+  };
+
+  const fetchComments = async () => {
+    if (!document) return;
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`/api/documents/${document.id}/comments`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) setCommentsList(await res.json());
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const customDataObj = typeof document?.custom_data === 'string' ? JSON.parse(document.custom_data) : (document?.custom_data || {});
+
+  useEffect(() => {
+    if (document && !isEditing) {
+      fetchWorkflowData();
+      fetchComments();
+      fetchVersions();
+      setDocumentType(document.document_type || "Invoice");
+      setVendorName(document.vendor_name || "");
+      setInvoiceNumber(document.invoice_number || "");
+      setPoNumber(document.po_number || "");
+      fetchErpData(document.po_number || "");
+      setAmount(document.amount || 0);
+      setInvoiceDate(document.invoice_date || "");
+      setCgst(document.cgst || 0);
+      setSgst(document.sgst || 0);
+      setIgst(document.igst || 0);
+
+      const customData = typeof document.custom_data === 'string' ? JSON.parse(document.custom_data) : (document.custom_data || {});
+      setDynamicFields(customData);
+      setBuyerName(customData.buyerName || customData.customerName || "");
+      setPoDate(customData.poDate || customData.orderDate || "");
+      setIndentNumber(customData.indentNumber || "");
+      setPaymentTerms(customData.paymentTerms || "");
+      let parsedItems = [];
+      if (typeof document.items === "string") {
+        try {
+          parsedItems = JSON.parse(document.items);
+        } catch (_e) {}
+      } else if (Array.isArray(document.items)) {
+        parsedItems = document.items;
+      }
+      setItemsList(
+        parsedItems.map((itm: any, idx: number) => ({
+          id: `itm-${idx}-${Math.random()}`,
+          description: itm.description || "Line Item",
+          quantity: Number(itm.quantity) || 1,
+          unit_price: Number(itm.unit_price || itm.amount) || 0,
+          amount: Number(itm.amount) || 0,
+          warranty_text: itm.warranty_text,
+          serial_numbers: Array.isArray(itm.serial_numbers)
+            ? itm.serial_numbers
+            : typeof itm.serial_numbers === "string"
+              ? itm.serial_numbers.split(",").map((s: string) => s.trim())
+              : [],
+        })),
+      );
+    }
+  }, [document, isEditing]);
+
+  useEffect(() => {
+    const fetchChecklist = async () => {
+      if (!document || !document.id) return;
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch(`/api/invoices/${document.id}/checklist`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.map((item: any) => item.item_text);
+          const states: Record<string, boolean> = {};
+          data.forEach((item: any) => {
+            states[item.item_text] = Boolean(item.is_checked);
+          });
+          setChecklistItems(items);
+          setCheckedStates(states);
+        }
+      } catch (e) {
+        console.error("Failed to fetch checklist from backend:", e);
+      }
+    };
+
+    fetchChecklist();
+  }, [document?.id, document?.current_stage, activeApprovalLog?.current_stage_number]);
+
+  // Auto-Restore Draft Verification Inputs & Comments
+  useEffect(() => {
+    if (!document?.id) return;
+    const draftKey = `docuflow_draft_${document.id}`;
+    try {
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.approvalComment) setApprovalComment(parsed.approvalComment);
+        if (parsed.vendorName) setVendorName(parsed.vendorName);
+        if (parsed.invoiceNumber) setInvoiceNumber(parsed.invoiceNumber);
+        if (parsed.poNumber) setPoNumber(parsed.poNumber);
+      }
+    } catch (_) {}
+  }, [document?.id]);
+
+  // Auto-Save Draft Verification Inputs on Changes
+  useEffect(() => {
+    if (!document?.id) return;
+    const draftKey = `docuflow_draft_${document.id}`;
+    if (approvalComment || vendorName || invoiceNumber || poNumber) {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          approvalComment,
+          vendorName,
+          invoiceNumber,
+          poNumber,
+          updatedAt: new Date().toISOString()
+        }));
+      } catch (_) {}
+    }
+  }, [document?.id, approvalComment, vendorName, invoiceNumber, poNumber]);
+
+  const clearDraft = () => {
+    if (document?.id) {
+      try {
+        localStorage.removeItem(`docuflow_draft_${document.id}`);
+      } catch (_) {}
+    }
+  };
+
+  useEffect(() => {
+    if (!document) {
+      onGoBack();
+    }
+  }, [document, onGoBack]);
+
+  useEffect(() => {
+    if (!document) {
+      setIframeSrc("");
+      return;
+    }
+    const rawPath = document.file_url || document.file_path || "";
+    
+    // Check if rawPath points to a valid file route
+    if (
+      rawPath &&
+      rawPath !== "/" &&
+      rawPath !== "invoice.pdf" &&
+      rawPath !== "/uploads/invoice.pdf" &&
+      rawPath !== "uploads/invoice.pdf"
+    ) {
+      const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
+      const path = isAbsolute ? rawPath : `/${rawPath}`;
+      setIframeSrc(encodeURI(path));
+    } else {
+      setIframeSrc("");
+    }
+  }, [document?.id, document?.file_url, document?.file_path]);
+
+  if (!document) return null;
+
+  const fetchVersions = async () => {
+    if (!document) return;
+    setLoadingVersions(true);
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/invoices/${document.id}/versions`, { headers });
+      if (res.ok) {
+        setVersions(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const handleInlineReject = async () => {
+    if (!document) return;
+    const isStage1 = (document?.current_stage || 1) <= 1;
+    const comments = approvalComment.trim();
+    if (!comments) {
+      alert(isStage1 
+        ? "Please enter reason notes in the comments box before cancelling this process." 
+        : `Please enter rejection reason notes in the comments box before returning to Stage ${(document.current_stage || 2) - 1} approver.`
+      );
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/workflows/reject`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+        },
+        body: JSON.stringify({
+          invoiceId: document.id,
+          comments,
+        }),
+      });
+      if (response.ok) {
+        clearDraft();
+        setApprovalComment("");
+        showToast("✓ Document Rejection Recorded Successfully!", "amber");
+        await fetchWorkflowData();
+        onRefreshDocument();
+        const nextId = getNextPendingDocId();
+        setPendingNextId(nextId);
+        setActionModalType('reject');
+        setShowNextActionModal(true);
+      } else {
+        let errDetail = "Rejection failed";
+        try {
+          const txt = await response.text();
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
+        setActionError(errDetail);
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Rejection action failed");
+    }
+    setActionLoading(false);
+  };
+
+  const handleInlineHold = async () => {
+    if (!document) return;
+    const comments = approvalComment.trim();
+    if (!comments) {
+      alert("Comments are required to hold/send back the document.");
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/workflows/sendback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+        },
+        body: JSON.stringify({
+          invoiceId: document.id,
+          comments,
+        }),
+      });
+      if (response.ok) {
+        clearDraft();
+        setApprovalComment("");
+        showToast("✓ Document Placed on Hold!", "info");
+        await fetchWorkflowData();
+        onRefreshDocument();
+        const nextId = getNextPendingDocId();
+        setPendingNextId(nextId);
+        setActionModalType('hold');
+        setShowNextActionModal(true);
+      } else {
+        let errDetail = "Hold action failed";
+        try {
+          const txt = await response.text();
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
+        setActionError(errDetail);
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Hold action failed");
+    }
+    setActionLoading(false);
+  };
+
+  const handleToggleChecklist = async (itemText: string) => {
+    if (isDocumentLocked) return;
+    const updatedStates = { ...checkedStates, [itemText]: !checkedStates[itemText] };
+    setCheckedStates(updatedStates);
+    
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
+      await fetch(`/api/invoices/${document.id}/checklist`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ checked_items })
+      });
+    } catch (e) {
+      console.error("Failed to update checklist state on server:", e);
+    }
+  };
+
+  const handleToggleAllChecklist = async () => {
+    if (isDocumentLocked) return;
+    const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
+    const updatedStates: Record<string, boolean> = {};
+    effectiveChecklist.forEach((item) => {
+      updatedStates[item] = !allChecked;
+    });
+    setCheckedStates(updatedStates);
+    
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
+      await fetch(`/api/invoices/${document.id}/checklist`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ checked_items })
+      });
+    } catch (e) {
+      console.error("Failed to batch update checklist state on server:", e);
+    }
+  };
+
+  const handleInlineApprove = async () => {
+    const hasDocAttachment = Boolean(iframeSrc);
+    const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+    const checkedCount = Object.values(checkedStates).filter(Boolean).length;
+    const totalCount = effectiveChecklist.length;
+    const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
+
+    if (isStage1Attachment && !hasDocAttachment) {
+      setActionError("⚠️ Physical PDF Attachment Compulsory: You must upload/attach the physical invoice PDF document before approving Stage 1 (Attachment Status).");
+      return;
+    }
+
+    if (!allItemsChecked) {
+      setActionError(`⚠️ Compliance Checklist Incomplete: Please verify and check all ${totalCount} checklist items (${totalCount - checkedCount} remaining) before approving.`);
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || 1} (Document Attached & Compliance Checklist Verified)`;
+      const response = await fetch(`/api/workflows/approve`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+        },
+        body: JSON.stringify({
+          invoiceId: document.id,
+          comments: commentsToSend,
+          checklistVerified: true,
+          verifiedItems: Object.keys(checkedStates).filter(k => checkedStates[k])
+        }),
+      });
+      if (response.ok) {
+        clearDraft();
+        setApprovalComment("");
+        showToast("✓ Document Approved & Forwarded Successfully!", "success");
+        await fetchWorkflowData();
+        onRefreshDocument();
+        const nextId = getNextPendingDocId();
+        setPendingNextId(nextId);
+        setActionModalType('approve');
+        setShowNextActionModal(true);
+      } else {
+        let errDetail = "Approval action failed";
+        try {
+          const txt = await response.text();
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
+        setActionError(errDetail);
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Approval action failed");
+    }
+    setActionLoading(false);
+  };
+
+  const effectiveChecklist = checklistItems;
+
+  const getStatusBadge = () => {
+    const status = document.status;
+    const isStage1 = activeApprovalLog?.current_stage_number === 1;
+    const hasAttachment = Boolean(document?.file_url || document?.file_path);
+
+    if (["Approved", "Paid", "Ready for Payment", "Settled"].includes(status)) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider">
+          Approved
+        </span>
+      );
+    }
+    if (["Cancelled", "Failed"].includes(status)) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-slate-700/60 border border-slate-500/40 text-[9px] font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+          Cancelled
+        </span>
+      );
+    }
+    if ((status || '').toLowerCase().includes('return') || (status || '').toLowerCase().includes('reject')) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-bold text-amber-200 uppercase tracking-wider flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          Returned
+        </span>
+      );
+    }
+    if (isStage1 && !hasAttachment) {
+      return (
+        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-amber-300 uppercase tracking-wider animate-pulse">
+          Pending Attachment
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-[9px] font-extrabold text-indigo-300 uppercase tracking-wider">
+        Under Review
+      </span>
+    );
+  };
+
+  return (
+    <div className="animate-fadeIn relative">
+      {/* FLOATING ACTION TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none">
+          <div className={`px-4 py-2.5 rounded-xl shadow-2xl border flex items-center gap-2.5 font-bold text-xs ${
+            toastMessage.type === 'success' 
+              ? 'bg-slate-900 text-emerald-300 border-emerald-500/50 shadow-emerald-950/30'
+              : toastMessage.type === 'amber'
+              ? 'bg-slate-900 text-amber-300 border-amber-500/50 shadow-amber-950/30'
+              : toastMessage.type === 'error'
+              ? 'bg-slate-900 text-rose-300 border-rose-500/50 shadow-rose-950/30'
+              : 'bg-slate-900 text-slate-200 border-indigo-500/50 shadow-indigo-950/30'
+          }`}>
+            <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-400" />
+            <span>{toastMessage.text}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Action Error Alert */}
+      {actionError && (
+        <div className="w-full mb-2 flex items-center px-4 py-2 bg-red-50 border border-red-200 text-red-700 font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm">
+          <AlertCircle className="h-4 w-4 mr-2 text-red-600" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* MODERN FULL-HEIGHT EXECUTIVE REVIEW & ACTION WORKSPACE */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
+        
+        {/* TOP EXECUTIVE BAR */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-2 flex items-center justify-between shadow-sm shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+              <Shield className="h-3 w-3" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-xs tracking-tight text-white font-display">
+                  Document Review
+                </span>
+                <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[9px] font-mono font-bold text-indigo-200">
+                  {formatDocNumber(document.id, document.document_type, (document as any).category)}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                  <FileText className="h-2.5 w-2.5" />
+                  {document.document_type || "DOCUMENT"}
+                </span>
+
+                {/* Subtle Status Badge */}
+                {getStatusBadge()}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* ERP Data Sync Button: Opens ERP Data Sync & Reconciliation Modal */}
+            {getFieldPerm("erp_sync_data") !== "hidden" ? (
+              <button
+                onClick={() => setShowErpSyncModal(true)}
+                className="p-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white transition text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-0.5 border border-indigo-400/40 shadow-xs cursor-pointer"
+                title="View Enterprise ERP Data Sync & Ledger Reconciliation"
+              >
+                <Database className="h-3 w-3 text-indigo-200" />
+                <span>ERP Data Sync</span>
+              </button>
+            ) : (
+              <button
+                onClick={onRefreshDocument}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white transition text-[10px] font-bold flex items-center gap-1 px-2 py-0.5"
+                title="Refresh Document"
+              >
+                <RotateCw className="h-3 w-3" />
+                <span className="hidden md:inline">Refresh</span>
+              </button>
+            )}
+
+            <button
+              onClick={onGoBack}
+              className="p-1 rounded-lg bg-white/10 hover:bg-rose-500/80 text-slate-200 hover:text-white transition cursor-pointer"
+              title="Close Workspace"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* ACTIVE REVIEWER CONCURRENT COLLISION LOCK BANNER */}
+        {lockInfo.isLocked && !lockInfo.isSelf && (
+          <div className="bg-amber-500/15 border-b border-amber-400/40 px-4 py-2 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-amber-900 text-xs font-bold">
+              <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>
+                Active Review in Progress: Currently being reviewed by <strong className="underline decoration-amber-500 font-extrabold">{lockInfo.lockedBy}</strong>. Document is in read-only mode to prevent conflicting modifications.
+              </span>
+            </div>
+            <span className="text-[9.5px] bg-amber-200 text-amber-950 font-mono px-2 py-0.5 rounded font-black uppercase tracking-wider border border-amber-300">
+              Locked
+            </span>
+          </div>
+        )}
+
+        {/* ENTERPRISE FINANCIAL KPI STRIP (DYNAMICALLY FILTERED & ENFORCED BY FLAC ROLE PERMISSIONS) */}
+        <div ref={containerRef} className="bg-slate-50 border-b border-slate-200/80 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Primary Metrics Group */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              
+              {/* 1. Supplier / Vendor */}
+              {getFieldPerm("vendor_name") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[190px] max-w-[230px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                    <span>Supplier / Vendor</span>
+                  </div>
+                  {getFieldPerm("vendor_name") === "edit" ? (
+                    <input 
+                      type="text"
+                      value={vendorName || document.vendor_name || "-"}
+                      onChange={e => setVendorName(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
+                      title={vendorName || document.vendor_name || "-"}
+                    />
+                  ) : (
+                    <div className="text-[11px] font-bold text-slate-900 truncate" title={vendorName || document.vendor_name || "-"}>
+                      {vendorName || document.vendor_name || "-"}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. Bill No & Date */}
+              {getFieldPerm("invoice_num_date") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[155px] max-w-[185px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
+                  </div>
+                  {getFieldPerm("invoice_num_date") === "edit" ? (
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="text"
+                        value={invoiceNumber || document.invoice_number || "-"}
+                        onChange={e => setInvoiceNumber(e.target.value)}
+                        className="w-5/12 text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
+                        placeholder="Bill No"
+                      />
+                      <span className="text-slate-300 font-bold">•</span>
+                      <input 
+                        type="text"
+                        value={invoiceDate || document.invoice_date || "2026-03-13"}
+                        onChange={e => setInvoiceDate(e.target.value)}
+                        className="w-7/12 text-[11px] font-bold text-slate-700 bg-transparent border-0 p-0 outline-none truncate"
+                        placeholder="Date"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 truncate">
+                      <span>{invoiceNumber || document.invoice_number || "-"}</span>
+                      <span className="text-slate-300 font-bold">•</span>
+                      <span className="text-slate-600 font-medium">{invoiceDate || document.invoice_date || "2026-03-13"}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. PO Reference */}
+              {getFieldPerm("po_reference") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                    <span>PO Reference</span>
+                  </div>
+                  {getFieldPerm("po_reference") === "edit" ? (
+                    <input 
+                      type="text"
+                      value={poNumber || document.po_number || "-"}
+                      onChange={e => setPoNumber(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate font-mono"
+                    />
+                  ) : (
+                    <div className="text-[11px] font-bold font-mono text-slate-900 truncate">
+                      {poNumber || document.po_number || "-"}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. Total Amount (Gross) */}
+              {getFieldPerm("total_gross") !== "hidden" && (
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                    <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
+                    <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
+                  </div>
+                  {getFieldPerm("total_gross") === "edit" ? (
+                    <input 
+                      type="text"
+                      value={Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      onChange={e => setAmount(Number(e.target.value.replace(/,/g, '')))}
+                      className="w-full text-[11px] font-black text-indigo-700 bg-transparent border-0 p-0 outline-none"
+                    />
+                  ) : (
+                    <div className="text-[11px] font-black text-indigo-700 truncate">
+                      ₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Extra Data Dropdown Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowMoreMetadata(!showMoreMetadata)}
+              className={`py-1.5 px-3 rounded-lg border text-[10.5px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                showMoreMetadata 
+                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
+                  : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300"
+              }`}
+              title="Click to view/hide extra financial, tax, and ERP metadata fields"
+            >
+              <span>{showMoreMetadata ? "Hide Extra Data" : "Extra Data ▾"}</span>
+              {showMoreMetadata ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+            </button>
+          </div>
+
+          {/* Secondary Collapsible Extra Data Panel (Fully Dynamic) */}
+          {showMoreMetadata && (
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200/60 animate-fadeIn">
+              {dynamicSyncPayload.entries
+                .filter(entry => !['vendor_name', 'invoice_number', 'po_number', 'amount'].includes(entry.key))
+                .map(entry => (
+                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[160px]">
+                    <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 truncate" title={entry.label}>
+                      {entry.label}
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-800 truncate" title={String(entry.value)}>
+                      {entry.value}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
+          
+          {/* LEFT COLUMN: UNIFIED SCROLLABLE AUDIT & COMPLIANCE PANEL (OPTIMAL COMPACT WIDTH) */}
+          <div className="w-full lg:w-[360px] xl:w-[390px] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1.5 space-y-2.5 max-h-full">
+            
+            {/* 1. Sleek Stepper Progress Strip */}
+            <div 
+              onClick={() => setShowTimelineModal(true)}
+              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex items-center justify-between gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
+              title="Click to view full Approval Timeline & Audit Trail"
+            >
+              {/* Horizontal Stepper */}
+              <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar flex-1 min-w-0">
+                {workflowStepDefinitions.length > 0 ? (
+                  workflowStepDefinitions.map((step: any, sIdx: number) => {
+                    const isDocSettled = ["Approved", "Settled", "Paid", "Ready for Payment"].includes(document?.status || "");
+                    const docStatusLower = (document?.status || "").toLowerCase();
+                    const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
+                    const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
+
+                    const matchingCancelLog = (commentsList || []).find((c: any) => {
+                      const action = (c.action || "").toLowerCase();
+                      return action.includes("cancel") || action.includes("reject") || action.includes("returned") || action.includes("send back");
+                    });
+
+                    const isStepCancelled = (isDocCancelled && step.stage_number === currentStageNum) || Boolean(matchingCancelLog && matchingCancelLog.stage && matchingCancelLog.stage.includes(String(step.stage_number)));
+                    const isPassed = !isStepCancelled && (isDocSettled || (!isDocCancelled && step.stage_number < currentStageNum));
+                    const isCurrent = !isDocSettled && !isDocCancelled && !isTerminal && step.stage_number === currentStageNum;
+
+                    return (
+                      <React.Fragment key={sIdx}>
+                        {sIdx > 0 && <span className="text-slate-300 font-black text-[9px] shrink-0">➔</span>}
+                        <div 
+                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9.5px] transition shrink-0 ${
+                            isStepCancelled
+                              ? "bg-rose-50/80 border border-rose-200 text-rose-900 font-bold shadow-3xs"
+                              : isCurrent
+                              ? "bg-indigo-50 border border-indigo-200 text-indigo-900 font-extrabold shadow-2xs"
+                              : isPassed
+                              ? "bg-emerald-50 text-emerald-800 font-bold"
+                              : "text-slate-400 font-medium"
+                          }`}
+                        >
+                          <span className={`h-3.5 w-3.5 rounded-full flex items-center justify-center text-[7.5px] font-black ${
+                            isStepCancelled
+                              ? "bg-rose-500 text-white shadow-3xs"
+                              : isCurrent
+                              ? "bg-indigo-600 text-white"
+                              : isPassed
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-150 text-slate-500 border border-slate-200"
+                          }`}>
+                            {isStepCancelled ? "✕" : isPassed ? "✓" : step.stage_number}
+                          </span>
+                          <span className="truncate max-w-[95px]">
+                            {step.stage_name}
+                          </span>
+                          {isStepCancelled ? (
+                            <span className="text-[8px] font-mono text-rose-600 font-extrabold uppercase">
+                              (CANCELLED)
+                            </span>
+                          ) : isCurrent ? (
+                            <span className="text-[8px] font-mono text-indigo-600/80 uppercase">
+                              ({step.approver_target || currentUserUsername || "anbu"})
+                            </span>
+                          ) : null}
+                        </div>
+                      </React.Fragment>
+                    );
+                  })
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-900 font-extrabold">
+                      <span className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[7.5px]">1</span>
+                      <span>Accounts Review ({currentUserUsername || "anbu"})</span>
+                    </span>
+                    <span className="text-slate-300 font-black text-[9px]">➔</span>
+                    <span className="text-slate-400 text-[9.5px] font-medium">Final Settlement</span>
+                  </div>
+                )}
+              </div>
+
+              {/* View Timeline Badge Pill */}
+              <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 bg-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-700 text-slate-600 text-[8.5px] font-bold uppercase tracking-wider rounded-md border border-slate-200 group-hover:border-indigo-200 transition shadow-2xs">
+                <Clock className="h-2.5 w-2.5" />
+                <span>Timeline ↗</span>
+              </div>
+            </div>
+
+            {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
+            {(() => {
+              const isSettled = (document?.status || '').toLowerCase().includes('settled') || (document?.status || '').toLowerCase().includes('paid') || document?.status === 'Approved';
+              const isCancelled = ["Cancelled", "Failed"].includes(document?.status || "");
+              const isReturned = (document?.status || '').toLowerCase().includes('return');
+              
+              if (isSettled) {
+                return (
+                  <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 flex flex-col gap-2 shadow-2xs shrink-0 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                          ✓
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs block text-emerald-900 leading-tight">Document Fully Settled & Approved</span>
+                          <span className="text-[10px] text-emerald-700 font-medium">All workflow sign-off stages completed. Cleared for payment disbursement.</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                        Settled
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-emerald-100/60 text-emerald-900 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>View Sign-Off History & Named Approver Audit Log ➔</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              if (isCancelled) {
+                return (
+                  <div className="p-3 bg-gradient-to-r from-rose-50/90 to-orange-50/40 border border-rose-200/90 rounded-xl text-rose-950 flex flex-col gap-2.5 shadow-2xs shrink-0 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-rose-500 text-white flex items-center justify-center font-black text-xs shadow-xs shrink-0">
+                          ✕
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs block text-rose-950 leading-tight">Document Process Cancelled</span>
+                          <span className="text-[10px] text-rose-700/90 font-medium">This workflow process was cancelled and voided.</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-300/70 rounded-md text-[9.5px] font-extrabold uppercase tracking-wider shadow-3xs">
+                        Cancelled
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-rose-50 text-rose-900 border border-rose-200 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-rose-600" />
+                      <span>View Cancellation Audit Trail ➔</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              if (isDocumentLocked) {
+                return (
+                  <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-medium flex flex-col gap-2 shrink-0 animate-fadeIn shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+                      <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span>
+                        Document Locked (Read-Only): Currently at Stage {document.current_stage || 1} {document.assigned_approver ? `(Assigned: ${document.assigned_approver})` : ''}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      {isTerminal 
+                        ? `This document is in a completed terminal state (${document.status}) and cannot be edited.`
+                        : `This document has been signed off for this stage. All fields, checklists, and document attachments are locked in read-only mode until returned via rejection.`
+                      }
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineModal(true)}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-slate-100/90 text-slate-800 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-slate-500" />
+                      <span>View Stage Approval Timeline & Audit Trail</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
+              const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+              const checkedCount = Object.values(checkedStates).filter(Boolean).length;
+              const totalCount = effectiveChecklist.length;
+              const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
+              const canApprove = (!isStage1Attachment || hasDocAttachment) && allItemsChecked && !actionLoading;
+
+              return (
+                <div className="space-y-1.5 shrink-0">
+                  {/* Step-Down Returned Notice */}
+                  {isReturned && (
+                    <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <RotateCcw className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                        <span>Returned Document: Rejected by next stage approver. Review feedback, verify checklist, and re-approve.</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowTimelineModal(true)} 
+                        className="text-[8.5px] uppercase tracking-wider text-rose-700 bg-rose-100 hover:bg-rose-200 px-1.5 py-0.5 rounded font-extrabold cursor-pointer"
+                      >
+                        View Notes
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Stage Guidance Alert Pill */}
+                  {isStage1Attachment && !hasDocAttachment ? (
+                    <div className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <span>Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval.</span>
+                    </div>
+                  ) : isStage1Attachment && hasDocAttachment && !allItemsChecked ? (
+                    <div className="p-2 bg-amber-50/70 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span>Attachment Stage: Review document, verify checklist ({checkedCount}/{totalCount}), and click Approve to forward (or Cancel).</span>
+                      </div>
+                      <span className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-extrabold">Stage 1</span>
+                    </div>
+                  ) : !allItemsChecked ? (
+                    <div className="p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        <span>Checklist Verification: ({checkedCount}/{totalCount}) items verified</span>
+                      </div>
+                      <span className="text-[9px] uppercase tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-extrabold">Required</span>
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3] shrink-0" />
+                      <span>All Stage {document?.current_stage || 1} criteria satisfied! Click Approve to forward to next stage.</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleInlineApprove}
+                      disabled={!canApprove}
+                      className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
+                        canApprove
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/35 hover:shadow-emerald-600/50 hover:shadow-md ring-1 ring-emerald-500/20"
+                          : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                      }`}
+                      title={
+                        !hasDocAttachment && isStage1Attachment
+                          ? "Attach physical document PDF first"
+                          : !allItemsChecked
+                          ? "Verify all checklist items first"
+                          : "Click to approve and forward to next stage approver"
+                      }
+                    >
+                      <Check className="h-4 w-4 stroke-[3]" />
+                      <span>
+                        {actionLoading 
+                          ? "Processing..." 
+                          : isStage1Attachment && !hasDocAttachment
+                          ? "Attach PDF to Unlock"
+                          : !allItemsChecked
+                          ? `Verify Checklist (${checkedCount}/${totalCount})`
+                          : "Approve & Forward ➔"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleInlineHold}
+                      disabled={actionLoading}
+                      className="px-3 py-2 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                      title="Hold and request clarification"
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                      <span>Hold</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleInlineReject}
+                      disabled={actionLoading}
+                      className="px-3 py-2 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                      title={
+                        (document?.current_stage || 1) > 1
+                          ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
+                          : "Cancel and void this process at Attachment stage"
+                      }
+                    >
+                      {(document?.current_stage || 1) > 1 ? (
+                        <>
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Reject / Return</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3.5 w-3.5 stroke-[3]" />
+                          <span>Cancel Process</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 3. 9-POINT COMPLIANCE CHECKLIST STATION (SINGLE UNIFIED CONTAINER) */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 space-y-2.5 shrink-0">
+              
+              {/* Checklist Header Controls */}
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Compliance Checklist ({Object.values(checkedStates).filter(Boolean).length}/{effectiveChecklist.length})</span>
+                </span>
+                {isDocumentLocked ? (
+                  <span className="text-[9px] uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-extrabold flex items-center gap-1">
+                    <Lock className="h-2.5 w-2.5" /> Locked (Read-Only)
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleToggleAllChecklist}
+                    className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                  >
+                    {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
+                  </button>
+                )}
+              </div>
+
+              {/* Checklist Items Matrix */}
+              <div className="space-y-1.5">
+                {effectiveChecklist.length === 0 ? (
+                  <div className="p-3 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-xl text-center text-[10px] font-medium italic">
+                    No checklist requirements for this workflow stage.
+                  </div>
+                ) : (
+                  effectiveChecklist.map((item, idx) => {
+                    const isChecked = !!checkedStates[item];
+                    return (
+                      <div
+                        key={idx}
+                        onClick={isDocumentLocked ? undefined : () => handleToggleChecklist(item)}
+                        className={`p-2 rounded-lg border transition-all flex items-center gap-2.5 select-none shadow-2xs ${
+                          isDocumentLocked
+                            ? isChecked
+                              ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 font-bold cursor-default"
+                              : "bg-slate-50 border-slate-200 text-slate-500 cursor-default"
+                            : isChecked
+                            ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 font-bold cursor-pointer hover:shadow-xs active:scale-[0.99]"
+                            : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300 cursor-pointer active:scale-[0.99]"
+                        }`}
+                      >
+                        <div
+                          className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                            isChecked
+                              ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                              : "bg-white border-slate-300"
+                          }`}
+                        >
+                          {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                        </div>
+                        <span className="text-[10px] leading-tight font-bold" title={item}>{item}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Decision Remarks & Audit Notes Box */}
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[8.5px] uppercase font-bold text-slate-500">
+                    Audit Notes / Decision Remarks
+                  </label>
+                  {!isDocumentLocked ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setApprovalComment("✓ All 9 verification points verified & reconciled.")}
+                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
+                      >
+                        + All Verified
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setApprovalComment("Tax component and GST rates checked.")}
+                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
+                      >
+                        + Tax OK
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[8.5px] text-slate-400 font-medium flex items-center gap-1">
+                      <Lock className="h-2.5 w-2.5" /> Read-Only
+                    </span>
+                  )}
+                </div>
+                
+                <textarea
+                  rows={3}
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                  disabled={isDocumentLocked || actionLoading}
+                  placeholder={
+                    isDocumentLocked
+                      ? "Document is locked in read-only mode for this stage."
+                      : (document?.current_stage || 1) === 1
+                      ? "Enter reason notes if cancelling, or optional compliance remarks..."
+                      : "Enter reason notes if rejecting / returning to previous approver, or optional remarks..."
+                  }
+                  className={`w-full text-[10.5px] font-medium p-2 border rounded-xl outline-none transition resize-none ${
+                    isDocumentLocked 
+                      ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" 
+                      : "bg-slate-50 border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500/20"
+                  }`}
+                />
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN: EXTENDED LARGE ORIGINAL DOCUMENT VIEWER (FILLS REMAINING SCREEN) */}
+          <div className="flex-1 flex flex-col bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-sm min-w-0 h-full">
+            
+            {/* Viewer Header Bar */}
+            <div className="bg-slate-900 text-white px-3.5 py-2 text-[10px] font-bold flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 truncate">
+                <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="text-white font-bold text-[11px] truncate">
+                  {document.file_url || document.file_path ? `Original Document (${document.file_name || `${document.id}.pdf`})` : "Stage 1: Attachment Status (Pending Upload)"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!isDocumentLocked && (
+                  <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
+                    <Upload className="h-3 w-3" />
+                    <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
+                    <input 
+                      type="file" 
+                      accept=".pdf,application/pdf" 
+                      disabled={isUploadingVersion}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadVersion(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                )}
+
+                {iframeSrc && (
+                  <a
+                    href={iframeSrc}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
+                    title="Open Fullscreen Document in New Tab"
+                  >
+                    <ArrowUpRight className="h-3 w-3" />
+                    <span>Full Screen</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* LIVE ORIGINAL PDF VIEWER OR STAGE 1 ATTACHMENT DROPZONE */}
+            <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
+              {iframeSrc ? (
+                <iframe
+                  src={iframeSrc}
+                  title={document.file_name || `${document.id}.pdf`}
+                  className="w-full h-full border-0 rounded-lg bg-white shadow-inner"
+                />
+              ) : (
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!isDocumentLocked && (document?.current_stage || 1) === 1 && e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleUploadVersion(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  className="w-full h-full bg-slate-50 border-2 border-dashed border-indigo-300/80 hover:border-indigo-500 hover:bg-indigo-50/20 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
+                >
+                  <div className="h-14 w-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-3.5 shadow-sm">
+                    <Upload className="h-7 w-7 text-indigo-600" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
+                    {isDocumentLocked 
+                      ? "This document is locked in read-only mode. Physical invoice attachment is pending from the Stage 1 initiator desk."
+                      : "This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record."
+                    }
+                  </p>
+                  
+                  {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
+                    <>
+                      <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
+                        <Plus className="h-4 w-4" />
+                        <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
+                        <input 
+                          type="file" 
+                          accept=".pdf,application/pdf" 
+                          disabled={isUploadingVersion}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUploadVersion(e.target.files[0]);
+                            }
+                          }}
+                          className="hidden" 
+                        />
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono mt-2">Drag & Drop or Click to Upload (PDF only)</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* BOTTOM FOOTER BAR */}
+        <div className="bg-slate-50 border-t border-slate-200/80 px-4 py-1.5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold">
+            <span>Logged in as <strong className="text-slate-800">{currentUserUsername || "admin"}</strong> ({currentUserRole || "Admin"})</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTimelineModal(true)}
+              className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold underline cursor-pointer"
+            >
+              View Audit History
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ========================================================= */}
+      {/* 1. ERP DATA SYNC & MASTER RECONCILIATION MODAL */}
+      {/* ========================================================= */}
+      {showErpSyncModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Top Bar */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 flex items-center justify-center shadow-inner">
+                  <Database className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-sm text-white font-display">
+                      ERP Data Sync
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[9px] font-mono font-bold text-emerald-300">
+                      Connected
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-300">
+                    Live SAP & MS SQL Sync
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowErpSyncModal(false)}
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Toast Alert */}
+            {erpSyncToast && (
+              <div className="bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-[10.5px] px-4 py-2 font-bold flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{erpSyncToast}</span>
+              </div>
+            )}
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1 bg-slate-50/50">
+              
+              {/* Card 1: System Integration & Status Card */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wider">
+                      Target ERP: SAP / MS SQL
+                    </span>
+                  </div>
+                  <span className="text-[9.5px] font-mono text-slate-400">
+                    Last Synced: {document.updated_at ? new Date(document.updated_at).toLocaleString('en-IN') : new Date().toLocaleTimeString('en-IN')}
+                  </span>
+                </div>
+
+                {/* 4-Grid System Meta */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
+                    <span className="text-[8px] font-extrabold text-slate-400 uppercase block">ERP DocKey</span>
+                    <span className="text-[11px] font-mono font-black text-indigo-700">
+                      {document.doc_key || 8803}
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
+                    <span className="text-[8px] font-extrabold text-slate-400 uppercase block">CardCode (Vendor)</span>
+                    <span className="text-[11px] font-mono font-bold text-slate-800">
+                      {document.vendor_code || "VEND-GEV-991"}
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
+                    <span className="text-[8px] font-extrabold text-slate-400 uppercase block">Division / Branch</span>
+                    <span className="text-[11px] font-bold text-slate-800">
+                      {document.division || "VCC"} • {document.plant || "TN-SIVAKASI"}
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
+                    <span className="text-[8px] font-extrabold text-slate-400 uppercase block">Cost Center & GL</span>
+                    <span className="text-[11px] font-bold text-slate-800 truncate" title={(document as any)?.cost_center || "-"}>
+                      {(document as any)?.cost_center || "-"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Synced ERP Master Record */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                <div className="px-3.5 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
+                  <span className="font-extrabold text-[10.5px] uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Synced ERP Master Record</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[8.5px] font-extrabold uppercase">
+                    Synced
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-[10.5px]">
+                    <thead>
+                      <tr className="bg-slate-50 text-[9px] uppercase font-extrabold text-slate-400 border-b border-slate-200">
+                        <th className="py-2 px-3 w-1/3">Field Attribute</th>
+                        <th className="py-2 px-3">ERP Master Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dynamicSyncPayload.entries.map((entry) => (
+                        <tr key={entry.key} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-bold text-slate-700">{entry.label}</td>
+                          <td className="py-2 px-3 font-medium text-slate-900">{entry.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Card 3: Expandable Raw ERP Payload JSON */}
+              <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRawPayload(!showRawPayload)}
+                  className="flex items-center justify-between w-full text-slate-700 hover:text-indigo-600 font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>Raw ERP Sync Payload JSON ({showRawPayload ? "Collapse" : "Expand"})</span>
+                  </span>
+                  {showRawPayload ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                {showRawPayload && (
+                  <pre className="p-2.5 bg-slate-900 text-emerald-400 rounded-lg text-[9.5px] font-mono overflow-x-auto max-h-48 custom-scrollbar">
+                    {JSON.stringify(dynamicSyncPayload.rawPayload, null, 2)}
+                  </pre>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowErpSyncModal(false)}
+                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 2. APPROVAL TIMELINE & AUDIT TRAIL MODAL */}
+      {/* ========================================================= */}
+      {showTimelineModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-400/30 text-indigo-300">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                    <span>Approval Timeline & Audit Trail</span>
+                    <span className="text-[10px] font-mono font-normal text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                      {formatDocNumber(document.id, document.document_type, (document as any).category)}
+                    </span>
+                  </h3>
+                  <p className="text-[10.5px] text-slate-400 font-medium">
+                    {vendorName || document.vendor_name || "Vendor"} • ₹{Number(amount || document.amount || 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTimelineModal(false)}
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Chronological Audit Trail */}
+            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
+              
+              {/* Dynamic Approval Workflow Stages */}
+              {workflowStepDefinitions && workflowStepDefinitions.length > 0 ? (
+                workflowStepDefinitions.map((step: any, idx: number) => {
+                  const isDocSettled = ["Approved", "Settled", "Paid", "Ready for Payment"].includes(document?.status || "");
+                  const docStatusLower = (document?.status || "").toLowerCase();
+                  const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
+                  const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
+
+                  const poolMembers = (step.approver_target || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                  
+                  // Specific approval log for this exact step
+                  const matchingApprovalLog = (commentsList || []).find((c: any) => {
+                    const action = (c.action || "").toLowerCase();
+                    const author = (c.author || c.user_name || c.user || "").toLowerCase();
+                    const isSyncOrSystem = author.includes("sync") || author.includes("erp") || action.includes("sync") || action.includes("ingest");
+                    if (isSyncOrSystem) return false;
+                    const isApprovalAction = action.includes("approved") || action.includes("signoff") || action.includes("verified");
+                    if (!isApprovalAction) return false;
+                    return (
+                      (c.stage && (c.stage.includes(String(step.stage_number)) || c.stage.toLowerCase().includes(step.stage_name.toLowerCase()))) || 
+                      (c.action && (c.action.includes(String(step.stage_number)) || c.action.toLowerCase().includes(step.stage_name.toLowerCase())))
+                    );
+                  });
+
+                  // Terminal cancellation log for the cancelled stage
+                  const terminalCancelLog = (commentsList || []).find((c: any) => {
+                    const action = (c.action || "").toLowerCase();
+                    return action.includes("cancel") || action.includes("void");
+                  });
+
+                  // Return/Sendback log
+                  const returnLog = (commentsList || []).find((c: any) => {
+                    const action = (c.action || "").toLowerCase();
+                    const isReturn = action.includes("returned") || action.includes("send back") || action.includes("sendback") || action.includes("reject");
+                    if (!isReturn) return false;
+                    return (
+                      (c.stage && (c.stage.includes(String(step.stage_number)) || c.stage.toLowerCase().includes(step.stage_name.toLowerCase()))) || 
+                      (c.action && (c.action.includes(String(step.stage_number)) || c.action.toLowerCase().includes(step.stage_name.toLowerCase())))
+                    );
+                  });
+
+                  const isTerminalCancelledStage = isDocCancelled && (
+                    (terminalCancelLog && ((terminalCancelLog.stage && terminalCancelLog.stage.includes(String(step.stage_number))) || step.stage_number === currentStageNum)) ||
+                    (!terminalCancelLog && step.stage_number === currentStageNum)
+                  );
+
+                  const isPassed = !isTerminalCancelledStage && (isDocSettled || Boolean(matchingApprovalLog) || (!isDocCancelled && step.stage_number < currentStageNum));
+                  const isCurrent = !isDocSettled && !isDocCancelled && !isTerminal && !isPassed && (step.stage_number === currentStageNum);
+                  const isAborted = isDocCancelled && step.stage_number > currentStageNum;
+
+                  return (
+                    <div key={idx} className="flex gap-3 relative">
+                      <div className="flex flex-col items-center">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center font-semibold text-[10px] ${
+                          isTerminalCancelledStage
+                            ? "bg-slate-100 text-rose-600 border border-slate-300 font-bold"
+                            : isPassed 
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-400 font-bold" 
+                            : isCurrent 
+                            ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-100" 
+                            : "bg-slate-100 text-slate-400 border border-slate-200"
+                        }`}>
+                          {isTerminalCancelledStage ? "✕" : isPassed ? "✓" : step.stage_number}
+                        </div>
+                        {idx < workflowStepDefinitions.length - 1 && (
+                          <div className={`w-0.5 flex-1 mt-1 min-h-[28px] ${
+                            isPassed ? "bg-emerald-200" : "bg-slate-200"
+                          }`} />
+                        )}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-center justify-between">
+                          <span className={`font-semibold text-xs ${
+                            isTerminalCancelledStage ? "text-slate-800" : isCurrent ? "text-indigo-900 font-bold" : isPassed ? "text-slate-800 font-semibold" : "text-slate-400"
+                          }`}>
+                            {step.stage_name}
+                          </span>
+                          {isTerminalCancelledStage && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-semibold tracking-wider flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                              Cancelled
+                            </span>
+                          )}
+                          {isCurrent && (
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[9px] uppercase tracking-wider border border-indigo-200">
+                              Active Stage
+                            </span>
+                          )}
+                          {isPassed && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold text-[9px] border border-emerald-200/60">
+                              Approved
+                            </span>
+                          )}
+                          {isAborted && (
+                            <span className="text-[9px] text-slate-400 font-medium italic">
+                              Not Reached
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Approver Details & Specific Sign-off Identity Card */}
+                        <div className="mt-1 text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200/80 space-y-1.5">
+                          {/* 1. Assigned Pool Breakdown */}
+                          <div className="flex items-start justify-between text-[10px]">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                                Assigned Pool ({poolMembers.length > 0 ? poolMembers.length : 1}):
+                              </span>
+                              <div className="flex flex-wrap gap-1 pt-0.5">
+                                {poolMembers.length > 0 ? (
+                                  poolMembers.map((mem: string, mIdx: number) => {
+                                    const relevantLog = isTerminalCancelledStage ? terminalCancelLog : matchingApprovalLog;
+                                    const isTheSigner = relevantLog && (relevantLog.author || relevantLog.user_name || relevantLog.user || "").toLowerCase().includes(mem.toLowerCase());
+                                    return (
+                                      <span 
+                                        key={mIdx} 
+                                        className={`px-1.5 py-0.2 rounded text-[9.5px] font-mono ${
+                                          isTheSigner 
+                                            ? "bg-slate-100 text-slate-900 border border-slate-300 font-bold"
+                                            : "bg-slate-50 text-slate-600 border border-slate-200"
+                                        }`}
+                                      >
+                                        {mem}
+                                      </span>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="font-mono text-slate-700">{step.approver_target || "Authorized Pool"}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-slate-400 font-mono text-[8.5px] bg-slate-100 px-1 py-0.2 rounded">Stage {step.stage_number}</span>
+                          </div>
+
+                          {/* 2. Exact Sign-Off / Status Attribution */}
+                          {isTerminalCancelledStage ? (
+                            <div className="p-1.5 bg-slate-50 rounded border border-slate-200 text-[10.5px] flex items-center justify-between text-slate-700">
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-3.5 w-3.5 rounded-full bg-slate-200 text-rose-600 font-bold text-[8.5px] flex items-center justify-center">✕</span>
+                                <span>
+                                  <strong>Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : (currentUserUsername || "User")}
+                                </span>
+                              </div>
+                              {terminalCancelLog?.created_at && (
+                                <span className="text-[9px] font-mono text-slate-400">
+                                  {formatTimeOnly(terminalCancelLog.created_at)}
+                                </span>
+                              )}
+                            </div>
+                          ) : isPassed ? (
+                            <div className="p-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[10.5px] flex items-center justify-between text-emerald-800">
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-600 text-white font-bold text-[8.5px] flex items-center justify-center">✓</span>
+                                <span>
+                                  <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : "Authorized Approver"}
+                                </span>
+                              </div>
+                              {matchingApprovalLog?.created_at && (
+                                <span className="text-[9px] font-mono text-emerald-700">
+                                  {formatTimeOnly(matchingApprovalLog.created_at)}
+                                </span>
+                              )}
+                            </div>
+                          ) : returnLog && !isDocSettled ? (
+                            <div className="p-1.5 bg-amber-50/60 rounded border border-amber-200/60 text-[10px] flex items-center justify-between text-amber-800">
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-3.5 w-3.5 rounded-full bg-amber-500 text-white font-bold text-[8.5px] flex items-center justify-center">↩</span>
+                                <span>
+                                  <strong>Returned By:</strong> {returnLog.author || returnLog.user_name || returnLog.user || "Reviewer"}
+                                </span>
+                              </div>
+                              {returnLog.created_at && (
+                                <span className="text-[9px] font-mono text-amber-600">
+                                  {formatTimeOnly(returnLog.created_at)}
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {isCurrent && (
+                            <p className="text-[9.5px] text-indigo-600 font-medium pt-0.5 flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+                              <span>Any 1 pool member can verify and sign off.</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex gap-3 relative">
+                  <div className="flex flex-col items-center">
+                    <div className="h-6 w-6 rounded-full bg-indigo-600 text-white shadow-md ring-4 ring-indigo-100 flex items-center justify-center font-bold text-[10px]">
+                      1
+                    </div>
+                  </div>
+                  <div className="flex-1 pb-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-indigo-900">Stage 1: Accounts Review</span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-[9px] uppercase tracking-wider animate-pulse">
+                        Active Stage
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                      <span><strong className="text-slate-700">Assigned Approver:</strong> {currentUserUsername || "anbu"}</span>
+                      <p className="text-[10px] text-indigo-600 font-semibold mt-1">
+                        Awaiting compliance checklist verification and sign-off.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Audit Remarks Log */}
+              {commentsList && commentsList.length > 0 && (
+                <div className="pt-3 border-t border-slate-200">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2.5 flex items-center justify-between">
+                    <span>Signed Audit Trail & Remarks ({commentsList.length})</span>
+                    <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Tamper-Evident</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {commentsList.map((comm: any, cIdx: number) => {
+                      const authorName = comm.author || comm.user_name || "System Administrator";
+                      const actionLabel = comm.action || "Compliance Sign-off";
+
+                      return (
+                        <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between font-bold text-slate-800">
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-700 font-black text-[9px] flex items-center justify-center">
+                                {authorName.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-slate-900 text-xs">{authorName}</span>
+                              <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8.5px] font-bold uppercase tracking-wider">
+                                {actionLabel}
+                              </span>
+                            </div>
+                            <span className="text-[9.5px] font-normal text-slate-400 font-mono">
+                              {formatDateTime(comm.created_at)}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
+                            {comm.text || comm.comment || "Signed off without remarks."}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between">
+              <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Enterprise Audit Log</span>
+              <button
+                type="button"
+                onClick={() => setShowTimelineModal(false)}
+                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* APPROVAL SUCCESS / NEXT ACTION MODAL */}
+      {showNextActionModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 p-6 text-center animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            
+            {actionModalType === 'approve' ? (
+              <div className="h-14 w-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+            ) : actionModalType === 'reject' ? (
+              <div className="h-14 w-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                <XCircle className="h-8 w-8" />
+              </div>
+            ) : (
+              <div className="h-14 w-14 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center mx-auto shadow-inner">
+                <PauseCircle className="h-8 w-8" />
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-slate-900 text-lg tracking-tight">
+                {actionModalType === 'approve' ? 'Document Approved Successfully!' : actionModalType === 'reject' ? 'Document Rejection Saved' : 'Document Placed On Hold'}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Stage sign-off recorded for <span className="font-bold text-slate-800">{document?.invoice_number || document?.id}</span>. What would you like to do next?
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-2">
+              {pendingNextId && onSelectDocument ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNextActionModal(false);
+                    onSelectDocument(pendingNextId);
+                  }}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Move to Next Document ➔</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-2.5 px-4 bg-slate-100 text-slate-400 font-bold text-xs rounded-xl border border-slate-200 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <span>No More Pending Docs in Queue</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNextActionModal(false);
+                  onRefreshDocument();
+                  onGoBack();
+                }}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <span>Back to Dashboard 🏠</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

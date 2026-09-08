@@ -1,0 +1,51 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docuflow-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - FRONTEND_URL=${FRONTEND_URL:-http://192.168.179.22:8085}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=1433
+      - DB_NAME=${DB_NAME:-DocuFlowDB}
+      - DB_USER=${DB_USER:-sa}
+      - DB_PASSWORD=${DB_PASSWORD:-Admin@1234}
+      - PDF_STORAGE_PATH=/app/stored_pdfs
+      - APPROVED_PDF_PATH=/app/stored_pdfs/approved
+    restart: unless-stopped
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./stored_pdfs:/app/stored_pdfs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docuflow-frontend
+    ports:
+      - "8085:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: docuflow-db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${DB_PASSWORD:-Admin@1234}
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  mssql_data:

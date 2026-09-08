@@ -1,0 +1,6 @@
+{
+  "name": "DocuFlow Automation",
+  "description": "Automated document intake, OCR layout extraction, structured LLM parsing with Gemini, and configurable approval workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

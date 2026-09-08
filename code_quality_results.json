@@ -1,0 +1,4964 @@
+{
+  "frontend": {
+    "unused_files": [
+      "frontend/src/index.css",
+      "frontend/src/components/PolicyMatrix.jsx",
+      "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+      "frontend/src/components/GoodsReceiptPage.tsx",
+      "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+      "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+      "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+      "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+      "frontend/src/components/dapi-sync-back/SimpleSyncConfigurator.tsx",
+      "frontend/src/components/AdminRecycleBin.jsx",
+      "frontend/src/components/AdminUsers.jsx",
+      "frontend/src/components/dapi-sync-back/mockSyncBackData.ts",
+      "frontend/src/components/AdminMasterData.jsx",
+      "frontend/src/vite-env.d.ts"
+    ],
+    "unused_variables_and_functions": [
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 14,
+        "column": 8,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'IntegrationsHub' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 17,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 17,
+        "column": 36,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Clock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 18,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'io' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 187,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'_' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 194,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 219,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'_' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 227,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 260,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 310,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/App.tsx",
+        "line": 451,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminMasterData.jsx",
+        "line": 2,
+        "column": 58,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertTriangle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRACI.jsx",
+        "line": 33,
+        "column": 48,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRACI.jsx",
+        "line": 73,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 532,
+        "column": 36,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSelectedCategoryDropdown' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 548,
+        "column": 25,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSelectedScope' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 550,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'showAddCustomFieldModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 552,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setNewFieldCategory' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 599,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'selectedUserIds' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 642,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleSelectAllUsers' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 651,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleSelectUserCheckbox' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 718,
+        "column": 76,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 729,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 733,
+        "column": 79,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 737,
+        "column": 65,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 741,
+        "column": 77,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 745,
+        "column": 79,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 793,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleToggleAllFolders' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 823,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setFieldScopeRolePerm' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 846,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'getEffectiveFieldState' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 857,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isCustomizedScope' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 860,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleApplyToAllFlows' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 874,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleResetScopeToGlobal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 887,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleAddCustomField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 910,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'toggleUserPerm' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 933,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'resetUserPerm' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 943,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleUserRoleChange' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 968,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1000,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1018,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1235,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1242,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleResetDefaults' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1303,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1463,
+        "column": 29,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'removed' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1475,
+        "column": 29,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'removed' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1505,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'filteredFields' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1662,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isSelected' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminRBAC.jsx",
+        "line": 1992,
+        "column": 29,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isSelected' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminSystem.jsx",
+        "line": 2,
+        "column": 48,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'RefreshCw' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminSystem.jsx",
+        "line": 2,
+        "column": 71,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Shield' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminSystem.jsx",
+        "line": 30,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'loading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminSystem.jsx",
+        "line": 30,
+        "column": 19,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Mail' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Phone' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Key' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Check' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Lock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 23,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Smartphone' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 25,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Fingerprint' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 26,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Calendar' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 27,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 37,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'User' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 480,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 609,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/AdminUsers.jsx",
+        "line": 649,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Check' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 17,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'X' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 20,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'HelpCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 32,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileText' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 42,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'User' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 48,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'MessageCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 76,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 86,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 96,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 144,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'HelpIcon' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 154,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileKey' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 2,
+        "column": 172,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Database' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 13,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'invoices' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/ApprovalQueuePage.tsx",
+        "line": 40,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 3,
+        "column": 45,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Save' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 4,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 4,
+        "column": 41,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Filter' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 4,
+        "column": 49,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 5,
+        "column": 17,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 5,
+        "column": 33,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'SlidersHorizontal' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 5,
+        "column": 52,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Eye' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 5,
+        "column": 57,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Tag' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 5,
+        "column": 62,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'MapPin' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 11,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Check' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ListChecks' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 30,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowRight' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 42,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldAlert' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 6,
+        "column": 55,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'GitMerge' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 142,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'chkWfCategoryFilter' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 154,
+        "column": 15,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ChecklistConditionBuilder.jsx",
+        "line": 306,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'mandatoryCount' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 2,
+        "column": 40,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Save' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 2,
+        "column": 49,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Settings2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 2,
+        "column": 60,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'GripVertical' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 2,
+        "column": 74,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckCircle2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 44,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 97,
+        "column": 15,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 370,
+        "column": 73,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 475,
+        "column": 11,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 1229,
+        "column": 35,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/ConditionBuilder.jsx",
+        "line": 1266,
+        "column": 33,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertTriangle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 7,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'IndianRupee' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Cpu' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 12,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'TrendingUp' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 13,
+        "column": 15,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'BarChartIcon' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 15,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Database' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Server' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ResponsiveContainer' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 31,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'PieChart' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 41,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Pie' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 46,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Cell' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 52,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Tooltip' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 61,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Legend' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 69,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'BarChart' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 79,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Bar' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 84,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'XAxis' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 91,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'YAxis' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 28,
+        "column": 98,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CartesianGrid' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 49,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCurrentView' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 56,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'activeChartTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 56,
+        "column": 26,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveChartTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 61,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setViewScope' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 100,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'topVendorsData' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 107,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'formatCurrency' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 116,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'recentInvoices' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 120,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'totalSpentVal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 196,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'totalAssignedCount' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 214,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'statusChartData' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/Dashboard.tsx",
+        "line": 292,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'roleLabels' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 2,
+        "column": 38,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 2,
+        "column": 60,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 2,
+        "column": 73,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileText' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 2,
+        "column": 83,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 13,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveFilter' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DataVerificationPage.tsx",
+        "line": 43,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'highPriorityCount' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 4,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Cpu' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Play' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Save' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowRight' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 14,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowLeft' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 15,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Download' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Loader2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckSquare' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 22,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Trash2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 23,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Barcode' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 24,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 25,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'HelpCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 26,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 27,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Hash' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 33,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'MoreHorizontal' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 34,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Tag' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 36,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sliders' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 39,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ExternalLink' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 40,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'RefreshCw' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 46,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'InvoiceLineItem' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 142,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'activeTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 142,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 147,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setIsEditing' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 148,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'activeInputField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 148,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveInputField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 149,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'documentType' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 155,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'cgst' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 156,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'sgst' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 157,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'igst' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 160,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'templatesList' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 160,
+        "column": 25,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setTemplatesList' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 161,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'dynamicFields' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 164,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'buyerName' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 165,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'poDate' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 166,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'indentNumber' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 169,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'itemsList' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 170,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'saveLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 170,
+        "column": 23,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSaveLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 192,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isReSyncingErp' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 197,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'containerWidth' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 310,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 321,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'err' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 398,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 402,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 409,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'newComment' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 409,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setNewComment' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 410,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'commentsLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 410,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCommentsLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 411,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'n8nHookUrl' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 411,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setN8nHookUrl' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 414,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'n8nLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 414,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setN8nLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 415,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'n8nLogs' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 415,
+        "column": 19,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setN8nLogs' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 418,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'activeWorkspaceTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 418,
+        "column": 30,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveWorkspaceTab' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 421,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'showChecklistModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 421,
+        "column": 30,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setShowChecklistModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 422,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'showSecondLine' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 422,
+        "column": 26,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setShowSecondLine' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 423,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'showAllParallelFields' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 423,
+        "column": 33,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setShowAllParallelFields' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 424,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'selectedParallelField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 424,
+        "column": 33,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSelectedParallelField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 425,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'activeExtraField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 425,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setActiveExtraField' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 428,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'selectedFile' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 428,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSelectedFile' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 429,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isDragOver' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 429,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setIsDragOver' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 430,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isUploadingAttachment' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 430,
+        "column": 33,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setIsUploadingAttachment' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 435,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'workflowInstance' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 437,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'workflowSteps' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 438,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'availableWorkflows' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 439,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'selectedWorkflowId' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 440,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'customSteps' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 440,
+        "column": 23,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCustomSteps' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 441,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'overrideMode' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 441,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setOverrideMode' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 444,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'isApplying' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 444,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setIsApplying' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 447,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'versions' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 448,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'loadingVersions' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 450,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'erpData' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 451,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'erpLoading' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 474,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 481,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleManualErpReSync' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 489,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 496,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handlePushToErpLedger' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 503,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 527,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 571,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 633,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'_' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 649,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'_' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 657,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'_' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 924,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'defaultSDChecklist' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 938,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'currentStageDef' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentDetails.tsx",
+        "line": 2315,
+        "column": 29,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'stageLabel' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 2,
+        "column": 86,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 27,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'useAIExtraction' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 27,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setUseAIExtraction' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 28,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'manualData' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 28,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setManualData' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 37,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'showExtractConfirmModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/DocumentUpload.tsx",
+        "line": 37,
+        "column": 35,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setShowExtractConfirmModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 2,
+        "column": 40,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Save' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 2,
+        "column": 143,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Folder' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 2,
+        "column": 170,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 2,
+        "column": 180,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckSquare' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 4,
+        "column": 7,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'STAGE_CHECKLIST_LIBRARY' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 26,
+        "column": 7,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'getPrefixCode' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 225,
+        "column": 44,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'index' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 235,
+        "column": 46,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'idx' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/FlowBuilder.jsx",
+        "line": 450,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'DOC_TYPE_ORDER' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 12,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Send' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckCircle2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Lock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GettingStartedPage.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowRightLeft' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GoodsReceiptPage.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Plus' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GoodsReceiptPage.tsx",
+        "line": 7,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Download' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GoodsReceiptPage.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Calendar' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/GoodsReceiptPage.tsx",
+        "line": 15,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Filter' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 1,
+        "column": 42,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 1,
+        "column": 58,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'HelpCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 22,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCurrentUserRole' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 24,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCurrentUserEmail' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 25,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'stats' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Header.tsx",
+        "line": 113,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'roles' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/LoginPage.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Monitor' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'DollarSign' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 22,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldAlert' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 35,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CreditCard' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 47,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Send' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 67,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CloudLightning' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 93,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Calendar' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 2,
+        "column": 103,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'RefreshCw' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PaymentReadinessPage.tsx",
+        "line": 9,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'invoices' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 2,
+        "column": 113,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ChevronRight' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 2,
+        "column": 138,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Eye' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 5,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'editingId' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 88,
+        "column": 65,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 113,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'updateRuleFlow' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/PolicyMatrix.jsx",
+        "line": 123,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 4,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ListOrdered' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 5,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'GitBranch' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 7,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'LineChart' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Receipt' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 10,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Settings2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckSquare' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 12,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ClipboardList' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Database' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Globe' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sliders' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ListFilter' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 21,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Share2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 23,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'motion' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/Sidebar.tsx",
+        "line": 40,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'stats' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 4,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'RefreshCw' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'SlidersHorizontal' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 7,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckCircle2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 10,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ChevronRight' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Building2' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 12,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowUpDown' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Eye' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Filter' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'TrendingUp' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CreditCard' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 21,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 40,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'requireGRN' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 48,
+        "column": 18,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setSortBy' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 148,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setTrackerScope' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 167,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'kpiStats' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/WorkTrackerPage.tsx",
+        "line": 281,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'renderStatusBadge' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 4,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Lock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Clock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 14,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 15,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Code' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Check' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Play' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApiConfigTab.tsx",
+        "line": 24,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'HeaderConfig' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertTriangle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Key' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/ApplicationsTab.tsx",
+        "line": 97,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleOpenEditModal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DapiSyncBackHub.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DapiSyncBackHub.tsx",
+        "line": 40,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'fieldMappings' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DapiSyncBackHub.tsx",
+        "line": 40,
+        "column": 25,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setFieldMappings' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 10,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileText' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 37,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'hoveredBarIndex' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 37,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setHoveredBarIndex' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 38,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'hoveredTrendIndex' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 38,
+        "column": 29,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setHoveredTrendIndex' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 41,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'filteredLogs' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 275,
+        "column": 40,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'idx' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/DashboardTab.tsx",
+        "line": 399,
+        "column": 43,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'i' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+        "line": 8,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sparkles' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'RefreshCw' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+        "line": 14,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'SystemFieldOption' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+        "line": 28,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'customFieldInput' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/FieldMappingTab.tsx",
+        "line": 28,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setCustomFieldInput' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sliders' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'CheckSquare' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Lock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Code' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/RuleBuilderWizardModal.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertTriangle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SimpleSyncConfigurator.tsx",
+        "line": 6,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'XCircle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SimpleSyncConfigurator.tsx",
+        "line": 14,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sliders' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SimpleSyncConfigurator.tsx",
+        "line": 19,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Info' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SimpleSyncConfigurator.tsx",
+        "line": 120,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'onAddAppClick' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncLogsTab.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileText' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncLogsTab.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Download' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncLogsTab.tsx",
+        "line": 25,
+        "column": 21,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setAppFilter' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+        "line": 3,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Sliders' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Layers' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ArrowRight' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+        "line": 18,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldAlert' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/dapi-sync-back/SyncRulesTab.tsx",
+        "line": 20,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/ApplicationsManager.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Key' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/ApplicationsManager.tsx",
+        "line": 12,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/ApplicationsManager.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/ApplicationsManager.tsx",
+        "line": 128,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/ApplicationsManager.tsx",
+        "line": 254,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'generateRandomKey' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 1,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'useEffect' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 9,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Copy' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 14,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'ShieldCheck' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 66,
+        "column": 24,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setTriggerEvent' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 78,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 97,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 109,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 118,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'authApiKeyHeader' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 118,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setAuthApiKeyHeader' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 119,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'authApiKeyValue' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 119,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setAuthApiKeyValue' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 120,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'authBearerToken' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 120,
+        "column": 27,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setAuthBearerToken' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 123,
+        "column": 20,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setBodyType' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 124,
+        "column": 23,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setContentType' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRuleBuilder.tsx",
+        "line": 130,
+        "column": 16,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRulesPage.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Play' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/CallbackRulesPage.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Zap' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 11,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Clock' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 13,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Code' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 14,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'FileText' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 15,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'AlertTriangle' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 16,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Server' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 17,
+        "column": 3,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'Copy' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationLogsPage.tsx",
+        "line": 123,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/components/integrations/IntegrationsHub.tsx",
+        "line": 13,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'targetAppForRules' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 2,
+        "column": 71,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'GitMerge' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 33,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'openRuleEditor' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 36,
+        "column": 82,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 66,
+        "column": 10,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'templateSearchQuery' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 66,
+        "column": 31,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'setTemplateSearchQuery' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 96,
+        "column": 14,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 144,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'renderConditionChips' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 175,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 180,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleSaveRuleLocal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 210,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleSaveFlowLocal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 239,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'handleDeleteFlowLocal' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 273,
+        "column": 13,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 290,
+        "column": 43,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'id' is defined but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 403,
+        "column": 9,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'groupedSteps' is assigned a value but never used."
+      },
+      {
+        "file": "frontend/src/pages/Admin.jsx",
+        "line": 803,
+        "column": 28,
+        "rule": "@typescript-eslint/no-unused-vars",
+        "message": "'e' is defined but never used."
+      }
+    ],
+    "unused_exports": []
+  },
+  "backend": {
+    "unused_files": [
+      "backend/scripts/clear_and_post_one_doc.py",
+      "backend/app/services/integration_service.py",
+      "backend/scripts/fix_rule_and_repost.py",
+      "backend/scripts/delete_documents_only.py",
+      "backend/app/routers/sync_router.py",
+      "backend/app/routers/events.py",
+      "backend/app/routers/documents.py",
+      "backend/scripts/reset_demo_environment.py",
+      "backend/app/services/__init__.py",
+      "backend/scripts/check_doc_status.py",
+      "backend/scripts/migrate_checklist_matrix.py",
+      "backend/app/schemas/__init__.py",
+      "backend/app/services/lock_service.py",
+      "backend/scripts/check_all_rules_and_workflows.py",
+      "backend/scripts/push_canteen_maint_doc.py",
+      "backend/app/services/callback_service.py",
+      "backend/app/services/ocr_service.py",
+      "backend/scripts/backup_and_clear_rules.py",
+      "backend/scripts/seed_demo_documents.py",
+      "backend/scripts/fix_vcc_sample_rule.py",
+      "backend/scripts/__init__.py",
+      "backend/app/routers/auth.py",
+      "backend/scripts/audit_enterprise_codebase.py",
+      "backend/scripts/cleanup_users_keep_5.py",
+      "backend/app/services/pdf_compressor.py",
+      "backend/app/routers/sync.py",
+      "backend/scripts/delete_and_repost_canteen.py",
+      "backend/scripts/verify_100_percent_mapping_matrix.py",
+      "backend/scripts/assign_workflow_to_doc.py",
+      "backend/scripts/simplify_vcc_checklist_matrix.py",
+      "backend/scripts/consolidate_workflows.py",
+      "backend/scripts/purge_all_documents_and_files.py",
+      "backend/app/routers/users.py",
+      "backend/app/routers/audit.py",
+      "backend/scripts/audit_mapping_integrity.py",
+      "backend/scripts/seed_from_snapshot.py",
+      "backend/scripts/sync_to_remote_db.py",
+      "backend/scripts/create_vcc_doc.py",
+      "backend/scripts/re_evaluate_doc2.py",
+      "backend/scripts/update_doc_checklist.py",
+      "backend/scripts/reset_to_raw_posted_doc.py",
+      "backend/scripts/update_workflow_approvers.py",
+      "backend/scripts/debug_500_error.py",
+      "backend/scripts/purge_all_flows_conditions_docs_checklists.py",
+      "backend/scripts/seed_checklist_matrix.py",
+      "backend/app/routers/workflows.py",
+      "backend/scripts/verify_enterprise_app_suite.py",
+      "backend/app/routers/integrations.py",
+      "backend/scripts/post_demo_document.py",
+      "backend/scripts/cleanup_users.py",
+      "backend/scripts/sync_second_cost_center_doc.py",
+      "backend/scripts/push_it_hardware_doc.py",
+      "backend/app/config/__init__.py",
+      "backend/scripts/check_users.py",
+      "backend/app/routers/callback_integrations.py",
+      "backend/scripts/purge_all_flows_conditions_docs.py",
+      "backend/app/routers/conditions.py",
+      "backend/app/services/mfa_service.py",
+      "backend/scripts/create_vcc_ithardware_doc.py",
+      "backend/scripts/verify_db_clean_and_sync_flow.py"
+    ],
+    "unused_imports": [
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\database\\connection.py",
+        "column": "4",
+        "message": "1: F401 'app.config.BASE_DIR' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "2",
+        "message": "1: F401 'pathlib.Path' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "37",
+        "message": "5: F401 'sqlalchemy.inspect' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\models.py",
+        "column": "1",
+        "message": "1: F401 'app.database.models.*' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\auth.py",
+        "column": "3",
+        "message": "1: F401 'typing.Optional' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\auth.py",
+        "column": "3",
+        "message": "1: F401 'typing.List' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "5",
+        "message": "1: F401 'typing.List' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "5",
+        "message": "1: F401 'typing.Dict' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "6",
+        "message": "1: F401 'fastapi.Request' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "6",
+        "message": "1: F401 'fastapi.status' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "9",
+        "message": "1: F401 'app.models.Document' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "17",
+        "message": "1: F401 'app.schemas.ThirdPartyApplicationResponse' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "17",
+        "message": "1: F401 'app.schemas.CallbackRuleResponse' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\callback_integrations.py",
+        "column": "26",
+        "message": "1: F401 'app.services.callback_service.build_document_context' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\conditions.py",
+        "column": "1",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "7",
+        "message": "1: F401 'threading' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "12",
+        "message": "1: F401 'fastapi.Request' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "18",
+        "message": "1: F401 'app.models.WorkflowProfile' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "18",
+        "message": "1: F401 'app.models.SystemLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "18",
+        "message": "1: F401 'app.models.BusinessRule' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "24",
+        "message": "1: F401 'app.schemas.InvoiceCreate' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "29",
+        "message": "1: F401 'app.services.rules_engine.match_condition' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\events.py",
+        "column": "5",
+        "message": "1: F401 'fastapi.Depends' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\events.py",
+        "column": "5",
+        "message": "1: F401 'fastapi.HTTPException' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\events.py",
+        "column": "8",
+        "message": "1: F401 'app.database.get_db' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\integrations.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\integrations.py",
+        "column": "7",
+        "message": "1: F401 'typing.List' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\integrations.py",
+        "column": "8",
+        "message": "1: F401 'fastapi.status' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\integrations.py",
+        "column": "13",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "7",
+        "message": "1: F401 'typing.Dict' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "12",
+        "message": "1: F401 'app.models.ChecklistTemplate' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "18",
+        "message": "1: F401 'app.services.rules_engine.evaluate_business_rules' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\users.py",
+        "column": "7",
+        "message": "1: F401 'app.models.AuditLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\workflows.py",
+        "column": "8",
+        "message": "1: F401 'app.models.ChecklistRule' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\workflows.py",
+        "column": "9",
+        "message": "1: F401 'app.schemas.WorkflowStepSchema' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\schemas.py",
+        "column": "1",
+        "message": "1: F401 'app.schemas.schemas.*' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\schemas\\__init__.py",
+        "column": "1",
+        "message": "1: F401 'app.schemas.schemas.*' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\callback_service.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\callback_service.py",
+        "column": "15",
+        "message": "1: F401 'app.models.IntegrationAuditHistory' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\callback_service.py",
+        "column": "323",
+        "message": "9: F401 'app.models.DocumentLineItem' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\integration_service.py",
+        "column": "10",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\integration_service.py",
+        "column": "10",
+        "message": "1: F401 'app.models.AuditLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\mfa_service.py",
+        "column": "3",
+        "message": "1: F401 'random' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\pdf_compressor.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\run.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\assign_workflow_to_doc.py",
+        "column": "4",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\audit_enterprise_codebase.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\audit_mapping_integrity.py",
+        "column": "2",
+        "message": "1: F401 'json' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\audit_mapping_integrity.py",
+        "column": "9",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\audit_mapping_integrity.py",
+        "column": "9",
+        "message": "1: F401 'app.models.DocumentChecklistState' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\backup_and_clear_rules.py",
+        "column": "4",
+        "message": "1: F401 'pathlib.Path' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\cleanup_users_keep_5.py",
+        "column": "2",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\clear_and_post_one_doc.py",
+        "column": "9",
+        "message": "1: F401 'app.models.DocumentChecklistState' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\clear_and_post_one_doc.py",
+        "column": "9",
+        "message": "1: F401 'app.models.DocumentApprovalLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\clear_and_post_one_doc.py",
+        "column": "9",
+        "message": "1: F401 'app.models.SystemEngineLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\consolidate_workflows.py",
+        "column": "1",
+        "message": "1: F401 'sys' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\create_vcc_doc.py",
+        "column": "3",
+        "message": "1: F401 'json' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\post_demo_document.py",
+        "column": "2",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\post_demo_document.py",
+        "column": "10",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\purge_all_documents_and_files.py",
+        "column": "4",
+        "message": "1: F401 'shutil' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\purge_all_documents_and_files.py",
+        "column": "5",
+        "message": "1: F401 'pathlib.Path' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\purge_all_flows_conditions_docs_checklists.py",
+        "column": "3",
+        "message": "1: F401 'shutil' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\purge_all_flows_conditions_docs_checklists.py",
+        "column": "11",
+        "message": "1: F401 'app.database.engine' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\reset_demo_environment.py",
+        "column": "7",
+        "message": "1: F401 'app.database.engine' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\seed_from_snapshot.py",
+        "column": "2",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\seed_from_snapshot.py",
+        "column": "12",
+        "message": "1: F401 'sqlalchemy.create_engine' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\seed_sd_workflow_matrix.py",
+        "column": "1",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\seed_sd_workflow_matrix.py",
+        "column": "15",
+        "message": "1: F401 'app.models.ChecklistTemplate' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\seed_sd_workflow_matrix.py",
+        "column": "16",
+        "message": "1: F401 'app.services.rules_engine.is_wildcard' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_second_cost_center_doc.py",
+        "column": "10",
+        "message": "1: F401 'app.models.WorkflowProfile' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_second_cost_center_doc.py",
+        "column": "10",
+        "message": "1: F401 'app.models.DocumentChecklistState' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "16",
+        "message": "1: F401 'sqlalchemy.inspect' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "16",
+        "message": "1: F401 'sqlalchemy.Table' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.User' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.Document' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.WorkflowProfile' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.WorkflowStepDefinition' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.BusinessRule' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.ChecklistTemplate' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.ChecklistRule' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.InvoiceChecklistState' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.AuditLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.SystemLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.InAppNotification' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.NotificationProviderConfig' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\sync_to_remote_db.py",
+        "column": "20",
+        "message": "1: F401 'app.models.NotificationRaciMatrix' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\update_doc_checklist.py",
+        "column": "10",
+        "message": "1: F401 'sqlalchemy.text' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_100_percent_mapping_matrix.py",
+        "column": "3",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_100_percent_mapping_matrix.py",
+        "column": "10",
+        "message": "1: F401 'app.models.WorkflowStepDefinition' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "2",
+        "message": "1: F401 'json' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "3",
+        "message": "1: F401 'os' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "4",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "12",
+        "message": "1: F401 'app.database.engine' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "13",
+        "message": "1: F401 'app.models.ChecklistRule' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_db_clean_and_sync_flow.py",
+        "column": "13",
+        "message": "1: F401 'app.models.SystemEngineLog' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_enterprise_app_suite.py",
+        "column": "3",
+        "message": "1: F401 'datetime' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_enterprise_app_suite.py",
+        "column": "9",
+        "message": "1: F401 'app.database.engine' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_enterprise_app_suite.py",
+        "column": "10",
+        "message": "1: F401 'app.models.Invoice' imported but unused"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\verify_enterprise_app_suite.py",
+        "column": "12",
+        "message": "1: F401 'app.services.rules_engine.evaluate_business_rules_full' imported but unused"
+      },
+      {
+        "file": "backend/app/main.py",
+        "line": "37",
+        "message": "unused import 'inspect' (90% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "17",
+        "message": "unused import 'CallbackRuleResponse' (90% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "24",
+        "message": "unused import 'InvoiceCreate' (90% confidence)"
+      },
+      {
+        "file": "backend/scripts/sync_to_remote_db.py",
+        "line": "16",
+        "message": "unused import 'inspect' (90% confidence)"
+      }
+    ],
+    "unused_variables": [
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "215",
+        "message": "9: F841 local variable 'user_count' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "963",
+        "message": "13: F841 local variable 'current_step_name' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "298",
+        "message": "29: F841 local variable 'stage_name' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\sync.py",
+        "column": "435",
+        "message": "9: F841 local variable 'action_type' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\pdf_compressor.py",
+        "column": "69",
+        "message": "21: F841 local variable 'image_ext' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\services\\pdf_compressor.py",
+        "column": "89",
+        "message": "17: F841 local variable 'img_err' is assigned to but never used"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\scripts\\clear_and_post_one_doc.py",
+        "column": "24",
+        "message": "1: F841 local variable 'e' is assigned to but never used"
+      },
+      {
+        "file": "backend/app/config/settings.py",
+        "line": "19",
+        "message": "unused variable 'API_V1_STR' (60% confidence)"
+      },
+      {
+        "file": "backend/app/config/settings.py",
+        "line": "54",
+        "message": "unused variable 'case_sensitive' (60% confidence)"
+      },
+      {
+        "file": "backend/app/config/settings.py",
+        "line": "55",
+        "message": "unused variable 'extra' (60% confidence)"
+      },
+      {
+        "file": "backend/app/config/settings.py",
+        "line": "56",
+        "message": "unused variable 'env_file' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "36",
+        "message": "unused variable 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "42",
+        "message": "unused variable 'last_login' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "48",
+        "message": "unused variable 'last_activity_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "107",
+        "message": "unused variable 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "116",
+        "message": "unused variable 'pi_indicator' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "120",
+        "message": "unused variable 'doc_due_date' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "121",
+        "message": "unused variable 'contact_person' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "122",
+        "message": "unused variable 'link_column' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "129",
+        "message": "unused variable 'external_sync_error' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "201",
+        "message": "unused variable 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "251",
+        "message": "unused variable 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "316",
+        "message": "unused variable 'user_agent' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "317",
+        "message": "unused variable 'failure_reason' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "349",
+        "message": "unused variable 'module_name' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "353",
+        "message": "unused variable 'log_level' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "354",
+        "message": "unused variable 'details' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "419",
+        "message": "unused variable 'events_json' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "437",
+        "message": "unused variable 'payload_snapshot' (60% confidence)"
+      },
+      {
+        "file": "backend/app/database/models.py",
+        "line": "544",
+        "message": "unused variable 'callback_event' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "99",
+        "message": "unused attribute 'last_activity_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "100",
+        "message": "unused attribute 'last_login' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "309",
+        "message": "unused attribute 'last_activity_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "310",
+        "message": "unused attribute 'last_login' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "202",
+        "message": "unused attribute 'is_current_approver' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "204",
+        "message": "unused attribute 'has_rejected' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "245",
+        "message": "unused attribute 'is_current_approver' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "395",
+        "message": "unused attribute 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "215",
+        "message": "unused attribute 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "325",
+        "message": "unused attribute 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "362",
+        "message": "unused attribute 'deleted_at' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "18",
+        "message": "unused variable 'token_type' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "19",
+        "message": "unused variable 'expires_in' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "21",
+        "message": "unused variable 'mfa_required' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "22",
+        "message": "unused variable 'mfa_ticket' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "23",
+        "message": "unused variable 'available_methods' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "26",
+        "message": "unused variable 'has_authenticator_setup' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "27",
+        "message": "unused variable 'active_session_conflict' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "30",
+        "message": "unused variable 'session_id' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "49",
+        "message": "unused variable 'qr_svg_data_url' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "104",
+        "message": "unused variable 'created_on' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "106",
+        "message": "unused variable 'last_login' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "109",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "173",
+        "message": "unused variable 'is_current_approver' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "175",
+        "message": "unused variable 'has_rejected' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "178",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "195",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "218",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "225",
+        "message": "unused variable 'logicalOperator' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "246",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "247",
+        "message": "unused variable 'extra' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "258",
+        "message": "unused variable 'details' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "262",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "263",
+        "message": "unused variable 'populate_by_name' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "269",
+        "message": "unused variable 'doc_entry' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "303",
+        "message": "unused variable 'cls' (100% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "315",
+        "message": "unused variable 'populate_by_name' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "318",
+        "message": "unused variable 'success' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "336",
+        "message": "unused variable 'sync_source' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "339",
+        "message": "unused variable 'index' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "348",
+        "message": "unused variable 'total_received' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "349",
+        "message": "unused variable 'successful_count' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "362",
+        "message": "unused variable 'populate_by_name' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "365",
+        "message": "unused variable 'success' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "370",
+        "message": "unused variable 'file_size_bytes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "371",
+        "message": "unused variable 'ocr_extracted_fields' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "412",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "427",
+        "message": "unused variable 'success' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "466",
+        "message": "unused variable 'last_callback' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "471",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "534",
+        "message": "unused variable 'application_name' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "535",
+        "message": "unused variable 'application_code' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "559",
+        "message": "unused variable 'last_execution' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "564",
+        "message": "unused variable 'from_attributes' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/callback_service.py",
+        "line": "25",
+        "message": "unused variable 'DYNAMIC_VARIABLES' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/integration_service.py",
+        "line": "203",
+        "message": "unused attribute 'external_sync_error' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/integration_service.py",
+        "line": "231",
+        "message": "unused attribute 'external_sync_error' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/mfa_service.py",
+        "line": "18",
+        "message": "unused variable 'OTP_EXPIRY_SECONDS' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/pdf_compressor.py",
+        "line": "16",
+        "message": "unused variable 'target_max_bytes' (100% confidence)"
+      },
+      {
+        "file": "backend/app/services/pdf_compressor.py",
+        "line": "69",
+        "message": "unused variable 'image_ext' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/assign_workflow_to_doc.py",
+        "line": "100",
+        "message": "unused variable 'eval_res' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/consolidate_workflows.py",
+        "line": "31",
+        "message": "unused variable 'steps_sig' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_documents_and_files.py",
+        "line": "71",
+        "message": "unused variable 'dirs' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_flows_conditions_docs.py",
+        "line": "24",
+        "message": "unused variable 'cnt_sys' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_flows_conditions_docs.py",
+        "line": "25",
+        "message": "unused variable 'cnt_sync' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_flows_conditions_docs_checklists.py",
+        "line": "37",
+        "message": "unused variable 'cnt_sys_log' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_flows_conditions_docs_checklists.py",
+        "line": "38",
+        "message": "unused variable 'cnt_sync_log' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/purge_all_flows_conditions_docs_checklists.py",
+        "line": "78",
+        "message": "unused variable 'dirs' (60% confidence)"
+      },
+      {
+        "file": "backend/scripts/sync_second_cost_center_doc.py",
+        "line": "81",
+        "message": "unused variable 'eval_res' (60% confidence)"
+      }
+    ],
+    "unused_functions_or_classes": [
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'auth' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'users' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'documents' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'workflows' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'conditions' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'audit' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'sync' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'sync_router' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'integrations' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\main.py",
+        "column": "242",
+        "message": "1: F811 redefinition of unused 'events' from line 9"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "51",
+        "message": "9: F811 redefinition of unused 'threading' from line 7"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "1914",
+        "message": "1: F811 redefinition of unused 'json' from line 3"
+      },
+      {
+        "file": "c",
+        "line": "\\Users\\TempAdmin\\OneDrive\\Documents\\docuflow-automation\\backend\\app\\routers\\documents.py",
+        "column": "1915",
+        "message": "1: F811 redefinition of unused 'os' from line 1"
+      },
+      {
+        "file": "backend/app/config/settings.py",
+        "line": "53",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/main.py",
+        "line": "187",
+        "message": "unused function 'startup_event' (60% confidence)"
+      },
+      {
+        "file": "backend/app/main.py",
+        "line": "282",
+        "message": "unused function 'health_check' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/audit.py",
+        "line": "10",
+        "message": "unused function 'get_audit_logs' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/audit.py",
+        "line": "22",
+        "message": "unused function 'get_system_logs' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "23",
+        "message": "unused function 'login_get_info' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "166",
+        "message": "unused function 'send_otp' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "214",
+        "message": "unused function 'setup_totp' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "240",
+        "message": "unused function 'verify_mfa' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "374",
+        "message": "unused function 'logout' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/auth.py",
+        "line": "392",
+        "message": "unused function 'get_me' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "62",
+        "message": "unused function 'list_applications' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "90",
+        "message": "unused function 'create_application' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "116",
+        "message": "unused function 'get_application' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "123",
+        "message": "unused function 'update_application' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "160",
+        "message": "unused function 'toggle_application_status' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "175",
+        "message": "unused function 'delete_application' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "193",
+        "message": "unused function 'list_callback_rules' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "240",
+        "message": "unused function 'create_callback_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "283",
+        "message": "unused function 'get_callback_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "290",
+        "message": "unused function 'update_callback_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "361",
+        "message": "unused function 'duplicate_callback_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "402",
+        "message": "unused function 'toggle_rule_status' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "417",
+        "message": "unused function 'delete_callback_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "435",
+        "message": "unused function 'execute_test_callback' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "568",
+        "message": "unused function 'list_integration_logs' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "623",
+        "message": "unused function 'get_integration_log_detail' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "674",
+        "message": "unused function 'manual_retry_callback' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "695",
+        "message": "unused function 'bulk_retry_failed_callbacks' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/callback_integrations.py",
+        "line": "717",
+        "message": "unused function 'get_audit_history' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/conditions.py",
+        "line": "11",
+        "message": "unused function 'get_business_rules' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/conditions.py",
+        "line": "17",
+        "message": "unused function 'save_business_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/conditions.py",
+        "line": "112",
+        "message": "unused function 'delete_business_rule' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/conditions.py",
+        "line": "121",
+        "message": "unused function 'simulate_rule_routing' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/conditions.py",
+        "line": "141",
+        "message": "unused function 'detect_conflicts_endpoint' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "115",
+        "message": "unused function 'get_all_invoices' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "209",
+        "message": "unused function 'get_synced_pending_documents' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "250",
+        "message": "unused function 'get_invoice_by_id' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "357",
+        "message": "unused function 'update_invoice' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "498",
+        "message": "unused function 'serve_stored_pdf' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "515",
+        "message": "unused function 'get_rejected_pdf_path' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "942",
+        "message": "unused function 'workflow_approve_payload' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1049",
+        "message": "unused function 'approve_invoice_url' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1128",
+        "message": "unused function 'invoice_step_action' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1239",
+        "message": "unused function 'workflow_reject_payload' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1267",
+        "message": "unused function 'reject_invoice_url' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1293",
+        "message": "unused function 'workflow_hold_payload' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1323",
+        "message": "unused function 'workflow_cancel_route' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1363",
+        "message": "unused function 'hold_invoice_url' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1388",
+        "message": "unused function 'upload_document' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1531",
+        "message": "unused function 'upload_and_route' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1654",
+        "message": "unused function 'upload_invoice_version' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1693",
+        "message": "unused function 'get_document_comments' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1719",
+        "message": "unused function 'add_document_comment' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1738",
+        "message": "unused function 'get_document_versions' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1755",
+        "message": "unused function 'get_dashboard_stats' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1830",
+        "message": "unused function 'get_notifications' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1876",
+        "message": "unused function 'mark_notification_read' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1886",
+        "message": "unused function 'mark_all_notifications_read' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1910",
+        "message": "unused function 'get_templates' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1949",
+        "message": "unused function 'get_admin_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1953",
+        "message": "unused function 'post_admin_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1976",
+        "message": "unused function 'get_admin_erp_master' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1980",
+        "message": "unused function 'post_admin_erp_master' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "1998",
+        "message": "unused function 'post_admin_erp_master_bulk' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2015",
+        "message": "unused function 'delete_admin_erp_master' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2022",
+        "message": "unused function 'get_admin_recycle_bin' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2026",
+        "message": "unused function 'get_admin_notifications_provider' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2047",
+        "message": "unused function 'save_admin_notifications_provider' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2070",
+        "message": "unused function 'get_admin_notifications_raci' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2087",
+        "message": "unused function 'save_admin_notifications_raci' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2111",
+        "message": "unused function 'test_admin_notifications_smtp' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2146",
+        "message": "unused function 'get_admin_notifications_inapp_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2165",
+        "message": "unused function 'save_admin_notifications_inapp_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2170",
+        "message": "unused function 'get_admin_backup_history' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2174",
+        "message": "unused function 'trigger_admin_backup' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2181",
+        "message": "unused function 'get_erp_po_details' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2264",
+        "message": "unused function 'get_invoice_checklist' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2319",
+        "message": "unused function 'update_invoice_checklist' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2366",
+        "message": "unused function 'get_checklist_templates' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2391",
+        "message": "unused function 'save_checklist_template' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2434",
+        "message": "unused function 'delete_checklist_template' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/documents.py",
+        "line": "2445",
+        "message": "unused function 'get_approved_documents' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/events.py",
+        "line": "36",
+        "message": "unused function 'event_stream' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/events.py",
+        "line": "76",
+        "message": "unused function 'acquire_document_lock' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/events.py",
+        "line": "104",
+        "message": "unused function 'renew_document_lock' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/events.py",
+        "line": "114",
+        "message": "unused function 'release_document_lock' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/events.py",
+        "line": "129",
+        "message": "unused function 'get_document_lock_status' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "33",
+        "message": "unused function 'get_approved_documents' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "82",
+        "message": "unused function 'get_single_document_export' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "101",
+        "message": "unused function 'acknowledge_document_sync' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "151",
+        "message": "unused function 'download_approved_document_pdf' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "206",
+        "message": "unused function 'get_webhook_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "214",
+        "message": "unused function 'save_webhook_config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "240",
+        "message": "unused function 'test_webhook_connection' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "322",
+        "message": "unused function 'retry_document_push' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/integrations.py",
+        "line": "345",
+        "message": "unused function 'get_integration_sync_logs' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "566",
+        "message": "unused function 'sync_single_document' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "714",
+        "message": "unused function 'sync_batch_documents' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "758",
+        "message": "unused function 'sync_attachment_upload' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "828",
+        "message": "unused function 'sync_attachment_base64' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "894",
+        "message": "unused function 'sync_record_attachment_by_pk' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "958",
+        "message": "unused function 'sync_record_attachment_by_pk_base64' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync.py",
+        "line": "1026",
+        "message": "unused function 'seed_demo_invoices_endpoint' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync_router.py",
+        "line": "43",
+        "message": "unused function 'm2m_login' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/sync_router.py",
+        "line": "61",
+        "message": "unused function 'ingest_record' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "22",
+        "message": "unused function 'get_users' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "57",
+        "message": "unused function 'get_user_by_id' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "74",
+        "message": "unused function 'create_user_master' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "137",
+        "message": "unused function 'update_user_master' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "190",
+        "message": "unused function 'toggle_user_status' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/users.py",
+        "line": "208",
+        "message": "unused function 'delete_user' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "81",
+        "message": "unused function 'enforce_designated_approvers' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "84",
+        "message": "unused function 'sync_all_workflow_approvers' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "88",
+        "message": "unused function 'get_all_workflow_profiles' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "175",
+        "message": "unused function 'get_workflow_steps' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "180",
+        "message": "unused function 'save_workflow_profile' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "276",
+        "message": "unused function 'get_single_workflow_profile' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "308",
+        "message": "unused function 'delete_category_endpoint' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "344",
+        "message": "unused function 'delete_workflow_profile' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "370",
+        "message": "unused function 'save_workflow_step' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "417",
+        "message": "unused function 'delete_workflow_step' (60% confidence)"
+      },
+      {
+        "file": "backend/app/routers/workflows.py",
+        "line": "426",
+        "message": "unused function 'publish_configurations' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "108",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "141",
+        "message": "unused class 'InvoiceCreate' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "177",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "194",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "217",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "221",
+        "message": "unused class 'ConditionItem' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "245",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "261",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "301",
+        "message": "unused method 'populate_numbers' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "314",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "361",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "411",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "455",
+        "message": "unused class 'ThirdPartyApplicationResponse' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "470",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "529",
+        "message": "unused class 'CallbackRuleResponse' (60% confidence)"
+      },
+      {
+        "file": "backend/app/schemas/schemas.py",
+        "line": "563",
+        "message": "unused class 'Config' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/security_middleware.py",
+        "line": "11",
+        "message": "unused method 'dispatch' (60% confidence)"
+      },
+      {
+        "file": "backend/app/services/security_middleware.py",
+        "line": "51",
+        "message": "unused method 'dispatch' (60% confidence)"
+      }
+    ]
+  }
+}
