@@ -13,7 +13,7 @@ import {
   Loader2
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
-import { REFERENCE_DOCUMENTS, REFERENCE_DOC_TYPE_FILTERS } from "../data/dashboardData";
+import { REFERENCE_DOCUMENTS } from "../data/dashboardData";
 
 interface DashboardProps {
   documents: DbInvoice[];

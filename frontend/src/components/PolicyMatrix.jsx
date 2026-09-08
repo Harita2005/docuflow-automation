@@ -85,7 +85,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
       if (r.id !== ruleId) return r;
       
       let conditions = [];
-      try { conditions = JSON.parse(r.conditions_json); } catch(_e) {}
+      try { conditions = JSON.parse(r.conditions_json); } catch {}
       
       // Update or add condition
       const existingIdx = conditions.findIndex(c => c.field === field);
@@ -120,7 +120,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
       const conditions = JSON.parse(rule.conditions_json);
       const cond = conditions.find(c => c.field === field);
       return cond ? cond.value : '';
-    } catch(_e) { return ''; }
+    } catch { return ''; }
   };
 
   // Group workflows by unique profile_name

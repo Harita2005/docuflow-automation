@@ -5,8 +5,6 @@ import {
   Trash2,
   Play,
   Save,
-  CheckCircle,
-  AlertTriangle,
   Globe,
   Database,
   Sliders,
@@ -14,10 +12,8 @@ import {
   Code,
   Shield,
   Layers,
-  Sparkles,
   ChevronDown,
   ChevronUp,
-  Key,
   Server
 } from 'lucide-react';
 import { ThirdPartyApplication, SyncRule, Condition, AuthType } from '../../types/dapiSyncBack';

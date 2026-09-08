@@ -3,19 +3,13 @@ import {
   Sparkles, 
   ArrowRight, 
   User, 
-  ShieldCheck, 
   ClipboardList, 
   FileCheck, 
   Receipt, 
   Mail, 
   ScanLine, 
-  Send, 
-  CheckCircle2, 
   Database, 
-  GitBranch,
-  Building2,
-  Lock,
-  ArrowRightLeft
+  GitBranch
 } from "lucide-react";
 
 interface GettingStartedPageProps {

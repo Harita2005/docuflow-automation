@@ -8,9 +8,6 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
-  Key,
-  ShieldCheck,
-  Zap,
   RefreshCw,
   Eye,
   EyeOff,
@@ -125,7 +122,7 @@ export default function ApplicationsManager({ onConfigureRules }: ApplicationsMa
     if (app.auth_config_json) {
       try {
         parsedAuth = JSON.parse(app.auth_config_json);
-      } catch (_e) {}
+      } catch {}
     }
 
     setFormData({

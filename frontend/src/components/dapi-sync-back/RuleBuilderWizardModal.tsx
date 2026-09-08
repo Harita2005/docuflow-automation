@@ -3,20 +3,13 @@ import {
   GitBranch,
   Server,
   FileText,
-  Sliders,
   CheckCircle,
   XCircle,
-  Layers,
   Zap,
-  CheckSquare,
   ArrowRight,
   ArrowLeft,
   Plus,
-  Trash2,
-  Lock,
-  Code,
-  ShieldCheck,
-  AlertTriangle
+  Trash2
 } from 'lucide-react';
 import {
   SyncRule,

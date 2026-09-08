@@ -8,9 +8,7 @@ import {
   CheckCircle,
   XCircle,
   Copy,
-  Play,
   RefreshCw,
-  Zap,
   Globe
 } from "lucide-react";
 import CallbackRuleBuilder from "./CallbackRuleBuilder";

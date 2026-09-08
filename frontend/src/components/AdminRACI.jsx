@@ -31,7 +31,7 @@ export default function AdminRACI() {
       if (res.ok) {
         setDbUsers(await res.json());
       }
-    } catch (_e) {}
+    } catch {}
   };
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function AdminRACI() {
       
       const safeParse = (str) => {
         if (!str) return [];
-        try { return JSON.parse(str); } catch (_e) { return []; }
+        try { return JSON.parse(str); } catch { return []; }
       };
 
       newGrid[event] = {
@@ -86,7 +86,7 @@ export default function AdminRACI() {
         const data = await res.json();
         if (data) setProviderConfig(data);
       }
-    } catch(_e) {}
+    } catch {}
   };
 
   const fetchWorkflows = async () => {

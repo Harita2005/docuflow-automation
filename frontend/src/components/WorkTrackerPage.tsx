@@ -1,24 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { 
   Search, 
-  RefreshCw, 
-  Download, 
-  SlidersHorizontal, 
   CheckCircle2, 
-  Clock, 
-  FileText, 
-  ChevronRight, 
-  Building2, 
-  ShieldCheck, 
-  ArrowUpDown, 
-  Check, 
-  AlertCircle,
-  Eye,
-  Filter,
-  Sparkles,
-  TrendingUp,
-  CreditCard,
-  Layers,
+  FileText,
   Calendar,
   X
 } from "lucide-react";
@@ -28,7 +12,6 @@ import { formatDocNumber } from "../utils/formatters";
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
   onViewDocument: (id: string) => void;
-  requireGRN?: boolean;
   currentUserRole?: string;
   currentUserEmail?: string;
   currentUserUsername?: string;
@@ -37,7 +20,6 @@ interface WorkTrackerPageProps {
 export default function WorkTrackerPage({ 
   documents, 
   onViewDocument,
-  requireGRN = true,
   currentUserRole = "employee",
   currentUserEmail = "",
   currentUserUsername = ""
@@ -49,7 +31,6 @@ export default function WorkTrackerPage({
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
-  const [isExporting, setIsExporting] = useState(false);
 
   // Robust date extraction and filter matching
   const getDocumentDates = (d: DbInvoice): string[] => {
@@ -279,106 +260,6 @@ export default function WorkTrackerPage({
     if (norm.includes("PURCHASE ORDER") || norm === "PO") return "PURCHASE ORDER";
     if (norm.includes("GOODS RECEIPT") || norm === "GRN") return "GOODS RECEIPT";
     return "ALL";
-  };
-
-  // Export to CSV helper
-  const handleExportCSV = () => {
-    setIsExporting(true);
-    try {
-      const tabCategory = getNormalizedTabCategory(activeTab);
-      let headers: string[] = [];
-      let rows: (string | number)[][] = [];
-
-      if (tabCategory === "AP INVOICE") {
-        headers = ["Invoice ID", "Supplier / Vendor", "GSTIN", "Invoice Number", "Invoice Date", "PO Reference", "Gross Value (INR)", "Tax Amount (GST)", "Stage", "Status", "Assigned Approver"];
-        rows = filteredAndSortedDocs.map(doc => {
-          const gross = Number(doc.amount || 0);
-          const tax = Math.round(gross - (gross / 1.18));
-          return [
-            doc.id,
-            `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
-            `"${((doc as any).vendor_gstin || '33AAAAA0000A1Z5').replace(/"/g, '""')}"`,
-            `"${(doc.invoice_number || '').replace(/"/g, '""')}"`,
-            doc.invoice_date || '',
-            `"${(doc.po_number || '').replace(/"/g, '""')}"`,
-            gross,
-            tax,
-            doc.current_stage || 1,
-            doc.status || "Pending",
-            `"${(doc.assigned_approver || '').replace(/"/g, '""')}"`
-          ];
-        });
-      } else if (tabCategory === "GENERAL RECORDS") {
-        headers = ["Record ID", "Submitter / Employee", "Cost Center", "Division", "Category", "Description", "Gross Value (INR)", "Stage", "Status", "Assigned Approver"];
-        rows = filteredAndSortedDocs.map(doc => {
-          const gross = Number(doc.amount || 0);
-          return [
-            doc.id,
-            `"${(doc.vendor_name || (doc as any).employee_name || 'Employee').replace(/"/g, '""')}"`,
-            `"${((doc as any).cost_center || 'CC-4020').replace(/"/g, '""')}"`,
-            `"${((doc as any).division || 'Corporate').replace(/"/g, '""')}"`,
-            doc.document_type || "General Record",
-            `"${(doc.invoice_number || 'General Expense').replace(/"/g, '""')}"`,
-            gross,
-            doc.current_stage || 1,
-            doc.status || "Pending",
-            `"${(doc.assigned_approver || '').replace(/"/g, '""')}"`
-          ];
-        });
-      } else if (tabCategory === "PURCHASE ORDER") {
-        headers = ["PO Number", "Supplier / Vendor", "Plant / Division", "Order Date", "Total PO Value (INR)", "Stage", "Status", "Assigned Approver"];
-        rows = filteredAndSortedDocs.map(doc => {
-          const gross = Number(doc.amount || 0);
-          return [
-            `"${(doc.po_number || doc.invoice_number || `PO-${doc.id}`).replace(/"/g, '""')}"`,
-            `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
-            `"${((doc as any).plant || 'Plant-01 (Chennai Hub)').replace(/"/g, '""')}"`,
-            doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''),
-            gross,
-            doc.current_stage || 1,
-            doc.status || "Pending",
-            `"${(doc.assigned_approver || '').replace(/"/g, '""')}"`
-          ];
-        });
-      } else if (tabCategory === "GOODS RECEIPT") {
-        headers = ["GRN Ref", "PO Reference", "Supplier / Vendor", "Intake Date", "Quality Check", "Stage", "Status"];
-        rows = filteredAndSortedDocs.map(doc => {
-          return [
-            `"${(doc.invoice_number || `GRN-${doc.id}`).replace(/"/g, '""')}"`,
-            `"${(doc.po_number || '').replace(/"/g, '""')}"`,
-            `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
-            doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''),
-            "Passed",
-            doc.current_stage || 1,
-            doc.status || "Pending"
-          ];
-        });
-      } else {
-        headers = ["Doc ID", "Vendor Name", "Document Number / Ref", "Document Type", "Amount (INR)", "Status", "Created Date"];
-        rows = filteredAndSortedDocs.map(doc => [
-          doc.id,
-          `"${(doc.vendor_name || '').replace(/"/g, '""')}"`,
-          `"${(doc.invoice_number || '').replace(/"/g, '""')}"`,
-          doc.document_type || "Document",
-          doc.amount || 0,
-          doc.status || "Pending",
-          new Date(doc.created_at || Date.now()).toLocaleDateString()
-        ]);
-      }
-
-      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `DocuFlow_${tabCategory.replace(/\s+/g, '_')}_Export_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error("Export failed", err);
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   const activeTabCategory = getNormalizedTabCategory(activeTab);

@@ -84,7 +84,7 @@ export default function Admin() {
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
       const res = await fetch('/api/admin/audit-logs', { headers });
       if (res.ok) setAuditLogs(await res.json());
-    } catch (_e) {}
+    } catch {}
   };
 
   const handleTriggerSync = async () => {
@@ -154,7 +154,7 @@ export default function Admin() {
          fields = Object.keys(schemaParsed).map((k, i) => ({ id: Date.now()+i, name: k, type: 'string', description: '', required: false }));
          instrs = parsed.instructions || "";
       }
-    } catch(_e) {}
+    } catch {}
     if (fields.length === 0) fields = [{ id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }];
     fields = fields.map((f, i) => ({ 
       ...f, 
@@ -703,7 +703,7 @@ export default function Admin() {
                      } else if (p && Array.isArray(p.fields)) {
                        parsedFields = p.fields;
                      }
-                   } catch(_e) {}
+                   } catch {}
                    
                    return (
                       <div key={t.id} className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col group hover:border-blue-300 hover:shadow transition-all ${isDraft ? 'bg-amber-50/20' : ''}`}>

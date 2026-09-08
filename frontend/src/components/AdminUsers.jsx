@@ -6,23 +6,15 @@ import {
   Trash2, 
   ShieldCheck, 
   KeyRound, 
-  Key, 
   Save, 
   X, 
   RefreshCw, 
   CheckCircle2, 
   AlertTriangle, 
   Search, 
-  Check, 
-  Lock, 
-  Building, 
   UserCheck, 
   UserX,
-  Smartphone,
   Shield,
-  Fingerprint,
-  Calendar,
-  Sparkles,
   MoreVertical,
   ExternalLink,
   Info,
@@ -32,7 +24,6 @@ import {
   BarChart3,
   CheckSquare,
   FileSpreadsheet,
-  User,
   Sliders
 } from 'lucide-react';
 
@@ -475,7 +466,7 @@ export default function AdminUsers() {
       await fetchUsers();
       setToastMsg("✓ User directory successfully synchronized with database!");
       setTimeout(() => setToastMsg(""), 3500);
-    } catch (_e) {
+    } catch {
       setErrorMsg("Directory sync failed.");
       setTimeout(() => setErrorMsg(""), 3500);
     } finally {
@@ -604,7 +595,7 @@ export default function AdminUsers() {
       setToastMsg(`User ${name} removed.`);
       setTimeout(() => setToastMsg(""), 3000);
       if (selectedUser?.id === id) setSelectedUser(null);
-    } catch(_e) { 
+    } catch { 
       setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
@@ -644,7 +635,7 @@ export default function AdminUsers() {
       });
       setToastMsg(`Status for ${user.name} set to ${nextStatus ? 'ACTIVE' : 'INACTIVE'}.`);
       setTimeout(() => setToastMsg(""), 3000);
-    } catch(_e) {}
+    } catch {}
   };
 
   // Triggered from permissions panel to toggle override

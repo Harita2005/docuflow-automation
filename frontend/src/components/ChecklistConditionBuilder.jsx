@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  CheckSquare, Plus, Edit2, Trash2, Search, Save, X, AlertTriangle, 
-  ShieldCheck, CheckCircle2, RefreshCw, Filter, Layers, ChevronLeft, 
-  ChevronRight, Sparkles, Copy, SlidersHorizontal, Eye, Tag, Building2, 
-  MapPin, Check, ListChecks, ArrowRight, ShieldAlert, GitMerge
+  CheckSquare, Plus, Edit2, Trash2, Search, X, AlertTriangle, CheckCircle2, RefreshCw, ChevronLeft, 
+  ChevronRight, Copy
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -150,7 +148,7 @@ export default function ChecklistConditionBuilder() {
         if (res.ok) {
           setWorkflows(await res.json());
         }
-      } catch(_e) {}
+      } catch {}
     };
     fetchWf();
   }, []);
@@ -218,8 +216,8 @@ export default function ChecklistConditionBuilder() {
         workflow_profile: editingRule.workflow_profile || 'ALL',
         stage_name: editingRule.stage_name || 'Attachment Status',
         item_text: (editingRule.itemsList || []).join(' || '),
-        is_mandatory: editingRule.is_mandatory !== false,
-        is_active: editingRule.is_active !== false,
+        is_mandatory: editingRule.is_mandatory ?? true,
+        is_active: editingRule.is_active ?? true,
         sequence_order: editingRule.sequence_order || 1
       };
 
@@ -592,7 +590,7 @@ export default function ChecklistConditionBuilder() {
                           <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                           <span className="truncate max-w-[170px]" title={r.rule_name}>{r.rule_name}</span>
 
-                          {r.is_mandatory !== false ? (
+                          {r.is_mandatory ? (
                             <span className="text-[7.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 shrink-0">
                               REQ
                             </span>
@@ -970,7 +968,7 @@ export default function ChecklistConditionBuilder() {
                   <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 cursor-pointer select-none">
                     <input 
                       type="checkbox"
-                      checked={editingRule.is_mandatory !== false}
+                      checked={!!editingRule.is_mandatory}
                       onChange={e => setEditingRule({ ...editingRule, is_mandatory: e.target.checked })}
                       className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
                     />

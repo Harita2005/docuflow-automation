@@ -3,7 +3,6 @@ import {
   Server,
   ListFilter,
   Share2,
-  Zap,
   CheckCircle,
   Sliders
 } from 'lucide-react';

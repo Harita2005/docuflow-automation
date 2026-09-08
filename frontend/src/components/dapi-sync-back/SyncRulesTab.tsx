@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Sliders,
   Plus,
   Search,
   ArrowUp,
@@ -13,11 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   History,
-  Layers,
-  ArrowRight,
-  ShieldAlert,
   Server,
-  FileCheck,
   Eye
 } from 'lucide-react';
 import { SyncRule, ThirdPartyApplication } from '../../types/dapiSyncBack';

@@ -7,10 +7,8 @@ import {
   RefreshCw,
   TrendingUp,
   Filter,
-  Layers,
   ArrowUpRight,
-  Server,
-  FileText
+  Server
 } from 'lucide-react';
 import { ThirdPartyApplication, SyncLog } from '../../types/dapiSyncBack';
 

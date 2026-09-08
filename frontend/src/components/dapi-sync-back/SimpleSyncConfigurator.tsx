@@ -3,7 +3,6 @@ import {
   Server,
   Globe,
   CheckCircle,
-  XCircle,
   Zap,
   Check,
   Power,
@@ -11,12 +10,10 @@ import {
   EyeOff,
   Plus,
   Trash2,
-  Sliders,
   ShieldCheck,
   Edit,
   ChevronDown,
-  ChevronUp,
-  Info
+  ChevronUp
 } from 'lucide-react';
 import {
   ThirdPartyApplication,
@@ -107,7 +104,6 @@ interface SimpleSyncConfiguratorProps {
   selectedAppId?: string;
   onSaveRule: (rule: SyncRule, status: 'Active' | 'Draft') => void;
   onUpdateApp: (app: ThirdPartyApplication) => void;
-  onAddAppClick: () => void;
   onViewLogsClick: () => void;
 }
 
@@ -117,7 +113,6 @@ export default function SimpleSyncConfigurator({
   selectedAppId: initialSelectedAppId,
   onSaveRule,
   onUpdateApp,
-  onAddAppClick,
   onViewLogsClick
 }: SimpleSyncConfiguratorProps) {
   // Selected Application State

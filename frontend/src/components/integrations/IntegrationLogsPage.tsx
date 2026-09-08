@@ -114,7 +114,7 @@ export default function IntegrationLogsPage() {
       if (att.request_headers_json) {
         headersObj = typeof att.request_headers_json === "string" ? JSON.parse(att.request_headers_json) : att.request_headers_json;
       }
-    } catch (_e) {}
+    } catch {}
 
     const headerStr = Object.entries(headersObj)
       .map(([k, v]) => `-H "${k}: ${v}"`)

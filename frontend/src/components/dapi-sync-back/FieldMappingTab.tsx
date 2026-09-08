@@ -5,8 +5,6 @@ import {
   Trash2,
   Code,
   ArrowRight,
-  Sparkles,
-  RefreshCw,
   CheckCircle,
   Copy,
   Info

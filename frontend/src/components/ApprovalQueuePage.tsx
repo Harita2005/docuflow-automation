@@ -37,7 +37,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
               const res = await fetch(`/api/documents/${inv.id}`);
               const fullData = await res.json();
               return { ...inv, current_stage: fullData.workflow_instance?.current_stage };
-            } catch (_e) {
+            } catch {
               return inv;
             }
           }

@@ -3,16 +3,12 @@ import { createPortal } from "react-dom";
 import { 
   CheckCircle, 
   Search,
-  Plus,
-  Download,
-  Calendar,
   AlertCircle,
   Cpu,
   Package,
   X,
   MessageSquare,
   Clock,
-  Filter,
   RefreshCw,
   PackageCheck
 } from "lucide-react";

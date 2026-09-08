@@ -715,7 +715,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         if (Array.isArray(configs)) {
           const matrixCfg = configs.find(c => c.key === "RBAC_GRANULAR_MATRIX");
           if (matrixCfg && matrixCfg.value) {
-            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch(_e) {}
+            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch {}
           }
           const flacCfg = configs.find(c => c.key === "RBAC_FIELD_PERMISSIONS");
           if (flacCfg && flacCfg.value) {
@@ -726,23 +726,23 @@ export default function AdminRBAC({ onRefreshSignal }) {
               } else {
                 setFieldPermissionsByScope(parsed);
               }
-            } catch(_e) {}
+            } catch {}
           }
           const customFieldsCfg = configs.find(c => c.key === "RBAC_CUSTOM_FIELDS");
           if (customFieldsCfg && customFieldsCfg.value) {
-            try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch(_e) {}
+            try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch {}
           }
           const rolesCfg = configs.find(c => c.key === "RBAC_CUSTOM_ROLES");
           if (rolesCfg && rolesCfg.value) {
-            try { setRoles(JSON.parse(rolesCfg.value)); } catch(_e) {}
+            try { setRoles(JSON.parse(rolesCfg.value)); } catch {}
           }
           const overridesCfg = configs.find(c => c.key === "UBAC_USER_OVERRIDES");
           if (overridesCfg && overridesCfg.value) {
-            try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch(_e) {}
+            try { setUserOverrides(JSON.parse(overridesCfg.value)); } catch {}
           }
           const permsListCfg = configs.find(c => c.key === "RBAC_PERMISSION_DEFINITIONS");
           if (permsListCfg && permsListCfg.value) {
-            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch(_e) {}
+            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch {}
           }
         }
       }
@@ -763,7 +763,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             dept: u.department || u.dept || 'General Operations',
             division: u.division || 'VCC',
             is_active: u.is_active !== undefined ? u.is_active : true,
-            status: u.is_active !== false ? "Active" : "Inactive",
+            status: u.is_active ? "Active" : "Inactive",
             created_on: u.created_on || u.created_at || new Date().toISOString()
           }));
           
@@ -965,7 +965,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
           division: selectedUser.division || "VCC"
         })
       });
-    } catch(_e) {}
+    } catch {}
   };
 
   const handleToggleStatus = async (user) => {
@@ -997,7 +997,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
         body: JSON.stringify({ is_active: nextStatus })
       });
-    } catch(_e) {}
+    } catch {}
   };
 
   const deleteUser = async (id, name, empId) => {
@@ -1015,7 +1015,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       await fetch(`/api/users/${id}`, { method: 'DELETE', headers: token ? { "Authorization": `Bearer ${token}` } : {} });
       setUsers(prev => prev.filter(u => u.id !== id));
       if (selectedUser?.id === id) setSelectedUser(null);
-    } catch(_e) { 
+    } catch { 
       setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
@@ -1232,7 +1232,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
       setSuccessMsg("✓ All permissions & 50+ workflow policies saved successfully!");
       if (onRefreshSignal) onRefreshSignal();
       setTimeout(() => setSuccessMsg(""), 3500);
-    } catch(_e) {
+    } catch {
       setErrorMsg("Failed to save permissions.");
     } finally {
       setSaving(false);
@@ -1300,7 +1300,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         const errData = await res.json();
         setErrorMsg(errData.detail || "Failed to create user.");
       }
-    } catch (_err) {
+    } catch {
       setErrorMsg("Network error trying to create user.");
     } finally {
       setIsCreatingUser(false);
@@ -1659,7 +1659,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
                   {roles.map(r => {
-                    const isSelected = selectedRoleId === r.id;
                     const userCount = users.filter(u => u.role === r.id).length;
                     
                     return (
@@ -1989,7 +1988,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     </tr>
                   ) : (
                     filteredUsers.map(u => {
-                      const isSelected = selectedUser?.id === u.id;
                       const hasOverrides = userOverrides[u.username || u.email] && Object.keys(userOverrides[u.username || u.email]).length > 0;
                       
                       return (

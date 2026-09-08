@@ -201,14 +201,14 @@ export default function App() {
             handleLogout("Your session was terminated because your account was logged in from another device/browser.", true);
             return;
           }
-        } catch (_) {}
+        } catch {}
         handleLogout();
       } else if (response.status === 503) {
         // Backend starting up or restarting - silent retry
       } else {
         console.error("Failed to fetch documents:", await response.text());
       }
-    } catch (_e) {
+    } catch {
       // Backend temporarily offline
     } finally {
       if (!silent) setLoadingDocs(false);
@@ -233,7 +233,7 @@ export default function App() {
             handleLogout("Your session was terminated because your account was logged in from another device/browser.", true);
             return;
           }
-        } catch (_) {}
+        } catch {}
         handleLogout();
       } else if (response.status === 503) {
         setStats({ totalDocuments: 0 });
@@ -241,7 +241,7 @@ export default function App() {
         console.error("Failed to fetch analytical stats counters:", await response.text());
         setStats({ totalDocuments: 0 });
       }
-    } catch (_e) {
+    } catch {
       setStats({ totalDocuments: 0 });
     } finally {
       if (!silent) setLoadingStats(false);
@@ -274,7 +274,7 @@ export default function App() {
             fetchDocuments(true);
             fetchStats(true);
           }
-        } catch (_err) {
+        } catch {
           // heartbeat or ping
         }
       };
@@ -324,7 +324,7 @@ export default function App() {
         channel.postMessage({ type: "LOGIN", role, email, username });
         channel.close();
       }
-    } catch (_e) {}
+    } catch {}
   };
 
   useEffect(() => {
@@ -465,7 +465,7 @@ export default function App() {
           }
           channel.close();
         }
-      } catch (_e) {}
+      } catch {}
     }
   }
 
@@ -595,7 +595,6 @@ export default function App() {
               <WorkTrackerPage
                 documents={documents}
                 onViewDocument={handleViewDocument}
-                requireGRN={requireGRN}
                 currentUserRole={currentUserRole}
                 currentUserEmail={currentUserEmail}
                 currentUserUsername={currentUserUsername}

@@ -23,7 +23,6 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
   const [mfaTicket, setMfaTicket] = useState<string>("");
   const [maskedEmail, setMaskedEmail] = useState<string>("");
   const [maskedPhone, setMaskedPhone] = useState<string>("");
-  const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
   const [otpCode, setOtpCode] = useState<string>("");
   const [otpError, setOtpError] = useState<string>("");
   const [otpSentNotice, setOtpSentNotice] = useState<string>("");
@@ -115,7 +114,6 @@ export default function LoginPage({ onLoginSuccess, kickedReason, onClearKickedR
         setMfaTicket(ticket);
         setMaskedEmail(data.masked_email || "");
         setMaskedPhone(data.masked_phone || "");
-        setHasAuthenticatorSetup(!!data.has_authenticator_setup);
 
         // Step B: If Email or SMS, trigger OTP dispatch immediately
         if (methodToUse === "EMAIL" || methodToUse === "SMS") {

@@ -1,19 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks } from 'lucide-react';
 
-const STAGE_CHECKLIST_LIBRARY = [
-  "Verify PO & Line Items Match Invoice",
-  "Confirm Unit Rates & Total Price Calculations",
-  "Validate HSN/SAC Code & Applicable GST Rates",
-  "Verify Delivery / Goods Receipt Confirmation (GRN)",
-  "Verify Physical Stamp & Authorized Signatures",
-  "Validate Vendor Bank Details & GSTIN against ERP Master",
-  "Confirm Cost Center & Department Budget Clearance",
-  "Check Advance Adjustment & TDS Withholding",
-  "Verify Payment Terms & Credit Period Compliance",
-  "Inspect Quality Inspection Certificate & Warranty Terms"
-];
-
 const STAGE_PRESET_OPTIONS = [
   "Attachment Status",
   "First Approval",

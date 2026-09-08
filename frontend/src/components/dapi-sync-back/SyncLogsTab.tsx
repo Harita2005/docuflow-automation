@@ -8,9 +8,7 @@ import {
   RefreshCw,
   Eye,
   RotateCcw,
-  FileText,
-  Server,
-  Download
+  Server
 } from 'lucide-react';
 import { SyncLog, SyncLogStatus } from '../../types/dapiSyncBack';
 import SyncLogDetailDrawer from './SyncLogDetailDrawer';

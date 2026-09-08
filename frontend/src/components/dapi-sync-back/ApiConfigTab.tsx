@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Globe,
-  Lock,
   Eye,
   EyeOff,
   AlertTriangle,
@@ -9,19 +8,13 @@ import {
   Plus,
   Trash2,
   CheckCircle,
-  XCircle,
-  Clock,
-  ShieldCheck,
-  Code,
-  Check,
-  Play
+  XCircle
 } from 'lucide-react';
 import {
   EndpointConfig,
   ThirdPartyApplication,
   HttpMethod,
-  AuthType,
-  HeaderConfig
+  AuthType
 } from '../../types/dapiSyncBack';
 
 interface ApiConfigTabProps {

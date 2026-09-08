@@ -41,7 +41,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
         const extra = parsed.filter(p => !existingIds.has(p.id));
         return [...DEFAULT_CONDITION_FIELDS, ...extra];
       }
-    } catch(_e) {}
+    } catch {}
     return DEFAULT_CONDITION_FIELDS;
   });
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -94,7 +94,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
         if (res.ok) {
           setWorkflows(await res.json());
         }
-      } catch(_e) {}
+      } catch {}
     };
     fetchWf();
   }, []);
@@ -367,7 +367,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                    return targetA.localeCompare(targetB, undefined, { numeric: true });
                 }).map((r, index) => {
                   let parsed = { conditions: [] };
-                  try { parsed = JSON.parse(r.conditions_json); } catch(_e) {}
+                  try { parsed = JSON.parse(r.conditions_json); } catch {}
                   if (Array.isArray(parsed)) parsed = { conditions: parsed };
 
                   const targetWf = workflows.find(w => w.id === r.target_workflow_id || w.profile_name === r.target_workflow_id);
@@ -472,7 +472,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
     if (Array.isArray(parsedJson)) {
       parsedJson = { conditions: parsedJson, settings: {} };
     }
-  } catch(_e) {}
+  } catch {}
   
   const updateJson = (updates) => {
     const newJson = { ...parsedJson, ...updates };
@@ -1226,7 +1226,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                           setAvailableFields(updated);
                           try {
                             localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
-                          } catch(_err) {}
+                          } catch {}
                         }
                         if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
                           const newC = [...parsedJson.conditions];
@@ -1263,7 +1263,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
                         setAvailableFields(updated);
                         try {
                           localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
-                        } catch(_err) {}
+                        } catch {}
                       }
                       if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
                         const newC = [...parsedJson.conditions];

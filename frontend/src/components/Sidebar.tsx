@@ -1,11 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { 
   LayoutDashboard, 
   Upload, 
   Settings, 
   Layers,
-  ChevronLeft,
-  ChevronRight
+  ChevronLeft
 } from "lucide-react";
 import kolamSolidImg from "../assets/kolam_solid_white.png";
 
@@ -70,14 +69,12 @@ function SidebarBrand({
 
 // 2. NAV ITEM COMPONENT (36px Height)
 function NavItem({
-  id,
   label,
   icon: Icon,
   active,
   isExpanded,
   onClick
 }: {
-  id: string;
   label: string;
   icon: React.ElementType;
   active: boolean;
@@ -265,7 +262,6 @@ export default function Sidebar({
                   return (
                     <NavItem
                       key={item.id}
-                      id={item.id}
                       label={item.label}
                       icon={item.icon}
                       active={active}

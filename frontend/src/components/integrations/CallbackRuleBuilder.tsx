@@ -6,14 +6,11 @@ import {
   Plus,
   Trash2,
   Play,
-  Copy,
   ChevronRight,
   ChevronLeft,
   AlertTriangle,
   Code,
-  ShieldCheck,
   RefreshCw,
-  Zap,
   Info
 } from "lucide-react";
 
@@ -75,7 +72,7 @@ export default function CallbackRuleBuilder({
           if (parsed.logicalOperator) setLogicalOperator(parsed.logicalOperator);
           return parsed.conditions;
         }
-      } catch (_e) {}
+      } catch {}
     }
     return [
       { field: "company", operator: "Equals", value: "VCC" }
@@ -94,7 +91,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.query_params_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (_e) {}
+      } catch {}
     }
     return [
       { key: "source", value: "DOCUFLOW", type: "Static" }
@@ -106,7 +103,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.headers_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (_e) {}
+      } catch {}
     }
     return [
       { key: "Content-Type", value: "application/json", type: "Static" }
@@ -124,7 +121,7 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.payload_mapping_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch (_e) {}
+      } catch {}
     }
     return [
       { thirdPartyField: "primaryKey", sourceField: "primaryKey" },

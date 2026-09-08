@@ -1,50 +1,30 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FileText,
-  Cpu,
   CheckCircle2,
   RotateCw,
   RotateCcw,
-  Play,
-  Save,
   Check,
   X,
   Shield,
-  ArrowRight,
-  ArrowLeft,
-  Download,
-  Loader2,
   AlertCircle,
   Database,
-  Layers,
-  CheckSquare,
   Plus,
-  Trash2,
-  Barcode,
-  Sparkles,
-  HelpCircle,
-  Building2,
-  Hash,
   Calendar,
   Pause,
   ArrowUpRight,
   ChevronDown,
   ChevronUp,
-  MoreHorizontal,
-  Tag,
   Clock,
-  Sliders,
   CheckCheck,
   Lock,
-  ExternalLink,
-  RefreshCw,
   FileSpreadsheet,
   Upload,
   XCircle,
   PauseCircle
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
-import { formatDocNumber, formatDateTime, formatTimeOnly } from "../utils/formatters";
+import { formatDocNumber, formatTimeOnly } from "../utils/formatters";
 
 interface DocumentDetailsProps {
   document: DbInvoice | null;
@@ -217,7 +197,7 @@ export default function DocumentDetails({
       } else if (typeof document.custom_data === 'string') {
         try {
           customObj = JSON.parse(document.custom_data);
-        } catch (_e) {}
+        } catch {}
       }
     }
 
@@ -379,7 +359,7 @@ export default function DocumentDetails({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_handle: userHandle, lease_seconds: 180 })
         });
-      } catch (_err) {}
+      } catch {}
     }, 30000);
 
     return () => {
@@ -390,7 +370,7 @@ export default function DocumentDetails({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_handle: userHandle })
         }).catch(() => {});
-      } catch (_err) {}
+      } catch {}
     };
   }, [document?.id, currentUserUsername, currentUserEmail]);
 
@@ -467,11 +447,11 @@ export default function DocumentDetails({
             if (flacCfg && flacCfg.value) {
               try {
                 setFieldPermissions(JSON.parse(flacCfg.value));
-              } catch (_e) {}
+              } catch {}
             }
           }
         }
-      } catch (_e) {}
+      } catch {}
     };
     loadConfig();
   }, []);
@@ -504,7 +484,7 @@ export default function DocumentDetails({
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
   const [iframeSrc, setIframeSrc] = useState<string>("");
-  const [workflowInstance, setWorkflowInstance] =
+  const [_workflowInstance, setWorkflowInstance] =
     useState<DbWorkflowInstance | null>(null);
   const [_workflowSteps, setWorkflowSteps] = useState<any[]>([]);
   const [_availableWorkflows, setAvailableWorkflows] = useState<any[]>([]);
@@ -543,7 +523,7 @@ export default function DocumentDetails({
       } else {
         setErpData(null);
       }
-    } catch (_e) {
+    } catch {
       setErpData(null);
     } finally {
       setErpLoading(false);
@@ -596,7 +576,7 @@ export default function DocumentDetails({
         setAvailableWorkflows(wfs);
         if (wfs.length > 0) setSelectedWorkflowId(wfs[0].id);
       }
-    } catch (_e) {}
+    } catch {}
   };
 
   const fetchComments = async () => {
@@ -611,8 +591,6 @@ export default function DocumentDetails({
       console.error(e);
     }
   };
-
-  const customDataObj = typeof document?.custom_data === 'string' ? JSON.parse(document.custom_data) : (document?.custom_data || {});
 
   useEffect(() => {
     if (document && !isEditing) {
@@ -640,7 +618,7 @@ export default function DocumentDetails({
       if (typeof document.items === "string") {
         try {
           parsedItems = JSON.parse(document.items);
-        } catch (_e) {}
+        } catch {}
       } else if (Array.isArray(document.items)) {
         parsedItems = document.items;
       }
@@ -702,7 +680,7 @@ export default function DocumentDetails({
         if (parsed.invoiceNumber) setInvoiceNumber(parsed.invoiceNumber);
         if (parsed.poNumber) setPoNumber(parsed.poNumber);
       }
-    } catch (_) {}
+    } catch {}
   }, [document?.id]);
 
   // Auto-Save Draft Verification Inputs on Changes
@@ -718,7 +696,7 @@ export default function DocumentDetails({
           poNumber,
           updatedAt: new Date().toISOString()
         }));
-      } catch (_) {}
+      } catch {}
     }
   }, [document?.id, approvalComment, vendorName, invoiceNumber, poNumber]);
 
@@ -726,7 +704,7 @@ export default function DocumentDetails({
     if (document?.id) {
       try {
         localStorage.removeItem(`docuflow_draft_${document.id}`);
-      } catch (_) {}
+      } catch {}
     }
   };
 
