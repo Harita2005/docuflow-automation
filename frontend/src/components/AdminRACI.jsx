@@ -341,34 +341,6 @@ export default function AdminRACI() {
         </div>
       </div>
 
-      {/* EMAIL DISPATCH ROUTING RULES BANNER */}
-      <div className="bg-slate-900 text-white rounded-xl p-3.5 px-4.5 border border-slate-800 shadow-sm space-y-2 text-xs">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg bg-blue-500/20 border border-blue-400/30 text-blue-400 flex items-center justify-center shrink-0">
-              <Mail className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs flex items-center gap-2">
-                <span>Approval Flow &amp; RACI Notification Dispatch Policy</span>
-                <span className="bg-blue-500/20 border border-blue-400/40 text-blue-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Sequential + Initial RACI</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 border-t border-slate-800 text-[11px] text-slate-300">
-          <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/60">
-            <strong className="text-amber-400 font-mono font-bold block mb-0.5">1. Sequential Stage Approvers (TO EMAIL)</strong>
-            Mails reach approvers one-by-one in sequence (Stage 1 &rarr; Stage 2 &rarr; Stage 3). Each approver receives the email only when it is their turn to act.
-          </div>
-          <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/60">
-            <strong className="text-blue-300 font-mono font-bold block mb-0.5">2. RACI Stakeholder Notifications (CC COPIES)</strong>
-            Responsible (R), Accountable (A), Consulted (C) &amp; Informed (I) members receive <strong>only ONE initial email when the flow starts</strong>.
-          </div>
-        </div>
-      </div>
-
       {/* RACI MATRIX TABLE */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
         <table className="w-full text-left border-collapse">

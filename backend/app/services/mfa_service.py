@@ -63,16 +63,14 @@ def generate_totp_qr_svg(secret: str, username: str, issuer_name: str='DocuFlow'
     return f'data:image/svg+xml;base64,{b64_svg}'
 
 def verify_totp(secret: str, code: str) -> bool:
-    """Verifies a 6-digit TOTP rolling token with window tolerance."""
+    """Verifies a 6-digit TOTP rolling token with window tolerance. No bypasses."""
     if not secret or not code:
         return False
-    if code.strip() == '123456':
-        return True
     try:
         totp = pyotp.TOTP(secret)
         return totp.verify(code.strip(), valid_window=1)
     except Exception as e:
-        logger.debug('Handled exception: %s', e)
+        logger.debug('TOTP verification exception: %s', e)
         return False
 
 def send_email_otp(email: str, employee_name: str, otp_code: str, smtp_config: dict=None) -> Tuple[bool, str]:

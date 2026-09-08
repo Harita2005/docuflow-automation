@@ -141,7 +141,16 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
         return str_doc not in rule_items and clean_doc not in clean_rule_items
     if op in ['contains any of', 'contains any of (or)', 'contains']:
         return any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
-    return True
+    if op in ['starts with', 'starts_with']:
+        return any(str_doc.startswith(it) for it in rule_items)
+    if op in ['ends with', 'ends_with']:
+        return any(str_doc.endswith(it) for it in rule_items)
+    if op in ['in', 'in (comma-separated)']:
+        return str_doc in rule_items
+    if op in ['not in']:
+        return str_doc not in rule_items
+    # Invalid or unrecognized operator MUST return False, never silently True
+    return False
 
 def match_condition(rule: Any, document: Any) -> bool:
     """
@@ -287,19 +296,22 @@ def calculate_rule_priority(cat_val: str, branch_val: str, cc_val: str, base_pri
     return priority
 
 def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
+    if not isinstance(cond, dict) or 'field' not in cond or not cond.get('field'):
+        logger.warning(f"[RulesEngine] Malformed or empty condition rejected (fail-closed): {cond}")
+        return False
     return match_condition(cond, invoice)
 
 def evaluate_rule_conditions(conditions: List[Dict[str, Any]], invoice: Invoice) -> bool:
     if not conditions:
-        return True
+        return False
     if isinstance(conditions, dict) and 'conditions' in conditions:
         conditions = conditions['conditions']
     if not isinstance(conditions, list) or len(conditions) == 0:
-        return True
+        return False
     is_match = True
     for idx, cond in enumerate(conditions):
         matched = evaluate_single_condition(cond, invoice)
-        logical_op = cond.get('logicalOperator', 'AND').upper()
+        logical_op = cond.get('logicalOperator', 'AND').upper() if isinstance(cond, dict) else 'AND'
         if idx == 0:
             is_match = matched
         elif logical_op == 'OR':
@@ -307,6 +319,86 @@ def evaluate_rule_conditions(conditions: List[Dict[str, Any]], invoice: Invoice)
         else:
             is_match = is_match and matched
     return is_match
+
+def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
+    """
+    Dynamically resolves active approvers for a workflow step based on:
+    - Step approver_type ('Role', 'Specific Employee', or targets)
+    - Document context: division, department
+    - Organizational hierarchy: user's division/department matching document's
+    - Only active users (is_active == True)
+    - Deterministic fallback to Admin / Division Head if no approver is found.
+    """
+    from app.models import User
+    if not step:
+        return []
+
+    targets = []
+    if getattr(step, 'approver_target', None):
+        targets.extend([t.strip() for t in step.approver_target.split(',') if t.strip()])
+    if getattr(step, 'delegate_approver', None):
+        targets.extend([t.strip() for t in step.delegate_approver.split(',') if t.strip()])
+
+    doc_div = getattr(doc, 'division', None)
+    doc_dept = getattr(doc, 'department', None) or getattr(doc, 'category', None)
+
+    resolved_users: List[Any] = []
+
+    for target in targets:
+        # Check if target matches known roles
+        role_users = db.query(User).filter(
+            User.is_active == True,
+            (User.role.ilike(target) | (User.role.ilike(f"%{target}%")))
+        ).all()
+        
+        if role_users:
+            for u in role_users:
+                u_div = (u.division or '').strip().upper()
+                d_div = (doc_div or '').strip().upper()
+                div_match = not d_div or not u_div or u_div in ['GLOBAL', 'HQ', 'ALL'] or u_div == d_div
+                
+                u_dept = (u.department or '').strip().upper()
+                d_dept = (doc_dept or '').strip().upper()
+                dept_match = not d_dept or not u_dept or u_dept in ['ALL'] or u_dept == d_dept or u_div in ['GLOBAL', 'HQ']
+                
+                if div_match and dept_match:
+                    if u not in resolved_users:
+                        resolved_users.append(u)
+        else:
+            # Match by specific employee username, employee_id, email, or employee_name
+            specific_users = db.query(User).filter(
+                User.is_active == True,
+                (
+                    (User.username.ilike(target)) |
+                    (User.employee_id.ilike(target)) |
+                    (User.email.ilike(target)) |
+                    (User.employee_name.ilike(target))
+                )
+            ).all()
+            for u in specific_users:
+                if u not in resolved_users:
+                    resolved_users.append(u)
+
+    # Fallback if no active approver resolved
+    if not resolved_users:
+        logger.warning(
+            f"[ApproverResolution] No active approvers found for step '{getattr(step, 'step_name', 'Step')}' "
+            f"(stage {getattr(step, 'stage_number', 1)}, target '{getattr(step, 'approver_target', '')}') "
+            f"on doc {getattr(doc, 'id', 'N/A')}. Escalating to Division Head / Admins."
+        )
+        if doc_div:
+            div_admins = db.query(User).filter(
+                User.is_active == True,
+                User.role.in_(['admin', 'gm', 'md', 'jmd']),
+                (User.division.ilike(doc_div)) | (User.division.in_(['GLOBAL', 'HQ']))
+            ).all()
+            if div_admins:
+                resolved_users.extend(div_admins)
+        if not resolved_users:
+            all_admins = db.query(User).filter(User.is_active == True, User.role == 'admin').all()
+            resolved_users.extend(all_admins)
+
+    return resolved_users
 
 def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
     res = evaluate_business_rules_full(db, invoice)

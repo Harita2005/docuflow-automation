@@ -19,10 +19,12 @@ from app.config import settings
 from app.models import Invoice, WorkflowStepDefinition, AuditLog, User, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig, ChecklistRule, InAppNotification
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
-from app.auth import get_current_user
+from app.auth import get_current_user, get_current_active_user, decode_token
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
+from app.services.rbac_service import authorize_document_access
+from app.services.file_security import validate_uploaded_file, get_safe_file_path, sanitize_filename
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -88,7 +90,7 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
 @router.get('/api/records', response_model=List[InvoiceResponse])
 @router.get('/api/documents', response_model=List[InvoiceResponse])
 @router.get('/api/invoices', response_model=List[InvoiceResponse])
-def get_all_invoices(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
+def get_all_invoices(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     invoices = db.query(Invoice).filter(Invoice.is_deleted == False).order_by(Invoice.created_at.desc()).all()
     approved_invoice_ids = set()
     rejected_invoice_ids = set()
@@ -122,8 +124,12 @@ def get_all_invoices(db: Session=Depends(get_db), current_user: Optional[User]=D
                 if step_def.delegate_approver and step_def.delegate_approver.strip():
                     targets.append(step_def.delegate_approver.strip())
                 inv.assigned_approver = ', '.join(targets)
-        if not current_user or current_user.role == 'admin':
+        if current_user.role == 'admin':
             filtered_invoices.append(inv)
+            continue
+        user_div = (current_user.division or '').strip().upper()
+        doc_div = (inv.division or '').strip().upper()
+        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
             continue
         if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
             filtered_invoices.append(inv)
@@ -138,6 +144,9 @@ def get_all_invoices(db: Session=Depends(get_db), current_user: Optional[User]=D
                     is_prior_pool_member = True
                     break
         if is_prior_pool_member:
+            filtered_invoices.append(inv)
+            continue
+        if authorize_document_access(current_user, inv):
             filtered_invoices.append(inv)
             continue
     results = []
@@ -159,7 +168,7 @@ def get_all_invoices(db: Session=Depends(get_db), current_user: Optional[User]=D
 @router.get('/api/documents/synced-pending', response_model=List[InvoiceResponse])
 @router.get('/api/records/synced-pending', response_model=List[InvoiceResponse])
 @router.get('/api/invoices/synced-pending', response_model=List[InvoiceResponse])
-def get_synced_pending_documents(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
+def get_synced_pending_documents(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     invoices = db.query(Invoice).filter(Invoice.is_deleted == False, Invoice.doc_key.isnot(None), Invoice.file_url.is_(None) | (Invoice.file_url == '')).order_by(Invoice.created_at.desc()).all()
     if current_user and current_user.role != 'admin':
         user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
@@ -173,7 +182,7 @@ def get_synced_pending_documents(db: Session=Depends(get_db), current_user: Opti
                     if handle in approvers or any((handle in app or app in handle for app in approvers)):
                         is_assigned = True
                         break
-            if is_assigned:
+            if is_assigned or authorize_document_access(current_user, inv):
                 filtered_invoices.append(inv)
         invoices = filtered_invoices
     results = []
@@ -187,7 +196,7 @@ def get_synced_pending_documents(db: Session=Depends(get_db), current_user: Opti
 @router.get('/api/records/{invoice_id}')
 @router.get('/api/documents/{invoice_id}')
 @router.get('/api/invoices/{invoice_id}')
-def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
+def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     steps_data = []
     if inv.workflow_profile_id:
@@ -236,8 +245,12 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 is_prior_pool_member = True
                 break
     if current_user and current_user.role != 'admin':
-        if not is_curr and (not has_appr) and (not has_rej) and (not is_prior_pool_member):
-            raise HTTPException(status_code=403, detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to '{inv.assigned_approver}'. It will only become accessible in your queue once preceding stage approvals are signed off.")
+        user_div = (current_user.division or '').strip().upper()
+        doc_div = (inv.division or '').strip().upper()
+        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
+            raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
+        if not is_curr and (not has_appr) and (not has_rej) and (not is_prior_pool_member) and not authorize_document_access(current_user, inv):
+            raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
     inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
@@ -534,18 +547,60 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'message': 'Workflow process cancelled and voided at Attachment Stage.'}
 
+@router.get('/api/records/{invoice_id}/file')
+@router.get('/api/documents/{invoice_id}/file')
+@router.get('/api/invoices/{invoice_id}/file')
+def stream_document_file(
+    invoice_id: str,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    auth_user = current_user
+    if not auth_user and token:
+        try:
+            payload = decode_token(token)
+            username = payload.get('sub')
+            if username:
+                auth_user = db.query(User).filter(User.username == username, User.is_active == True).first()
+        except Exception:
+            pass
+
+    if not auth_user:
+        raise HTTPException(status_code=401, detail='Authentication required to view document attachment.')
+
+    inv = find_invoice_by_identifier(db, invoice_id)
+    if not authorize_document_access(auth_user, inv) and not is_user_in_approver_pool(auth_user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail='Access Denied: You are not authorized to access this document file.')
+
+    target_ref = getattr(inv, 'file_path', None) or inv.file_url
+    if not target_ref:
+        raise HTTPException(status_code=404, detail='No physical file attached to this document.')
+
+    safe_path = get_safe_file_path(target_ref)
+    if not safe_path.exists():
+        raise HTTPException(status_code=404, detail='Document file not found on server storage.')
+
+    media_type = 'application/pdf' if safe_path.suffix.lower() == '.pdf' else 'image/jpeg'
+    return FileResponse(
+        path=str(safe_path),
+        media_type=media_type,
+        filename=safe_path.name,
+        headers={'Content-Disposition': f'inline; filename="{safe_path.name}"'}
+    )
+
 def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True):
+    if not user:
+        raise HTTPException(status_code=401, detail='Authentication required: Please log in to approve or review documents.')
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail='Account Inactive: Your user account is disabled.')
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed']:
         raise HTTPException(status_code=400, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
     if inv.assigned_approver and inv.assigned_approver.strip():
         approvers = [s.strip().lower() for s in inv.assigned_approver.split(',') if s.strip()]
-        user_handles = []
-        is_admin = False
-        if user:
-            user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
-            user_handles = [h for h in user_handles if h]
-            if (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']:
-                is_admin = True
+        user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
+        user_handles = [h for h in user_handles if h]
+        is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
         is_authorized = is_admin
         if not is_authorized:
             for handle in user_handles:
@@ -558,10 +613,13 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         is_stage_1 = (inv.current_stage or 1) == 1
         has_attachment = False
         if inv.file_url and inv.file_url.strip():
-            filename = inv.file_url.split('/')[-1]
-            file_disk_path = settings.UPLOAD_DIR / filename
-            if file_disk_path.exists() and file_disk_path.stat().st_size > 0:
-                has_attachment = True
+            try:
+                target_f = getattr(inv, 'file_path', None) or inv.file_url
+                file_disk_path = get_safe_file_path(target_f)
+                if file_disk_path.exists() and file_disk_path.stat().st_size > 0:
+                    has_attachment = True
+            except Exception:
+                has_attachment = False
         if is_stage_1 and (not has_attachment):
             raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical invoice PDF file must be attached and uploaded before approving Stage 1 (Attachment Status).')
         current_step_name = 'Attachment Status' if is_stage_1 else f'Stage {inv.current_stage or 1}'
@@ -573,27 +631,24 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         if not checklist_items:
             default_items = resolve_checklist_items(db, inv, current_step_name)
             for t_text in default_items:
-                item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False)
+                item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False, is_mandatory=True)
                 db.add(item)
                 checklist_items.append(item)
             db.commit()
         if checklist_items:
-            unchecked = [item for item in checklist_items if not item.is_checked]
-            if unchecked:
-                raise HTTPException(status_code=400, detail=f"Compliance Checklist Incomplete: Please verify and check all {len(checklist_items)} checklist items for '{current_step_name}' ({len(unchecked)} remaining) before approving.")
+            unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
+            if unchecked_mandatory:
+                missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])
+                raise HTTPException(status_code=400, detail=f"Compliance Checklist Incomplete: The following mandatory checklist items must be verified and checked before approving: {missing_items_str}")
 
 @router.post('/api/workflows/approve')
 @router.post('/api/workflow/approve')
-def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=True)
-    if inv.workflow_profile_id:
-        step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
-        if step and step.step_name:
-            step.step_name
     approver_name = payload.get('approver') or payload.get('user') or payload.get('username')
     if not approver_name or approver_name.lower() in ['approver', 'reviewer', 'admin']:
         if user:
@@ -605,32 +660,62 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: O
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Compliance items verified and signed off.'
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
+    current_version = inv.version or 1
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
+    next_stage_val = prev_stage_num
+    next_status_val = inv.status
+    next_assigned_val = inv.assigned_approver
+    next_checklist_val = inv.checklist_state
+
     if (inv.current_stage or 1) < (inv.total_stages or 1):
-        inv.current_stage = (inv.current_stage or 1) + 1
-        next_step_name = f'Stage {inv.current_stage}'
+        next_stage_val = (inv.current_stage or 1) + 1
+        next_step_name = f'Stage {next_stage_val}'
         if inv.workflow_profile_id:
-            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == inv.current_stage).first()
+            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
             if next_step:
-                inv.assigned_approver = next_step.approver_target
+                next_assigned_val = next_step.approver_target
                 next_step_name = next_step.step_name
-                next_assigned_info = f'Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
+                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
             for item_text in checklist_items:
-                db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False))
-            inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
+                db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False, is_mandatory=True))
+            next_checklist_val = json.dumps({item_text: False for item_text in checklist_items})
         else:
             for item in existing_next_items:
                 item.is_checked = False
                 item.checked_by = None
                 item.checked_at = None
-            inv.checklist_state = json.dumps({item.item_text: False for item in existing_next_items})
-        inv.status = f'In Progress (Stage {inv.current_stage})'
+            next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
+        next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
-        inv.status = 'Settled'
+        next_status_val = 'Settled'
         archive_approved_pdf(inv)
+
+    rows_affected = db.query(Invoice).filter(
+        Invoice.id == inv.id,
+        Invoice.version == current_version,
+        Invoice.current_stage == prev_stage_num
+    ).update({
+        Invoice.current_stage: next_stage_val,
+        Invoice.status: next_status_val,
+        Invoice.assigned_approver: next_assigned_val,
+        Invoice.version: current_version + 1,
+        Invoice.checklist_state: next_checklist_val,
+        Invoice.updated_at: datetime.datetime.utcnow()
+    }, synchronize_session=False)
+
+    if rows_affected == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Conflict: Document '{inv.id}' was modified or approved concurrently by another process. Please reload.")
+
+    inv.current_stage = next_stage_val
+    inv.status = next_status_val
+    inv.assigned_approver = next_assigned_val
+    inv.version = current_version + 1
+    inv.checklist_state = next_checklist_val
+
     dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
     db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}'))
     db.commit()
@@ -641,39 +726,69 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: O
 @router.post('/api/records/{invoice_id}/approve')
 @router.post('/api/documents/{invoice_id}/approve')
 @router.post('/api/invoices/{invoice_id}/approve')
-def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=True)
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = action.remarks if action and action.remarks else 'Compliance items verified and signed off.'
     stage_name = action.stage_name if action and action.stage_name else f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
+    current_version = inv.version or 1
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
+    next_stage_val = prev_stage_num
+    next_status_val = inv.status
+    next_assigned_val = inv.assigned_approver
+    next_checklist_val = inv.checklist_state
+
     if (inv.current_stage or 1) < (inv.total_stages or 1):
-        inv.current_stage = (inv.current_stage or 1) + 1
-        next_step_name = f'Stage {inv.current_stage}'
+        next_stage_val = (inv.current_stage or 1) + 1
+        next_step_name = f'Stage {next_stage_val}'
         if inv.workflow_profile_id:
-            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == inv.current_stage).first()
+            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
             if next_step:
-                inv.assigned_approver = next_step.approver_target
+                next_assigned_val = next_step.approver_target
                 next_step_name = next_step.step_name
-                next_assigned_info = f'Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
+                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
             for item_text in checklist_items:
-                db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False))
-            inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
+                db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False, is_mandatory=True))
+            next_checklist_val = json.dumps({item_text: False for item_text in checklist_items})
         else:
             for item in existing_next_items:
                 item.is_checked = False
                 item.checked_by = None
                 item.checked_at = None
-            inv.checklist_state = json.dumps({item.item_text: False for item in existing_next_items})
-        inv.status = f'In Progress (Stage {inv.current_stage})'
+            next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
+        next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
-        inv.status = 'Settled'
+        next_status_val = 'Settled'
         archive_approved_pdf(inv)
+
+    rows_affected = db.query(Invoice).filter(
+        Invoice.id == inv.id,
+        Invoice.version == current_version,
+        Invoice.current_stage == prev_stage_num
+    ).update({
+        Invoice.current_stage: next_stage_val,
+        Invoice.status: next_status_val,
+        Invoice.assigned_approver: next_assigned_val,
+        Invoice.version: current_version + 1,
+        Invoice.checklist_state: next_checklist_val,
+        Invoice.updated_at: datetime.datetime.utcnow()
+    }, synchronize_session=False)
+
+    if rows_affected == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Conflict: Document '{inv.id}' was modified or approved concurrently by another process. Please reload.")
+
+    inv.current_stage = next_stage_val
+    inv.status = next_status_val
+    inv.assigned_approver = next_assigned_val
+    inv.version = current_version + 1
+    inv.checklist_state = next_checklist_val
+
     dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}'))
     db.commit()
@@ -813,28 +928,76 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
     return {'success': True, 'status': inv.status, 'invoice': inv}
 
 @router.post('/api/documents/upload')
-async def upload_document(file: UploadFile=File(...), division: Optional[str]=Form('VCC'), plant: Optional[str]=Form('TN-SIVAKASI'), document_type: Optional[str]=Form('AP INVOICE'), workflow_profile: Optional[str]=Form(None), db: Session=Depends(get_db)):
+async def upload_document(
+    file: UploadFile = File(...),
+    division: Optional[str] = Form(None),
+    plant: Optional[str] = Form(None),
+    document_type: Optional[str] = Form('AP INVOICE'),
+    workflow_profile: Optional[str] = Form(None),
+    vendor_name: Optional[str] = Form(None),
+    invoice_number: Optional[str] = Form(None),
+    amount: Optional[float] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     import uuid
+    content = await file.read()
+    unique_filename, detected_type = validate_uploaded_file(file, content)
+    file_path = settings.UPLOAD_DIR / unique_filename
+    with open(file_path, 'wb') as buffer:
+        buffer.write(content)
+
+    if detected_type == 'pdf':
+        try:
+            compress_pdf(file_path)
+        except Exception as exc:
+            logger.debug('Handled compression exception: %s', exc)
+
+    ocr_data = {}
+    if detected_type == 'pdf':
+        try:
+            from app.services.ocr_service import extract_text_from_pdf
+            ocr_data = extract_text_from_pdf(file_path) or {}
+        except Exception as exc:
+            logger.debug('Handled ocr exception: %s', exc)
+
     timestamp = int(datetime.datetime.utcnow().timestamp())
     prefix = get_doc_type_prefix(document_type or '', '')
     rand_hex = uuid.uuid4().hex[:6].upper()
     new_id = f'{prefix}-{timestamp % 1000000}_{rand_hex}'
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
-    filename = f'{new_id}.{ext}'
-    file_path = settings.UPLOAD_DIR / filename
-    with open(file_path, 'wb') as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    if ext.lower() == 'pdf':
-        compress_pdf(file_path)
-    from app.services.ocr_service import extract_text_from_pdf
-    ocr_data = extract_text_from_pdf(file_path) if ext.lower() == 'pdf' else {}
-    amount = float(ocr_data.get('amount') or 45000.0)
-    base_amount = round(amount / 1.18, 2)
-    tax_amount = round(amount - base_amount, 2)
-    vendor_name = ocr_data.get('vendor_name') or 'Sample Vendor Enterprise'
-    invoice_number = ocr_data.get('invoice_number') or f'INV-{timestamp % 10000}'
-    vendor_gstin = ocr_data.get('gstin') or '33AAACR1234F1Z5'
-    new_inv = Invoice(id=new_id, vendor_name=vendor_name, invoice_number=invoice_number, invoice_date=ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d'), amount=amount, base_amount=base_amount, tax_amount=tax_amount, vendor_gstin=vendor_gstin, division=division or 'VCC', plant=plant or 'TN-SIVAKASI', category=document_type or 'PURCHASE', document_type=document_type or 'AP INVOICE', file_url=f'/uploads/{filename}', status='Pending Approval', current_stage=1, total_stages=2)
+
+    final_amount = float(amount if amount is not None else (ocr_data.get('amount') or 0.0))
+    final_base = round(final_amount / 1.18, 2) if final_amount else 0.0
+    final_tax = round(final_amount - final_base, 2) if final_amount else 0.0
+    final_vendor = vendor_name or ocr_data.get('vendor_name') or 'Direct Upload Supplier'
+    final_inv_no = invoice_number or ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}'
+    final_gstin = ocr_data.get('gstin') or ''
+    user_div = division or current_user.division or 'VCC'
+    user_plant = plant or 'MAIN'
+
+    new_inv = Invoice(
+        id=new_id,
+        vendor_name=final_vendor,
+        invoice_number=final_inv_no,
+        invoice_date=ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d'),
+        amount=final_amount,
+        base_amount=final_base,
+        tax_amount=final_tax,
+        vendor_gstin=final_gstin,
+        division=user_div,
+        plant=user_plant,
+        category=document_type or 'PURCHASE',
+        document_type=document_type or 'AP INVOICE',
+        file_url=f'/api/documents/{new_id}/file',
+        file_path=str(file_path),
+        file_name=file.filename,
+        file_size=len(content),
+        status='Pending Approval',
+        current_stage=1,
+        total_stages=2,
+        version=1,
+        source_application='DocuFlow Direct'
+    )
     
     if workflow_profile and workflow_profile.strip() and workflow_profile.strip() != 'auto':
         matched_wf = workflow_profile.strip()
@@ -894,18 +1057,37 @@ async def upload_document(file: UploadFile=File(...), division: Optional[str]=Fo
     return {'success': True, 'invoice': new_inv}
 
 @router.post('/api/documents/upload-and-route/{synced_doc_id}')
-async def upload_and_route(synced_doc_id: str, file: UploadFile=File(...), document_type: Optional[str]=Form('AP INVOICE'), vendorName: Optional[str]=Form(None), invoiceNumber: Optional[str]=Form(None), amount: Optional[float]=Form(None), invoiceDate: Optional[str]=Form(None), poNumber: Optional[str]=Form(None), cgst: Optional[float]=Form(0.0), sgst: Optional[float]=Form(0.0), igst: Optional[float]=Form(0.0), db: Session=Depends(get_db)):
+async def upload_and_route(
+    synced_doc_id: str,
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form('AP INVOICE'),
+    vendorName: Optional[str] = Form(None),
+    invoiceNumber: Optional[str] = Form(None),
+    amount: Optional[float] = Form(None),
+    invoiceDate: Optional[str] = Form(None),
+    poNumber: Optional[str] = Form(None),
+    cgst: Optional[float] = Form(0.0),
+    sgst: Optional[float] = Form(0.0),
+    igst: Optional[float] = Form(0.0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     inv = db.query(Invoice).filter(Invoice.id == synced_doc_id).first()
     if not inv:
         raise HTTPException(status_code=404, detail='Synced staging document not found')
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
-    filename = f'{inv.id}.{ext}'
-    file_path = settings.UPLOAD_DIR / filename
+    content = await file.read()
+    unique_filename, detected_type = validate_uploaded_file(file, content)
+    file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    if ext.lower() == 'pdf':
-        compress_pdf(file_path)
-    inv.file_url = f'/uploads/{filename}'
+        buffer.write(content)
+    if detected_type == 'pdf':
+        try:
+            compress_pdf(file_path)
+        except Exception as exc:
+            logger.debug('Handled exception: %s', exc)
+    inv.file_url = f'/api/documents/{inv.id}/file'
+    inv.file_path = str(file_path)
+    inv.file_size = len(content)
     inv.file_name = file.filename
     if document_type:
         inv.document_type = document_type
@@ -964,25 +1146,34 @@ async def upload_and_route(synced_doc_id: str, file: UploadFile=File(...), docum
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
     db.commit()
     db.refresh(inv)
-    db.add(AuditLog(invoice_id=inv.id, user='Metadata Editor / Sync Uploader', action='Metadata Completed & Routed', stage='Stage 1', notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."))
-    db.commit()
     return {'success': True, 'invoice': inv}
 
 @router.post('/api/records/{invoice_id}/version')
 @router.post('/api/documents/{invoice_id}/version')
 @router.post('/api/invoices/{invoice_id}/version')
-async def upload_invoice_version(invoice_id: str, file: UploadFile=File(...), db: Session=Depends(get_db)):
+async def upload_invoice_version(
+    invoice_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     inv = find_invoice_by_identifier(db, invoice_id)
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
-    filename = f'{inv.id}.{ext}'
-    file_path = settings.UPLOAD_DIR / filename
+    content = await file.read()
+    unique_filename, detected_type = validate_uploaded_file(file, content)
+    file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    if ext.lower() == 'pdf':
-        compress_pdf(file_path)
-    inv.file_url = f'/uploads/{filename}'
+        buffer.write(content)
+    if detected_type == 'pdf':
+        try:
+            compress_pdf(file_path)
+        except Exception as exc:
+            logger.debug('Handled exception: %s', exc)
+    inv.file_url = f'/api/documents/{inv.id}/file'
+    inv.file_path = str(file_path)
+    inv.file_size = len(content)
     inv.file_name = file.filename
-    db.add(AuditLog(invoice_id=str(inv.id), user='Initiator / Approver', action='Invoice PDF Attached', stage=f'Stage {inv.current_stage or 1}', notes=f'Physical document attached: {file.filename}. Pending checklist verification and stage approval.'))
+    uploader_name = current_user.employee_name or current_user.username
+    db.add(AuditLog(invoice_id=str(inv.id), user=uploader_name, action='Invoice PDF Attached', stage=f'Stage {inv.current_stage or 1}', notes=f'Physical document attached: {file.filename}. Pending checklist verification and stage approval.'))
     db.commit()
     db.refresh(inv)
     return {'success': True, 'file_url': inv.file_url, 'current_stage': inv.current_stage, 'status': inv.status}

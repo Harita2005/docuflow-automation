@@ -33,6 +33,8 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
         user = db.query(User).filter(User.employee_id.ilike(f'%_{ident_str}') | User.employee_id.ilike(f'%{ident_str}%') | User.username.ilike(f'%{ident_str}%') | User.name.ilike(f'%{ident_str}%')).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"User '{ident_str}' not found in system.")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated. Access denied.")
     if request.password:
         is_valid = verify_password(request.password, user.password_hash or '')
         if not is_valid:
@@ -67,10 +69,20 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     user = db.query(User).filter(User.id == ticket_data['user_id']).first()
     if not user:
         raise HTTPException(status_code=404, detail='Employee record not found')
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail='Employee account is deactivated. Access denied.')
+
+    # Enforce 30s resend rate limiting
+    last_sent = ticket_data.get('otp_sent_at', 0)
+    if time.time() - last_sent < 30:
+        remaining = int(30 - (time.time() - last_sent))
+        raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
+
     code = generate_numeric_otp(6)
     ticket_data['otp'] = code
     ticket_data['method'] = request.method
     ticket_data['otp_expires_at'] = time.time() + 300
+    ticket_data['otp_sent_at'] = time.time()
     method_upper = request.method.upper()
     if method_upper == 'EMAIL':
         from app.models import NotificationProviderConfig
@@ -80,14 +92,14 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
             config_dict = {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': config.encrypted_password, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
         background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
         destination = mask_email(user.email)
-        msg = f'Verification code queued in background for {destination}'
+        msg = f'Verification code queued for {destination}'
     elif method_upper == 'SMS':
         background_tasks.add_task(send_sms_otp, user.phone_number or '+91 98765 43210', user.employee_name or user.name, code)
         destination = mask_phone(user.phone_number or '+91 98765 43210')
-        msg = f'Verification code queued in background for {destination}'
+        msg = f'Verification code queued for {destination}'
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
-    return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300, 'preview_otp': code}
+    return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300, 'preview_otp': code, 'dev_otp': code}
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
 def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
@@ -97,6 +109,8 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
     user = db.query(User).filter(User.id == ticket_data['user_id']).first()
     if not user:
         raise HTTPException(status_code=404, detail='Employee not found')
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail='Employee account is deactivated.')
     if not user.mfa_secret:
         user.mfa_secret = generate_totp_secret()
         db.commit()
@@ -114,6 +128,8 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
     user = db.query(User).filter(User.id == ticket_data['user_id']).first()
     if not user:
         raise HTTPException(status_code=404, detail='Employee record not found')
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail='Employee account is deactivated. Access denied.')
     method_upper = request.method.upper()
     code_str = request.code.strip()
     is_valid = False
@@ -125,9 +141,10 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
     elif method_upper in ['EMAIL', 'SMS']:
         expected_otp = ticket_data.get('otp')
         otp_expiry = ticket_data.get('otp_expires_at', 0)
-        if code_str == '123456':
+        if expected_otp and code_str == expected_otp and (time.time() <= otp_expiry):
             is_valid = True
-        elif expected_otp and code_str == expected_otp and (time.time() <= otp_expiry):
+            ticket_data['verified'] = True
+        elif ticket_data.get('verified') and request.force_login:
             is_valid = True
         else:
             is_valid = False
@@ -158,7 +175,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
         except Exception as e:
             logger.debug('Handled exception: %s', e)
     expires_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    access_token = create_access_token(data={'sub': user.username, 'id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
+    access_token = create_access_token(data={'sub': user.username, 'id': user.id, 'role': user.role, 'division': user.division, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
     try:
         db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='MFA Verified', stage='Authentication', notes=f'User {user.employee_name} ({user.employee_id}) completed 2FA challenge via [{method_upper}].'))
         db.commit()

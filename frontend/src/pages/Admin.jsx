@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
+import kolamSolidImg from '../assets/kolam_solid_white.png';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -301,37 +302,47 @@ export default function Admin() {
     <div className="flex gap-8 h-[calc(100vh-4.5rem)] w-full font-sans overflow-hidden">
       
       {/* Secondary Sidebar */}
-      <div className="w-56 shrink-0 flex flex-col gap-4 h-full overflow-y-auto border-r border-slate-200 pr-6 pt-6 pb-6 custom-scrollbar">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 tracking-tight">Settings</h2>
-          <p className="text-[10px] text-slate-500 mt-0.5">Manage system configuration and policies.</p>
+      <div className="relative w-56 shrink-0 flex flex-col gap-4 h-full overflow-hidden rounded-r-xl bg-gradient-to-b from-[#004B32] via-[#003F29] to-[#002E1E] px-3 pt-5 pb-4 text-white shadow-lg custom-scrollbar">
+        <img
+          src={kolamSolidImg}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-x-[-18px] top-24 bottom-20 w-[116%] max-w-none object-contain opacity-20 pointer-events-none"
+        />
+
+        <div className="relative z-10 px-2">
+          <div className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-white" />
+            <h2 className="text-sm font-bold text-white tracking-tight">Control Settings</h2>
+          </div>
+          <p className="text-[9px] text-emerald-100/70 mt-1">System configuration and policies</p>
         </div>
 
-        <div className="flex-1 space-y-4">
+        <div className="relative z-10 flex-1 space-y-4 overflow-y-auto custom-scrollbar">
           {/* WORKFLOW */}
           <div className="space-y-0.5">
-            <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">Workflow & Rules</h3>
+            <h3 className="text-[9px] font-bold text-emerald-100/55 uppercase tracking-widest px-2 mb-1.5">Workflow & Rules</h3>
             <button
               onClick={() => setActiveTab("routing")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "routing" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "routing" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Flow Builder
             </button>
             <button
               onClick={() => setActiveTab("matrix")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "matrix" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Condition Builder
             </button>
             <button
               onClick={() => setActiveTab("checklists")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "checklists" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "checklists" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Checklist Matrix
             </button>
             <button
               onClick={() => setActiveTab("templates")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "templates" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               AI Templates
             </button>
@@ -339,11 +350,11 @@ export default function Admin() {
 
           {/* WORKSPACE & ACCESS */}
           <div className="space-y-0.5">
-            <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">Workspace & Access</h3>
+            <h3 className="text-[9px] font-bold text-emerald-100/55 uppercase tracking-widest px-2 mb-1.5">Workspace & Access</h3>
 
             <button
               onClick={() => setActiveTab("rbac")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "rbac" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "rbac" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Role Matrix (RBAC)
             </button>
@@ -351,34 +362,34 @@ export default function Admin() {
 
           {/* SYSTEM ADMINISTRATION */}
           <div className="space-y-0.5">
-            <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1.5">System Administration</h3>
+            <h3 className="text-[9px] font-bold text-emerald-100/55 uppercase tracking-widest px-2 mb-1.5">System Administration</h3>
             <button
               onClick={() => setActiveTab("raci")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "raci" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "raci" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Email & RACI
             </button>
             <button
               onClick={() => setActiveTab("inapp")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "inapp" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "inapp" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               In-App Notifications
             </button>
             <button
               onClick={() => setActiveTab("audit")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "audit" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "audit" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Audit Logs
             </button>
             <button
               onClick={() => setActiveTab("system")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "system" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               System Settings
             </button>
             <button
               onClick={() => setActiveTab("callbacks")}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "callbacks" ? "bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm" : "text-slate-600 hover:bg-slate-100 border border-transparent"}`}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "callbacks" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
             >
               Third-Party App Sync
             </button>
@@ -393,7 +404,7 @@ export default function Admin() {
         {activeTab !== 'callbacks' && (
           <div className={`mb-1.5 border rounded-lg p-2 backdrop-blur-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2 transition-colors ${hasChanges ? 'bg-amber-50/90 border-amber-200/60' : 'bg-white/80 border-slate-200/60'}`}>
             <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-md flex items-center justify-center text-white shadow-sm transition-colors ${hasChanges ? 'bg-gradient-to-br from-amber-400 to-amber-600' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
+              <div className={`h-6 w-6 rounded-md flex items-center justify-center text-white shadow-sm transition-colors ${hasChanges ? 'bg-gradient-to-br from-amber-400 to-amber-600' : 'bg-gradient-to-br from-[#003F28] to-[#00452B]'}`}>
                 {hasChanges ? <AlertTriangle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
               </div>
               <div>
@@ -420,7 +431,7 @@ export default function Admin() {
               {(activeTab === 'routing' || activeTab === 'matrix') && isRootView && (
                 <button 
                   onClick={() => window.dispatchEvent(new Event('open-add-category'))} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shadow-sm border border-blue-100 mr-2"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003F28] text-white hover:bg-[#005333] font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003F28] shadow-sm mr-2 cursor-pointer"
                 >
                   <Plus className="h-3 w-3" /> Add Category
                 </button>
@@ -428,7 +439,7 @@ export default function Admin() {
               {activeTab === 'templates' && (
                 <button
                   onClick={() => openEditTemplate(null)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shadow-sm border border-blue-200 mr-2"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003F28] text-white hover:bg-[#005333] font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003F28] shadow-sm mr-2 cursor-pointer"
                 >
                   <Plus className="h-3 w-3" /> New Template
                 </button>

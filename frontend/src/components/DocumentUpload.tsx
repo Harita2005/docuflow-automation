@@ -1,5 +1,5 @@
+import { Upload } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
-import { Upload, FileText, CheckCircle2, ArrowRight, AlertCircle, Loader2, Layers, GitMerge, Plus, ShieldCheck, UserCheck, ArrowUpRight, X, Sliders, ExternalLink, Eye, ChevronDown } from "lucide-react";
 
 interface DocumentUploadProps {
   onUploadSuccess: (newDoc: any) => void;
@@ -310,9 +310,8 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               </label>
               <button
                 onClick={() => setShowNewTypeModal(true)}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline cursor-pointer"
+                className="text-[11px] font-bold text-[#003F28] hover:text-[#005333] flex items-center gap-1 hover:underline cursor-pointer"
               >
-                <Plus className="h-3.5 w-3.5" />
                 <span>New Document Stream</span>
               </button>
             </div>
@@ -327,7 +326,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
                     setSelectedDocType(e.target.value);
                   }
                 }}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#003F28]/20 focus:border-[#003F28] transition appearance-none cursor-pointer"
               >
                 <optgroup label="Standard Document Types">
                   <option value="AP Invoice">AP Invoice</option>
@@ -347,12 +346,11 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
                   </optgroup>
                 )}
 
-                <option value="__NEW__" className="text-blue-600 font-bold">
+                <option value="__NEW__" className="text-[#003F28] font-bold">
                   + Create New Document Type &amp; Workflow...
                 </option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                <Layers className="h-4 w-4" />
               </div>
             </div>
           </div>
@@ -361,18 +359,15 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           <div className="space-y-1.5 pt-1">
             <div className="flex items-center justify-between">
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Sliders className="h-3 w-3 text-indigo-500" />
                 <span>Approval Workflow Profile</span>
               </label>
               <button
                 type="button"
                 onClick={() => setCurrentView("admin")}
-                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 hover:underline cursor-pointer"
+                className="text-[11px] font-bold text-[#003F28] hover:text-[#005333] flex items-center gap-1 hover:underline cursor-pointer"
                 title="Open Flow Builder in Admin to design custom workflow canvas"
               >
-                <GitMerge className="h-3 w-3 text-indigo-500" />
                 <span>Build Flow in Canvas</span>
-                <ExternalLink className="h-2.5 w-2.5" />
               </button>
             </div>
 
@@ -386,7 +381,7 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
                     setSelectedWorkflowProfile(e.target.value);
                   }
                 }}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition appearance-none cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#003F28]/20 focus:border-[#003F28] transition appearance-none cursor-pointer"
               >
                 <option value="auto">⚡ Auto-Match via Policy Matrix (Recommended)</option>
                 
@@ -413,7 +408,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
                 </option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                <GitMerge className="h-4 w-4" />
               </div>
             </div>
 
@@ -425,10 +419,9 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
                 className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 transition cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Eye className="h-3.5 w-3.5 text-blue-600" />
                   <span>View Workflow Stages &amp; Approvers ({activeWorkflowPreview.stages.length} Stages)</span>
                 </div>
-                <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${showStagesDropdown ? "rotate-180" : ""}`} />
+                <span className="text-[10px] text-slate-500">{showStagesDropdown ? "Hide" : "Show"}</span>
               </button>
 
               {showStagesDropdown && (
@@ -469,7 +462,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-6 shadow-sm">
           <div className="relative flex items-center justify-center">
             <div className="absolute h-10 w-10 bg-blue-100 rounded-full animate-ping opacity-60"></div>
-            <Loader2 className="h-10 w-10 text-blue-600 animate-spin relative z-10" />
           </div>
           <div className="space-y-1.5 max-w-sm">
             <h3 className="font-bold text-slate-800 text-sm">Registering &amp; Routing Document Stream</h3>
@@ -483,7 +475,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
         /* Upload & Workflow Initiation Success State */
         <div className="bg-white border border-slate-200/90 rounded-2xl p-8 text-center space-y-6 shadow-sm">
           <div className="mx-auto bg-emerald-50 h-12 w-12 text-emerald-600 rounded-full flex items-center justify-center border border-emerald-100">
-            <CheckCircle2 className="h-6 w-6" />
           </div>
           <div className="space-y-1.5">
             <h3 className="font-display font-extrabold text-slate-800 text-lg">Document Uploaded &amp; Workflow Initiated!</h3>
@@ -517,7 +508,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               className="w-full sm:w-1/2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition rounded-xl flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
             >
               <span>Track Workflow</span>
-              <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => {
@@ -527,7 +517,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               className="w-full sm:w-1/2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider transition rounded-xl flex items-center justify-center space-x-2 shadow-md shadow-blue-500/10 cursor-pointer"
             >
               <span>View Document</span>
-              <ArrowRight className="h-4 w-4" />
             </button>                        
           </div>
         </div>
@@ -536,7 +525,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
         <div className="backdrop-blur-xl border border-slate-200 bg-white rounded-[2rem] p-8 text-center relative overflow-hidden flex flex-col items-center justify-center space-y-5 shadow-sm">
           <div className="w-full max-w-sm bg-slate-50 border border-slate-100 rounded-2xl p-4 flex items-center space-x-3 text-left">
             <div className="h-10 w-10 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-              <FileText className="h-5.5 w-5.5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-xs font-bold text-slate-850 truncate">
@@ -550,7 +538,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
 
           <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-left w-full max-w-sm text-xs space-y-1">
             <div className="font-bold text-blue-900 text-[11px] flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
               <span>Ready for Workflow Dispatch</span>
             </div>
             <p className="text-[10px] text-blue-700/80">
@@ -579,7 +566,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-xl text-xs transition-all duration-200 shadow-md shadow-blue-500/10 flex items-center justify-center space-x-1.5 cursor-pointer"
             >
               <span>Upload &amp; Route</span>
-              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -612,8 +598,8 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
               or <span className="text-blue-600 font-semibold hover:text-blue-700 underline decoration-blue-200 underline-offset-4 transition">browse your computer</span>
             </p>
             <div className="pt-2 flex items-center justify-center gap-3 text-[10px] text-slate-400 font-medium">
-              <span className="flex items-center gap-1"><FileText className="h-3 w-3"/> PDF ONLY</span>
-              <span className="flex items-center gap-1"><UserCheck className="h-3 w-3"/> Max 60MB</span>
+              <span>PDF ONLY</span>
+              <span>Max 60MB</span>
             </div>
           </div>
 
@@ -629,7 +615,6 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
 
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 p-4.5 rounded-2xl flex items-start space-x-3 text-red-800 text-xs shadow-sm">
-          <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-650" />
           <div className="space-y-1"> 
             <span className="font-extrabold uppercase text-[10px] tracking-wide block">Upload Interrupted</span>
             <span>{errorMsg}</span>
@@ -643,11 +628,10 @@ export default function DocumentUpload({ onUploadSuccess, setCurrentView, setSel
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scaleIn">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 text-slate-800">
-                <Plus className="h-5 w-5 text-blue-600" />
                 <h3 className="font-bold text-sm">Create New Document Stream &amp; Workflow</h3>
               </div>
               <button onClick={() => setShowNewTypeModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-4 w-4" />
+                <span>Close</span>
               </button>
             </div>
 

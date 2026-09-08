@@ -4,16 +4,76 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Foreign
 from sqlalchemy.orm import relationship
 from app.database.connection import Base
 
+class Division(Base):
+    __tablename__ = 'divisions'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(150), nullable=False)
+    is_active = Column(Boolean, default=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    departments = relationship('Department', back_populates='division_rel', cascade='all, delete-orphan')
+
+class Department(Base):
+    __tablename__ = 'departments'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(150), nullable=False)
+    division_id = Column(Integer, ForeignKey('divisions.id', ondelete='CASCADE'), nullable=True, index=True)
+    is_active = Column(Boolean, default=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    division_rel = relationship('Division', back_populates='departments')
+
+class Role(Base):
+    __tablename__ = 'roles'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    permissions = relationship('RolePermission', back_populates='role', cascade='all, delete-orphan')
+
+class Permission(Base):
+    __tablename__ = 'permissions'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(150), nullable=False)
+    module = Column(String(50), default='DOCUMENT', index=True)
+    action = Column(String(50), default='READ')
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class RolePermission(Base):
+    __tablename__ = 'role_permissions'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(Integer, ForeignKey('roles.id', ondelete='CASCADE'), nullable=False, index=True)
+    permission_id = Column(Integer, ForeignKey('permissions.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    role = relationship('Role', back_populates='permissions')
+    permission = relationship('Permission')
+
+class DocumentLock(Base):
+    __tablename__ = 'document_locks'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(String(100), ForeignKey('documents.id', ondelete='CASCADE'), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    username = Column(String(150), nullable=False)
+    lock_token = Column(String(100), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_uid = Column(String(50), unique=True, index=True, nullable=True)
     employee_id = Column(String(50), unique=True, index=True, nullable=False)
     employee_name = Column(String(150), nullable=False)
-    name = Column(String(150), nullable=False)
+    name = Column(String(150), nullable=True)
     username = Column(String(150), unique=True, index=True, nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
     phone_number = Column(String(20), nullable=True)
+    division_id = Column(Integer, ForeignKey('divisions.id', ondelete='SET NULL'), nullable=True, index=True)
+    department_id = Column(Integer, ForeignKey('departments.id', ondelete='SET NULL'), nullable=True, index=True)
+    role_id = Column(Integer, ForeignKey('roles.id', ondelete='SET NULL'), nullable=True, index=True)
     division = Column(String(100), default='VCC', index=True)
     department = Column(String(100), nullable=True)
     plant = Column(String(100), nullable=True, index=True)
@@ -33,6 +93,10 @@ class User(Base):
     created_by = Column(String(150), default='System Admin')
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    division_rel = relationship('Division', foreign_keys=[division_id])
+    department_rel = relationship('Department', foreign_keys=[department_id])
+    role_rel = relationship('Role', foreign_keys=[role_id])
 
 class Document(Base):
     __tablename__ = 'documents'
@@ -74,6 +138,7 @@ class Document(Base):
     line_items_json = Column(Text, nullable=True)
     custom_data = Column(Text, nullable=True)
     file_url = Column(String(500), nullable=True)
+    file_path = Column(String(500), nullable=True)
     pi_indicator = Column(String(10), nullable=True)
     trans_type = Column(String(20), nullable=True)
     gstin = Column(String(15), nullable=True)
@@ -86,6 +151,8 @@ class Document(Base):
     external_synced_at = Column(DateTime, nullable=True)
     external_sync_system = Column(String(100), nullable=True)
     external_sync_error = Column(Text, nullable=True)
+    source_application = Column(String(100), nullable=True, index=True)
+    version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     line_items = relationship('DocumentLineItem', back_populates='document', cascade='all, delete-orphan')
@@ -201,6 +268,7 @@ class DocumentChecklistState(Base):
     invoice_id = Column(String(100), ForeignKey('documents.id', ondelete='CASCADE'), index=True, nullable=False)
     stage_name = Column(String(200), nullable=False, index=True)
     item_text = Column(String(500), nullable=False)
+    is_mandatory = Column(Boolean, default=True, nullable=False)
     is_checked = Column(Boolean, default=False)
     checked_by = Column(String(150), nullable=True)
     checked_at = Column(DateTime, nullable=True)

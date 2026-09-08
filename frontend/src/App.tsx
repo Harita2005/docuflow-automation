@@ -14,7 +14,7 @@ import AdminPage from "./pages/Admin.jsx";
 
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types.ts";
-import { ClipboardCheck, ArrowRight, X } from "lucide-react";
+import { ClipboardCheck, ArrowRight, X, Clock } from "lucide-react";
 
 import { formatCurrencyINR } from "./utils/formatters.ts";
 
@@ -32,7 +32,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("isLoggedIn") === "true");
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(initialRoute.docId);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Default Actor settings
   const [currentUserRole, setCurrentUserRole] = useState<string>(() => localStorage.getItem("currentUserRole") || "");
@@ -545,7 +545,7 @@ export default function App() {
       />
 
       {/* Main Content Area Container */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarCollapsed ? "ml-[72px]" : "ml-[230px]"}`}>
         
         {/* Sophisticated Action top bar */}
         <Header
@@ -566,7 +566,7 @@ export default function App() {
         />
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 pt-1 pb-2">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 pt-1 pb-2">
           <div className="w-full max-w-[1920px] mx-auto space-y-2 animate-fadeIn">
             {currentView === "getting-started" && (
               <GettingStartedPage
@@ -679,7 +679,7 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn border border-slate-100">
             {/* Header / Graphic */}
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white relative">
+            <div className="bg-gradient-to-br from-[#003F28] via-[#00452B] to-[#005333] p-6 text-white relative">
               <button 
                 onClick={() => setShowPendingModal(false)}
                 className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition"
@@ -694,7 +694,7 @@ export default function App() {
               <h3 className="text-base font-black font-display tracking-tight leading-none mb-1">
                 Welcome back, {currentUserUsername || currentUserEmail.split('@')[0]}!
               </h3>
-              <p className="text-[11px] text-blue-100 font-semibold tracking-wide uppercase mt-1">
+              <p className="text-[11px] text-emerald-100 font-semibold tracking-wide uppercase mt-1">
                 You have {documents.filter(isDocumentPendingForUser).length} pending actions waiting
               </p>
             </div>
@@ -712,7 +712,7 @@ export default function App() {
                       setCurrentView("details");
                       setShowPendingModal(false);
                     }}
-                    className="group border border-slate-100 hover:border-blue-300 hover:bg-blue-50/20 p-3 rounded-xl transition cursor-pointer flex items-center justify-between shadow-sm relative overflow-hidden"
+                    className="group border border-slate-100 hover:border-[#003F28]/40 hover:bg-[#003F28]/5 p-3 rounded-xl transition cursor-pointer flex items-center justify-between shadow-sm relative overflow-hidden"
                   >
                     <div className="flex flex-col min-w-0 pr-2">
                       <span className="text-[10px] font-black text-slate-800 tracking-tight">
@@ -729,7 +729,7 @@ export default function App() {
                       <span className="block text-[11px] font-black text-slate-900">
                         {formatCurrencyINR(doc.amount)}
                       </span>
-                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-blue-600 mt-1 uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-[#003F28] mt-1 uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity">
                         Review <ArrowRight className="h-2 w-2" />
                       </span>
                     </div>
@@ -744,7 +744,7 @@ export default function App() {
                     setCurrentView("work-tracker");
                     setShowPendingModal(false);
                   }}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-1.5 active:scale-98"
+                  className="w-full py-2.5 bg-[#003F28] hover:bg-[#005333] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
                 >
                   <ClipboardCheck className="h-4 w-4" /> Go to Work Tracker
                 </button>

@@ -1031,7 +1031,7 @@ export default function DocumentDetails({
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-[9px] font-extrabold text-indigo-300 uppercase tracking-wider">
+      <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[9px] font-extrabold text-white uppercase tracking-wider">
         Under Review
       </span>
     );
@@ -1049,7 +1049,7 @@ export default function DocumentDetails({
               ? 'bg-slate-900 text-amber-300 border-amber-500/50 shadow-amber-950/30'
               : toastMessage.type === 'error'
               ? 'bg-slate-900 text-rose-300 border-rose-500/50 shadow-rose-950/30'
-              : 'bg-slate-900 text-slate-200 border-indigo-500/50 shadow-indigo-950/30'
+              : 'bg-slate-900 text-slate-200 border-slate-500/50 shadow-slate-950/30'
           }`}>
             <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-400" />
             <span>{toastMessage.text}</span>
@@ -1069,20 +1069,20 @@ export default function DocumentDetails({
       <div className="bg-white border border-slate-200/90 rounded-2xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
         
         {/* TOP EXECUTIVE BAR */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-2 flex items-center justify-between shadow-sm shrink-0">
+        <div className="bg-white text-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
-            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+            <div className="h-6 w-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
               <Shield className="h-3 w-3" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xs tracking-tight text-white font-display">
+                <span className="font-extrabold text-xs tracking-tight text-slate-800 font-display">
                   Document Review
                 </span>
-                <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[9px] font-mono font-bold text-indigo-200">
+                <span className="px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600">
                   {formatDocNumber(document.id, document.document_type, (document as any).category)}
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1">
                   <FileText className="h-2.5 w-2.5" />
                   {document.document_type || "DOCUMENT"}
                 </span>
@@ -1098,16 +1098,16 @@ export default function DocumentDetails({
             {getFieldPerm("erp_sync_data") !== "hidden" ? (
               <button
                 onClick={() => setShowErpSyncModal(true)}
-                className="p-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white transition text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-0.5 border border-indigo-400/40 shadow-xs cursor-pointer"
+                className="p-1 rounded-lg bg-[#FFBF00] hover:bg-[#e6ac00] text-[#002F20] transition text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-0.5 border border-[#e6ac00]/40 shadow-xs cursor-pointer"
                 title="View Enterprise ERP Data Sync & Ledger Reconciliation"
               >
-                <Database className="h-3 w-3 text-indigo-200" />
+                <Database className="h-3 w-3 text-[#002F20]" />
                 <span>ERP Data Sync</span>
               </button>
             ) : (
               <button
                 onClick={onRefreshDocument}
-                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white transition text-[10px] font-bold flex items-center gap-1 px-2 py-0.5"
+                className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition text-[10px] font-bold flex items-center gap-1 px-2 py-0.5 border border-slate-200"
                 title="Refresh Document"
               >
                 <RotateCw className="h-3 w-3" />
@@ -1117,7 +1117,7 @@ export default function DocumentDetails({
 
             <button
               onClick={onGoBack}
-              className="p-1 rounded-lg bg-white/10 hover:bg-rose-500/80 text-slate-200 hover:text-white transition cursor-pointer"
+              className="p-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
               title="Close Workspace"
             >
               <X className="h-3.5 w-3.5" />
@@ -1593,7 +1593,7 @@ export default function DocumentDetails({
               {/* Checklist Header Controls */}
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-indigo-600" />
+                  <Shield className="h-3.5 w-3.5 text-[#003F28]" />
                   <span>Compliance Checklist ({Object.values(checkedStates).filter(Boolean).length}/{effectiveChecklist.length})</span>
                 </span>
                 {isDocumentLocked ? (
@@ -1604,7 +1604,7 @@ export default function DocumentDetails({
                   <button
                     type="button"
                     onClick={handleToggleAllChecklist}
-                    className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                    className="text-[9.5px] font-bold text-[#003F28] hover:text-[#005333] underline cursor-pointer"
                   >
                     {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
                   </button>
@@ -1708,9 +1708,9 @@ export default function DocumentDetails({
           <div className="flex-1 flex flex-col bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-sm min-w-0 h-full">
             
             {/* Viewer Header Bar */}
-            <div className="bg-slate-900 text-white px-3.5 py-2 text-[10px] font-bold flex items-center justify-between shrink-0">
+            <div className="bg-[#003F28] text-white px-3.5 py-2 text-[10px] font-bold flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 truncate">
-                <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <FileText className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
                 <span className="text-white font-bold text-[11px] truncate">
                   {document.file_url || document.file_path ? `Original Document (${document.file_name || `${document.id}.pdf`})` : "Stage 1: Attachment Status (Pending Upload)"}
                 </span>
@@ -1718,7 +1718,7 @@ export default function DocumentDetails({
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {!isDocumentLocked && (
-                  <label className="cursor-pointer px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
+                  <label className="cursor-pointer px-2.5 py-1 rounded-md bg-[#005333] hover:bg-[#00663F] text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
                     <Upload className="h-3 w-3" />
                     <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
                     <input 
@@ -1740,7 +1740,7 @@ export default function DocumentDetails({
                     href={iframeSrc}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
                     title="Open Fullscreen Document in New Tab"
                   >
                     <ArrowUpRight className="h-3 w-3" />
@@ -1767,10 +1767,10 @@ export default function DocumentDetails({
                       handleUploadVersion(e.dataTransfer.files[0]);
                     }
                   }}
-                  className="w-full h-full bg-slate-50 border-2 border-dashed border-indigo-300/80 hover:border-indigo-500 hover:bg-indigo-50/20 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
+                  className="w-full h-full bg-slate-50 border-2 border-dashed border-emerald-300/80 hover:border-[#003F28] hover:bg-[#003F28]/5 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
                 >
-                  <div className="h-14 w-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-3.5 shadow-sm">
-                    <Upload className="h-7 w-7 text-indigo-600" />
+                  <div className="h-14 w-14 rounded-2xl bg-[#003F28]/10 border border-[#003F28]/20 text-[#003F28] flex items-center justify-center mb-3.5 shadow-sm">
+                    <Upload className="h-7 w-7 text-[#003F28]" />
                   </div>
                   <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
@@ -1782,7 +1782,7 @@ export default function DocumentDetails({
                   
                   {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
                     <>
-                      <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
+                      <label className="cursor-pointer px-4 py-2.5 bg-[#003F28] hover:bg-[#005333] text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
                         <Plus className="h-4 w-4" />
                         <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
                         <input 
@@ -1817,7 +1817,7 @@ export default function DocumentDetails({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTimelineModal(true)}
-              className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold underline cursor-pointer"
+              className="text-[#003F28] hover:text-[#005333] text-[10px] font-bold underline cursor-pointer"
             >
               View Audit History
             </button>
@@ -1995,19 +1995,19 @@ export default function DocumentDetails({
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
             
             {/* Modal Header */}
-            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-400/30 text-indigo-300">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
                   <Clock className="h-4 w-4" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
                     <span>Approval Timeline & Audit Trail</span>
-                    <span className="text-[10px] font-mono font-normal text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                    <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
                       {formatDocNumber(document.id, document.document_type, (document as any).category)}
                     </span>
                   </h3>
-                  <p className="text-[10.5px] text-slate-400 font-medium">
+                  <p className="text-[10.5px] text-emerald-100/80 font-medium">
                     {vendorName || document.vendor_name || "Vendor"} • ₹{Number(amount || document.amount || 0).toLocaleString('en-IN')}
                   </p>
                 </div>
@@ -2015,7 +2015,7 @@ export default function DocumentDetails({
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2083,7 +2083,7 @@ export default function DocumentDetails({
                             : isPassed 
                             ? "bg-emerald-50 text-emerald-700 border border-emerald-400 font-bold" 
                             : isCurrent 
-                            ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-100" 
+                            ? "bg-[#003F28] text-white shadow-xs ring-2 ring-[#003F28]/20" 
                             : "bg-slate-100 text-slate-400 border border-slate-200"
                         }`}>
                           {isTerminalCancelledStage ? "✕" : isPassed ? "✓" : step.stage_number}
@@ -2097,7 +2097,7 @@ export default function DocumentDetails({
                       <div className="flex-1 pb-3">
                         <div className="flex items-center justify-between">
                           <span className={`font-semibold text-xs ${
-                            isTerminalCancelledStage ? "text-slate-800" : isCurrent ? "text-indigo-900 font-bold" : isPassed ? "text-slate-800 font-semibold" : "text-slate-400"
+                            isTerminalCancelledStage ? "text-slate-800" : isCurrent ? "text-slate-900 font-bold" : isPassed ? "text-slate-800 font-semibold" : "text-slate-400"
                           }`}>
                             {step.stage_name}
                           </span>
@@ -2108,7 +2108,7 @@ export default function DocumentDetails({
                             </span>
                           )}
                           {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[9px] uppercase tracking-wider border border-indigo-200">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[#003F28] font-bold text-[9px] uppercase tracking-wider border border-emerald-200">
                               Active Stage
                             </span>
                           )}
@@ -2160,11 +2160,11 @@ export default function DocumentDetails({
 
                           {/* 2. Exact Sign-Off / Status Attribution */}
                           {isTerminalCancelledStage ? (
-                            <div className="p-1.5 bg-slate-50 rounded border border-slate-200 text-[10.5px] flex items-center justify-between text-slate-700">
+                            <div className="p-1.5 bg-rose-50/70 rounded border border-rose-200/70 text-[10px] flex items-center justify-between text-rose-900">
                               <div className="flex items-center gap-1.5">
-                                <span className="h-3.5 w-3.5 rounded-full bg-slate-200 text-rose-600 font-bold text-[8.5px] flex items-center justify-center">✕</span>
+                                <span className="h-3.5 w-3.5 rounded-full bg-rose-600 text-white font-bold text-[8.5px] flex items-center justify-center">✕</span>
                                 <span>
-                                  <strong>Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : (currentUserUsername || "User")}
+                                  <strong>Process Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : "Initiator"}
                                 </span>
                               </div>
                               {terminalCancelLog?.created_at && (
@@ -2204,8 +2204,8 @@ export default function DocumentDetails({
                           ) : null}
 
                           {isCurrent && (
-                            <p className="text-[9.5px] text-indigo-600 font-medium pt-0.5 flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+                            <p className="text-[9.5px] text-slate-700 font-medium pt-0.5 flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-ping" />
                               <span>Any 1 pool member can verify and sign off.</span>
                             </p>
                           )}
@@ -2217,20 +2217,20 @@ export default function DocumentDetails({
               ) : (
                 <div className="flex gap-3 relative">
                   <div className="flex flex-col items-center">
-                    <div className="h-6 w-6 rounded-full bg-indigo-600 text-white shadow-md ring-4 ring-indigo-100 flex items-center justify-center font-bold text-[10px]">
+                    <div className="h-6 w-6 rounded-full bg-[#003F28] text-white shadow-md ring-4 ring-[#003F28]/20 flex items-center justify-center font-bold text-[10px]">
                       1
                     </div>
                   </div>
                   <div className="flex-1 pb-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-indigo-900">Stage 1: Accounts Review</span>
-                      <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-[9px] uppercase tracking-wider animate-pulse">
+                      <span className="font-bold text-xs text-slate-900">Stage 1: Accounts Review</span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold text-[9px] uppercase tracking-wider border border-slate-300 animate-pulse">
                         Active Stage
                       </span>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
                       <span><strong className="text-slate-700">Assigned Approver:</strong> {currentUserUsername || "anbu"}</span>
-                      <p className="text-[10px] text-indigo-600 font-semibold mt-1">
+                      <p className="text-[10px] text-slate-700 font-semibold mt-1">
                         Awaiting compliance checklist verification and sign-off.
                       </p>
                     </div>
@@ -2254,16 +2254,13 @@ export default function DocumentDetails({
                         <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
                           <div className="flex items-center justify-between font-bold text-slate-800">
                             <div className="flex items-center gap-1.5">
-                              <span className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-700 font-black text-[9px] flex items-center justify-center">
+                              <span className="h-5 w-5 rounded-full bg-slate-200 text-slate-700 font-black text-[9px] flex items-center justify-center">
                                 {authorName.charAt(0).toUpperCase()}
                               </span>
                               <span className="text-slate-900 text-xs">{authorName}</span>
-                              <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8.5px] font-bold uppercase tracking-wider">
-                                {actionLabel}
-                              </span>
                             </div>
-                            <span className="text-[9.5px] font-normal text-slate-400 font-mono">
-                              {formatDateTime(comm.created_at)}
+                            <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-bold uppercase tracking-wider">
+                              {actionLabel}
                             </span>
                           </div>
                           <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
@@ -2284,7 +2281,7 @@ export default function DocumentDetails({
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
               </button>

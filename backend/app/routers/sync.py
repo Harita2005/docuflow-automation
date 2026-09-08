@@ -5,17 +5,18 @@ import base64
 import datetime
 import logging
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
-from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, InvoiceChecklistState, InvoiceLineItem
+from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, InvoiceChecklistState, InvoiceLineItem, IntegrationSyncLog
 from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
 from app.services.rules_engine import get_doc_type_prefix
 from app.services.ocr_service import extract_text_from_pdf
+from app.auth import verify_service_api_key
 
-logger = logging.getLogger(__name__)
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
 
@@ -288,15 +289,82 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 @router.post('/documents', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post('/invoice', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @router.post('/invoices', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
-def sync_single_document(payload: DocumentSyncRequest, db: Session=Depends(get_db)):
+def sync_single_document(
+    payload: DocumentSyncRequest,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     Production-grade idempotent endpoint for syncing single records from ERP, SAP, or Tally.
-    Auto-evaluates business rules, sets branch approver, and logs audit trail.
-    If sync or routing fails, still commits the record with status 'Sync Failed' and logs the reason.
+    Requires M2M authentication (X-API-Key or Bearer token).
     """
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Validation Error: 'amount' must be greater than 0.")
+    if payload.currency and len(payload.currency.strip()) != 3:
+        raise HTTPException(status_code=400, detail="Validation Error: 'currency' must be a 3-letter ISO code.")
+    if not payload.division and not payload.company_code:
+        raise HTTPException(status_code=400, detail="Validation Error: 'division' or 'CompanyCode' is required.")
+
+    source_app = payload.company_code or payload.division or 'ERP'
+    raw_payload_str = json.dumps(payload.dict(), default=str)
+
+    # Idempotency check: if record already exists in terminal state, return existing without changes
+    if payload.doc_key:
+        existing = db.query(Invoice).filter(Invoice.doc_key == str(payload.doc_key)).first()
+        if existing and existing.status in ['Settled', 'Approved', 'Paid', 'Cancelled']:
+            db.add(IntegrationSyncLog(
+                document_id=existing.id,
+                sync_direction='PULL',
+                target_system=source_app,
+                status='DUPLICATE',
+                payload_snapshot=raw_payload_str
+            ))
+            db.commit()
+            return DocumentSyncResponse(
+                success=True,
+                message=f'Record already exists in terminal status ({existing.status}). Idempotent response returned.',
+                document_id=existing.id,
+                doc_key=existing.doc_key,
+                invoice_number=existing.invoice_number,
+                document_number=existing.invoice_number,
+                vendor_name=existing.vendor_name,
+                amount=existing.amount,
+                division=existing.division,
+                plant=existing.plant,
+                workflow_profile_id=existing.workflow_profile_id,
+                total_stages=existing.total_stages,
+                current_stage=existing.current_stage,
+                assigned_approver=existing.assigned_approver,
+                status=existing.status
+            )
+
     try:
         inv = _upsert_single_document(payload, db)
-        return DocumentSyncResponse(success=True, message='Record synchronized and auto-routed successfully', document_id=inv.id, doc_key=inv.doc_key, invoice_number=inv.invoice_number, document_number=inv.invoice_number, vendor_name=inv.vendor_name, amount=inv.amount, division=inv.division, plant=inv.plant, workflow_profile_id=inv.workflow_profile_id, total_stages=inv.total_stages, current_stage=inv.current_stage, assigned_approver=inv.assigned_approver, status=inv.status)
+        db.add(IntegrationSyncLog(
+            document_id=inv.id,
+            sync_direction='PULL',
+            target_system=source_app,
+            status='SUCCESS',
+            payload_snapshot=raw_payload_str
+        ))
+        db.commit()
+        return DocumentSyncResponse(
+            success=True,
+            message='Record synchronized and auto-routed successfully',
+            document_id=inv.id,
+            doc_key=inv.doc_key,
+            invoice_number=inv.invoice_number,
+            document_number=inv.invoice_number,
+            vendor_name=inv.vendor_name,
+            amount=inv.amount,
+            division=inv.division,
+            plant=inv.plant,
+            workflow_profile_id=inv.workflow_profile_id,
+            total_stages=inv.total_stages,
+            current_stage=inv.current_stage,
+            assigned_approver=inv.assigned_approver,
+            status=inv.status
+        )
     except Exception as e:
         logger.debug('Handled exception: %s', e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f'Document sync failed: {str(e)}')
@@ -304,7 +372,11 @@ def sync_single_document(payload: DocumentSyncRequest, db: Session=Depends(get_d
 @router.post('/records/batch', response_model=BatchSyncResponse)
 @router.post('/batch', response_model=BatchSyncResponse)
 @router.post('/invoices/batch', response_model=BatchSyncResponse)
-def sync_batch_documents(payload: BatchSyncRequest, db: Session=Depends(get_db)):
+def sync_batch_documents(
+    payload: BatchSyncRequest,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     High-throughput bulk synchronization endpoint for scheduled ERP batch cron jobs (up to 500 records per call).
     Provides atomic isolation: single item failure does not disrupt the entire batch.
@@ -322,8 +394,95 @@ def sync_batch_documents(payload: BatchSyncRequest, db: Session=Depends(get_db))
             failed_count += 1
     return BatchSyncResponse(total_received=len(payload.documents), successful_count=success_count, failed_count=failed_count, results=results)
 
+class ExternalCancelRequest(BaseModel):
+    record_id: Optional[str] = None
+    doc_key: Optional[Union[str, int]] = None
+    cancellation_reason: Optional[str] = 'Cancelled by external source application'
+    source_application: Optional[str] = 'ERP'
+
+@router.post('/record/{record_id}/cancel')
+@router.post('/cancel')
+def cancel_synced_document(
+    record_id: Optional[str] = None,
+    payload: Optional[ExternalCancelRequest] = None,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
+    target_id = record_id or (payload.record_id if payload else None)
+    doc_key = payload.doc_key if payload else None
+    reason = (payload.cancellation_reason if payload else None) or 'Cancelled by external source application'
+    source_app = (payload.source_application if payload else None) or 'ERP'
+
+    inv = None
+    if target_id:
+        inv = db.query(Invoice).filter((Invoice.id == target_id) | (Invoice.doc_key == str(target_id))).first()
+    if not inv and doc_key:
+        inv = db.query(Invoice).filter(Invoice.doc_key == str(doc_key)).first()
+
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document not found for cancellation (ID: {target_id}, Key: {doc_key})")
+
+    if inv.status in ['Settled', 'Approved', 'Paid']:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Conflict: Document '{inv.id}' has already completed workflow approval ('{inv.status}') and cannot be cancelled."
+        )
+
+    if inv.status == 'Cancelled':
+        return {
+            "success": True,
+            "status": "Cancelled",
+            "document_id": inv.id,
+            "message": "Document is already cancelled (idempotent)."
+        }
+
+    prev_status = inv.status
+    inv.status = 'Cancelled'
+    inv.assigned_approver = None
+    inv.rejection_reason = reason
+    inv.updated_at = datetime.datetime.utcnow()
+
+    db.add(AuditLog(
+        invoice_id=str(inv.id),
+        user=f"External ({source_app})",
+        action="Cancelled by External Source",
+        stage=f"Stage {inv.current_stage or 1}",
+        notes=f"External source '{source_app}' cancelled document. Previous status: '{prev_status}'. Reason: {reason}"
+    ))
+    db.add(IntegrationSyncLog(
+        document_id=inv.id,
+        sync_direction='PULL',
+        target_system=source_app,
+        status='CANCELLED',
+        payload_snapshot=json.dumps({"reason": reason, "previous_status": prev_status})
+    ))
+    db.commit()
+    db.refresh(inv)
+
+    try:
+        from app.routers.events import broadcast_event
+        broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'assigned_approver': None})
+    except Exception as exc:
+        logger.debug('Handled exception: %s', exc)
+
+    return {
+        "success": True,
+        "status": "Cancelled",
+        "document_id": inv.id,
+        "message": f"Document '{inv.id}' successfully cancelled by external source system."
+    }
+
 @router.post('/attachment/upload', response_model=AttachmentSyncResponse)
-async def sync_attachment_upload(file: UploadFile=File(..., description='Binary attachment file (PDF, PNG, JPG, TIFF)'), doc_key: Optional[str]=Form(None, description='ERP DocKey'), record_id: Optional[str]=Form(None, description='Target Record ID (e.g. DOC-101)'), invoice_id: Optional[str]=Form(None, description='Target Record/Invoice ID (e.g. DOC-101)'), attachment_type: str=Form('Original Invoice', description='Type of attachment'), uploaded_by: str=Form('ERP Sync Service', description='Sync source or user'), db: Session=Depends(get_db)):
+async def sync_attachment_upload(
+    file: UploadFile = File(..., description='Binary attachment file (PDF, PNG, JPG, TIFF)'),
+    doc_key: Optional[str] = Form(None, description='ERP DocKey'),
+    record_id: Optional[str] = Form(None, description='Target Record ID (e.g. DOC-101)'),
+    invoice_id: Optional[str] = Form(None, description='Target Record/Invoice ID (e.g. DOC-101)'),
+    attachment_type: str = Form('Original Invoice', description='Type of attachment'),
+    uploaded_by: str = Form('ERP Sync Service', description='Sync source or user'),
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     Multipart file attachment synchronization.
     Saves document to secure storage, executes OCR extraction, and binds to the record.
@@ -343,18 +502,24 @@ async def sync_attachment_upload(file: UploadFile=File(..., description='Binary 
     with open(file_path, 'wb') as f:
         f.write(contents)
     file_size = len(contents)
-    file_url = f'/uploads/{safe_name}'
+    file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if file.filename.lower().endswith('.pdf'):
         ocr_data = extract_text_from_pdf(file_path)
     inv.file_url = file_url
+    inv.file_path = str(file_path)
+    inv.file_size = file_size
     db.commit()
     db.add(AuditLog(invoice_id=inv.id, user=uploaded_by, action='Attachment Synced', stage=f'Stage {inv.current_stage}', notes=f'Attached {attachment_type}: {file.filename} ({round(file_size / 1024, 1)} KB).'))
     db.commit()
     return AttachmentSyncResponse(success=True, message='Attachment synchronized and bound to record successfully', document_id=inv.id, file_name=file.filename, file_url=file_url, file_size_bytes=file_size, ocr_extracted_fields=ocr_data)
 
 @router.post('/attachment/base64', response_model=AttachmentSyncResponse)
-def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session=Depends(get_db)):
+def sync_attachment_base64(
+    payload: Base64AttachmentSyncRequest,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     Base64 encoded attachment synchronizer for JSON-only enterprise ESB pipelines (SAP PI/PO, MuleSoft, WebMethods).
     Decodes binary, stores file, runs OCR validation, and attaches to the target record.
@@ -378,18 +543,27 @@ def sync_attachment_base64(payload: Base64AttachmentSyncRequest, db: Session=Dep
     with open(file_path, 'wb') as f:
         f.write(binary_data)
     file_size = len(binary_data)
-    file_url = f'/uploads/{safe_name}'
+    file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if payload.file_name.lower().endswith('.pdf'):
         ocr_data = extract_text_from_pdf(file_path)
     inv.file_url = file_url
+    inv.file_path = str(file_path)
+    inv.file_size = file_size
     db.commit()
     db.add(AuditLog(invoice_id=inv.id, user=payload.uploaded_by or 'ERP Base64 Sync', action='Attachment Synced (Base64)', stage=f'Stage {inv.current_stage}', notes=f'Attached {payload.attachment_type}: {payload.file_name} ({round(file_size / 1024, 1)} KB).'))
     db.commit()
     return AttachmentSyncResponse(success=True, message='Base64 attachment decoded, saved, and linked successfully', document_id=inv.id, file_name=payload.file_name, file_url=file_url, file_size_bytes=file_size, ocr_extracted_fields=ocr_data)
 
 @router.post('/record/{record_id}/attachment', response_model=AttachmentSyncResponse)
-async def sync_record_attachment_by_pk(record_id: str, file: UploadFile=File(..., description='Binary attachment file (PDF, PNG, JPG, TIFF)'), attachment_type: str=Form('Original Invoice', description='Type of attachment'), uploaded_by: str=Form('ERP Sync Service', description='Sync source or user'), db: Session=Depends(get_db)):
+async def sync_record_attachment_by_pk(
+    record_id: str,
+    file: UploadFile = File(..., description='Binary attachment file (PDF, PNG, JPG, TIFF)'),
+    attachment_type: str = Form('Original Invoice', description='Type of attachment'),
+    uploaded_by: str = Form('ERP Sync Service', description='Sync source or user'),
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     Synchronizes a binary attachment to a record identified by its primary key (id).
     """
@@ -404,18 +578,25 @@ async def sync_record_attachment_by_pk(record_id: str, file: UploadFile=File(...
     with open(file_path, 'wb') as f:
         f.write(contents)
     file_size = len(contents)
-    file_url = f'/uploads/{safe_name}'
+    file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if file.filename.lower().endswith('.pdf'):
         ocr_data = extract_text_from_pdf(file_path)
     inv.file_url = file_url
+    inv.file_path = str(file_path)
+    inv.file_size = file_size
     db.commit()
     db.add(AuditLog(invoice_id=inv.id, user=uploaded_by, action='Attachment Synced (PK)', stage=f'Stage {inv.current_stage}', notes=f'Attached {attachment_type}: {file.filename} ({round(file_size / 1024, 1)} KB) via Primary Key.'))
     db.commit()
     return AttachmentSyncResponse(success=True, message='Attachment synchronized and bound to record via primary key successfully', document_id=inv.id, file_name=file.filename, file_url=file_url, file_size_bytes=file_size, ocr_extracted_fields=ocr_data)
 
 @router.post('/record/{record_id}/attachment/base64', response_model=AttachmentSyncResponse)
-def sync_record_attachment_by_pk_base64(record_id: str, payload: Base64AttachmentSyncRequest, db: Session=Depends(get_db)):
+def sync_record_attachment_by_pk_base64(
+    record_id: str,
+    payload: Base64AttachmentSyncRequest,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
     """
     Synchronizes a Base64-encoded attachment to a record identified by its primary key (id).
     """
@@ -443,11 +624,13 @@ def sync_record_attachment_by_pk_base64(record_id: str, payload: Base64Attachmen
     with open(file_path, 'wb') as f:
         f.write(binary_data)
     file_size = len(binary_data)
-    file_url = f'/uploads/{safe_name}'
+    file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if payload.file_name.lower().endswith('.pdf'):
         ocr_data = extract_text_from_pdf(file_path)
     inv.file_url = file_url
+    inv.file_path = str(file_path)
+    inv.file_size = file_size
     db.commit()
     db.add(AuditLog(invoice_id=inv.id, user=payload.uploaded_by or 'ERP Base64 Sync', action='Attachment Synced (PK Base64)', stage=f'Stage {inv.current_stage}', notes=f'Attached {payload.attachment_type}: {payload.file_name} ({round(file_size / 1024, 1)} KB) via Primary Key.'))
     db.commit()

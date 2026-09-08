@@ -105,15 +105,24 @@ def startup_event():
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
-app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
+allowed_origins_raw = getattr(settings, 'ALLOWED_ORIGINS', None) or 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000'
+origins = [o.strip() for o in allowed_origins_raw.split(',') if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Authorization', 'Content-Type', 'Accept', 'X-API-Key', 'X-Requested-With'],
+    expose_headers=['Content-Disposition', 'X-Request-ID']
+)
 from app.routers import auth, users, documents, workflows, conditions, audit, sync, sync_router, integrations, events, callback_integrations
 from app.services.security_middleware import SecurityHeadersMiddleware, RateLimiterMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimiterMiddleware, max_auth_requests=15, window_seconds=60)
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-app.mount('/uploads', StaticFiles(directory=str(settings.UPLOAD_DIR)), name='uploads')
-app.mount('/stored_pdfs', StaticFiles(directory=str(settings.PDF_STORAGE_DIR)), name='stored_pdfs')
+# Public static mounts removed: confidential documents are served securely through GET /api/documents/{id}/file
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(users.admin_router)
