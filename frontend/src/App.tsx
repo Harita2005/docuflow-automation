@@ -14,7 +14,7 @@ import AdminPage from "./pages/Admin.jsx";
 
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types.ts";
-import { ClipboardCheck, ArrowRight, X, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, ArrowRight, X } from "lucide-react";
 
 import { formatCurrencyINR } from "./utils/formatters.ts";
 

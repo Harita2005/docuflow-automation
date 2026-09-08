@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, Mail, Users, Plus, X, Server, Edit3, Sparkles } from 'lucide-react';
+import { Save, RefreshCw, Mail, Users, X, Server, Edit3, Sparkles } from 'lucide-react';
 
 const UNIFIED_EVENT = "Workflow Initiation & RACI Matrix";
 const EVENTS = [UNIFIED_EVENT];
