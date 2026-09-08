@@ -1,33 +1,19 @@
 import { 
   LayoutDashboard, 
   Upload, 
-  ListOrdered, 
-  FileCheck, 
-  GitBranch, 
-  LineChart, 
-  Receipt, 
   Settings, 
-  Settings2,
-  CheckSquare, 
-  Sparkles,
   Layers,
   ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  Database,
-  Globe,
-  Sliders,
-  ListFilter,
-  Share2
+  ChevronRight
 } from "lucide-react";
-
 import { useState } from "react";
+import SidebarCulturalArt from "./SidebarCulturalArt";
 
 interface SidebarProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   currentUserRole: string;
-  stats: any;
+  stats?: any;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
   rolePermissions?: Record<string, string[]>;
@@ -37,7 +23,6 @@ export default function Sidebar({
   currentView,
   setCurrentView,
   currentUserRole,
-  stats,
   collapsed,
   setCollapsed,
   rolePermissions
@@ -53,7 +38,7 @@ export default function Sidebar({
 
   const menuGroups = [
     {
-      group: "Operations",
+      group: "OPERATIONS",
       items: [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
         { id: "work-tracker", label: "Work Tracker", icon: Layers },
@@ -61,7 +46,7 @@ export default function Sidebar({
       ]
     },
     {
-      group: "Administration",
+      group: "ADMINISTRATION",
       items: [
         { id: "admin", label: "Control Settings", icon: Settings },
       ]
@@ -72,44 +57,53 @@ export default function Sidebar({
     <aside 
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`bg-[#003d27] text-emerald-100 border-r border-emerald-900/60 transition-all duration-300 flex flex-col z-40 relative overflow-hidden select-none ${
-        !isExpanded ? "w-20" : "w-68"
+      className={`bg-gradient-to-b from-[#003F28] via-[#00452B] to-[#005333] text-emerald-100 border-r border-[#005333]/80 transition-all duration-300 flex flex-col z-40 relative overflow-hidden select-none shrink-0 ${
+        !isExpanded ? "w-20" : "w-[338px]"
       }`}
+      style={{ height: '100vh' }}
     >
-      {/* Brand Header */}
-      <div className="h-16 px-5 border-b border-emerald-900/60 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="h-9 w-9 bg-white text-[#003d27] rounded-xl flex items-center justify-center font-extrabold shrink-0 shadow-lg">
-            <Layers className="h-5 w-5 text-[#003d27]" />
+      {/* 1. BRAND HEADER (~90px Height) */}
+      <div className="h-[90px] px-6 border-b border-emerald-800/40 flex items-center justify-between z-20 shrink-0">
+        <div className="flex items-center gap-4 overflow-hidden">
+          {/* Logo 50x50px */}
+          <div className="h-[50px] w-[50px] bg-white text-[#003F28] rounded-[12px] flex items-center justify-center font-extrabold shrink-0 shadow-md border border-white/20">
+            <Layers className="h-7 w-7 text-[#003F28]" />
           </div>
+
           {isExpanded && (
             <div className="flex flex-col min-w-0">
-              <span className="font-black text-white text-base tracking-tight font-display">DAAS</span>
-              <span className="text-[8px] text-emerald-200/80 font-bold tracking-wider uppercase truncate">Document Approval & Automation System</span>
+              <span className="font-extrabold text-white text-[21px] tracking-tight font-display leading-tight">
+                DAAS
+              </span>
+              <span className="text-[10px] text-[#A3BFB0] font-bold tracking-[0.08em] uppercase leading-tight font-sans mt-0.5">
+                DOCUMENT APPROVAL &<br />AUTOMATION SYSTEM
+              </span>
             </div>
           )}
         </div>
+
         <button 
           onClick={() => setCollapsed(!collapsed)} 
-          className="p-1 rounded-lg hover:bg-emerald-800/60 text-emerald-300 hover:text-white transition hidden md:block"
+          aria-label={isExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+          className="p-1.5 rounded-lg hover:bg-emerald-800/60 text-[#A3BFB0] hover:text-white transition hidden md:block cursor-pointer"
         >
-          {!isExpanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {!isExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Menu Area */}
-      <div className="flex-1 overflow-y-auto py-6 px-3 space-y-6 z-10">
+      {/* 2. MENU NAVIGATION AREA */}
+      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-7 z-20 relative">
         {menuGroups.map((group, gIdx) => {
           const visibleItems = group.items.filter(item => permissions.includes(item.id));
           if (visibleItems.length === 0) return null;
           return (
-            <div key={gIdx} className="space-y-2">
+            <div key={gIdx} className="space-y-3">
               {isExpanded && (
-                <span className="text-[9px] font-extrabold text-emerald-400/60 uppercase tracking-[0.2em] px-3 block">
+                <span className="text-[11px] font-bold text-[#8FA99B] uppercase tracking-[2px] px-3 block">
                   {group.group}
                 </span>
               )}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {visibleItems.map((item) => {
                   const active = currentView === item.id;
                   const Icon = item.icon;
@@ -117,29 +111,22 @@ export default function Sidebar({
                     <button
                       key={item.id}
                       onClick={() => setCurrentView(item.id)}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wide transition-all group relative cursor-pointer ${
+                      className={`w-full flex items-center justify-between h-[44px] px-4 rounded-[8px] text-sm font-bold tracking-wide transition-all duration-200 group relative cursor-pointer ${
                         active
-                          ? "bg-[#f5a623] text-slate-950 font-black shadow-md"
-                          : "text-emerald-100/80 hover:text-white hover:bg-emerald-800/40"
+                          ? "bg-[#FFBE00] text-[#003F28] font-black shadow-md"
+                          : "text-emerald-100/90 hover:text-white hover:bg-emerald-800/30"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Icon className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${active ? 'text-slate-950' : 'text-emerald-300/80 group-hover:text-white'}`} />
+                      <div className="flex items-center gap-[14px]">
+                        <Icon className={`h-5 w-5 shrink-0 transition-transform group-hover:scale-105 ${
+                          active ? 'text-[#003F28]' : 'text-emerald-200/90 group-hover:text-white'
+                        }`} />
                         {isExpanded && <span className="truncate">{item.label}</span>}
                       </div>
 
-                      {/* Optional Badge */}
-                      {isExpanded && (item as any).badge !== undefined && (item as any).badge > 0 && (
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
-                          active ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-900 text-emerald-200'
-                        }`}>
-                          {(item as any).badge}
-                        </span>
-                      )}
-
-                      {/* Hover Tooltip if collapsed */}
+                      {/* Collapsed Tooltip */}
                       {!isExpanded && (
-                        <div className="absolute left-full ml-4 px-2.5 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 whitespace-nowrap shadow-xl z-50">
+                        <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 whitespace-nowrap shadow-xl z-50">
                           {item.label}
                         </div>
                       )}
@@ -152,48 +139,47 @@ export default function Sidebar({
         })}
       </div>
 
-      {/* Sidebar Bottom Watermark Artwork */}
+      {/* 3. CULTURAL ARTWORK & DECORATIVE GEOMETRIC BOTTOM */}
       {isExpanded && (
-        <div className="relative h-44 w-full pointer-events-none select-none z-0 mt-auto">
-          {/* Temple Gopuram Tower Silhouette Watermark */}
-          <div className="absolute left-3 bottom-10 w-44 h-36 opacity-15">
-            <svg className="w-full h-full stroke-emerald-100 fill-none" viewBox="0 0 200 250">
-              <path d="M80 50 L120 50 L124 75 L76 75 Z" strokeWidth="1.2" />
-              <path d="M76 75 L124 75 L128 105 L72 105 Z" strokeWidth="1.2" />
-              <path d="M72 105 L128 105 L132 145 L68 145 Z" strokeWidth="1.2" />
-              <path d="M68 145 L132 145 L136 195 L64 195 Z" strokeWidth="1.2" />
-              <path d="M64 195 L136 195 L140 240 L60 240 Z" strokeWidth="1.5" />
+        <div className="relative w-full h-[280px] pointer-events-none select-none z-10 mt-auto overflow-hidden">
+          {/* Tamil Gopuram Temple Line-Art SVG */}
+          <div className="absolute left-0 bottom-[60px] w-full h-[240px] opacity-90 z-10">
+            <SidebarCulturalArt />
+          </div>
+
+          {/* Deep Red Diagonal Polygon (#C90818) */}
+          <div className="absolute bottom-0 left-0 w-[240px] h-[170px] z-20">
+            <svg className="w-full h-full" viewBox="0 0 240 170" preserveAspectRatio="none">
+              <polygon points="0,170 0,30 200,170" fill="#C90818" />
+              {/* Thin Golden Edge Line */}
+              <polyline points="0,30 200,170" stroke="#FFBE00" strokeWidth="1.5" opacity="0.6" />
             </svg>
           </div>
 
-          {/* Bottom-Left Red Corner Shape */}
-          <div className="absolute bottom-0 left-0 w-36 h-28 z-1">
-            <svg className="w-full h-full" viewBox="0 0 150 120" preserveAspectRatio="none">
-              <path d="M0 120 L0 40 Q70 80 110 120 Z" fill="#b91c1c" />
+          {/* Golden Yellow Diagonal Polygon (#FFBE00) */}
+          <div className="absolute bottom-0 right-0 w-[220px] h-[140px] z-30">
+            <svg className="w-full h-full" viewBox="0 0 220 140" preserveAspectRatio="none">
+              <polygon points="40,140 220,10 220,140" fill="#FFBE00" />
             </svg>
           </div>
 
-          {/* Bottom-Left Red Dot Matrix (5x4) */}
-          <div className="absolute bottom-3 left-3 grid grid-cols-5 gap-1.5 opacity-40 z-10">
+          {/* Golden Dotted Matrix (5x4) near bottom-left */}
+          <div className="absolute bottom-6 left-6 grid grid-cols-5 gap-2 opacity-50 z-40">
             {[...Array(20)].map((_, i) => (
-              <div key={i} className="w-1 h-1 rounded-full bg-red-200" />
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#E5B300]" />
             ))}
           </div>
 
-          {/* Bottom-Right Golden Yellow Sweep */}
-          <div className="absolute bottom-0 right-0 w-40 h-24 z-2">
-            <svg className="w-full h-full" viewBox="0 0 160 100" preserveAspectRatio="none">
-              <path d="M0 100 Q80 40 160 60 L160 100 Z" fill="#f5a623" />
-            </svg>
-          </div>
-
-          {/* Tagline */}
-          <div className="absolute bottom-2 right-4 text-[9px] font-extrabold text-slate-950 z-20 font-display">
-            Automate Today<br />Enable Tomorrow
+          {/* Bottom Tagline Text */}
+          <div className="absolute bottom-5 right-6 text-right z-40">
+            <div className="w-8 h-[2px] bg-[#003F28]/60 mb-1 ml-auto"></div>
+            <div className="text-[11px] font-bold text-[#003F28] leading-tight font-display tracking-tight">
+              Automate Today<br />
+              Enable Tomorrow
+            </div>
           </div>
         </div>
       )}
-
     </aside>
   );
 }
