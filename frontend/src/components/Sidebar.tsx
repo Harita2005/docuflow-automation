@@ -8,7 +8,6 @@ import {
   ChevronRight
 } from "lucide-react";
 import kolamSolidImg from "../assets/kolam_solid_white.png";
-import kolamLargeImg from "../assets/kolam_large.png";
 
 interface SidebarProps {
   currentView: string;
