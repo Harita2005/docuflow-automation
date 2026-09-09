@@ -1,11 +1,10 @@
-import os
 import re
 import uuid
 import logging
 from pathlib import Path
 from typing import Tuple
 from fastapi import HTTPException, UploadFile
-from app.config import settings
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +20,9 @@ MAGIC_BYTES = {
 def sanitize_filename(filename: str) -> str:
     if not filename:
         return f'doc_{uuid.uuid4().hex[:8]}.pdf'
-    clean = filename.replace('\x00', '').replace('/', '_').replace('\\', '_')
-    clean = re.sub(r'(\.\./|\.\.\\)', '', clean)
-    clean = re.sub(r'[^a-zA-Z0-9_\.\-]', '_', clean)
-    clean = clean.lstrip('.')
+    raw = filename.replace('\x00', '').replace('/', '_').replace('\\', '_')
+    no_path = re.sub(r'(\.\./|\.\.\\)', '', raw)
+    clean = re.sub(r'[^a-zA-Z0-9_\.\-]', '_', no_path).lstrip('.')
     return clean or f'doc_{uuid.uuid4().hex[:8]}.pdf'
 
 def detect_file_type_and_validate_magic(header: bytes) -> str:

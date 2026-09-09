@@ -3,7 +3,7 @@ import re
 import json
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from app.models import BusinessRule, WorkflowProfile, WorkflowStepDefinition, Invoice
+from app.database.models import BusinessRule, Document, Invoice, WorkflowProfile, WorkflowStepDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +329,7 @@ def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
     - Only active users (is_active == True)
     - Deterministic fallback to Admin / Division Head if no approver is found.
     """
-    from app.models import User
+    from app.database.models import User
     if not step:
         return []
 

@@ -1,5 +1,4 @@
-import pytest
-from app.models import Document
+from app.database.models import Document
 
 M2M_KEY = 'DocuFlow-M2M-Integration-Secret-2026'
 

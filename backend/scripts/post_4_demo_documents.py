@@ -1,6 +1,5 @@
 import sys
 import json
-import time
 import urllib.request
 from pathlib import Path
 
@@ -107,7 +106,7 @@ def post_documents():
                     posted = True
                     print(f"  [HTTP {resp.status}] Ingested ID: {res_body.get('document_id')} | Status: {res_body.get('status')}")
             except Exception as http_err:
-                pass
+                print(f"  [HTTP API Warning] {http_err}, falling back to direct ingestion...")
                 
             # Direct Ingestion Fallback
             if not posted:

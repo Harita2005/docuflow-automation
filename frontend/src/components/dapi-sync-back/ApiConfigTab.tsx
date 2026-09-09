@@ -52,7 +52,7 @@ export default function ApiConfigTab({
     status: number;
     statusText: string;
     responseTimeMs: number;
-    responseBody: any;
+    responseBody: unknown;
   } | null>(null);
 
   const currentApp = apps.find(a => a.id === selectedAppId) || apps[0];

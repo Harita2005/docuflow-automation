@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional
+from typing import List
 from fastapi import HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from app.auth import get_current_user
-from app.database import get_db
-from app.models import User, Document, Role, Permission, RolePermission, Division, Department
+from app.database.connection import get_db
+from app.database.models import Document, Permission, Role, RolePermission, User
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +71,14 @@ def authorize_document_access(user: User, doc: Document, required_action: str = 
     if u_role in ['admin', 'administrator', 'system_admin', 'superadmin']:
         return True
 
-    user_handles = [
+    raw_handles = [
         (user.username or '').strip().lower(),
         (user.employee_id or '').strip().lower(),
         (user.employee_name or '').strip().lower(),
         (user.name or '').strip().lower(),
         (user.email or '').strip().lower()
     ]
-    user_handles = [h for h in user_handles if h]
+    user_handles = [h for h in raw_handles if h]
 
     # Strict Division Boundary: Users from a specific division cannot access another division's documents
     user_div = (user.division or '').strip().upper()

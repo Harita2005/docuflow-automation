@@ -1,6 +1,5 @@
-import pytest
 from app.auth import create_access_token
-from app.models import Document, DocumentChecklistState
+from app.database.models import Document, DocumentChecklistState
 from app.services.lock_service import lock_manager
 
 def test_optimistic_concurrency_conflict(client, db_session, seed_test_data):
@@ -18,6 +17,10 @@ def test_optimistic_concurrency_conflict(client, db_session, seed_test_data):
         workflow_profile_id='STANDARD_AP_2STAGE',
         file_url='/api/documents/DOC-RACE-01/file'
     )
+    from app.config.settings import settings
+    (settings.UPLOAD_DIR / 'DOC-RACE-01.pdf').write_bytes(b'%PDF-1.4 sample valid test invoice')
+    (settings.PDF_STORAGE_DIR / 'DOC-RACE-01.pdf').write_bytes(b'%PDF-1.4 sample valid test invoice')
+
     db_session.add(doc)
     db_session.flush()
 
@@ -40,7 +43,7 @@ def test_optimistic_concurrency_conflict(client, db_session, seed_test_data):
 
     # Simulate stale second approval worker trying to approve the same stage / version
     # It attempts to approve doc.id which is already version 2 / stage 2
-    res2 = client.post(f'/api/documents/{doc.id}/approve', json={'remarks': 'Second concurrent worker'}, headers=headers)
+    res2 = client.post(f'/api/documents/{doc.id}/approve', json={'remarks': 'Second concurrent worker', 'expected_version': 1}, headers=headers)
     # Stage is now 2, so Stage 2 requires assigned approver or Stage 2 checklist, or if version mismatch
     # It will either reject because stage advanced or conflict
     assert res2.status_code in [400, 409]

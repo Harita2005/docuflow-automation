@@ -1,56 +1,61 @@
-import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from app.config import settings
 
-logger = logging.getLogger(__name__)
+from app.config.settings import settings
 
-db_url = settings.get_database_url()
-if db_url.startswith('sqlserver://'):
-    db_url = db_url.replace('sqlserver://', 'mssql+pyodbc://', 1)
-    if 'driver=' not in db_url.lower():
-        delim = '&' if '?' in db_url else '?'
-        db_url += f'{delim}driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes'
-engine_kwargs = {'pool_size': 10, 'max_overflow': 20, 'pool_pre_ping': True, 'pool_recycle': 300}
 
-def ensure_mssql_database_exists(url: str):
-    """Auto-create target database (e.g. DocuFlowDB) on MS SQL Server if missing."""
-    if 'mssql' not in url.lower():
-        return
-    db_name = settings.DB_NAME or 'DocuFlowDB'
-    if db_name.lower() == 'master':
-        return
-    for attempt in range(5):
-        try:
-            from sqlalchemy import text
-            from urllib.parse import quote_plus
-            safe_pass = quote_plus(settings.DB_PASSWORD) if settings.DB_PASSWORD else ''
-            user_part = f'{settings.DB_USER}:{safe_pass}@' if settings.DB_USER else ''
-            master_url = f'mssql+pyodbc://{user_part}{settings.DB_HOST}:{settings.DB_PORT}/master?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes'
-            master_engine = create_engine(master_url, isolation_level='AUTOCOMMIT')
-            with master_engine.connect() as conn:
-                conn.execute(text(f"IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'{db_name}') CREATE DATABASE [{db_name}];"))
-            master_engine.dispose()
-            logger.info(f"[Database Auto-Create] Verified database '{db_name}' exists on SQL Server.")
-            break
-        except Exception as create_err:
-            logger.debug('Handled exception: %s', create_err)
-ensure_mssql_database_exists(db_url)
-try:
-    engine = create_engine(db_url, **engine_kwargs)
-    logger.info('[Database Connection] Successfully initialized engine.')
-except Exception as exc:
-    logger.debug('Handled exception: %s', exc)
-    raise RuntimeError('Enterprise Database Connection Error: Failed to initialize engine.')
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# ---------------------------------------------------------------------------
+# Database connection
+# ---------------------------------------------------------------------------
+
+DATABASE_URL = settings.get_database_url()
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
+
+
+# ---------------------------------------------------------------------------
+# Database session
+# ---------------------------------------------------------------------------
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+
+# ---------------------------------------------------------------------------
+# Base model
+# ---------------------------------------------------------------------------
+
 Base = declarative_base()
+
+
+# ---------------------------------------------------------------------------
+# Dependency
+# ---------------------------------------------------------------------------
 
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
-        try:
-            db.close()
-        except Exception as exc:
-            logger.debug('Handled exception: %s', exc)
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Public exports
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    "engine",
+    "SessionLocal",
+    "Base",
+    "get_db",
+]

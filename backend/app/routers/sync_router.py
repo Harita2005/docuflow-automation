@@ -1,14 +1,13 @@
+import jwt
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
-import os
-import jwt
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-load_dotenv()
-from app.config import settings
+
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 SERVICE_API_USER = os.getenv('SERVICE_API_USER', 'backend_sync_client')

@@ -6,12 +6,32 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.config import settings
-from app.models import User, AuditLog
-from app.schemas import LoginRequest, TokenResponse, MFASendOTPRequest, MFAVerifyRequest, MFASetupTOTPRequest, MFASetupTOTPResponse
-from app.auth import verify_password, create_access_token, get_current_user
-from app.services.mfa_service import create_mfa_ticket, get_mfa_ticket, generate_numeric_otp, generate_totp_secret, generate_totp_qr_svg, verify_totp, send_email_otp, send_sms_otp, mask_email, mask_phone, _MFA_TICKETS
+from app.auth import create_access_token, get_current_user, verify_password
+from app.config.settings import settings
+from app.database.connection import get_db
+from app.database.models import AuditLog, NotificationProviderConfig, User
+from app.schemas.schemas import (
+    LoginRequest,
+    MFASendOTPRequest,
+    MFASetupTOTPRequest,
+    MFASetupTOTPResponse,
+    MFAVerifyRequest,
+    TokenResponse,
+)
+from app.services.mfa_service import (
+    _MFA_TICKETS,
+    create_mfa_ticket,
+    generate_numeric_otp,
+    generate_totp_qr_svg,
+    generate_totp_secret,
+    get_mfa_ticket,
+    get_totp_provisioning_uri,
+    mask_email,
+    mask_phone,
+    send_email_otp,
+    send_sms_otp,
+    verify_totp,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/auth', tags=['Authentication'])
@@ -85,7 +105,7 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     ticket_data['otp_sent_at'] = time.time()
     method_upper = request.method.upper()
     if method_upper == 'EMAIL':
-        from app.models import NotificationProviderConfig
+        from app.database.models import NotificationProviderConfig
         config = db.query(NotificationProviderConfig).first()
         config_dict = None
         if config:
@@ -99,7 +119,7 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         msg = f'Verification code queued for {destination}'
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
-    return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300, 'preview_otp': code, 'dev_otp': code}
+    return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300}
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
 def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):

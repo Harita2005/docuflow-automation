@@ -1,9 +1,8 @@
-import pytest
 from app.auth import create_access_token
-from app.models import Document, DocumentChecklistState
+from app.database.models import Document, DocumentChecklistState
 
 def test_checklist_enforcement_and_stage_advance(client, db_session, seed_test_data):
-    from app.config import settings
+    from app.config.settings import settings
     (settings.UPLOAD_DIR / 'DOC-CHK-01.pdf').write_bytes(b'%PDF-1.4 sample valid test invoice')
     (settings.PDF_STORAGE_DIR / 'DOC-CHK-01.pdf').write_bytes(b'%PDF-1.4 sample valid test invoice')
 

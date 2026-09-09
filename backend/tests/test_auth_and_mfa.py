@@ -1,6 +1,3 @@
-import pytest
-import time
-from app.auth import create_access_token
 
 def test_login_invalid_password_rejected(client, seed_test_data):
     # Verify bypasses (password123, admin, etc.) are completely eliminated

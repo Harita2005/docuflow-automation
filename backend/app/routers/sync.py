@@ -9,9 +9,18 @@ from typing import List, Optional, Any, Union
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.config import settings
-from app.models import Invoice, WorkflowProfile, WorkflowStepDefinition, AuditLog, SystemLog, InvoiceChecklistState, InvoiceLineItem, IntegrationSyncLog
+from app.config.settings import settings
+from app.database.connection import SessionLocal, get_db
+from app.database.models import (
+    AuditLog,
+    IntegrationSyncLog,
+    Invoice,
+    InvoiceChecklistState,
+    InvoiceLineItem,
+    SystemLog,
+    WorkflowProfile,
+    WorkflowStepDefinition,
+)
 from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
 from app.services.rules_engine import get_doc_type_prefix
 from app.services.ocr_service import extract_text_from_pdf
@@ -27,7 +36,7 @@ def generate_compliance_checklist_for_category(category: Optional[str], doc_type
     Returns empty list [] if no checklist items are configured by admin.
     """
     try:
-        from app.database import SessionLocal
+        from app.database.connection import SessionLocal
         local_db = db or SessionLocal()
         try:
             mock_inv = Invoice(division=division or 'VCC', category=category, document_type=doc_type or 'AP INVOICE', plant=plant, workflow_profile_id=workflow_profile)

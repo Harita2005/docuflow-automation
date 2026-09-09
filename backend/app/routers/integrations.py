@@ -7,9 +7,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.config import settings
-from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog, AuditLog
+from app.config.settings import settings
+from app.database.connection import get_db
+from app.database.models import AuditLog, Document, IntegrationSyncLog, ThirdPartyWebhookConfig
 from app.schemas import ThirdPartyWebhookConfigCreate, ThirdPartyWebhookConfigResponse, ThirdPartyWebhookTestRequest, IntegrationAcknowledgmentRequest, IntegrationAcknowledgmentResponse
 from app.services.integration_service import build_universal_export_payload, dispatch_outgoing_webhook, compute_hmac_signature
 

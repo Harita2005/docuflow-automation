@@ -6,8 +6,8 @@ import requests
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import ThirdPartyApplication, CallbackRule, CallbackEvent, CallbackAttempt, IntegrationAuditHistory
+from app.database.connection import get_db
+from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, IntegrationAuditHistory, ThirdPartyApplication
 from app.schemas import ThirdPartyApplicationCreate, ThirdPartyApplicationUpdate, CallbackRuleCreate, CallbackRuleUpdate, TestCallbackRequest
 from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers
 

@@ -12,7 +12,7 @@ import urllib.error
 import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
-from app.models import Document, ThirdPartyApplication, CallbackRule, CallbackEvent, CallbackAttempt
+from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication
 
 logger = logging.getLogger(__name__)
 DYNAMIC_VARIABLES = ['primaryKey', 'documentNumber', 'approvalStatus', 'documentType', 'applicationCode', 'company', 'category', 'branch', 'costCenter', 'approvedBy', 'approvalDate', 'rejectionReason', 'eventId']

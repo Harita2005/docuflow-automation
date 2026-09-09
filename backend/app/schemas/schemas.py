@@ -162,6 +162,7 @@ class InvoiceActionRequest(BaseModel):
     decision: Optional[str] = 'APPROVE'
     remarks: Optional[str] = None
     stage_name: Optional[str] = None
+    expected_version: Optional[int] = None
 
 class InvoiceResponse(InvoiceBase):
     id: str

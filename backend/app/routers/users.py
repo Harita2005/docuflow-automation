@@ -4,10 +4,15 @@ import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import User, Division, Department, Role
-from app.schemas import UserResponse, UserMasterCreate, UserMasterUpdate, UserStatusToggleRequest
-from app.auth import get_password_hash, get_current_user, get_current_active_user
+from app.auth import get_current_active_user, get_password_hash
+from app.database.connection import get_db
+from app.database.models import Department, Division, Role, User
+from app.schemas.schemas import (
+    UserMasterCreate,
+    UserMasterUpdate,
+    UserResponse,
+    UserStatusToggleRequest,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/users', tags=['User Master Management'])
@@ -155,7 +160,7 @@ def update_user_master(
     if not user:
         raise HTTPException(status_code=404, detail='Employee not found')
 
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
 
     # Prevent non-admin privilege escalation
     if not is_admin:

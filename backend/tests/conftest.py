@@ -4,10 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.auth import get_password_hash
+from app.database.connection import Base, get_db
+from app.database.models import Division, Role, User, WorkflowProfile, WorkflowStepDefinition
 from app.main import app
-from app.models import User, Division, Department, Role, Permission, RolePermission, Document, WorkflowProfile, WorkflowStepDefinition, DocumentChecklistState, BusinessRule
-from app.auth import get_password_hash, create_access_token
 
 # Use SQLite in-memory with StaticPool for test isolation
 SQLALCHEMY_DATABASE_URL = 'sqlite:///:memory:'

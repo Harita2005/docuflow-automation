@@ -14,9 +14,22 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.config import settings
-from app.models import Invoice, WorkflowStepDefinition, AuditLog, User, InvoiceChecklistState, NotificationRaciMatrix, NotificationProviderConfig, ChecklistRule, InAppNotification
+from app.config.settings import settings
+from app.database.connection import SessionLocal, get_db
+from app.database.models import (
+    AuditLog,
+    ChecklistRule,
+    Document,
+    DocumentApprovalLog,
+    DocumentChecklistState,
+    InAppNotification,
+    Invoice,
+    InvoiceChecklistState,
+    NotificationProviderConfig,
+    NotificationRaciMatrix,
+    User,
+    WorkflowStepDefinition,
+)
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
 from app.auth import get_current_user, get_current_active_user, decode_token
@@ -24,8 +37,8 @@ from app.services.rules_engine import evaluate_business_rules, get_doc_type_pref
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.services.rbac_service import authorize_document_access
-from app.services.file_security import validate_uploaded_file, get_safe_file_path, sanitize_filename
-from app.database import SessionLocal
+from app.services.file_security import validate_uploaded_file, get_safe_file_path
+from app.database.connection import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +86,8 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
     if not user or not pool_str:
         return False
     pool = [s.strip().lower() for s in pool_str.split(',') if s.strip()]
-    user_handles = [(user.username or '').strip().lower(), (user.employee_id or '').strip().lower(), (user.employee_name or '').strip().lower(), (user.email or '').strip().lower()]
-    user_handles = [h for h in user_handles if h]
+    raw_handles = [(user.username or '').strip().lower(), (user.employee_id or '').strip().lower(), (user.employee_name or '').strip().lower(), (user.email or '').strip().lower()]
+    user_handles = [h for h in raw_handles if h]
     for h in user_handles:
         if h in pool:
             return True
@@ -353,10 +366,10 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
     """
     Constructs the storage path for approved documents under storage root.
     """
-    clean_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or 'DOC'))
-    clean_doc_num = re.sub('[^a-zA-Z0-9_\\-\\.]', '', clean_doc_num)
-    clean_id = os.path.basename(str(inv.id) if inv.id else '0')
-    clean_id = re.sub('[^a-zA-Z0-9_\\-\\.]', '', clean_id)
+    raw_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or 'DOC'))
+    clean_doc_num = re.sub('[^a-zA-Z0-9_\\-\\.]', '', raw_doc_num)
+    raw_id = os.path.basename(str(inv.id) if inv.id else '0')
+    clean_id = re.sub('[^a-zA-Z0-9_\\-\\.]', '', raw_id)
     filename = f'{clean_doc_num}_{clean_id}.pdf'
     return get_storage_root_path() / 'approved' / filename
 
@@ -563,8 +576,8 @@ def stream_document_file(
             username = payload.get('sub')
             if username:
                 auth_user = db.query(User).filter(User.username == username, User.is_active == True).first()
-        except Exception:
-            pass
+        except Exception as auth_err:
+            logger.debug('Failed to decode token for pdf attachment: %s', auth_err)
 
     if not auth_user:
         raise HTTPException(status_code=401, detail='Authentication required to view document attachment.')
@@ -661,9 +674,11 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
+    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail=f"Conflict: Version mismatch. Document '{inv.id}' version is {current_version}, expected {expected_ver}.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_stage_val = prev_stage_num
-    next_status_val = inv.status
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 
@@ -734,9 +749,10 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     stage_name = action.stage_name if action and action.stage_name else f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
+    if action and action.expected_version is not None and action.expected_version != current_version:
+        raise HTTPException(status_code=409, detail=f"Conflict: Version mismatch. Document '{inv.id}' version is {current_version}, expected {action.expected_version}.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_stage_val = prev_stage_num
-    next_status_val = inv.status
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 
@@ -1400,9 +1416,8 @@ def post_admin_erp_master_bulk(payload: dict, db: Session=Depends(get_db)):
 
 @router.delete('/api/admin/erp-master/{po}')
 def delete_admin_erp_master(po: str, db: Session=Depends(get_db)):
-    items = load_erp_master_data()
-    items = [itm for itm in items if itm.get('po_number') != po]
-    save_erp_master_data(items)
+    filtered_items = [itm for itm in load_erp_master_data() if itm.get('po_number') != po]
+    save_erp_master_data(filtered_items)
     return {'success': True, 'deleted': po}
 
 @router.get('/api/admin/recycle-bin')

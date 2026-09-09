@@ -6,7 +6,18 @@ import re
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
-BLOCKED_IP_NETWORKS = [ipaddress.ip_network('127.0.0.0/8'), ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('172.16.0.0/12'), ipaddress.ip_network('192.168.0.0/16'), ipaddress.ip_network('169.254.0.0/16'), ipaddress.ip_network('0.0.0.0/8'), ipaddress.ip_network('::1/128'), ipaddress.ip_network('fc00::/7'), ipaddress.ip_network('fe80::/10')]
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
 
 def is_ip_blocked(ip_str: str) -> bool:
     """Checks if a given IP address string falls in a blocked private/loopback network."""

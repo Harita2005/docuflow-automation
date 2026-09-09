@@ -7,8 +7,8 @@ import urllib.error
 import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from app.database import SessionLocal
-from app.models import Document, ThirdPartyWebhookConfig, IntegrationSyncLog
+from app.database.connection import SessionLocal
+from app.database.models import Document, IntegrationSyncLog, ThirdPartyWebhookConfig
 
 logger = logging.getLogger(__name__)
 

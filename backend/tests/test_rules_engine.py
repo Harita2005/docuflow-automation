@@ -1,6 +1,5 @@
-import pytest
 from app.services.rules_engine import match_field_value, evaluate_rule_conditions, resolve_step_approvers
-from app.models import Document, WorkflowStepDefinition, User
+from app.database.models import Document, WorkflowStepDefinition
 
 def test_condition_operators():
     # Equals

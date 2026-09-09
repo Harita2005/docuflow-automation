@@ -1,6 +1,5 @@
-import pytest
 from app.auth import create_access_token
-from app.models import Document
+from app.database.models import Document
 
 def test_unauthenticated_request_rejected(client):
     # Requirement 2: Unauthenticated requests rejected with 401
