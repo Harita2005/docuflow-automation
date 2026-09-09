@@ -15,8 +15,10 @@ for py_file in py_files:
     try:
         py_compile.compile(str(py_file), doraise=True)
     except Exception as err:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', err)
+        syntax_clean = False
+        audit_passed = False
+        errors.append(f'Syntax error in {py_file}: {err}')
+        print(f'  [ERROR] {py_file.name}: {err}')
 if syntax_clean:
     print(f'  [PASSED] All {len(py_files)} Python files compiled cleanly with 0 syntax errors.')
 else:
