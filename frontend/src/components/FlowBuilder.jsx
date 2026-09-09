@@ -436,13 +436,13 @@ export default function FlowBuilder({ users = [] }) {
         <div className="flex flex-col gap-4 mt-2">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.keys(groupedWorkflows).map(cat => (
-              <div key={cat} onClick={() => setSelectedCategory(cat)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              <div key={cat} onClick={() => setSelectedCategory(cat)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <div className="h-8 w-8 rounded bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-700 group-hover:text-white transition-colors">
                     <Network className="h-4 w-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-xs tracking-wide group-hover:text-blue-700 transition-colors">{cat}</h3>
+                    <h3 className="font-bold text-slate-800 text-xs tracking-wide group-hover:text-emerald-700 transition-colors">{cat}</h3>
                     <p className="text-[10px] font-bold text-slate-500 mt-0.5">{groupedWorkflows[cat].length} Workflows</p>
                   </div>
                 </div>
@@ -450,7 +450,7 @@ export default function FlowBuilder({ users = [] }) {
                   <button onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget({ category: cat, wfs: groupedWorkflows[cat] }); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100" title="Delete Category">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-600 transition-colors" />
                 </div>
               </div>
             ))}
@@ -508,7 +508,7 @@ export default function FlowBuilder({ users = [] }) {
     }
 
     return (
-      <div className="flex flex-col gap-4 mt-4">
+      <div className="flow-builder-green-theme flex flex-col gap-4 mt-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
           <div className="flex items-center gap-4">
             <button aria-label="Back" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
@@ -669,7 +669,7 @@ export default function FlowBuilder({ users = [] }) {
   // EDIT VIEW (The requested Redesign)
   return (
     <>
-      <form onSubmit={handleSave} className="flex flex-col gap-1.5 bg-slate-50 h-full rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-5 overflow-hidden">
+      <form onSubmit={handleSave} className="flow-builder-green-theme flex flex-col gap-1.5 bg-slate-50 h-full rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-5 overflow-hidden">
       {/* Header */}
       <div className="flex flex-col shrink-0 z-10 bg-slate-50 pb-1 -mx-4 -mt-4 px-4 pt-1.5 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-2 border-b border-slate-200/60 shadow-sm mb-0">
         <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors" onClick={() => setEditingWorkflow(null)}>

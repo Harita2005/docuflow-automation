@@ -222,7 +222,7 @@ export default function Sidebar({
   return (
     <aside 
       className={`fixed left-0 top-0 h-screen z-40 overflow-hidden select-none transition-all duration-300 flex flex-col shrink-0 ${
-        !isExpanded ? "w-[72px]" : "w-[230px]"
+        !isExpanded ? "w-[64px]" : "w-[180px]"
       }`}
       style={{
         ["--daas-sidebar-green" as any]: "#004B32",

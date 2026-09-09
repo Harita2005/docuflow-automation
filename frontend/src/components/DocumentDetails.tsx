@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FileText,
+  ArrowLeft,
   CheckCircle2,
   RotateCw,
   RotateCcw,
@@ -980,14 +981,14 @@ export default function DocumentDetails({
 
     if (["Approved", "Paid", "Ready for Payment", "Settled"].includes(status)) {
       return (
-        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider">
+        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider">
           Approved
         </span>
       );
     }
     if (["Cancelled", "Failed"].includes(status)) {
       return (
-        <span className="px-2 py-0.5 rounded-md bg-slate-700/60 border border-slate-500/40 text-[9px] font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1">
+        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-slate-700/60 border border-slate-500/40 text-[9px] font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
           Cancelled
         </span>
@@ -995,7 +996,7 @@ export default function DocumentDetails({
     }
     if ((status || '').toLowerCase().includes('return') || (status || '').toLowerCase().includes('reject')) {
       return (
-        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-bold text-amber-200 uppercase tracking-wider flex items-center gap-1">
+        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-bold text-amber-200 uppercase tracking-wider flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           Returned
         </span>
@@ -1003,20 +1004,20 @@ export default function DocumentDetails({
     }
     if (isStage1 && !hasAttachment) {
       return (
-        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-black uppercase tracking-wider animate-pulse">
+        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-black uppercase tracking-wider animate-pulse">
           Pending Attachment
         </span>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[9px] font-extrabold text-white uppercase tracking-wider">
+      <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[9px] font-extrabold text-white uppercase tracking-wider">
         Under Review
       </span>
     );
   };
 
   return (
-    <div className="animate-fadeIn relative">
+    <div className="document-details-compact animate-fadeIn relative w-full max-w-[1600px] mx-auto">
       {/* FLOATING ACTION TOAST NOTIFICATION */}
       {toastMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[300] animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none">
@@ -1044,39 +1045,38 @@ export default function DocumentDetails({
       )}
 
       {/* MODERN FULL-HEIGHT EXECUTIVE REVIEW & ACTION WORKSPACE */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
+      <div className="bg-white border border-slate-200/90 rounded-xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
         
-        {/* TOP EXECUTIVE BAR */}
-        <div className="bg-white text-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-slate-300">
-          <div className="flex items-center gap-2.5">
-            <div className="h-6 w-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
-              <Shield className="h-3 w-3" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xs tracking-tight text-slate-800 font-display">
-                  Document Review
-                </span>
-                <span className="px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600">
-                  {formatDocNumber(document.id, document.document_type, (document as any).category)}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                  <FileText className="h-2.5 w-2.5" />
-                  {document.document_type || "DOCUMENT"}
-                </span>
-
-                {/* Subtle Status Badge */}
-                {getStatusBadge()}
+        {/* DOCUMENT TITLE BAR */}
+        <div className="bg-white text-slate-800 px-3 py-2 flex items-end justify-between shrink-0 border-b border-slate-200">
+          <div className="min-w-0">
+            <button type="button" onClick={onGoBack} className="flex items-center gap-1 text-[9px] font-bold text-slate-500 hover:text-[#003F28] mb-1 cursor-pointer">
+              <ArrowLeft className="h-3 w-3" /> Back to Documents
+            </button>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="h-7 w-7 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[#003F28] shrink-0">
+                <FileText className="h-3.5 w-3.5" />
               </div>
+              <span className="document-details-title font-extrabold text-base tracking-tight text-slate-800 font-display truncate">
+                Document Details
+              </span>
+              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600 shrink-0">
+                {formatDocNumber(document.id, document.document_type, (document as any).category)}
+              </span>
+              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1 shrink-0">
+                <FileText className="h-2.5 w-2.5" />
+                {document.document_type || "DOCUMENT"}
+              </span>
+              {getStatusBadge()}
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2 shrink-0">
             {/* ERP Data Sync Button: Opens ERP Data Sync & Reconciliation Modal */}
             {getFieldPerm("erp_sync_data") !== "hidden" ? (
               <button
                 onClick={() => setShowErpSyncModal(true)}
-                className="p-1 rounded-lg bg-[#FFBF00] hover:bg-[#e6ac00] text-[#002F20] transition text-[10px] font-bold flex items-center gap-1.5 px-2.5 py-0.5 border border-[#e6ac00]/40 shadow-xs cursor-pointer"
+                className="p-1.5 rounded-lg bg-[#006747] hover:bg-[#005333] text-white transition text-[10px] font-bold flex items-center gap-1.5 px-3 border border-[#005333] shadow-xs cursor-pointer"
                 title="View Enterprise ERP Data Sync & Ledger Reconciliation"
               >
                 <Database className="h-3 w-3 text-[#002F20]" />
@@ -1095,7 +1095,7 @@ export default function DocumentDetails({
 
             <button
               onClick={onGoBack}
-              className="p-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
               title="Close Workspace"
             >
               <X className="h-3.5 w-3.5" />
@@ -1122,11 +1122,11 @@ export default function DocumentDetails({
         <div ref={containerRef} className="bg-slate-50 border-b border-slate-300 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Primary Metrics Group */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-1 flex-wrap items-center gap-2.5">
               
               {/* 1. Supplier / Vendor */}
               {getFieldPerm("vendor_name") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[190px] max-w-[230px]">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[190px]">
                   <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
                     <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
                     <span>Supplier / Vendor</span>
@@ -1149,7 +1149,7 @@ export default function DocumentDetails({
 
               {/* 2. Bill No & Date */}
               {getFieldPerm("invoice_num_date") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[155px] max-w-[185px]">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[155px]">
                   <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
                     <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
                   </div>
@@ -1183,7 +1183,7 @@ export default function DocumentDetails({
 
               {/* 3. PO Reference */}
               {getFieldPerm("po_reference") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[125px] max-w-[155px]">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]">
                   <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
                     <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
                     <span>PO Reference</span>
@@ -1205,7 +1205,7 @@ export default function DocumentDetails({
 
               {/* 4. Total Amount (Gross) */}
               {getFieldPerm("total_gross") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[125px] max-w-[155px]">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]">
                   <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
                     <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
                     <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
@@ -1231,9 +1231,9 @@ export default function DocumentDetails({
             <button
               type="button"
               onClick={() => setShowMoreMetadata(!showMoreMetadata)}
-              className={`py-1.5 px-3 rounded-lg border text-[10.5px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+              className={`py-1.5 px-3 rounded-lg border text-[9.5px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
                 showMoreMetadata 
-                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
+                  ? "bg-[#006747] border-[#005333] text-white shadow-sm" 
                   : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300"
               }`}
               title="Click to view/hide extra financial, tax, and ERP metadata fields"
@@ -1249,7 +1249,7 @@ export default function DocumentDetails({
               {dynamicSyncPayload.entries
                 .filter(entry => !['vendor_name', 'invoice_number', 'po_number', 'amount'].includes(entry.key))
                 .map(entry => (
-                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[110px] max-w-[160px]">
+                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[110px]">
                     <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 truncate" title={entry.label}>
                       {entry.label}
                     </div>
@@ -1264,18 +1264,24 @@ export default function DocumentDetails({
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
           
           {/* LEFT COLUMN: UNIFIED SCROLLABLE AUDIT & COMPLIANCE PANEL (OPTIMAL COMPACT WIDTH) */}
-          <div className="w-full lg:w-[360px] xl:w-[390px] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1.5 space-y-2.5 max-h-full">
+          <div className="w-full lg:w-[30%] xl:w-[30%] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1.5 space-y-2.5 max-h-full">
             
             {/* 1. Sleek Stepper Progress Strip */}
             <div 
               onClick={() => setShowTimelineModal(true)}
-              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex items-center justify-between gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
+              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2.5 shadow-2xs shrink-0 flex flex-col gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
               title="Click to view full Approval Timeline & Audit Trail"
             >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-slate-800 flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-[#003F28]" /> Approval Workflow
+                </span>
+                <span className="px-2 py-0.5 rounded-md border border-slate-200 text-[8px] font-bold text-slate-600">View Timeline →</span>
+              </div>
               {/* Horizontal Stepper */}
-              <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar flex-1 min-w-0">
+              <div className="hidden flex-col gap-1.5 overflow-x-auto custom-scrollbar flex-1 min-w-0 w-full">
                 {workflowStepDefinitions.length > 0 ? (
-                  workflowStepDefinitions.map((step: any, sIdx: number) => {
+                  workflowStepDefinitions.slice(0, 2).map((step: any, sIdx: number) => {
                     const isDocSettled = ["Approved", "Settled", "Paid", "Ready for Payment"].includes(document?.status || "");
                     const docStatusLower = (document?.status || "").toLowerCase();
                     const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
@@ -1292,9 +1298,9 @@ export default function DocumentDetails({
 
                     return (
                       <React.Fragment key={sIdx}>
-                        {sIdx > 0 && <span className="text-slate-300 font-black text-[9px] shrink-0">➔</span>}
+                        {sIdx > 0 && <span className="text-slate-300 font-black text-[9px] shrink-0 ml-1">↓</span>}
                         <div 
-                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9.5px] transition shrink-0 ${
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[9.5px] transition shrink-0 ${
                             isStepCancelled
                               ? "bg-rose-50/80 border border-rose-200 text-rose-900 font-bold shadow-3xs"
                               : isCurrent
@@ -1332,22 +1338,17 @@ export default function DocumentDetails({
                     );
                   })
                 ) : (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-col items-start gap-1.5">
                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-900 font-extrabold">
                       <span className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[7.5px]">1</span>
                       <span>Accounts Review ({currentUserUsername || "anbu"})</span>
                     </span>
-                    <span className="text-slate-300 font-black text-[9px]">➔</span>
+                    <span className="text-slate-300 font-black text-[9px] ml-1">↓</span>
                     <span className="text-slate-400 text-[9.5px] font-medium">Final Settlement</span>
                   </div>
                 )}
               </div>
 
-              {/* View Timeline Badge Pill */}
-              <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 bg-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-700 text-slate-600 text-[8.5px] font-bold uppercase tracking-wider rounded-md border border-slate-200 group-hover:border-indigo-200 transition shadow-2xs">
-                <Clock className="h-2.5 w-2.5" />
-                <span>Timeline ↗</span>
-              </div>
             </div>
 
             {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
@@ -1634,24 +1635,7 @@ export default function DocumentDetails({
                   <label className="block text-[8.5px] uppercase font-bold text-slate-500">
                     Audit Notes / Decision Remarks
                   </label>
-                  {!isDocumentLocked ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setApprovalComment("✓ All 9 verification points verified & reconciled.")}
-                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
-                      >
-                        + All Verified
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setApprovalComment("Tax component and GST rates checked.")}
-                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-[8px] font-bold text-slate-600 transition cursor-pointer"
-                      >
-                        + Tax OK
-                      </button>
-                    </div>
-                  ) : (
+                  {isDocumentLocked && (
                     <span className="text-[8.5px] text-slate-400 font-medium flex items-center gap-1">
                       <Lock className="h-2.5 w-2.5" /> Read-Only
                     </span>

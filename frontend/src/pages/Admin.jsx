@@ -298,7 +298,7 @@ export default function Admin() {
   }));
 
   return (
-    <div className="flex gap-8 h-[calc(100vh-4.5rem)] w-full font-sans overflow-hidden">
+    <div className="admin-settings-theme flex gap-8 h-[calc(100vh-4.5rem)] w-full font-sans overflow-hidden">
       
       {/* Secondary Sidebar */}
       <div className="relative w-56 shrink-0 flex flex-col gap-4 h-full overflow-hidden rounded-r-xl bg-gradient-to-b from-[#004B32] via-[#003F29] to-[#002E1E] px-3 pt-5 pb-4 text-white shadow-lg custom-scrollbar">
@@ -883,16 +883,6 @@ export default function Admin() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleTriggerSync}
-              disabled={syncingData}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold text-[9px] uppercase tracking-wider rounded-md shadow-sm disabled:opacity-50 transition-all cursor-pointer"
-              title="Trigger Data Sync from primary data source and log to audit ledger"
-            >
-              <RefreshCw className={`h-3 w-3 ${syncingData ? 'animate-spin' : ''}`} />
-              {syncingData ? "Syncing..." : "Sync Data Now"}
-            </button>
             <div className="relative w-full sm:w-60">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                 <Search className="h-3.5 w-3.5 text-slate-400" />
