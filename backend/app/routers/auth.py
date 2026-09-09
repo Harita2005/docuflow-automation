@@ -5,7 +5,7 @@ import time
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from app.auth import create_access_token, get_current_user, verify_password
 from app.config.settings import settings
 from app.database.connection import get_db
@@ -48,7 +48,31 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
     if not ident:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
     ident_str = ident.strip()
-    user = db.query(User).filter(User.username.ilike(ident_str) | User.email.ilike(ident_str) | User.employee_id.ilike(ident_str) | User.user_uid.ilike(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
+    user = (
+        db.query(User)
+        .options(
+            load_only(
+                User.id,
+                User.username,
+                User.email,
+                User.password_hash,
+                User.role,
+                User.employee_id,
+                User.employee_name,
+                User.name,
+                User.is_active,
+                User.is_deleted,
+            )
+        )
+        .filter(
+            User.username.ilike(ident_str)
+            | User.email.ilike(ident_str)
+            | User.employee_id.ilike(ident_str)
+            | User.user_uid.ilike(ident_str)
+        )
+        .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
+        .first()
+    )
     if not user:
         user = db.query(User).filter(User.employee_id.ilike(f'%_{ident_str}') | User.employee_id.ilike(f'%{ident_str}%') | User.username.ilike(f'%{ident_str}%') | User.name.ilike(f'%{ident_str}%')).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     if not user:

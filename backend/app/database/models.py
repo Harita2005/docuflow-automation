@@ -155,12 +155,7 @@ class User(Base):
     email = Column(String(150), unique=True, index=True, nullable=False)
     phone_number = Column(String(20), nullable=True)
 
-    division_id = Column(
-        Integer,
-        ForeignKey("divisions.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+
     department_id = Column(
         Integer,
         ForeignKey("departments.id", ondelete="SET NULL"),
@@ -204,10 +199,7 @@ class User(Base):
         onupdate=datetime.datetime.utcnow,
     )
 
-    division_rel = relationship(
-        "Division",
-        foreign_keys=[division_id],
-    )
+
     department_rel = relationship(
         "Department",
         foreign_keys=[department_id],

@@ -128,7 +128,6 @@ def create_user_master(
         department=payload.department,
         plant=payload.plant,
         role=payload.role or 'employee',
-        division_id=div_id,
         department_id=dept_id,
         role_id=role_id,
         password_hash=hashed_pwd,
