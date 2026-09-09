@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.database.connection import engine
+from sqlalchemy import text
 from app.database.models import Base
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
@@ -28,7 +29,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
-        logger.info("Database schema initialized successfully.")
+        # Ensure role_id column exists (add if missing)
+        with engine.begin() as conn:
+            conn.execute(text("IF COL_LENGTH('users', 'role_id') IS NULL ALTER TABLE users ADD role_id INT NULL;"))
+            # Optional: add foreign key constraint if not already present
+            conn.execute(text("""IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_users_role_id')
+                ALTER TABLE users ADD CONSTRAINT fk_users_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;"""))
     except Exception as exc:
         logger.warning(f"Database schema initialization deferred: {exc}")
     yield

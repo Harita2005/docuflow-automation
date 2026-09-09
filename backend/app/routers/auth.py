@@ -146,21 +146,25 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
 def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
-    ticket_data = get_mfa_ticket(request.ticket)
-    if not ticket_data:
-        raise HTTPException(status_code=400, detail='MFA session expired. Please sign in again.')
-    user = db.query(User).filter(User.id == ticket_data['user_id']).first()
-    if not user:
-        raise HTTPException(status_code=404, detail='Employee not found')
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail='Employee account is deactivated.')
-    if not user.mfa_secret:
-        user.mfa_secret = generate_totp_secret()
-        db.commit()
-        db.refresh(user)
-    qr_svg = generate_totp_qr_svg(user.mfa_secret, user.username)
-    uri = get_totp_provisioning_uri(user.mfa_secret, user.username)
-    return {'secret': user.mfa_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
+    try:
+        ticket_data = get_mfa_ticket(request.ticket)
+        if not ticket_data:
+            raise HTTPException(status_code=400, detail='MFA session expired. Please sign in again.')
+        user = db.query(User).filter(User.id == ticket_data['user_id']).first()
+        if not user:
+            raise HTTPException(status_code=404, detail='Employee not found')
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail='Employee account is deactivated.')
+        if not user.mfa_secret:
+            user.mfa_secret = generate_totp_secret()
+            db.commit()
+            db.refresh(user)
+        qr_svg = generate_totp_qr_svg(user.mfa_secret, user.username)
+        uri = get_totp_provisioning_uri(user.mfa_secret, user.username)
+        return {'secret': user.mfa_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
+    except Exception as exc:
+        logger.exception('Error in MFA setup TOTP')
+        raise HTTPException(status_code=500, detail='Internal server error during MFA setup')
 
 @router.post('/mfa/verify', response_model=TokenResponse)
 def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
@@ -194,7 +198,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
         raise HTTPException(status_code=404, detail='Employee record not found')
     if not user.is_active:
         raise HTTPException(status_code=403, detail='Employee account is deactivated. Access denied.')
-    method_upper = request.method.upper()
+    method_upper = (request.method or "").upper()
     code_str = request.code.strip()
     is_valid = False
     if method_upper == 'AUTHENTICATOR':
