@@ -1003,7 +1003,7 @@ export default function DocumentDetails({
     }
     if (isStage1 && !hasAttachment) {
       return (
-        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-amber-300 uppercase tracking-wider animate-pulse">
+        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-black uppercase tracking-wider animate-pulse">
           Pending Attachment
         </span>
       );
