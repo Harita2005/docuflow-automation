@@ -1,4 +1,5 @@
 import sys
+import logging
 import py_compile
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -15,6 +16,7 @@ for py_file in py_files:
     try:
         py_compile.compile(str(py_file), doraise=True)
     except Exception as err:
+        logging.getLogger(__name__).debug('Handled exception: %s', err)
         syntax_clean = False
         audit_passed = False
         errors.append(f'Syntax error in {py_file}: {err}')
