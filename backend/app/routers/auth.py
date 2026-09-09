@@ -19,7 +19,7 @@ from app.schemas.schemas import (
     TokenResponse,
 )
 from app.services.mfa_service import (
-    _MFA_TICKETS,
+    delete_mfa_ticket,
     create_mfa_ticket,
     generate_numeric_otp,
     generate_totp_qr_svg,
@@ -171,7 +171,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
     if not is_valid:
         ticket_data['attempts'] = ticket_data.get('attempts', 0) + 1
         if ticket_data['attempts'] >= 5:
-            _MFA_TICKETS.pop(request.ticket, None)
+            delete_mfa_ticket(request.ticket)
             raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
         raise HTTPException(status_code=400, detail='Invalid verification code. Please check and try again.')
     if user.active_session_id and (not request.force_login):
@@ -199,8 +199,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
         db.commit()
     except Exception as e:
         logger.debug('Handled exception: %s', e)
-    from app.services.mfa_service import _MFA_TICKETS
-    _MFA_TICKETS.pop(request.ticket, None)
+    delete_mfa_ticket(request.ticket)
     return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
 @router.post('/logout')
