@@ -1973,14 +1973,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
-                        <Loader2 className="h-4 w-4 animate-spin inline mr-2 text-blue-600" />
-                        Loading users...
-                      </td>
-                    </tr>
-                  ) : filteredUsers.length === 0 ? (
+                  {filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
                         No users found.
