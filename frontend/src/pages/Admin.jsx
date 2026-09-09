@@ -559,7 +559,7 @@ export default function Admin() {
                         <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1.5 rounded" title="Mark as Required Field">
                           <input 
                             type="checkbox" 
-                            checked={field.required || false}
+                            checked={Boolean(field.required)}
                             onChange={(e) => {
                               const newFields = [...templateFields];
                               newFields[idx].required = e.target.checked;

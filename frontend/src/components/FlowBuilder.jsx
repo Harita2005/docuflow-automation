@@ -211,9 +211,9 @@ export default function FlowBuilder({ users = [] }) {
       }
       cloned.rule_action = wf.rule_action || 'WORKFLOW_ROUTE';
       cloned.cancel_reason = wf.cancel_reason || '';
-      cloned.auto_approve_enabled = wf.auto_approve_enabled || false;
+      cloned.auto_approve_enabled = Boolean(wf.auto_approve_enabled);
       cloned.auto_approve_condition = wf.auto_approve_condition || JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'lt', value: '5000' });
-      cloned.auto_cancel_enabled = wf.auto_cancel_enabled || false;
+      cloned.auto_cancel_enabled = Boolean(wf.auto_cancel_enabled);
       cloned.auto_cancel_condition = wf.auto_cancel_condition || JSON.stringify({ field: 'Invoice Amount (Total)', operator: 'gt', value: '500000' });
       setEditingWorkflow(cloned);
     } else {
