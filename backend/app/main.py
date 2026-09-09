@@ -48,15 +48,11 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimiterMiddleware, max_auth_requests=15, window_seconds=60)
 
-allowed_origins = [
-    origin.strip()
-    for origin in getattr(settings, "ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
-]
+origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins or ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

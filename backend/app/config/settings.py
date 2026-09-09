@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     )
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     # Database
     DB_HOST: str = "localhost"

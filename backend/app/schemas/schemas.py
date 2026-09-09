@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 import datetime
 
 class LoginRequest(BaseModel):
