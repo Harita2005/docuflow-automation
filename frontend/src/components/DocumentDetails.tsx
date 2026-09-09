@@ -1047,7 +1047,7 @@ export default function DocumentDetails({
       <div className="bg-white border border-slate-200/90 rounded-2xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
         
         {/* TOP EXECUTIVE BAR */}
-        <div className="bg-white text-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-slate-200">
+        <div className="bg-white text-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-slate-300">
           <div className="flex items-center gap-2.5">
             <div className="h-6 w-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
               <Shield className="h-3 w-3" />
@@ -1119,15 +1119,15 @@ export default function DocumentDetails({
         )}
 
         {/* ENTERPRISE FINANCIAL KPI STRIP (DYNAMICALLY FILTERED & ENFORCED BY FLAC ROLE PERMISSIONS) */}
-        <div ref={containerRef} className="bg-slate-50 border-b border-slate-200/80 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
+        <div ref={containerRef} className="bg-slate-50 border-b border-slate-300 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Primary Metrics Group */}
             <div className="flex flex-wrap items-center gap-2.5">
               
               {/* 1. Supplier / Vendor */}
               {getFieldPerm("vendor_name") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[190px] max-w-[230px]">
-                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[190px] max-w-[230px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
                     <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
                     <span>Supplier / Vendor</span>
                   </div>
@@ -1149,8 +1149,8 @@ export default function DocumentDetails({
 
               {/* 2. Bill No & Date */}
               {getFieldPerm("invoice_num_date") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[155px] max-w-[185px]">
-                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[155px] max-w-[185px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
                     <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
                   </div>
                   {getFieldPerm("invoice_num_date") === "edit" ? (
@@ -1183,8 +1183,8 @@ export default function DocumentDetails({
 
               {/* 3. PO Reference */}
               {getFieldPerm("po_reference") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
-                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 flex items-center gap-1">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
                     <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
                     <span>PO Reference</span>
                   </div>
@@ -1205,8 +1205,8 @@ export default function DocumentDetails({
 
               {/* 4. Total Amount (Gross) */}
               {getFieldPerm("total_gross") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[125px] max-w-[155px]">
-                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5">
+                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[125px] max-w-[155px]">
+                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
                     <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
                     <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
                   </div>
@@ -1245,12 +1245,12 @@ export default function DocumentDetails({
 
           {/* Secondary Collapsible Extra Data Panel (Fully Dynamic) */}
           {showMoreMetadata && (
-            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200/60 animate-fadeIn">
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-300 animate-fadeIn">
               {dynamicSyncPayload.entries
                 .filter(entry => !['vendor_name', 'invoice_number', 'po_number', 'amount'].includes(entry.key))
                 .map(entry => (
-                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs min-w-[110px] max-w-[160px]">
-                    <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-400 mb-0.5 truncate" title={entry.label}>
+                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs min-w-[110px] max-w-[160px]">
+                    <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 truncate" title={entry.label}>
                       {entry.label}
                     </div>
                     <div className="text-[11px] font-bold text-slate-800 truncate" title={String(entry.value)}>
