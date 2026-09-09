@@ -3,7 +3,7 @@ import re
 import json
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from app.database.models import BusinessRule, Document, Invoice, WorkflowProfile, WorkflowStepDefinition
+from app.database.models import BusinessRule, Invoice, WorkflowProfile, WorkflowStepDefinition
 
 logger = logging.getLogger(__name__)
 

@@ -62,7 +62,6 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
         
         try:
             from sqlalchemy import or_
-            from app.database.models import Document, WorkflowStepDefinition
             from app.services.rules_engine import evaluate_business_rules_full
             pending_docs = db.query(Document).filter(or_(Document.status == 'Pending Approval', Document.status.like('%Unrouted%'), Document.workflow_profile_id.is_(None)), Document.is_deleted == False).all()
             for p_doc in pending_docs:

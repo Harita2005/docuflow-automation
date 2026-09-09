@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
-import kolamSolidImg from '../assets/kolam_solid_white.png';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -303,13 +302,6 @@ export default function Admin() {
       
       {/* Secondary Sidebar */}
       <div className="relative w-56 shrink-0 flex flex-col gap-4 h-full overflow-hidden rounded-r-xl bg-gradient-to-b from-[#004B32] via-[#003F29] to-[#002E1E] px-3 pt-5 pb-4 text-white shadow-lg custom-scrollbar">
-        <img
-          src={kolamSolidImg}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-x-[-18px] top-24 bottom-20 w-[116%] max-w-none object-contain opacity-20 pointer-events-none"
-        />
-
         <div className="relative z-10 px-2">
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-white" />

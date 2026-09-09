@@ -134,16 +134,16 @@ function SidebarBackgroundArtwork({ isExpanded }: { isExpanded: boolean }) {
         </div>
       )}
 
-      {/* LAYER 3: CULTURAL KOLAM ARTWORK (FULL WIDTH FIT BELOW MENU LINKS, SUBTLE 25% OPACITY) */}
       {isExpanded && (
-        <img 
-          src={kolamSolidImg} 
-          alt="DAAS Subtle Kolam Background" 
-          className="absolute -left-[16px] right-0 top-[275px] bottom-[140px] w-[114%] max-w-none opacity-25 pointer-events-none object-contain select-none transition-all duration-300 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]" 
+        <img
+          src={kolamSolidImg}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-x-[-18px] top-[300px] bottom-20 w-[116%] max-w-none object-contain opacity-20 pointer-events-none"
         />
       )}
 
-      {/* LAYER 4: LOWER RED & YELLOW GEOMETRIC BRANDING FOOTER WITH SLOGAN & DOT MATRIX */}
+      {/* LOWER RED & YELLOW GEOMETRIC BRANDING FOOTER WITH SLOGAN & DOT MATRIX */}
       {isExpanded && (
         <div className="absolute bottom-0 left-0 right-0 h-[140px] z-20 overflow-hidden pointer-events-none">
           

@@ -19,9 +19,6 @@ from app.database.connection import SessionLocal, get_db
 from app.database.models import (
     AuditLog,
     ChecklistRule,
-    Document,
-    DocumentApprovalLog,
-    DocumentChecklistState,
     InAppNotification,
     Invoice,
     InvoiceChecklistState,
@@ -38,7 +35,6 @@ from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.services.rbac_service import authorize_document_access
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
-from app.database.connection import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -853,6 +849,10 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             archive_approved_pdf(inv)
         dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{comments} ➔ {next_assigned_info}'))
+        db.commit()
+        db.refresh(inv)
+        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, 'approved_by': approver_name}
     elif 'reject' in act_lower or 'send back' in act_lower or 'return' in act_lower:
         result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type)
         db.commit()

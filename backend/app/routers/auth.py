@@ -105,7 +105,6 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     ticket_data['otp_sent_at'] = time.time()
     method_upper = request.method.upper()
     if method_upper == 'EMAIL':
-        from app.database.models import NotificationProviderConfig
         config = db.query(NotificationProviderConfig).first()
         config_dict = None
         if config:
@@ -136,7 +135,6 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
         db.commit()
         db.refresh(user)
     qr_svg = generate_totp_qr_svg(user.mfa_secret, user.username)
-    from app.services.mfa_service import get_totp_provisioning_uri
     uri = get_totp_provisioning_uri(user.mfa_secret, user.username)
     return {'secret': user.mfa_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
 

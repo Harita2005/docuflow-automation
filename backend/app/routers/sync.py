@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from app.config.settings import settings
-from app.database.connection import SessionLocal, get_db
+from app.database.connection import get_db
 from app.database.models import (
     AuditLog,
     IntegrationSyncLog,
