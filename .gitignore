@@ -9,6 +9,7 @@ coverage/
 venv/
 backend/venv/
 backend/uploads/
+backend/backend/
 backend/flowapprove.db
 backend/docuflow.db
 playwright-report/

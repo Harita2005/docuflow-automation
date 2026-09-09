@@ -1,5 +1,6 @@
 from typing import List, Optional, Any, Union
-from pydantic import BaseModel, Field, model_validator
+import pydantic
+from pydantic import BaseModel, Field
 import datetime
 
 class LoginRequest(BaseModel):
@@ -289,7 +290,7 @@ class DocumentSyncRequest(BaseModel):
     api_key: Optional[str] = Field(None, alias='apiKey', description='API Key passed directly inside raw JSON body')
     secret_key: Optional[str] = Field(None, alias='secretKey', description='Secret Key passed directly inside raw JSON body')
 
-    @model_validator(mode='before')
+    @pydantic.model_validator(mode='before')
     @classmethod
     def populate_numbers(cls, data: Any) -> Any:
         if isinstance(data, dict):
