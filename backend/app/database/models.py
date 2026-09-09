@@ -156,12 +156,7 @@ class User(Base):
     phone_number = Column(String(20), nullable=True)
 
 
-    department_id = Column(
-        Integer,
-        ForeignKey("departments.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+
     role_id = Column(
         Integer,
         ForeignKey("roles.id", ondelete="SET NULL"),
@@ -200,10 +195,7 @@ class User(Base):
     )
 
 
-    department_rel = relationship(
-        "Department",
-        foreign_keys=[department_id],
-    )
+
     role_rel = relationship(
         "Role",
         foreign_keys=[role_id],

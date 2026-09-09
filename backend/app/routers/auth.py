@@ -167,7 +167,29 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
     ticket_data = get_mfa_ticket(request.ticket)
     if not ticket_data:
         raise HTTPException(status_code=400, detail='MFA session expired or invalid. Please restart login.')
-    user = db.query(User).filter(User.id == ticket_data['user_id']).first()
+    user = (
+        db.query(User)
+        .options(
+            load_only(
+                User.id,
+                User.username,
+                User.email,
+                User.password_hash,
+                User.role,
+                User.employee_id,
+                User.employee_name,
+                User.name,
+                User.is_active,
+                User.is_deleted,
+                User.mfa_secret,
+                User.mfa_enabled,
+                User.mfa_type,
+                User.mfa_secret,
+            )
+        )
+        .filter(User.id == ticket_data['user_id'])
+        .first()
+    )
     if not user:
         raise HTTPException(status_code=404, detail='Employee record not found')
     if not user.is_active:

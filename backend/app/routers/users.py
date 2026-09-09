@@ -128,7 +128,7 @@ def create_user_master(
         department=payload.department,
         plant=payload.plant,
         role=payload.role or 'employee',
-        department_id=dept_id,
+
         role_id=role_id,
         password_hash=hashed_pwd,
         is_active=payload.is_active,
@@ -201,8 +201,6 @@ def update_user_master(
     div_id, dept_id, role_id = resolve_user_foreign_keys(db, user.division, user.department, user.role)
     if div_id:
         user.division_id = div_id
-    if dept_id:
-        user.department_id = dept_id
     if role_id:
         user.role_id = role_id
 
