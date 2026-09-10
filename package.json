@@ -10,7 +10,8 @@
     "dev:backend": "python backend/run.py",
     "dev:frontend": "npm run dev -w frontend",
     "install:all": "npm install",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "npm run test -w frontend"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
