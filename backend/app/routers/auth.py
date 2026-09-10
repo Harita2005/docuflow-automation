@@ -55,6 +55,7 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
                 User.id,
                 User.username,
                 User.email,
+                User.phone_number,
                 User.password_hash,
                 User.role,
                 User.employee_id,
@@ -62,6 +63,12 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
                 User.name,
                 User.is_active,
                 User.is_deleted,
+                User.mfa_enabled,
+                User.mfa_type,
+                User.mfa_secret,
+                User.active_session_id,
+                User.active_device_info,
+                User.session_created_at,
             )
         )
         .filter(
@@ -74,7 +81,17 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
         .first()
     )
     if not user:
-        user = db.query(User).filter(User.employee_id.ilike(f'%_{ident_str}') | User.employee_id.ilike(f'%{ident_str}%') | User.username.ilike(f'%{ident_str}%') | User.name.ilike(f'%{ident_str}%')).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
+        user = (
+            db.query(User)
+            .filter(
+                User.employee_id.ilike(f'%_{ident_str}')
+                | User.employee_id.ilike(f'%{ident_str}%')
+                | User.username.ilike(f'%{ident_str}%')
+                | User.name.ilike(f'%{ident_str}%')
+            )
+            .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
+            .first()
+        )
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"User '{ident_str}' not found in system.")
     if not user.is_active:
@@ -102,8 +119,31 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
         expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
         access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
         return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
+
+    # Discover available MFA methods based on actual user profile in DB
+    available_methods = []
+    if user.email and '@' in user.email:
+        available_methods.append('EMAIL')
+    if user.phone_number and user.phone_number.strip():
+        available_methods.append('SMS')
+    available_methods.append('AUTHENTICATOR')
+
+    has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
     ticket = create_mfa_ticket(user.id, user.username)
-    return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 3600, 'user': None, 'mfa_required': True, 'mfa_ticket': ticket, 'available_methods': ['EMAIL', 'SMS', 'AUTHENTICATOR'], 'masked_email': mask_email(user.email), 'masked_phone': mask_phone(user.phone_number or '+91 98765 43210'), 'has_authenticator_setup': bool(user.mfa_secret), 'active_session_conflict': False}
+    return {
+        'token': None,
+        'access_token': None,
+        'token_type': 'bearer',
+        'expires_in': 3600,
+        'user': None,
+        'mfa_required': True,
+        'mfa_ticket': ticket,
+        'available_methods': available_methods,
+        'masked_email': mask_email(user.email) if user.email else '',
+        'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+        'has_authenticator_setup': has_auth_setup,
+        'active_session_conflict': False,
+    }
 
 @router.post('/mfa/send-otp')
 def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: Session=Depends(get_db)):
@@ -122,33 +162,41 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         remaining = int(30 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
 
+    method_upper = request.method.upper()
     code = generate_numeric_otp(6)
     ticket_data['otp'] = code
-    ticket_data['method'] = request.method
+    ticket_data['method'] = method_upper
     ticket_data['otp_expires_at'] = time.time() + 300
     ticket_data['otp_sent_at'] = time.time()
-    method_upper = request.method.upper()
+
     if method_upper == 'EMAIL':
+        if not user.email or '@' not in user.email:
+            raise HTTPException(status_code=400, detail='No registered email address found for this user.')
         config = db.query(NotificationProviderConfig).first()
         config_dict = None
-        if config:
-            config_dict = {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': config.encrypted_password, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
+        if config and config.smtp_server:
+            config_dict = {
+                'smtp_server': config.smtp_server,
+                'port': config.port,
+                'username': config.username,
+                'encrypted_password': config.encrypted_password,
+                'sender_email': config.sender_email,
+                'sender_name': config.sender_name,
+            }
         background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
         destination = mask_email(user.email)
-        msg = f'Verification code queued for {destination}'
+        msg = f'Verification code dispatched to {destination}'
     elif method_upper == 'SMS':
-        background_tasks.add_task(send_sms_otp, user.phone_number or '+91 98765 43210', user.employee_name or user.name, code)
-        destination = mask_phone(user.phone_number or '+91 98765 43210')
-        msg = f'Verification code queued for {destination}'
+        if not user.phone_number or not user.phone_number.strip():
+            raise HTTPException(status_code=400, detail='No registered mobile phone number found for this user.')
+        background_tasks.add_task(send_sms_otp, user.phone_number, user.employee_name or user.name, code)
+        destination = mask_phone(user.phone_number)
+        msg = f'Verification code dispatched to {destination}'
     elif method_upper == 'AUTHENTICATOR':
-        # For authenticator, reuse email OTP as a fallback (could be replaced with TOTP flow)
-        config = db.query(NotificationProviderConfig).first()
-        config_dict = None
-        if config:
-            config_dict = {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': config.encrypted_password, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
-        background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
-        destination = mask_email(user.email)
-        msg = f'Verification code queued for {destination}'
+        raise HTTPException(
+            status_code=400,
+            detail='Authenticator generates time-based verification codes in your app. No OTP message is dispatched.',
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
     return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300}
@@ -164,13 +212,25 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
             raise HTTPException(status_code=404, detail='Employee not found')
         if not user.is_active:
             raise HTTPException(status_code=403, detail='Employee account is deactivated.')
+
+        # If already enrolled, protect the secret
+        if user.mfa_secret and user.mfa_enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Authenticator is already configured for your account. Please enter your 6-digit code.",
+            )
+
         if not user.mfa_secret:
             user.mfa_secret = generate_totp_secret()
+            user.mfa_enabled = False
             db.commit()
             db.refresh(user)
+
         qr_svg = generate_totp_qr_svg(user.mfa_secret, user.username)
         uri = get_totp_provisioning_uri(user.mfa_secret, user.username)
         return {'secret': user.mfa_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception('Error in MFA setup TOTP')
         raise HTTPException(status_code=500, detail='Internal server error during MFA setup')
@@ -187,6 +247,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
                 User.id,
                 User.username,
                 User.email,
+                User.phone_number,
                 User.password_hash,
                 User.role,
                 User.employee_id,
@@ -197,7 +258,9 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
                 User.mfa_secret,
                 User.mfa_enabled,
                 User.mfa_type,
-                User.mfa_secret,
+                User.active_session_id,
+                User.active_device_info,
+                User.session_created_at,
             )
         )
         .filter(User.id == ticket_data['user_id'])
@@ -210,23 +273,34 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
     method_upper = (request.method or "").upper()
     code_str = request.code.strip()
     is_valid = False
+
     if method_upper == 'AUTHENTICATOR':
         secret = user.mfa_secret
         if not secret:
-            raise HTTPException(status_code=400, detail="Authenticator not set up. Please use 'First time? Scan QR Code' to configure your app first.")
+            raise HTTPException(
+                status_code=400,
+                detail="Authenticator not set up yet. Please complete enrollment by scanning the QR code first.",
+            )
         is_valid = verify_totp(secret, code_str)
+        if is_valid and not user.mfa_enabled:
+            user.mfa_enabled = True
+            db.commit()
+            db.refresh(user)
     elif method_upper in ['EMAIL', 'SMS']:
         expected_otp = ticket_data.get('otp')
         otp_expiry = ticket_data.get('otp_expires_at', 0)
         if expected_otp and code_str == expected_otp and (time.time() <= otp_expiry):
             is_valid = True
             ticket_data['verified'] = True
+            # Invalidate the OTP single-use so it cannot be replayed
+            ticket_data['otp'] = None
         elif ticket_data.get('verified') and request.force_login:
             is_valid = True
         else:
             is_valid = False
     else:
         raise HTTPException(status_code=400, detail=f'Unsupported MFA verification method: {request.method}')
+
     if not is_valid:
         ticket_data['attempts'] = ticket_data.get('attempts', 0) + 1
         if ticket_data['attempts'] >= 5:

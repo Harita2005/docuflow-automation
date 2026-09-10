@@ -14,7 +14,10 @@ from typing import Any, Dict, Optional, Tuple
 
 import pyotp
 import qrcode
+import requests
 from qrcode.image.svg import SvgPathImage
+
+from app.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
@@ -210,39 +213,63 @@ def send_email_otp(
     config = smtp_config or {}
 
     smtp_host = (
-        config.get("smtp_server")
-        or os.getenv("SMTP_HOST")
+        (config.get("smtp_server") or "").strip()
+        or getattr(settings, "SMTP_HOST", "")
+        or os.getenv("SMTP_HOST", "")
+        or os.getenv("SMTP_SERVER", "")
     )
 
-    smtp_port = int(
+    port_val = (
         config.get("port")
-        or os.getenv("SMTP_PORT", "587")
+        or getattr(settings, "SMTP_PORT", None)
+        or os.getenv("SMTP_PORT")
+        or 587
     )
+    try:
+        smtp_port = int(port_val)
+    except (TypeError, ValueError):
+        smtp_port = 587
 
     smtp_user = (
-        config.get("username")
-        or os.getenv("SMTP_USER")
+        (config.get("username") or "").strip()
+        or getattr(settings, "SMTP_USER", "")
+        or getattr(settings, "SMTP_USERNAME", "")
+        or os.getenv("SMTP_USER", "")
+        or os.getenv("SMTP_USERNAME", "")
     )
 
     smtp_password = (
-        config.get("encrypted_password")
-        or os.getenv("SMTP_PASS")
+        (config.get("encrypted_password") or "").strip()
+        or getattr(settings, "SMTP_PASS", "")
+        or getattr(settings, "SMTP_PASSWORD", "")
+        or os.getenv("SMTP_PASS", "")
+        or os.getenv("SMTP_PASSWORD", "")
     )
 
     sender_email = (
-        config.get("sender_email")
-        or os.getenv("SMTP_SENDER_EMAIL")
+        (config.get("sender_email") or "").strip()
+        or getattr(settings, "SMTP_SENDER_EMAIL", "")
+        or getattr(settings, "SMTP_FROM", "")
+        or os.getenv("SMTP_SENDER_EMAIL", "")
+        or os.getenv("SMTP_SENDER_MAIL", "")
+        or os.getenv("SMTP_FROM", "")
         or smtp_user
     )
 
     sender_name = (
-        config.get("sender_name")
-        or os.getenv("SMTP_SENDER_NAME")
+        (config.get("sender_name") or "").strip()
+        or getattr(settings, "SMTP_SENDER_NAME", "")
+        or os.getenv("SMTP_SENDER_NAME", "")
         or "DocuFlow Security"
     )
 
     if not smtp_host or not smtp_user or not smtp_password:
-        logger.error("SMTP configuration is incomplete.")
+        logger.error(
+            "SMTP configuration is incomplete. (Host: %s, User: %s, Pass present: %s)",
+            smtp_host or "[MISSING]",
+            smtp_user or "[MISSING]",
+            bool(smtp_password),
+        )
         return False, "Email service is not configured."
 
     masked_email = mask_email(email)
@@ -359,22 +386,17 @@ def send_email_otp(
     message.attach(MIMEText(html_body, "html"))
 
     try:
-        try:
-            smtp_host_resolved = socket.gethostbyname(smtp_host)
-        except socket.gaierror:
-            smtp_host_resolved = smtp_host
-
         if smtp_port == 465:
             server = smtplib.SMTP_SSL(
-                smtp_host_resolved,
+                smtp_host,
                 smtp_port,
-                timeout=10,
+                timeout=15,
             )
         else:
             server = smtplib.SMTP(
-                smtp_host_resolved,
+                smtp_host,
                 smtp_port,
-                timeout=10,
+                timeout=15,
             )
             server.ehlo()
             server.starttls()
@@ -392,18 +414,20 @@ def send_email_otp(
                 message.as_string(),
             )
         finally:
-            server.quit()
+            try:
+                server.quit()
+            except Exception:
+                pass
 
-        logger.info("Email OTP sent to %s", masked_email)
-
+        logger.info("Email OTP dispatched successfully to %s", masked_email)
         return True, f"Code sent to {masked_email}"
 
     except smtplib.SMTPAuthenticationError as exc:
-        logger.error("SMTP authentication failed: %s", exc)
+        logger.error("SMTP authentication failed for user %s: %s", smtp_user, exc)
         return False, "Email authentication failed."
 
     except smtplib.SMTPConnectError as exc:
-        logger.error("SMTP connection failed: %s", exc)
+        logger.error("SMTP connection failed to %s:%s: %s", smtp_host, smtp_port, exc)
         return False, "Unable to connect to email service."
 
     except Exception as exc:
@@ -426,16 +450,102 @@ def send_sms_otp(
         return False, "Invalid SMS OTP request."
 
     masked_phone = mask_phone(phone_number)
+    clean_phone = phone_number.strip().replace(" ", "").replace("-", "")
 
-    logger.info(
-        "SMS OTP requested for %s",
-        masked_phone,
+    # Clean message text (do not log)
+    sms_message = (
+        f"Your DocuFlow verification code is: {otp_code}. "
+        f"Valid for 5 minutes. Do not share this code with anyone."
     )
 
-    # Connect the actual SMS provider here.
-    # Do not report success until the provider confirms delivery.
+    # Provider credentials from settings / environment
+    twilio_sid = getattr(settings, "TWILIO_ACCOUNT_SID", "") or os.getenv("TWILIO_ACCOUNT_SID", "")
+    twilio_token = getattr(settings, "TWILIO_AUTH_TOKEN", "") or os.getenv("TWILIO_AUTH_TOKEN", "")
+    twilio_from = getattr(settings, "TWILIO_FROM_NUMBER", "") or os.getenv("TWILIO_FROM_NUMBER", "")
 
-    return False, "SMS service is not configured."
+    fast2sms_key = getattr(settings, "FAST2SMS_API_KEY", "") or os.getenv("FAST2SMS_API_KEY", "")
+
+    sms_api_url = getattr(settings, "SMS_API_URL", "") or os.getenv("SMS_API_URL", "")
+    sms_api_key = getattr(settings, "SMS_API_KEY", "") or os.getenv("SMS_API_KEY", "")
+    sms_sender_id = getattr(settings, "SMS_SENDER_ID", "DOCUFLOW") or os.getenv("SMS_SENDER_ID", "DOCUFLOW")
+
+    # 1. Twilio SMS
+    if twilio_sid and twilio_token and twilio_from:
+        try:
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
+            resp = requests.post(
+                url,
+                data={
+                    "From": twilio_from,
+                    "To": clean_phone,
+                    "Body": sms_message,
+                },
+                auth=(twilio_sid, twilio_token),
+                timeout=12,
+            )
+            if resp.status_code in [200, 201]:
+                logger.info("SMS OTP dispatched via Twilio to %s", masked_phone)
+                return True, f"Verification code sent to {masked_phone}"
+            else:
+                logger.error("Twilio SMS dispatch failed: HTTP %s - %s", resp.status_code, resp.text[:200])
+                return False, "Failed to deliver SMS via provider."
+        except Exception as exc:
+            logger.error("Twilio request exception: %s", exc)
+            return False, "SMS provider connection error."
+
+    # 2. Fast2SMS (Indian SMS Gateway)
+    if fast2sms_key:
+        try:
+            digits_only = clean_phone.replace("+91", "").replace("+", "")
+            resp = requests.post(
+                "https://www.fast2sms.com/dev/bulkV2",
+                headers={"authorization": fast2sms_key},
+                data={
+                    "variables_values": otp_code,
+                    "route": "otp",
+                    "numbers": digits_only,
+                },
+                timeout=12,
+            )
+            data = resp.json() if resp.status_code == 200 else {}
+            if resp.status_code == 200 and data.get("return") is True:
+                logger.info("SMS OTP dispatched via Fast2SMS to %s", masked_phone)
+                return True, f"Verification code sent to {masked_phone}"
+            else:
+                logger.error("Fast2SMS dispatch failed: HTTP %s - %s", resp.status_code, resp.text[:200])
+                return False, "Failed to deliver SMS via provider."
+        except Exception as exc:
+            logger.error("Fast2SMS request exception: %s", exc)
+            return False, "SMS provider connection error."
+
+    # 3. Generic HTTP REST Gateway / Webhook
+    if sms_api_url:
+        try:
+            headers = {"Content-Type": "application/json"}
+            if sms_api_key:
+                headers["Authorization"] = f"Bearer {sms_api_key}"
+            payload = {
+                "to": clean_phone,
+                "message": sms_message,
+                "sender": sms_sender_id,
+                "otp": otp_code,
+            }
+            resp = requests.post(sms_api_url, json=payload, headers=headers, timeout=12)
+            if resp.status_code in [200, 201, 202]:
+                logger.info("SMS OTP dispatched via custom gateway to %s", masked_phone)
+                return True, f"Verification code sent to {masked_phone}"
+            else:
+                logger.error("Custom SMS gateway error: HTTP %s - %s", resp.status_code, resp.text[:200])
+                return False, "SMS gateway returned delivery error."
+        except Exception as exc:
+            logger.error("Custom SMS gateway exception: %s", exc)
+            return False, "Unable to reach SMS gateway."
+
+    logger.warning(
+        "SMS requested for %s, but no SMS provider credentials configured in environment (set TWILIO_*, FAST2SMS_API_KEY, or SMS_API_URL).",
+        masked_phone,
+    )
+    return False, "SMS service gateway is not configured on this server."
 
 
 # ---------------------------------------------------------------------------

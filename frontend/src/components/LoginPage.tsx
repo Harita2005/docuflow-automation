@@ -3,12 +3,18 @@ import {
   Layers,
   User,
   Mail,
+  Smartphone,
+  ShieldCheck,
   ChevronLeft,
+  ChevronRight,
   AlertCircle,
   AlertTriangle,
   X,
+  Key,
 } from "lucide-react";
 import kolamSolidImg from "../assets/kolam_solid_white.png";
+
+type MFAMethod = "EMAIL" | "SMS" | "AUTHENTICATOR";
 
 interface LoginPageProps {
   onLoginSuccess: (
@@ -36,17 +42,28 @@ export default function LoginPage({
   const [employeeId, setEmployeeId] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 1 = Employee ID, 2 = OTP verification
-  const [step, setStep] = useState<1 | 2>(1);
+  // 1 = Employee ID, 2 = Choose MFA Method, 3 = Verification (Code or QR Scan)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // MFA state
+  // MFA State
   const [mfaTicket, setMfaTicket] = useState("");
+  const [availableMethods, setAvailableMethods] = useState<MFAMethod[]>(["EMAIL"]);
   const [maskedEmail, setMaskedEmail] = useState("");
+  const [maskedPhone, setMaskedPhone] = useState("");
+  const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<MFAMethod>("EMAIL");
+
+  // Code entry and feedback
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
-  const [loginMethod, setLoginMethod] = useState<"EMAIL" | "SMS" | "AUTHENTICATOR">("EMAIL");
+
+  // Authenticator enrollment state
+  const [isEnrollingTotp, setIsEnrollingTotp] = useState(false);
+  const [totpQrSvg, setTotpQrSvg] = useState("");
+  const [totpSecret, setTotpSecret] = useState("");
+  const [showManualKey, setShowManualKey] = useState(false);
 
   // Active session conflict
   const [sessionConflict, setSessionConflict] =
@@ -111,7 +128,7 @@ export default function LoginPage({
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (step === 2) {
+    if (step === 3) {
       const timer = window.setTimeout(() => {
         otpInputRef.current?.focus();
       }, 150);
@@ -121,14 +138,14 @@ export default function LoginPage({
   }, [step]);
 
   // ---------------------------------------------------------------------------
-  // Send Email OTP
+  // Step 1: Identification (Employee ID or Username)
   // ---------------------------------------------------------------------------
 
-  const handleSendOtp = async () => {
+  const handleIdentifyUser = async () => {
     const identifier = employeeId.trim();
 
     if (!identifier) {
-      setOtpError("Please enter your Employee ID");
+      setOtpError("Please enter your Employee ID or Username");
       return;
     }
 
@@ -137,9 +154,6 @@ export default function LoginPage({
     setOtpSentNotice("");
 
     try {
-      // Step 1:
-      // Backend finds the user using Employee ID / username.
-      // Backend should obtain the registered email from the database.
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -155,54 +169,30 @@ export default function LoginPage({
 
       if (!res.ok) {
         throw new Error(
-          data.detail || "Unable to start authentication"
+          data.detail || "Unable to find user account"
         );
       }
 
-      // If MFA is required, backend should return an MFA ticket.
       if (data.mfa_required) {
         if (!data.mfa_ticket) {
           throw new Error("Authentication ticket was not returned");
         }
 
         setMfaTicket(data.mfa_ticket);
-        setMaskedEmail(data.masked_email || "your registered email");
+        const methods: MFAMethod[] = Array.isArray(data.available_methods)
+          ? data.available_methods
+          : ["EMAIL", "AUTHENTICATOR"];
+        setAvailableMethods(methods);
+        setMaskedEmail(data.masked_email || "");
+        setMaskedPhone(data.masked_phone || "");
+        setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
 
-        // Step 2:
-        // Send OTP to the email associated with this employee.
-        const sendRes = await fetch("/api/auth/mfa/send-otp", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ticket: data.mfa_ticket,
-            method: "EMAIL",
-          }),
-        });
-
-        const sendData = await sendRes.json().catch(() => ({}));
-
-        if (!sendRes.ok) {
-          throw new Error(
-            sendData.detail || "Failed to send verification code"
-          );
-        }
-
-        setOtpSentNotice(
-          sendData.message ||
-            `A verification code has been sent to ${
-              data.masked_email || "your registered email"
-            }.`
-        );
-
-        setResendTimer(60);
-        setOtpCode("");
+        // Advance to Step 2: Choose Method
         setStep(2);
         return;
       }
 
-      // Direct login if backend does not require MFA.
+      // Direct login if MFA not required
       if (data.token && data.user) {
         localStorage.setItem("authToken", data.token);
         localStorage.setItem(
@@ -216,7 +206,6 @@ export default function LoginPage({
           data.user.email,
           data.user.username
         );
-
         return;
       }
 
@@ -234,7 +223,99 @@ export default function LoginPage({
   };
 
   // ---------------------------------------------------------------------------
-  // Resend Email OTP
+  // Step 2: Select MFA Method
+  // ---------------------------------------------------------------------------
+
+  const handleSelectMethod = async (method: MFAMethod) => {
+    setSelectedMethod(method);
+    setOtpCode("");
+    setOtpError("");
+    setOtpSentNotice("");
+
+    if (method === "EMAIL" || method === "SMS") {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/auth/mfa/send-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ticket: mfaTicket,
+            method: method,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(
+            data.detail || `Failed to send ${method} verification code`
+          );
+        }
+
+        const target = method === "EMAIL" ? maskedEmail : maskedPhone;
+        setOtpSentNotice(
+          data.message ||
+            `A verification code has been dispatched to ${target}.`
+        );
+
+        setResendTimer(30);
+        setStep(3);
+      } catch (err: unknown) {
+        setOtpError(
+          err instanceof Error
+            ? err.message
+            : `Failed to send ${method} OTP`
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (method === "AUTHENTICATOR") {
+      if (hasAuthenticatorSetup) {
+        setIsEnrollingTotp(false);
+        setStep(3);
+      } else {
+        setLoading(true);
+        try {
+          const res = await fetch("/api/auth/mfa/setup-totp", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ticket: mfaTicket }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            throw new Error(
+              data.detail || "Failed to initialize Authenticator setup"
+            );
+          }
+
+          setTotpQrSvg(data.qr_svg_data_url || "");
+          setTotpSecret(data.secret || "");
+          setIsEnrollingTotp(true);
+          setStep(3);
+        } catch (err: unknown) {
+          setOtpError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load Authenticator QR code"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Resend OTP (Email or SMS)
   // ---------------------------------------------------------------------------
 
   const handleResendOtp = async () => {
@@ -254,7 +335,7 @@ export default function LoginPage({
         },
         body: JSON.stringify({
           ticket: mfaTicket,
-          method: "EMAIL",
+          method: selectedMethod,
         }),
       });
 
@@ -266,13 +347,14 @@ export default function LoginPage({
         );
       }
 
+      const target = selectedMethod === "EMAIL" ? maskedEmail : maskedPhone;
       setOtpSentNotice(
         data.message ||
-          "A new verification code has been sent to your registered email."
+          `A new verification code has been dispatched to ${target}.`
       );
 
       setOtpCode("");
-      setResendTimer(60);
+      setResendTimer(30);
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -286,7 +368,7 @@ export default function LoginPage({
   };
 
   // ---------------------------------------------------------------------------
-  // Verify Email OTP
+  // Step 3: Verify OTP or Authenticator Code
   // ---------------------------------------------------------------------------
 
   const handleVerifyOtp = async (
@@ -298,7 +380,7 @@ export default function LoginPage({
     const code = otpCode.trim();
 
     if (!code) {
-      setOtpError("Please enter your 6-digit verification code");
+      setOtpError("Please enter your 6-digit code");
       return;
     }
 
@@ -326,8 +408,8 @@ export default function LoginPage({
         },
         body: JSON.stringify({
           ticket: mfaTicket,
-          method: "EMAIL",
-          code,
+          method: selectedMethod,
+          code: code,
           force_login: forceLogin,
           device_info: getDeviceLabel(),
         }),
@@ -351,8 +433,6 @@ export default function LoginPage({
           message: data.message,
           onConfirm: () => {
             setSessionConflict(null);
-
-            // Retry verification with force_login=true.
             void handleVerifyOtp(e, true);
           },
         });
@@ -392,16 +472,26 @@ export default function LoginPage({
   };
 
   // ---------------------------------------------------------------------------
-  // Return to Employee ID
+  // Back navigation
   // ---------------------------------------------------------------------------
 
-  const handleBack = () => {
+  const handleBackToId = () => {
     setStep(1);
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
     setMfaTicket("");
     setMaskedEmail("");
+    setMaskedPhone("");
+    setResendTimer(0);
+    setIsEnrollingTotp(false);
+  };
+
+  const handleBackToMethods = () => {
+    setStep(2);
+    setOtpCode("");
+    setOtpError("");
+    setOtpSentNotice("");
     setResendTimer(0);
   };
 
@@ -507,7 +597,7 @@ export default function LoginPage({
           )}
 
           {/* ============================================================= */}
-          {/* STEP 1 */}
+          {/* STEP 1: Employee ID / Username */}
           {/* ============================================================= */}
 
           {step === 1 && (
@@ -525,14 +615,14 @@ export default function LoginPage({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void handleSendOtp();
+                  void handleIdentifyUser();
                 }}
                 className="space-y-5 pt-2"
               >
-                {/* Employee ID */}
+                {/* Employee ID / Username */}
                 <div className="space-y-1.5 text-left">
                   <label className="text-xs font-semibold text-gray-800">
-                    Employee ID
+                    Employee ID or Username
                   </label>
 
                   <div className="relative">
@@ -546,7 +636,7 @@ export default function LoginPage({
                       onChange={(e) =>
                         setEmployeeId(e.target.value)
                       }
-                      placeholder="Enter your Employee ID"
+                      placeholder="e.g. EMP001 or username"
                       required
                       autoFocus
                       autoComplete="username"
@@ -555,18 +645,17 @@ export default function LoginPage({
                   </div>
                 </div>
 
-                {/* Email OTP information */}
+                {/* 2FA info badge */}
                 <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-                  <Mail className="h-4 w-4 text-[#006B3F] mt-0.5 shrink-0" />
+                  <ShieldCheck className="h-4 w-4 text-[#006B3F] mt-0.5 shrink-0" />
 
                   <p className="text-xs text-emerald-800 leading-relaxed">
-                    A 6-digit verification code will be sent
-                    to the email address registered with your
-                    Employee ID.
+                    Secure 2-Factor Authentication via <strong>Email OTP</strong>,{" "}
+                    <strong>SMS OTP</strong>, or <strong>Authenticator App</strong>.
                   </p>
                 </div>
 
-                {/* Send OTP */}
+                {/* Continue button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -575,12 +664,12 @@ export default function LoginPage({
                   {loading ? (
                     <div className="flex items-center space-x-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Sending OTP...</span>
+                      <span>Checking Account...</span>
                     </div>
                   ) : (
                     <>
-                      <Mail className="h-4 w-4" />
-                      <span>Send OTP</span>
+                      <span>Continue</span>
+                      <ChevronRight className="h-4 w-4" />
                     </>
                   )}
                 </button>
@@ -589,7 +678,7 @@ export default function LoginPage({
           )}
 
           {/* ============================================================= */}
-          {/* STEP 2 */}
+          {/* STEP 2: Choose MFA Method */}
           {/* ============================================================= */}
 
           {step === 2 && (
@@ -597,46 +686,237 @@ export default function LoginPage({
               <div className="flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={handleBack}
+                  onClick={handleBackToId}
                   className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#006B3F] cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
-                  Change Employee ID
+                  Change User ({employeeId})
                 </button>
-
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  EMAIL OTP
-                </span>
               </div>
 
               <div className="text-left space-y-1">
                 <h2 className="text-2xl font-bold text-[#006B3F] tracking-tight">
-                  Enter Verification Code
+                  Choose Verification Method
                 </h2>
 
                 <p className="text-gray-500 text-xs leading-relaxed">
-                  Enter the 6-digit passcode sent to{" "}
-                  <span className="font-semibold text-gray-700">
-                    {maskedEmail || "your registered email"}
-                  </span>
-                  .
+                  Select your preferred two-factor authentication method.
                 </p>
               </div>
 
-              {/* OTP sent notice */}
-              {otpSentNotice && (
+              <div className="space-y-3 pt-2">
+                {/* 1. EMAIL OTP */}
+                <button
+                  type="button"
+                  disabled={loading || !availableMethods.includes("EMAIL")}
+                  onClick={() => void handleSelectMethod("EMAIL")}
+                  className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                >
+                  <div className="flex items-center space-x-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#006B3F] flex items-center justify-center shrink-0">
+                      <Mail className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        Email OTP
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {maskedEmail ? `Send code to ${maskedEmail}` : "Registered email"}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                </button>
+
+                {/* 2. SMS OTP */}
+                {availableMethods.includes("SMS") ? (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void handleSelectMethod("SMS")}
+                    className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                  >
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-10 h-10 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
+                        <Smartphone className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          SMS OTP
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {maskedPhone ? `Send code to ${maskedPhone}` : "Registered mobile number"}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </button>
+                ) : (
+                  <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
+                        <Smartphone className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-700">
+                          SMS OTP
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          No registered phone number found on account
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
+                      Unavailable
+                    </span>
+                  </div>
+                )}
+
+                {/* 3. AUTHENTICATOR APP */}
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleSelectMethod("AUTHENTICATOR")}
+                  className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                >
+                  <div className="flex items-center space-x-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        Authenticator App (TOTP)
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {hasAuthenticatorSetup
+                          ? "Use Google or Microsoft Authenticator code"
+                          : "First-time setup with QR code scan"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                        hasAuthenticatorSetup
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-purple-100 text-purple-800"
+                      }`}
+                    >
+                      {hasAuthenticatorSetup ? "Configured" : "Setup Required"}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* STEP 3: Verification (Email OTP, SMS OTP, or Authenticator) */}
+          {/* ============================================================= */}
+
+          {step === 3 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleBackToMethods}
+                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#006B3F] cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Choose another method
+                </button>
+
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 uppercase">
+                  {selectedMethod === "AUTHENTICATOR"
+                    ? isEnrollingTotp
+                      ? "First-Time Setup"
+                      : "Authenticator"
+                    : `${selectedMethod} OTP`}
+                </span>
+              </div>
+
+              {/* Title & Description */}
+              <div className="text-left space-y-1">
+                <h2 className="text-2xl font-bold text-[#006B3F] tracking-tight">
+                  {selectedMethod === "AUTHENTICATOR"
+                    ? isEnrollingTotp
+                      ? "Set Up Authenticator"
+                      : "Enter Authenticator Code"
+                    : "Enter Verification Code"}
+                </h2>
+
+                <p className="text-gray-500 text-xs leading-relaxed">
+                  {selectedMethod === "EMAIL" && (
+                    <>
+                      Enter the 6-digit code sent to{" "}
+                      <span className="font-semibold text-gray-700">{maskedEmail}</span>.
+                    </>
+                  )}
+                  {selectedMethod === "SMS" && (
+                    <>
+                      Enter the 6-digit code sent to{" "}
+                      <span className="font-semibold text-gray-700">{maskedPhone}</span>.
+                    </>
+                  )}
+                  {selectedMethod === "AUTHENTICATOR" && isEnrollingTotp && (
+                    <>
+                      Scan the QR code below using <strong>Microsoft Authenticator</strong> or{" "}
+                      <strong>Google Authenticator</strong>, then enter the 6-digit code.
+                    </>
+                  )}
+                  {selectedMethod === "AUTHENTICATOR" && !isEnrollingTotp && (
+                    <>
+                      Open your Authenticator app and enter the current 6-digit code for DAAS.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Dispatch Notice for Email/SMS */}
+              {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
                   {otpSentNotice}
                 </div>
               )}
 
-              <form
-                onSubmit={(e) => void handleVerifyOtp(e)}
-                className="space-y-5"
-              >
+              {/* QR Code display for First-Time Authenticator Setup */}
+              {selectedMethod === "AUTHENTICATOR" && isEnrollingTotp && totpQrSvg && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl flex flex-col items-center justify-center space-y-3">
+                  <div className="p-3 bg-white rounded-xl shadow-xs border border-gray-200">
+                    <img
+                      src={totpQrSvg}
+                      alt="Authenticator QR Code"
+                      className="w-44 h-44 object-contain"
+                    />
+                  </div>
+
+                  <div className="text-center space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualKey((prev) => !prev)}
+                      className="text-xs font-semibold text-[#006B3F] hover:underline inline-flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                      <span>{showManualKey ? "Hide manual key" : "Can't scan QR? View key"}</span>
+                    </button>
+
+                    {showManualKey && totpSecret && (
+                      <div className="p-2 bg-white rounded border border-gray-300 font-mono text-xs text-gray-800 select-all break-all max-w-xs mt-1">
+                        {totpSecret}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Code entry form */}
+              <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-5">
                 <div className="space-y-2 text-left">
                   <label className="text-xs font-semibold text-gray-800">
-                    6-Digit Code
+                    {selectedMethod === "AUTHENTICATOR"
+                      ? "6-Digit Authenticator Code"
+                      : "6-Digit Passcode"}
                   </label>
 
                   <input
@@ -647,11 +927,7 @@ export default function LoginPage({
                     maxLength={6}
                     value={otpCode}
                     onChange={(e) =>
-                      setOtpCode(
-                        e.target.value
-                          .replace(/[^0-9]/g, "")
-                          .slice(0, 6)
-                      )
+                      setOtpCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
                     }
                     placeholder="••••••"
                     className="w-full text-center text-2xl tracking-[0.5em] font-mono py-3 px-4 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] text-gray-900"
@@ -670,31 +946,35 @@ export default function LoginPage({
                     </div>
                   ) : (
                     <span>
-                      Verify &amp; Enter Workspace
+                      {selectedMethod === "AUTHENTICATOR" && isEnrollingTotp
+                        ? "Verify & Complete Enrollment"
+                        : "Verify & Enter Workspace"}
                     </span>
                   )}
                 </button>
 
-                {/* Resend */}
-                <div className="text-center pt-2">
-                  {resendTimer > 0 ? (
-                    <p className="text-xs text-gray-400">
-                      Resend code in{" "}
-                      <span className="font-semibold text-gray-600">
-                        {resendTimer}s
-                      </span>
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void handleResendOtp()}
-                      disabled={loading}
-                      className="text-xs font-semibold text-[#006B3F] hover:underline cursor-pointer"
-                    >
-                      Didn't receive code? Resend OTP
-                    </button>
-                  )}
-                </div>
+                {/* Resend for Email / SMS */}
+                {selectedMethod !== "AUTHENTICATOR" && (
+                  <div className="text-center pt-2">
+                    {resendTimer > 0 ? (
+                      <p className="text-xs text-gray-400">
+                        Resend code in{" "}
+                        <span className="font-semibold text-gray-600">
+                          {resendTimer}s
+                        </span>
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleResendOtp()}
+                        disabled={loading}
+                        className="text-xs font-semibold text-[#006B3F] hover:underline cursor-pointer"
+                      >
+                        Didn't receive code? Resend OTP
+                      </button>
+                    )}
+                  </div>
+                )}
               </form>
             </div>
           )}

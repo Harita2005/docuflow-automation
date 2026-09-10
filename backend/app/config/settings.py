@@ -55,10 +55,31 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     EXCEL_PATH: Path = BASE_DIR / "data" / "SD Checklists.xlsx"
 
+    # SMTP Configuration
+    SMTP_HOST: str = "smtp.office365.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_USERNAME: str = ""
+    SMTP_PASS: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_SENDER_EMAIL: str = ""
+    SMTP_SENDER_NAME: str = "DocuFlow Security"
+
+    # SMS Gateway Configuration
+    SMS_PROVIDER: str = "generic"
+    SMS_API_URL: str = ""
+    SMS_API_KEY: str = ""
+    SMS_SENDER_ID: str = "DOCUFLOW"
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""
+    FAST2SMS_API_KEY: str = ""
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
-        case_sensitive=True,
+        case_sensitive=False,
         extra="ignore",
     )
 
