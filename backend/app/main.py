@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -27,23 +28,24 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        Base.metadata.create_all(bind=engine)
-        # Ensure required columns exist
-        with engine.begin() as conn:
-            # role_id column on users
-            conn.execute(text("IF COL_LENGTH('users', 'role_id') IS NULL ALTER TABLE users ADD role_id INT NULL;"))
-            conn.execute(text("""IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_users_role_id')
-                ALTER TABLE users ADD CONSTRAINT fk_users_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;"""))
-            # MFA and phone columns on users
-            conn.execute(text("IF COL_LENGTH('users', 'phone_number') IS NULL ALTER TABLE users ADD phone_number VARCHAR(50) NULL;"))
-            conn.execute(text("IF COL_LENGTH('users', 'mfa_enabled') IS NULL ALTER TABLE users ADD mfa_enabled BIT DEFAULT 0;"))
-            conn.execute(text("IF COL_LENGTH('users', 'mfa_type') IS NULL ALTER TABLE users ADD mfa_type VARCHAR(50) DEFAULT 'EMAIL';"))
-            conn.execute(text("IF COL_LENGTH('users', 'mfa_secret') IS NULL ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
-            # file_path column on documents
-            conn.execute(text("IF COL_LENGTH('documents', 'file_path') IS NULL ALTER TABLE documents ADD file_path VARCHAR(500) NULL;"))
-    except Exception as exc:
-        logger.warning(f"Database schema initialization deferred: {exc}")
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            Base.metadata.create_all(bind=engine)
+            # Ensure required columns exist
+            with engine.begin() as conn:
+                # role_id column on users
+                conn.execute(text("IF COL_LENGTH('users', 'role_id') IS NULL ALTER TABLE users ADD role_id INT NULL;"))
+                conn.execute(text("""IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_users_role_id')
+                    ALTER TABLE users ADD CONSTRAINT fk_users_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;"""))
+                # MFA and phone columns on users
+                conn.execute(text("IF COL_LENGTH('users', 'phone_number') IS NULL ALTER TABLE users ADD phone_number VARCHAR(50) NULL;"))
+                conn.execute(text("IF COL_LENGTH('users', 'mfa_enabled') IS NULL ALTER TABLE users ADD mfa_enabled BIT DEFAULT 0;"))
+                conn.execute(text("IF COL_LENGTH('users', 'mfa_type') IS NULL ALTER TABLE users ADD mfa_type VARCHAR(50) DEFAULT 'EMAIL';"))
+                conn.execute(text("IF COL_LENGTH('users', 'mfa_secret') IS NULL ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
+                # file_path column on documents
+                conn.execute(text("IF COL_LENGTH('documents', 'file_path') IS NULL ALTER TABLE documents ADD file_path VARCHAR(500) NULL;"))
+        except Exception as exc:
+            logger.warning(f"Database schema initialization deferred: {exc}")
     yield
 
 

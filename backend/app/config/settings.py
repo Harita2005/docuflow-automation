@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
-    # Database
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 1433
+    # Database (Strictly Microsoft SQL Server at 192.168.179.22:1443)
+    DB_HOST: str = "192.168.179.22"
+    DB_PORT: int = 1443
     DB_NAME: str = "DocuFlowDB"
     DB_USER: str = ""
     DB_PASSWORD: str = ""
@@ -58,13 +58,13 @@ class Settings(BaseSettings):
     # SMTP Configuration
     SMTP_HOST: str = "smtp.office365.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_USERNAME: str = ""
+    SMTP_USER: str = "communication@ramrajcotton.net"
+    SMTP_USERNAME: str = "communication@ramrajcotton.net"
     SMTP_PASS: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = ""
-    SMTP_SENDER_EMAIL: str = ""
-    SMTP_SENDER_NAME: str = "DocuFlow Security"
+    SMTP_FROM: str = "communication@ramrajcotton.net"
+    SMTP_SENDER_EMAIL: str = "communication@ramrajcotton.net"
+    SMTP_SENDER_NAME: str = "Ramraj Cotton - DocuFlow"
 
     # SMS Gateway Configuration
     SMS_PROVIDER: str = "generic"
@@ -91,14 +91,24 @@ class Settings(BaseSettings):
         """
         Build the SQL Server connection URL from the configured settings.
 
-        If DATABASE_URL is explicitly provided in .env, it is used directly.
-        Otherwise, the URL is built from DB_HOST, DB_PORT, DB_NAME,
-        DB_USER, DB_PASSWORD, and SQL Server driver settings.
+        Enforces connection strictly to 192.168.179.22:1443 and eliminates any
+        legacy localhost / 1433 / SQLite / MySQL / PostgreSQL configurations.
         """
 
-        # Explicit database URL takes priority.
+        # Sanitize explicit database URL if provided
         if self.DATABASE_URL:
-            return self.DATABASE_URL
+            db_url = self.DATABASE_URL.strip()
+            forbidden = ["localhost", "127.0.0.1", ":1433", "@db:", "sqlite", "postgresql", "mysql"]
+            if not any(f in db_url.lower() for f in forbidden):
+                return db_url
+
+        host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
+        if host.lower() in ("localhost", "127.0.0.1", "db"):
+            host = "192.168.179.22"
+
+        port = self.DB_PORT
+        if port == 1433 or not port:
+            port = 1443
 
         driver = quote_plus(self.DB_DRIVER)
 
@@ -109,7 +119,7 @@ class Settings(BaseSettings):
 
             return (
                 f"mssql+pyodbc://{username}:{password}"
-                f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+                f"@{host}:{port}/{self.DB_NAME}"
                 f"?driver={driver}"
                 f"&TrustServerCertificate="
                 f"{'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
@@ -118,7 +128,7 @@ class Settings(BaseSettings):
         # Windows / trusted connection
         return (
             f"mssql+pyodbc://@"
-            f"{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+            f"{host}:{port}/{self.DB_NAME}"
             f"?driver={driver}"
             f"&trusted_connection=yes"
             f"&TrustServerCertificate="
