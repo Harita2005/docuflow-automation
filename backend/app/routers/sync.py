@@ -645,7 +645,7 @@ def sync_record_attachment_by_pk_base64(
     db.commit()
     return AttachmentSyncResponse(success=True, message='Base64 attachment decoded, saved, and linked via primary key successfully', document_id=inv.id, file_name=payload.file_name, file_url=file_url, file_size_bytes=file_size, ocr_extracted_fields=ocr_data)
 
-@router.post('/seed-demo')
+# Seed demo endpoint removed to prevent reseeding of demo data
 def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
     """API endpoint to seed/sync the 10 standard multi-category demo documents directly into the database on demand."""
     base_dir = Path(__file__).resolve().parent.parent.parent

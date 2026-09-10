@@ -13,7 +13,7 @@ import {
   Loader2
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
-import { REFERENCE_DOCUMENTS } from "../data/dashboardData";
+// import REFERENCE_DOCUMENTS removed to avoid mock data
 
 interface DashboardProps {
   documents: DbInvoice[];
@@ -70,7 +70,7 @@ export default function Dashboard({
         assigned_approver: d.assigned_approver,
         is_current_approver: d.is_current_approver
       }))
-    : REFERENCE_DOCUMENTS;
+: []
 
   // Filter documents strictly by assigned user if not admin
   const isAssignedToUser = (doc: any) => {

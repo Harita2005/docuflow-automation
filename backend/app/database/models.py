@@ -705,6 +705,24 @@ class NotificationProviderConfig(Base):
     sender_name = Column(String(200), nullable=True)
 
 
+# ---------------------------------------------------------------------------
+# OTP Verification
+# ---------------------------------------------------------------------------
+
+class OTPVerification(Base):
+    __tablename__ = "otp_verifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    otp_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    is_used = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", backref="otp_verifications")
+
 class InAppNotification(Base):
     __tablename__ = "in_app_notifications"
 

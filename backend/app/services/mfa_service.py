@@ -3,6 +3,7 @@ import base64
 import io
 import logging
 import os
+from email.utils import formatdate, make_msgid
 import secrets
 import smtplib
 import socket
@@ -247,9 +248,14 @@ def send_email_otp(
     masked_email = mask_email(email)
 
     message = MIMEMultipart("alternative")
-    message["Subject"] = "Your DocuFlow Login Verification Code"
+    message["Subject"] = "DocuFlow OTP – Your verification code"
     message["From"] = f"{sender_name} <{sender_email}>"
     message["To"] = email
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid()
+    message["X-Mailer"] = "DocuFlow OTP (Python/SMTP)"
+    message["List-Unsubscribe"] = f"<mailto:{sender_email}?subject=Unsubscribe>"
+
 
     plain_body = (
         f"Hello {employee_name},\n\n"

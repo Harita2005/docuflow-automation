@@ -6,7 +6,7 @@ import {
   Layers,
   ChevronLeft
 } from "lucide-react";
-import kolamSolidImg from "../assets/kolam_solid_white.png";
+
 
 interface SidebarProps {
   currentView: string;
@@ -132,15 +132,6 @@ function SidebarBackgroundArtwork({ isExpanded }: { isExpanded: boolean }) {
             <div key={i} className="w-1 h-1 rounded-full bg-[#9FD7C0]" />
           ))}
         </div>
-      )}
-
-      {isExpanded && (
-        <img
-          src={kolamSolidImg}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-x-[-18px] top-[300px] bottom-20 w-[116%] max-w-none object-contain opacity-20 pointer-events-none"
-        />
       )}
 
       {/* LOWER RED & YELLOW GEOMETRIC BRANDING FOOTER WITH SLOGAN & DOT MATRIX */}

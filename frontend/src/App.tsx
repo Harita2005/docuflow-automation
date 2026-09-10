@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Header from "./components/Header.tsx";
 import Sidebar from "./components/Sidebar.tsx";
-import LoginPage from "./components/LoginPage.tsx";
+import LoginPage from "./components/LoginPage";
 import Dashboard from "./components/Dashboard.tsx";
 import DocumentUpload from "./components/DocumentUpload.tsx";
 import DocumentDetails from "./components/DocumentDetails.tsx";
