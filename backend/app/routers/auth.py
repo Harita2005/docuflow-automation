@@ -103,7 +103,7 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
         access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
         return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
     ticket = create_mfa_ticket(user.id, user.username)
-    return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 3600, 'user': None, 'mfa_required': True, 'mfa_ticket': ticket, 'available_methods': ['EMAIL'], 'masked_email': mask_email(user.email), 'masked_phone': mask_phone(user.phone_number or '+91 98765 43210'), 'has_authenticator_setup': bool(user.mfa_secret), 'active_session_conflict': False}
+    return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 3600, 'user': None, 'mfa_required': True, 'mfa_ticket': ticket, 'available_methods': ['EMAIL', 'SMS', 'AUTHENTICATOR'], 'masked_email': mask_email(user.email), 'masked_phone': mask_phone(user.phone_number or '+91 98765 43210'), 'has_authenticator_setup': bool(user.mfa_secret), 'active_session_conflict': False}
 
 @router.post('/mfa/send-otp')
 def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: Session=Depends(get_db)):
@@ -139,6 +139,15 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     elif method_upper == 'SMS':
         background_tasks.add_task(send_sms_otp, user.phone_number or '+91 98765 43210', user.employee_name or user.name, code)
         destination = mask_phone(user.phone_number or '+91 98765 43210')
+        msg = f'Verification code queued for {destination}'
+    elif method_upper == 'AUTHENTICATOR':
+        # For authenticator, reuse email OTP as a fallback (could be replaced with TOTP flow)
+        config = db.query(NotificationProviderConfig).first()
+        config_dict = None
+        if config:
+            config_dict = {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': config.encrypted_password, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
+        background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
+        destination = mask_email(user.email)
         msg = f'Verification code queued for {destination}'
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
