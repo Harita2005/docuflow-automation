@@ -1,8 +1,7 @@
 import datetime
 import bcrypt
-from typing import Tuple
 from sqlalchemy.orm import Session
-from app.database.models import OTPVerification, User
+from app.database.models import OTPVerification
 
 
 def generate_numeric_otp(length: int = 6) -> str:

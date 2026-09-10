@@ -1,6 +1,4 @@
-import time
 import pyotp
-import pytest
 from app.services.mfa_service import get_mfa_ticket
 
 

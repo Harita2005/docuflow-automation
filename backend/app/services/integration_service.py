@@ -2,8 +2,6 @@ import logging
 import json
 import hmac
 import hashlib
-import urllib.request
-import urllib.error
 import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session

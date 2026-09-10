@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, RefreshCw, Settings2, Database } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -53,7 +53,7 @@ export default function Admin() {
   // New States for Search and Diagnostics
   const [logSearchQuery, setLogSearchQuery] = useState("");
   const [auditCategoryFilter, setAuditCategoryFilter] = useState("ALL");
-  const [syncingData, setSyncingData] = useState(false);
+  const [_syncingData, _setSyncingData] = useState(false);
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
   const [templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
   const [publishConfirm, setPublishConfirm] = useState(false);
@@ -86,8 +86,8 @@ export default function Admin() {
     } catch {}
   };
 
-  const handleTriggerSync = async () => {
-    setSyncingData(true);
+  const _handleTriggerSync = async () => {
+    _setSyncingData(true);
     try {
       const token = localStorage.getItem("authToken");
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
@@ -98,7 +98,7 @@ export default function Admin() {
     } catch (e) {
       console.error("Sync error:", e);
     } finally {
-      setSyncingData(false);
+      _setSyncingData(false);
     }
   };
 

@@ -2,7 +2,7 @@ import logging
 from sqlalchemy.orm import Session
 
 import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.database.connection import SessionLocal
 from app.database import models
 

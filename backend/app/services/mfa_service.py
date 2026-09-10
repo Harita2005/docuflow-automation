@@ -6,7 +6,6 @@ import os
 from email.utils import formatdate, make_msgid
 import secrets
 import smtplib
-import socket
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -416,8 +415,8 @@ def send_email_otp(
         finally:
             try:
                 server.quit()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("SMTP connection already closed on quit: %s", exc)
 
         logger.info("Email OTP dispatched successfully to %s", masked_email)
         return True, f"Code sent to {masked_email}"

@@ -6,9 +6,6 @@ import time
 import uuid
 import hmac
 import hashlib
-import urllib.request
-import urllib.parse
-import urllib.error
 import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
