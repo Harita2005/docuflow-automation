@@ -57,7 +57,6 @@ export default function LoginPage({
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState("");
-  const [otpDevHint, setOtpDevHint] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
 
   // Authenticator enrollment state
@@ -188,20 +187,7 @@ export default function LoginPage({
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
 
-        if (data.initial_otp_sent) {
-          setSelectedMethod("EMAIL");
-          setOtpSentNotice(
-            data.message || `A verification code has been dispatched to ${data.masked_email || "your registered email"}.`
-          );
-          if (data.dev_otp) {
-            setOtpDevHint(data.dev_otp);
-          }
-          setResendTimer(30);
-          setStep(3);
-          return;
-        }
-
-        // Advance to Step 2: Choose Method
+        // Advance to Step 2: Choose Verification Method
         setStep(2);
         return;
       }
@@ -273,7 +259,6 @@ export default function LoginPage({
           data.message ||
             `A verification code has been dispatched to ${target}.`
         );
-        setOtpDevHint(data.dev_otp || "");
 
         setResendTimer(30);
         setStep(3);
@@ -367,7 +352,6 @@ export default function LoginPage({
         data.message ||
           `A new verification code has been dispatched to ${target}.`
       );
-      setOtpDevHint(data.dev_otp || "");
 
       setOtpCode("");
       setResendTimer(30);
@@ -496,7 +480,6 @@ export default function LoginPage({
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
-    setOtpDevHint("");
     setMfaTicket("");
     setMaskedEmail("");
     setMaskedPhone("");
@@ -509,7 +492,6 @@ export default function LoginPage({
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
-    setOtpDevHint("");
     setResendTimer(0);
   };
 
@@ -895,25 +877,6 @@ export default function LoginPage({
               {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
                   {otpSentNotice}
-                </div>
-              )}
-
-              {/* Dev Hint if available */}
-              {otpDevHint && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">
-                  <span>
-                    OTP Code: <strong className="font-mono tracking-wider text-amber-950 font-bold">{otpDevHint}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOtpCode(otpDevHint);
-                      setOtpError("");
-                    }}
-                    className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-semibold rounded text-[11px] cursor-pointer"
-                  >
-                    Auto-fill
-                  </button>
                 </div>
               )}
 
