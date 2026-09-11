@@ -11,10 +11,13 @@ try:
 except ImportError as exc:
     logger.debug('Handled exception: %s', exc)
 
-def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_quality: int=70) -> Tuple[bool, int, int]:
+FIVE_MB = 5 * 1024 * 1024
+
+def compress_pdf(file_path: Path, target_max_bytes: int = FIVE_MB, jpeg_quality: int = 70) -> Tuple[bool, int, int]:
     """
     Automated High-Performance PDF Compressor Service.
     Compresses PDF streams and embedded scanned images using PyMuPDF and Pillow.
+    Files larger than 5 MB are prioritized for aggressive lossless & image downsampling.
     
     Returns:
         (was_compressed: bool, original_size_bytes: int, compressed_size_bytes: int)
@@ -23,6 +26,10 @@ def compress_pdf(file_path: Path, target_max_bytes: int=3 * 1024 * 1024, jpeg_qu
     if not file_path.exists():
         return (False, 0, 0)
     original_size = file_path.stat().st_size
+    # If the file is already small (<= 5MB) and user only requested compression for >5MB:
+    if original_size <= target_max_bytes:
+        logger.debug("PDF %s is %s bytes (under %s limit), skipping heavy compression", file_path.name, original_size, target_max_bytes)
+        return (False, original_size, original_size)
     try:
         doc = fitz.open(file_path)
     except Exception as e:

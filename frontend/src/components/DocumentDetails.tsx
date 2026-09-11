@@ -282,9 +282,14 @@ export default function DocumentDetails({
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        const newPath = data.file_url || data.file_path;
+        let newPath = data.file_url || data.file_path;
         if (newPath) {
-          setIframeSrc(encodeURI(newPath.startsWith('/') ? newPath : `/${newPath}`));
+          newPath = newPath.startsWith('/') ? newPath : `/${newPath}`;
+          if (token && newPath.includes("/file")) {
+            const separator = newPath.includes("?") ? "&" : "?";
+            newPath = `${newPath}${separator}token=${encodeURIComponent(token)}`;
+          }
+          setIframeSrc(newPath);
         }
         showToast("✓ Physical PDF Attached & Saved Successfully!", "success");
         onRefreshDocument();
@@ -731,8 +736,13 @@ export default function DocumentDetails({
       rawPath !== "uploads/invoice.pdf"
     ) {
       const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
-      const path = isAbsolute ? rawPath : `/${rawPath}`;
-      setIframeSrc(encodeURI(path));
+      let path = isAbsolute ? rawPath : `/${rawPath}`;
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      if (token && path.includes("/file")) {
+        const separator = path.includes("?") ? "&" : "?";
+        path = `${path}${separator}token=${encodeURIComponent(token)}`;
+      }
+      setIframeSrc(path);
     } else {
       setIframeSrc("");
     }

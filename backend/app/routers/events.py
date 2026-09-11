@@ -44,11 +44,25 @@ async def event_stream(request: Request):
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield message
-                except asyncio.TimeoutError as exc:
-                    logger.debug('Handled exception: %s', exc)
+                except asyncio.TimeoutError:
+                    # Send an SSE keep-alive comment line every 15s to keep the HTTP chunked connection alive
+                    yield ": ping\n\n"
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    logger.debug("Event stream unexpected loop error: %s", exc)
+                    break
         finally:
             _active_listeners.discard(queue)
-    return StreamingResponse(event_generator(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'})
+    return StreamingResponse(
+        event_generator(),
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        }
+    )
 
 @router.post('/api/invoices/{invoice_id}/lock/acquire')
 @router.post('/api/documents/{invoice_id}/lock/acquire')

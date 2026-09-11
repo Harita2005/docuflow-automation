@@ -2,6 +2,7 @@ import datetime
 import uuid
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -260,6 +261,8 @@ class Document(Base):
 
     file_url = Column(String(500), nullable=True)
     file_path = Column(String(500), nullable=True)
+    file_name = Column(String(255), nullable=True)
+    file_size = Column(BigInteger, nullable=True)
 
     pi_indicator = Column(String(10), nullable=True)
     trans_type = Column(String(20), nullable=True)

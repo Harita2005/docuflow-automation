@@ -140,6 +140,41 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """
+    Validate the JWT Bearer token if present; return None if no authorization credentials are sent.
+    """
+    if not credentials or not credentials.credentials:
+        return None
+
+    try:
+        payload = decode_token(credentials.credentials)
+        username = payload.get("sub") or payload.get("username")
+        if not username:
+            return None
+    except Exception as exc:
+        logger.debug("Optional JWT decode error: %s", exc)
+        return None
+
+    user = (
+        db.query(User)
+        .filter(
+            (User.username == username)
+            | (User.email == username)
+            | (User.employee_id == username)
+        )
+        .filter(User.is_deleted == False)
+        .first()
+    )
+
+    if user and user.is_active:
+        return user
+    return None
+
+
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
@@ -250,6 +285,7 @@ __all__ = [
     "create_access_token",
     "decode_token",
     "get_current_user",
+    "get_current_user_optional",
     "get_current_active_user",
     "verify_service_api_key",
 ]

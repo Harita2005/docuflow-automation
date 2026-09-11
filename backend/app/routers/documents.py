@@ -29,7 +29,7 @@ from app.database.models import (
 )
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
-from app.auth import get_current_user, get_current_active_user, decode_token
+from app.auth import get_current_user, get_current_user_optional, get_current_active_user, decode_token
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
@@ -563,15 +563,19 @@ def stream_document_file(
     invoice_id: str,
     token: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     auth_user = current_user
     if not auth_user and token:
         try:
             payload = decode_token(token)
-            username = payload.get('sub')
+            username = payload.get('sub') or payload.get('username')
             if username:
-                auth_user = db.query(User).filter(User.username == username, User.is_active == True).first()
+                auth_user = db.query(User).filter(
+                    (User.username == username) | (User.employee_id == username) | (User.email == username),
+                    User.is_active == True,
+                    User.is_deleted == False
+                ).first()
         except Exception as auth_err:
             logger.debug('Failed to decode token for pdf attachment: %s', auth_err)
 
