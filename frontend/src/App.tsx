@@ -33,6 +33,15 @@ export default function App() {
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(initialRoute.docId);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workTrackerInitialFilter, setWorkTrackerInitialFilter] = useState<string>(() => {
+    return localStorage.getItem("workTrackerStatusFilter") || "all";
+  });
+
+  const handleNavigateToWorkTracker = (statusFilter: string) => {
+    setWorkTrackerInitialFilter(statusFilter);
+    localStorage.setItem("workTrackerStatusFilter", statusFilter);
+    setCurrentView("work-tracker");
+  };
 
   // Default Actor settings
   const [currentUserRole, setCurrentUserRole] = useState<string>(() => localStorage.getItem("currentUserRole") || "");
@@ -587,6 +596,7 @@ export default function App() {
                 currentUserEmail={currentUserEmail}
                 currentUserUsername={currentUserUsername}
                 setCurrentView={setCurrentView}
+                onNavigateToWorkTracker={handleNavigateToWorkTracker}
                 requireGRN={requireGRN}
               />
             )}
@@ -598,6 +608,7 @@ export default function App() {
                 currentUserRole={currentUserRole}
                 currentUserEmail={currentUserEmail}
                 currentUserUsername={currentUserUsername}
+                initialStatusFilter={workTrackerInitialFilter}
               />
             )}
 

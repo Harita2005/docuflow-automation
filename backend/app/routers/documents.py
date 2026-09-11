@@ -1253,6 +1253,8 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         scoped_invoices = []
         approved_count = 0
         pending_count = 0
+        hold_count = 0
+        rejected_count = 0
         total_spend = 0.0
         for inv in invoices:
             has_approved = inv.id in approved_invoice_ids
@@ -1266,19 +1268,38 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
             if has_approved or is_assigned:
                 scoped_invoices.append(inv)
                 total_spend += float(inv.amount or 0.0)
-                if has_approved:
+                st_lower = (inv.status or '').lower()
+                if has_approved or any(k in st_lower for k in ['settled', 'approved', 'paid', 'ready for payment']):
                     approved_count += 1
+                elif any(k in st_lower for k in ['hold', 'pause', 'wait', 'clarif']):
+                    hold_count += 1
+                elif any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned']):
+                    rejected_count += 1
                 else:
-                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
-                    if is_active_flow and is_assigned:
+                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled', 'Cancelled']
+                    if is_active_flow:
                         pending_count += 1
         total_docs = len(scoped_invoices)
     else:
         total_docs = len(invoices)
-        pending_count = sum((1 for i in invoices if any((status.lower() in (i.status or '').lower() for status in ['pending', 'initiated', 'progress']))))
-        approved_count = sum((1 for i in invoices if any((status.lower() in (i.status or '').lower() for status in ['settled', 'approved', 'paid', 'ready for payment']))))
+        hold_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['hold', 'pause', 'wait', 'clarif']))
+        rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['reject', 'cancel', 'void', 'fail', 'returned']))
+        approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']))
+        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['pending', 'initiated', 'progress', 'unrouted', 'verification', 'review']))
+        if pending_count == 0 and total_docs > (approved_count + hold_count + rejected_count):
+            pending_count = total_docs - (approved_count + hold_count + rejected_count)
         total_spend = sum((float(i.amount or 0.0) for i in invoices))
-    return {'totalDocuments': total_docs, 'pendingApprovals': pending_count, 'approvedDocuments': approved_count, 'totalSpendINR': total_spend, 'autoRoutedPercentage': 100.0 if total_docs > 0 else 0.0}
+
+    return {
+        'totalDocuments': total_docs,
+        'pendingApprovals': pending_count,
+        'pendingDocuments': pending_count,
+        'holdDocuments': hold_count,
+        'rejectedDocuments': rejected_count,
+        'approvedDocuments': approved_count,
+        'totalSpendINR': total_spend,
+        'autoRoutedPercentage': 100.0 if total_docs > 0 else 0.0
+    }
 
 @router.get('/api/notifications')
 def get_notifications(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):

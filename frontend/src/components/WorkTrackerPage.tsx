@@ -15,6 +15,7 @@ interface WorkTrackerPageProps {
   currentUserRole?: string;
   currentUserEmail?: string;
   currentUserUsername?: string;
+  initialStatusFilter?: string;
 }
 
 export default function WorkTrackerPage({ 
@@ -22,11 +23,14 @@ export default function WorkTrackerPage({
   onViewDocument,
   currentUserRole = "employee",
   currentUserEmail = "",
-  currentUserUsername = ""
+  currentUserUsername = "",
+  initialStatusFilter
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("AP INVOICE");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    return initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
+  });
   const [sortBy, _setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
@@ -137,10 +141,10 @@ export default function WorkTrackerPage({
     return filtered.length > 0 ? filtered : documents;
   }, [documents, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
 
-  // Derive dynamic document types (strictly document-wise, no 'All' tab)
+  // Derive dynamic document types (includes 'ALL' for cross-category views)
   const dynamicTypes = useMemo(() => {
     const types = Array.from(new Set(visibleDocs.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
-    return types.length > 0 ? types : ["AP INVOICE", "GENERAL RECORDS"];
+    return ["ALL", ...(types.length > 0 ? types : ["AP INVOICE", "GENERAL RECORDS"])];
   }, [visibleDocs]);
 
   const TABS = dynamicTypes;
@@ -151,6 +155,14 @@ export default function WorkTrackerPage({
       setActiveTab(dynamicTypes[0]);
     }
   }, [dynamicTypes, activeTab]);
+
+  // Sync initialStatusFilter if provided
+  React.useEffect(() => {
+    if (initialStatusFilter) {
+      setStatusFilter(initialStatusFilter);
+      setActiveTab("ALL");
+    }
+  }, [initialStatusFilter]);
 
   // Executive KPI summary calculations
   const _kpiStats = useMemo(() => {
@@ -195,7 +207,7 @@ export default function WorkTrackerPage({
       // Document-wise Tab filter
       const docType = (doc.document_type || "").toUpperCase().trim();
       const selectedTab = activeTab.toUpperCase().trim();
-      if (docType !== selectedTab) {
+      if (selectedTab !== "ALL" && docType !== selectedTab) {
         // Fallback matching for similar doc type labels
         const isAPInvoice = selectedTab.includes("INVOICE") && (docType.includes("INVOICE") || !docType);
         const isGeneral = selectedTab.includes("GENERAL") && (docType.includes("GENERAL") || docType.includes("VCC") || docType.includes("EXPENSE"));
@@ -213,9 +225,22 @@ export default function WorkTrackerPage({
         if (statusFilter === "approved") {
           if (!st.includes("approve") && !st.includes("paid") && !st.includes("ready") && !st.includes("settled")) return false;
         } else if (statusFilter === "pending") {
-          if (st.includes("reject") || st.includes("cancel") || st.includes("approve") || st.includes("paid") || st.includes("ready") || st.includes("settled") || st.includes("fail")) return false;
+          if (
+            st.includes("reject") || 
+            st.includes("cancel") || 
+            st.includes("approve") || 
+            st.includes("paid") || 
+            st.includes("ready") || 
+            st.includes("settled") || 
+            st.includes("fail") || 
+            st.includes("hold") || 
+            st.includes("pause") || 
+            st.includes("wait")
+          ) return false;
+        } else if (statusFilter === "hold") {
+          if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
-          if (!st.includes("reject") && !st.includes("fail")) return false;
+          if (!st.includes("reject") && !st.includes("fail") && !st.includes("cancel") && !st.includes("void") && !st.includes("returned")) return false;
         } else if (statusFilter === "cancelled") {
           if (!st.includes("cancel")) return false;
         }
@@ -312,17 +337,38 @@ export default function WorkTrackerPage({
           </div>
 
           {/* Status Filter Dropdown */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
-          >
-            <option value="all">All Statuses</option>
-            <option value="approved">Approved</option>
-            <option value="pending">Pending</option>
-            <option value="rejected">Rejected</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          <div className="flex items-center gap-1">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                localStorage.setItem("workTrackerStatusFilter", e.target.value);
+              }}
+              className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="hold">On Hold</option>
+              <option value="rejected">Rejected</option>
+              <option value="approved">Approved</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            {statusFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("all");
+                  localStorage.setItem("workTrackerStatusFilter", "all");
+                }}
+                className="flex items-center gap-0.5 text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition cursor-pointer"
+                title="Clear status filter"
+              >
+                <span>{statusFilter.toUpperCase()}</span>
+                <span>✕</span>
+              </button>
+            )}
+          </div>
 
           {/* Time / Date Filter */}
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-1">
