@@ -165,12 +165,12 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
 
     method_upper = request.method.upper()
 
-    # Enforce 30s resend rate limiting on the same method
+    # Enforce 60s resend rate limiting on the same method
     is_auto = ticket_data.pop('auto_initial', False)
     last_sent = ticket_data.get('otp_sent_at', 0)
     last_method = ticket_data.get('method')
-    if not is_auto and last_method == method_upper and (time.time() - last_sent < 30):
-        remaining = int(30 - (time.time() - last_sent))
+    if not is_auto and last_method == method_upper and (time.time() - last_sent < 60):
+        remaining = int(60 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
     code = generate_numeric_otp(6)
     ticket_data['otp'] = code

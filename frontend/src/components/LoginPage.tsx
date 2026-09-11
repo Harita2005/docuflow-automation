@@ -260,7 +260,7 @@ export default function LoginPage({
             `A verification code has been dispatched to ${target}.`
         );
 
-        setResendTimer(30);
+        setResendTimer(60);
         setStep(3);
       } catch (err: unknown) {
         setOtpError(
@@ -354,7 +354,7 @@ export default function LoginPage({
       );
 
       setOtpCode("");
-      setResendTimer(30);
+      setResendTimer(60);
     } catch (err: unknown) {
       const message =
         err instanceof Error

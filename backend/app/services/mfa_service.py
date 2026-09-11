@@ -429,13 +429,13 @@ def send_email_otp(
             server = smtplib.SMTP_SSL(
                 smtp_host,
                 smtp_port,
-                timeout=12,
+                timeout=60,
             )
         else:
             server = smtplib.SMTP(
                 smtp_host,
                 smtp_port,
-                timeout=12,
+                timeout=60,
             )
             server.ehlo()
             server.starttls()
