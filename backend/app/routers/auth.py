@@ -21,6 +21,7 @@ from app.schemas.schemas import (
 from app.services.mfa_service import (
     delete_mfa_ticket,
     create_mfa_ticket,
+    save_mfa_ticket,
     generate_numeric_otp,
     generate_totp_qr_svg,
     generate_totp_secret,
@@ -160,6 +161,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=
         background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, otp_code, config_dict)
         initial_otp_sent = True
         msg = f'Verification code dispatched to {mask_email(user.email)}'
+        save_mfa_ticket()
 
     return {
         'token': None,
@@ -177,6 +179,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=
         'has_authenticator_setup': has_auth_setup,
         'active_session_conflict': False,
         'message': msg,
+        'dev_otp': otp_code,
     }
 
 @router.post('/mfa/send-otp')
@@ -204,6 +207,7 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     ticket_data['method'] = method_upper
     ticket_data['otp_expires_at'] = time.time() + 300
     ticket_data['otp_sent_at'] = time.time()
+    save_mfa_ticket()
 
     if method_upper == 'EMAIL':
         if not user.email or '@' not in user.email:
@@ -241,6 +245,7 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
+        'dev_otp': code,
     }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
@@ -336,6 +341,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
             ticket_data['verified'] = True
             # Invalidate the OTP single-use so it cannot be replayed
             ticket_data['otp'] = None
+            save_mfa_ticket()
         elif ticket_data.get('verified') and request.force_login:
             is_valid = True
         else:
@@ -345,6 +351,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
 
     if not is_valid:
         ticket_data['attempts'] = ticket_data.get('attempts', 0) + 1
+        save_mfa_ticket()
         if ticket_data['attempts'] >= 5:
             delete_mfa_ticket(request.ticket)
             raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')

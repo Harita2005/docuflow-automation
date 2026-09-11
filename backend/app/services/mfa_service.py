@@ -32,34 +32,57 @@ MAX_MFA_ATTEMPTS = 5
 
 
 # ---------------------------------------------------------------------------
-# Temporary MFA tickets
+# Temporary MFA tickets (Persistent & In-Memory)
 # ---------------------------------------------------------------------------
 
 _MFA_TICKETS: Dict[str, Dict[str, Any]] = {}
+_CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", ".mfa_tickets.json")
+
+
+def _sync_cache_load() -> None:
+    global _MFA_TICKETS
+    if os.path.exists(_CACHE_PATH):
+        try:
+            import json
+            with open(_CACHE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        if k not in _MFA_TICKETS:
+                            _MFA_TICKETS[k] = v
+        except Exception as e:
+            logger.debug("Failed loading MFA ticket cache: %s", e)
+
+
+def _sync_cache_save() -> None:
+    try:
+        import json
+        os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
+        with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(_MFA_TICKETS, f)
+    except Exception as e:
+        logger.debug("Failed saving MFA ticket cache: %s", e)
 
 
 def cleanup_expired_tickets() -> None:
-    """Remove expired MFA tickets from memory."""
-
+    """Remove expired MFA tickets from memory and disk."""
+    _sync_cache_load()
     now = time.time()
-
     expired_tickets = [
         ticket
         for ticket, data in _MFA_TICKETS.items()
         if data.get("expires_at", 0) <= now
     ]
-
-    for ticket in expired_tickets:
-        _MFA_TICKETS.pop(ticket, None)
+    if expired_tickets:
+        for ticket in expired_tickets:
+            _MFA_TICKETS.pop(ticket, None)
+        _sync_cache_save()
 
 
 def create_mfa_ticket(user_id: int, username: str) -> str:
     """Create a temporary ticket for the MFA verification step."""
-
     cleanup_expired_tickets()
-
     ticket = secrets.token_urlsafe(32)
-
     _MFA_TICKETS[ticket] = {
         "user_id": user_id,
         "username": username,
@@ -69,26 +92,30 @@ def create_mfa_ticket(user_id: int, username: str) -> str:
         "otp_expires_at": None,
         "attempts": 0,
     }
-
+    _sync_cache_save()
     return ticket
+
+
+def save_mfa_ticket() -> None:
+    """Explicitly sync current ticket state to disk."""
+    _sync_cache_save()
 
 
 def get_mfa_ticket(ticket: str) -> Optional[Dict[str, Any]]:
     """Return MFA ticket data if the ticket exists and is not expired."""
-
+    _sync_cache_load()
     cleanup_expired_tickets()
-
     if not ticket:
         return None
-
     return _MFA_TICKETS.get(ticket)
 
 
 def delete_mfa_ticket(ticket: str) -> None:
     """Delete an MFA ticket after completion or invalidation."""
-
     if ticket:
+        _sync_cache_load()
         _MFA_TICKETS.pop(ticket, None)
+        _sync_cache_save()
 
 
 # ---------------------------------------------------------------------------
