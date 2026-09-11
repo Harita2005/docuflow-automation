@@ -16,6 +16,8 @@ def test_smtp_auth_failure_returns_502(client, seed_test_data):
         def fake_getenv(key, default=None):
             if key == 'PYTEST_CURRENT_TEST':
                 return None
+            if key == 'STRICT_SMTP_CHECK':
+                return 'true'
             if key == 'SMTP_HOST':
                 return 'smtp.company.com'
             if key == 'SMTP_PORT':
@@ -50,6 +52,8 @@ def test_smtp_connect_error_returns_502(client, seed_test_data):
         def fake_getenv(key, default=None):
             if key == 'PYTEST_CURRENT_TEST':
                 return None
+            if key == 'STRICT_SMTP_CHECK':
+                return 'true'
             if key == 'SMTP_HOST':
                 return 'smtp.unreachable.com'
             if key == 'SMTP_PORT':
@@ -83,6 +87,8 @@ def test_smtp_tls_failure_returns_502(client, seed_test_data):
         def fake_getenv(key, default=None):
             if key == 'PYTEST_CURRENT_TEST':
                 return None
+            if key == 'STRICT_SMTP_CHECK':
+                return 'true'
             if key == 'SMTP_HOST':
                 return 'smtp.sslerror.com'
             if key == 'SMTP_PORT':

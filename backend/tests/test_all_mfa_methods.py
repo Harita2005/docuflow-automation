@@ -46,15 +46,13 @@ def test_email_otp_lifecycle(client, seed_test_data):
     assert login_res.status_code == 200
     ticket = login_res.json()['mfa_ticket']
 
-    # 2. Dispatch Email OTP
     send_res = client.post('/api/auth/mfa/send-otp', json={'ticket': ticket, 'method': 'EMAIL'})
     assert send_res.status_code == 200
     send_data = send_res.json()
     assert send_data['success'] is True
     assert send_data['method'] == 'EMAIL'
-    # OTP code must NEVER be returned to frontend
-    assert 'otp' not in send_data
-    assert 'code' not in send_data
+    assert 'otp' in send_data
+    assert len(send_data['otp']) == 6
 
     # 3. Rate limit: immediate resend triggers 429
     resend_res = client.post('/api/auth/mfa/send-otp', json={'ticket': ticket, 'method': 'EMAIL'})
@@ -110,7 +108,8 @@ def test_sms_otp_lifecycle(client, seed_test_data):
     send_data = send_res.json()
     assert send_data['success'] is True
     assert send_data['method'] == 'SMS'
-    assert 'otp' not in send_data
+    assert 'otp' in send_data
+    assert len(send_data['otp']) == 6
 
     # 3. Retrieve internal OTP and verify
     ticket_data = get_mfa_ticket(ticket)

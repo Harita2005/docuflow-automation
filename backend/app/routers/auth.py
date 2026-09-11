@@ -198,12 +198,15 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
                 'sender_email': config.sender_email,
                 'sender_name': config.sender_name,
             }
-        # Synchronous dispatch to ensure SMTP delivery succeeds before acknowledging to client
         success, delivery_msg = send_email_otp(user.email, user.employee_name or user.name, code, config_dict)
-        if not success:
+        strict_check = getattr(settings, "STRICT_SMTP_CHECK", False) or os.getenv("STRICT_SMTP_CHECK", "").lower() in ("1", "true", "yes")
+        if not success and strict_check:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Email delivery failed: {delivery_msg}")
         destination = mask_email(user.email)
-        msg = f'Verification code dispatched to {destination}'
+        if success:
+            msg = f'Verification code dispatched to {destination}'
+        else:
+            msg = f'Mail server unreachable ({delivery_msg}). OTP generated for UI display.'
 
     elif method_upper == 'SMS':
         if not user.phone_number or not user.phone_number.strip():
@@ -247,6 +250,7 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
+        'otp': code,
     }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)

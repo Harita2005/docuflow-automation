@@ -432,11 +432,11 @@ def send_email_otp(
         ssl_context = ssl.create_default_context()
 
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(timeout=30, context=ssl_context)
+            server = smtplib.SMTP_SSL(timeout=4, context=ssl_context)
             server._host = smtp_host
             server.connect(connect_host, smtp_port)
         else:
-            server = smtplib.SMTP(timeout=30)
+            server = smtplib.SMTP(timeout=4)
             server._host = smtp_host
             server.connect(connect_host, smtp_port)
             server.ehlo()

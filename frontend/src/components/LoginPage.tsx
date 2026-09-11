@@ -55,6 +55,7 @@ export default function LoginPage({
 
   // Code entry and feedback
   const [otpCode, setOtpCode] = useState("");
+  const [displayOtp, setDisplayOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
@@ -260,6 +261,10 @@ export default function LoginPage({
             `A verification code has been dispatched to ${target}.`
         );
 
+        if (data.otp) {
+          setDisplayOtp(data.otp);
+        }
+
         setResendTimer(60);
         setStep(3);
       } catch (err: unknown) {
@@ -352,6 +357,10 @@ export default function LoginPage({
         data.message ||
           `A new verification code has been dispatched to ${target}.`
       );
+
+      if (data.otp) {
+        setDisplayOtp(data.otp);
+      }
 
       setOtpCode("");
       setResendTimer(60);
@@ -877,6 +886,27 @@ export default function LoginPage({
               {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
                   {otpSentNotice}
+                </div>
+              )}
+
+              {/* Display Generated OTP for Testing / Presentation */}
+              {displayOtp && selectedMethod !== "AUTHENTICATOR" && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                      Generated OTP (Dev / Demo Mode)
+                    </div>
+                    <div className="text-2xl font-mono font-extrabold tracking-widest text-amber-900 mt-0.5">
+                      {displayOtp}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(displayOtp)}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                  >
+                    Auto Fill
+                  </button>
                 </div>
               )}
 
