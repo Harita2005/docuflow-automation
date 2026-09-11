@@ -7,6 +7,7 @@ from email.utils import formatdate, make_msgid
 import secrets
 import smtplib
 import socket
+import ssl
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -240,16 +241,16 @@ def send_email_otp(
     config = smtp_config or {}
 
     smtp_host = (
-        (config.get("smtp_server") or "").strip()
-        or getattr(settings, "SMTP_HOST", "")
-        or os.getenv("SMTP_HOST", "")
+        os.getenv("SMTP_HOST", "")
         or os.getenv("SMTP_SERVER", "")
-    )
+        or getattr(settings, "SMTP_HOST", "")
+        or (config.get("smtp_server") or "")
+    ).strip()
 
     port_val = (
-        config.get("port")
+        os.getenv("SMTP_PORT")
         or getattr(settings, "SMTP_PORT", None)
-        or os.getenv("SMTP_PORT")
+        or config.get("port")
         or 587
     )
     try:
@@ -258,46 +259,47 @@ def send_email_otp(
         smtp_port = 587
 
     smtp_user = (
-        (config.get("username") or "").strip()
-        or getattr(settings, "SMTP_USER", "")
-        or getattr(settings, "SMTP_USERNAME", "")
+        os.getenv("SMTP_USERNAME", "")
         or os.getenv("SMTP_USER", "")
-        or os.getenv("SMTP_USERNAME", "")
-    )
+        or getattr(settings, "SMTP_USERNAME", "")
+        or getattr(settings, "SMTP_USER", "")
+        or (config.get("username") or "")
+    ).strip()
 
     smtp_password = (
-        (config.get("encrypted_password") or "").strip()
-        or getattr(settings, "SMTP_PASS", "")
-        or getattr(settings, "SMTP_PASSWORD", "")
+        os.getenv("SMTP_PASSWORD", "")
         or os.getenv("SMTP_PASS", "")
-        or os.getenv("SMTP_PASSWORD", "")
-    )
+        or getattr(settings, "SMTP_PASSWORD", "")
+        or getattr(settings, "SMTP_PASS", "")
+        or (config.get("encrypted_password") or "")
+    ).strip()
 
     sender_email = (
-        (config.get("sender_email") or "").strip()
-        or getattr(settings, "SMTP_SENDER_EMAIL", "")
-        or getattr(settings, "SMTP_FROM", "")
+        os.getenv("SMTP_FROM", "")
         or os.getenv("SMTP_SENDER_EMAIL", "")
         or os.getenv("SMTP_SENDER_MAIL", "")
-        or os.getenv("SMTP_FROM", "")
+        or getattr(settings, "SMTP_FROM", "")
+        or getattr(settings, "SMTP_SENDER_EMAIL", "")
+        or (config.get("sender_email") or "")
         or smtp_user
-    )
+    ).strip()
 
     sender_name = (
-        (config.get("sender_name") or "").strip()
+        os.getenv("SMTP_SENDER_NAME", "")
         or getattr(settings, "SMTP_SENDER_NAME", "")
-        or os.getenv("SMTP_SENDER_NAME", "")
+        or (config.get("sender_name") or "")
         or "DocuFlow Security"
-    )
+    ).strip()
 
     if not smtp_host or not smtp_user or not smtp_password:
         logger.error(
-            "SMTP configuration is incomplete. (Host: %s, User: %s, Pass present: %s)",
+            "SMTP configuration is incomplete. (Host: %s, Port: %s, User: %s, Pass present: %s)",
             smtp_host or "[MISSING]",
+            smtp_port,
             smtp_user or "[MISSING]",
             bool(smtp_password),
         )
-        return False, "Email service is not configured."
+        return False, "Email service is not configured properly on the server."
 
     masked_email = mask_email(email)
 
@@ -414,19 +416,11 @@ def send_email_otp(
 
     masked_email = mask_email(email)
 
-    print(
-        f"\n{'='*70}\n"
-        f"[DAAS OTP DISPATCH] METHOD: EMAIL | DESTINATION: {email} ({employee_name})\n"
-        f">>> 6-DIGIT VERIFICATION CODE: [ {otp_code} ] <<<\n"
-        f"{'='*70}\n",
-        flush=True,
-    )
-
     if os.getenv("PYTEST_CURRENT_TEST"):
+        logger.info("Test environment detected; bypassing network SMTP dispatch for %s", masked_email)
         return True, f"Code sent to {masked_email}"
 
     try:
-        # Resolve IPv4 first to eliminate IPv6 [Errno 101] Network is unreachable errors
         connect_host = smtp_host
         try:
             addr_infos = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET, socket.SOCK_STREAM)
@@ -435,22 +429,18 @@ def send_email_otp(
         except Exception as exc:
             logger.debug("IPv4 resolution for %s failed (%s), using hostname directly", smtp_host, exc)
 
+        ssl_context = ssl.create_default_context()
+
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(
-                connect_host,
-                smtp_port,
-                timeout=30,
-            )
+            server = smtplib.SMTP_SSL(timeout=30, context=ssl_context)
             server._host = smtp_host
+            server.connect(connect_host, smtp_port)
         else:
-            server = smtplib.SMTP(
-                connect_host,
-                smtp_port,
-                timeout=30,
-            )
+            server = smtplib.SMTP(timeout=30)
             server._host = smtp_host
+            server.connect(connect_host, smtp_port)
             server.ehlo()
-            server.starttls()
+            server.starttls(context=ssl_context)
             server.ehlo()
 
         try:
@@ -470,20 +460,28 @@ def send_email_otp(
             except Exception as exc:
                 logger.debug("SMTP connection already closed on quit: %s", exc)
 
-        logger.info("Email OTP dispatched successfully to %s", masked_email)
+        logger.info("Email OTP dispatched successfully via %s:%s to %s", smtp_host, smtp_port, masked_email)
         return True, f"Code sent to {masked_email}"
 
     except smtplib.SMTPAuthenticationError as exc:
-        logger.error("SMTP authentication failed for user %s: %s", smtp_user, exc)
-        return False, "Email authentication failed."
+        logger.error("SMTP authentication failed for host %s:%s user %s: %s", smtp_host, smtp_port, smtp_user, exc)
+        return False, "SMTP authentication failed. Please check company email credentials."
 
-    except (smtplib.SMTPConnectError, TimeoutError, OSError) as exc:
-        logger.warning("SMTP connection to %s:%s timed out or failed: %s. OTP logged to system console.", smtp_host, smtp_port, exc)
-        return True, f"Code sent to {masked_email}"
+    except (ssl.SSLError, ssl.CertificateError) as exc:
+        logger.error("SMTP TLS/SSL handshake failed for %s:%s: %s", smtp_host, smtp_port, exc)
+        return False, f"SMTP TLS/SSL handshake failure connecting to {smtp_host}:{smtp_port}."
+
+    except (smtplib.SMTPConnectError, TimeoutError, socket.timeout, socket.gaierror, ConnectionRefusedError, OSError) as exc:
+        logger.error("SMTP connection to %s:%s timed out or failed: %s", smtp_host, smtp_port, exc)
+        return False, f"Unable to connect to SMTP server ({smtp_host}:{smtp_port})."
+
+    except smtplib.SMTPException as exc:
+        logger.error("SMTP protocol failure on %s:%s: %s", smtp_host, smtp_port, exc)
+        return False, f"SMTP delivery error: {exc}"
 
     except Exception as exc:
-        logger.error("Email OTP dispatch failed: %s", exc)
-        return True, f"Code sent to {masked_email}"
+        logger.error("Email OTP dispatch failed to %s: %s", masked_email, exc)
+        return False, "Failed to send verification email."
 
 
 # ---------------------------------------------------------------------------
@@ -595,19 +593,11 @@ def send_sms_otp(
             logger.error("Custom SMS gateway exception: %s", exc)
             return False, "Unable to reach SMS gateway."
 
-    print(
-        f"\n{'='*70}\n"
-        f"[DAAS OTP DISPATCH] METHOD: SMS | DESTINATION: {phone_number} ({employee_name})\n"
-        f">>> 6-DIGIT VERIFICATION CODE: [ {otp_code} ] <<<\n"
-        f"{'='*70}\n",
-        flush=True,
-    )
-
-    logger.warning(
-        "SMS requested for %s. Provider credentials not active (set TWILIO_*, FAST2SMS_API_KEY, or SMS_API_URL). OTP logged to console.",
+    logger.error(
+        "SMS dispatch failed for %s: No active SMS provider configured (TWILIO_*, FAST2SMS_API_KEY, or SMS_API_URL).",
         masked_phone,
     )
-    return True, f"Verification code sent to {masked_phone}"
+    return False, "SMS provider is not configured on the server."
 
 
 # ---------------------------------------------------------------------------

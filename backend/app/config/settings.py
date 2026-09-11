@@ -59,16 +59,16 @@ class Settings(BaseSettings):
     # Audit Log Retention (default 7 days / 1 week)
     AUDIT_LOG_RETENTION_DAYS: int = 7
 
-    # SMTP Configuration
-    SMTP_HOST: str = "smtp.office365.com"
+    # SMTP Configuration (loaded from environment variables / .env)
+    SMTP_HOST: str = ""
     SMTP_PORT: int = 587
-    SMTP_USER: str = "communication@ramrajcotton.net"
-    SMTP_USERNAME: str = "communication@ramrajcotton.net"
-    SMTP_PASS: str = "QDjuS8BvQWq6bY"
-    SMTP_PASSWORD: str = "QDjuS8BvQWq6bY"
-    SMTP_FROM: str = "communication@ramrajcotton.net"
-    SMTP_SENDER_EMAIL: str = "communication@ramrajcotton.net"
-    SMTP_SENDER_NAME: str = "Ramraj Cotton - DocuFlow"
+    SMTP_USER: str = ""
+    SMTP_USERNAME: str = ""
+    SMTP_PASS: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_SENDER_EMAIL: str = ""
+    SMTP_SENDER_NAME: str = "DocuFlow Security"
 
     # SMS Gateway Configuration
     SMS_PROVIDER: str = "generic"

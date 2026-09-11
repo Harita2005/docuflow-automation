@@ -31,7 +31,6 @@ class TokenResponse(BaseModel):
     message: Optional[str] = None
     initial_otp_sent: bool = False
     selected_method: Optional[str] = None
-    dev_otp: Optional[str] = None
 
     model_config = pydantic.ConfigDict(extra="allow")
 

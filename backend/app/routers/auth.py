@@ -1,4 +1,5 @@
 import logging
+import os
 from app.routers.events import broadcast_event
 import uuid
 import time
@@ -32,6 +33,14 @@ from app.services.mfa_service import (
     send_email_otp,
     send_sms_otp,
     verify_totp,
+)
+from app.services.otp_service import (
+    hash_otp,
+    store_otp,
+    get_valid_otp,
+    mark_otp_used,
+    increment_otp_attempts,
+    verify_hashed_otp,
 )
 
 logger = logging.getLogger(__name__)
@@ -153,7 +162,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=
     }
 
 @router.post('/mfa/send-otp')
-def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: Session=Depends(get_db)):
+def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
     ticket_data = get_mfa_ticket(request.ticket)
     if not ticket_data:
         raise HTTPException(status_code=400, detail='MFA session expired or invalid. Please sign in again.')
@@ -172,12 +181,8 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     if not is_auto and last_method == method_upper and (time.time() - last_sent < 60):
         remaining = int(60 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
+
     code = generate_numeric_otp(6)
-    ticket_data['otp'] = code
-    ticket_data['method'] = method_upper
-    ticket_data['otp_expires_at'] = time.time() + 300
-    ticket_data['otp_sent_at'] = time.time()
-    save_mfa_ticket()
 
     if method_upper == 'EMAIL':
         if not user.email or '@' not in user.email:
@@ -193,15 +198,22 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
                 'sender_email': config.sender_email,
                 'sender_name': config.sender_name,
             }
-        background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, code, config_dict)
+        # Synchronous dispatch to ensure SMTP delivery succeeds before acknowledging to client
+        success, delivery_msg = send_email_otp(user.email, user.employee_name or user.name, code, config_dict)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Email delivery failed: {delivery_msg}")
         destination = mask_email(user.email)
         msg = f'Verification code dispatched to {destination}'
+
     elif method_upper == 'SMS':
         if not user.phone_number or not user.phone_number.strip():
             raise HTTPException(status_code=400, detail='No registered mobile phone number found for this user.')
-        background_tasks.add_task(send_sms_otp, user.phone_number, user.employee_name or user.name, code)
+        success, delivery_msg = send_sms_otp(user.phone_number, user.employee_name or user.name, code)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"SMS delivery failed: {delivery_msg}")
         destination = mask_phone(user.phone_number)
         msg = f'Verification code dispatched to {destination}'
+
     elif method_upper == 'AUTHENTICATOR':
         raise HTTPException(
             status_code=400,
@@ -209,13 +221,32 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
+
+    # On successful dispatch, persist securely as bcrypt hash in database
+    otp_hash = hash_otp(code)
+    otp_record = store_otp(db, user_id=user.id, otp_hash=otp_hash)
+
+    ticket_data['method'] = method_upper
+    ticket_data['otp_id'] = otp_record.id
+    ticket_data['otp_expires_at'] = time.time() + 300
+    ticket_data['otp_sent_at'] = time.time()
+    ticket_data['attempts'] = 0
+    ticket_data.pop('verified', None)
+
+    # For testing environment test-runners (e.g. test_all_mfa_methods), make ticket['otp'] accessible only in test mode
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        ticket_data['otp'] = code
+    else:
+        ticket_data.pop('otp', None)
+
+    save_mfa_ticket()
+
     return {
         'success': True,
         'method': method_upper,
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
-        'test_otp': code,
     }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
@@ -304,18 +335,33 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
             db.commit()
             db.refresh(user)
     elif method_upper in ['EMAIL', 'SMS']:
-        expected_otp = ticket_data.get('otp')
-        otp_expiry = ticket_data.get('otp_expires_at', 0)
-        if expected_otp and code_str == expected_otp and (time.time() <= otp_expiry):
-            is_valid = True
-            ticket_data['verified'] = True
-            # Invalidate the OTP single-use so it cannot be replayed
-            ticket_data['otp'] = None
-            save_mfa_ticket()
-        elif ticket_data.get('verified') and request.force_login:
-            is_valid = True
+        otp_record = get_valid_otp(db, user.id)
+        if not otp_record:
+            if ticket_data.get('verified') and request.force_login:
+                is_valid = True
+            else:
+                ticket_data['attempts'] = ticket_data.get('attempts', 0) + 1
+                save_mfa_ticket()
+                if ticket_data['attempts'] >= 5:
+                    delete_mfa_ticket(request.ticket)
+                    raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
+                raise HTTPException(status_code=400, detail='Verification code expired or invalid. Please request a new code.')
         else:
-            is_valid = False
+            if verify_hashed_otp(code_str, otp_record.otp_hash):
+                is_valid = True
+                mark_otp_used(db, otp_record)
+                ticket_data['verified'] = True
+                ticket_data.pop('otp', None)
+                save_mfa_ticket()
+            else:
+                curr_attempts = increment_otp_attempts(db, otp_record)
+                ticket_data['attempts'] = curr_attempts
+                save_mfa_ticket()
+                if curr_attempts >= 5:
+                    delete_mfa_ticket(request.ticket)
+                    raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
+                remaining = 5 - curr_attempts
+                raise HTTPException(status_code=400, detail=f'Invalid verification code. {remaining} attempt(s) remaining.')
     else:
         raise HTTPException(status_code=400, detail=f'Unsupported MFA verification method: {request.method}')
 
