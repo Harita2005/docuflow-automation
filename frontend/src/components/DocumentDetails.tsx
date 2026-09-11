@@ -568,7 +568,11 @@ export default function DocumentDetails({
   const fetchWorkflowData = async () => {
     if (!document) return;
     try {
-      const res = await fetch(`/api/documents/${document.id}`);
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/documents/${document.id}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setWorkflowInstance(data.workflow_instance || null);
@@ -576,7 +580,7 @@ export default function DocumentDetails({
         setActiveApprovalLog(data.active_approval_log || null);
         setWorkflowStepDefinitions(data.workflow_step_definitions || []);
       }
-      const wfRes = await fetch(`/api/workflows`);
+      const wfRes = await fetch(`/api/workflows`, { headers });
       if (wfRes.ok) {
         const wfs = await wfRes.json();
         setAvailableWorkflows(wfs);
