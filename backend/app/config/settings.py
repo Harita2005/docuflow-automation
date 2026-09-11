@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = "communication@ramrajcotton.net"
     SMTP_USERNAME: str = "communication@ramrajcotton.net"
-    SMTP_PASS: str = ""
-    SMTP_PASSWORD: str = ""
+    SMTP_PASS: str = "QDjuS8BvQWq6bY"
+    SMTP_PASSWORD: str = "QDjuS8BvQWq6bY"
     SMTP_FROM: str = "communication@ramrajcotton.net"
     SMTP_SENDER_EMAIL: str = "communication@ramrajcotton.net"
     SMTP_SENDER_NAME: str = "Ramraj Cotton - DocuFlow"
