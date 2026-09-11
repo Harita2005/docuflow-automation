@@ -402,13 +402,13 @@ def send_email_otp(
             server = smtplib.SMTP_SSL(
                 smtp_host,
                 smtp_port,
-                timeout=5,
+                timeout=12,
             )
         else:
             server = smtplib.SMTP(
                 smtp_host,
                 smtp_port,
-                timeout=5,
+                timeout=12,
             )
             server.ehlo()
             server.starttls()
