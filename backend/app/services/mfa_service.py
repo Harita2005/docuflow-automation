@@ -6,6 +6,7 @@ import os
 from email.utils import formatdate, make_msgid
 import secrets
 import smtplib
+import socket
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -425,18 +426,29 @@ def send_email_otp(
         return True, f"Code sent to {masked_email}"
 
     try:
+        # Resolve IPv4 first to eliminate IPv6 [Errno 101] Network is unreachable errors
+        connect_host = smtp_host
+        try:
+            addr_infos = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET, socket.SOCK_STREAM)
+            if addr_infos:
+                connect_host = addr_infos[0][4][0]
+        except Exception as exc:
+            logger.debug("IPv4 resolution for %s failed (%s), using hostname directly", smtp_host, exc)
+
         if smtp_port == 465:
             server = smtplib.SMTP_SSL(
-                smtp_host,
+                connect_host,
                 smtp_port,
-                timeout=60,
+                timeout=30,
             )
+            server._host = smtp_host
         else:
             server = smtplib.SMTP(
-                smtp_host,
+                connect_host,
                 smtp_port,
-                timeout=60,
+                timeout=30,
             )
+            server._host = smtp_host
             server.ehlo()
             server.starttls()
             server.ehlo()
