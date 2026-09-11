@@ -42,8 +42,12 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("IF COL_LENGTH('users', 'mfa_enabled') IS NULL ALTER TABLE users ADD mfa_enabled BIT DEFAULT 0;"))
                 conn.execute(text("IF COL_LENGTH('users', 'mfa_type') IS NULL ALTER TABLE users ADD mfa_type VARCHAR(50) DEFAULT 'EMAIL';"))
                 conn.execute(text("IF COL_LENGTH('users', 'mfa_secret') IS NULL ALTER TABLE users ADD mfa_secret VARCHAR(100) NULL;"))
-                # file_path column on documents
+                # file_path, source_application, and version columns on documents
                 conn.execute(text("IF COL_LENGTH('documents', 'file_path') IS NULL ALTER TABLE documents ADD file_path VARCHAR(500) NULL;"))
+                conn.execute(text("IF COL_LENGTH('documents', 'source_application') IS NULL ALTER TABLE documents ADD source_application VARCHAR(100) NULL;"))
+                conn.execute(text("IF COL_LENGTH('documents', 'version') IS NULL ALTER TABLE documents ADD version INT NULL DEFAULT 1;"))
+                # is_mandatory on document_checklist_states
+                conn.execute(text("IF COL_LENGTH('document_checklist_states', 'is_mandatory') IS NULL ALTER TABLE document_checklist_states ADD is_mandatory BIT NULL DEFAULT 0;"))
         except Exception as exc:
             logger.warning(f"Database schema initialization deferred: {exc}")
     yield

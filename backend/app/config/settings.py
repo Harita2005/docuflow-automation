@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         "Document Approval & Automation System - DAAS"
     )
     VERSION: str = "2.0.0"
+    ENVIRONMENT: str = "development"
     API_V1_STR: str = "/api"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 

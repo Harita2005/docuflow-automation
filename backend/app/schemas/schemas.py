@@ -29,6 +29,11 @@ class TokenResponse(BaseModel):
     session_created_at: Optional[str] = None
     session_id: Optional[str] = None
     message: Optional[str] = None
+    initial_otp_sent: bool = False
+    selected_method: Optional[str] = None
+    dev_otp: Optional[str] = None
+
+    model_config = pydantic.ConfigDict(extra="allow")
 
 class MFASendOTPRequest(BaseModel):
     ticket: str

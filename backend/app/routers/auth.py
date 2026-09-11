@@ -43,7 +43,7 @@ def login_get_info():
 
 @router.post('/login', response_model=TokenResponse, response_model_exclude_none=True)
 @router.post('/token', response_model=TokenResponse, response_model_exclude_none=True)
-def login(request: LoginRequest, db: Session=Depends(get_db)):
+def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=Depends(get_db)):
     ident = request.username or request.identifier or request.email
     if not ident:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
@@ -92,6 +92,8 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
             .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
             .first()
         )
+    if not user and ident_str.isdigit():
+        user = db.query(User).filter(User.id == int(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"User '{ident_str}' not found in system.")
     if not user.is_active:
@@ -130,6 +132,35 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
 
     has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
     ticket = create_mfa_ticket(user.id, user.username)
+
+    # Immediately auto-dispatch Email OTP if user has email
+    initial_otp_sent = False
+    otp_code = None
+    msg = None
+    ticket_data = get_mfa_ticket(ticket)
+    if user.email and '@' in user.email and ticket_data:
+        otp_code = generate_numeric_otp(6)
+        ticket_data['otp'] = otp_code
+        ticket_data['method'] = 'EMAIL'
+        ticket_data['otp_expires_at'] = time.time() + 300
+        ticket_data['otp_sent_at'] = time.time()
+        ticket_data['auto_initial'] = True
+
+        config = db.query(NotificationProviderConfig).first()
+        config_dict = None
+        if config and config.smtp_server:
+            config_dict = {
+                'smtp_server': config.smtp_server,
+                'port': config.port,
+                'username': config.username,
+                'encrypted_password': config.encrypted_password,
+                'sender_email': config.sender_email,
+                'sender_name': config.sender_name,
+            }
+        background_tasks.add_task(send_email_otp, user.email, user.employee_name or user.name, otp_code, config_dict)
+        initial_otp_sent = True
+        msg = f'Verification code dispatched to {mask_email(user.email)}'
+
     return {
         'token': None,
         'access_token': None,
@@ -139,10 +170,13 @@ def login(request: LoginRequest, db: Session=Depends(get_db)):
         'mfa_required': True,
         'mfa_ticket': ticket,
         'available_methods': available_methods,
+        'selected_method': 'EMAIL' if initial_otp_sent else (available_methods[0] if available_methods else 'EMAIL'),
+        'initial_otp_sent': initial_otp_sent,
         'masked_email': mask_email(user.email) if user.email else '',
         'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
         'has_authenticator_setup': has_auth_setup,
         'active_session_conflict': False,
+        'message': msg,
     }
 
 @router.post('/mfa/send-otp')
@@ -156,13 +190,15 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
     if not user.is_active:
         raise HTTPException(status_code=403, detail='Employee account is deactivated. Access denied.')
 
-    # Enforce 30s resend rate limiting
+    method_upper = request.method.upper()
+
+    # Enforce 30s resend rate limiting on the same method
+    is_auto = ticket_data.pop('auto_initial', False)
     last_sent = ticket_data.get('otp_sent_at', 0)
-    if time.time() - last_sent < 30:
+    last_method = ticket_data.get('method')
+    if not is_auto and last_method == method_upper and (time.time() - last_sent < 30):
         remaining = int(30 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
-
-    method_upper = request.method.upper()
     code = generate_numeric_otp(6)
     ticket_data['otp'] = code
     ticket_data['method'] = method_upper
@@ -199,7 +235,13 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
-    return {'success': True, 'method': method_upper, 'destination': destination, 'message': msg, 'expires_in_seconds': 300}
+    return {
+        'success': True,
+        'method': method_upper,
+        'destination': destination,
+        'message': msg,
+        'expires_in_seconds': 300,
+    }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
 def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
