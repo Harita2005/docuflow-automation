@@ -58,6 +58,7 @@ export default function LoginPage({
   const [otpError, setOtpError] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
+  const [debugTestOtp, setDebugTestOtp] = useState("");
 
   // Authenticator enrollment state
   const [isEnrollingTotp, setIsEnrollingTotp] = useState(false);
@@ -259,6 +260,9 @@ export default function LoginPage({
           data.message ||
             `A verification code has been dispatched to ${target}.`
         );
+        if (data.test_otp) {
+          setDebugTestOtp(data.test_otp);
+        }
 
         setResendTimer(60);
         setStep(3);
@@ -352,6 +356,9 @@ export default function LoginPage({
         data.message ||
           `A new verification code has been dispatched to ${target}.`
       );
+      if (data.test_otp) {
+        setDebugTestOtp(data.test_otp);
+      }
 
       setOtpCode("");
       setResendTimer(60);
@@ -480,6 +487,7 @@ export default function LoginPage({
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
+    setDebugTestOtp("");
     setMfaTicket("");
     setMaskedEmail("");
     setMaskedPhone("");
@@ -492,6 +500,7 @@ export default function LoginPage({
     setOtpCode("");
     setOtpError("");
     setOtpSentNotice("");
+    setDebugTestOtp("");
     setResendTimer(0);
   };
 
@@ -877,6 +886,27 @@ export default function LoginPage({
               {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
                   {otpSentNotice}
+                </div>
+              )}
+
+              {/* Testing Passcode Banner */}
+              {debugTestOtp && selectedMethod !== "AUTHENTICATOR" && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-blue-900 uppercase text-[9.5px] tracking-wider bg-blue-100 px-2 py-0.5 rounded border border-blue-300">
+                      Testing Passcode
+                    </span>
+                    <span className="font-mono text-base font-black text-blue-900 tracking-widest">
+                      {debugTestOtp}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(debugTestOtp)}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg transition shadow-2xs cursor-pointer active:scale-95"
+                  >
+                    Auto-Fill Code
+                  </button>
                 </div>
               )}
 

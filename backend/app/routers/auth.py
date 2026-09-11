@@ -215,6 +215,7 @@ def send_otp(request: MFASendOTPRequest, background_tasks: BackgroundTasks, db: 
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
+        'test_otp': code,
     }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
