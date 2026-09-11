@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -96,11 +96,36 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
                 return True
     return False
 
+@router.get('/api/records/approved', response_model=List[InvoiceResponse])
+@router.get('/api/documents/approved', response_model=List[InvoiceResponse])
+@router.get('/api/invoices/approved', response_model=List[InvoiceResponse])
+def get_approved_invoices(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    return get_all_invoices(status="approved", db=db, current_user=current_user)
+
 @router.get('/api/records', response_model=List[InvoiceResponse])
 @router.get('/api/documents', response_model=List[InvoiceResponse])
 @router.get('/api/invoices', response_model=List[InvoiceResponse])
-def get_all_invoices(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
-    invoices = db.query(Invoice).filter(Invoice.is_deleted == False).order_by(Invoice.created_at.desc()).all()
+def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    query = db.query(Invoice).filter(Invoice.is_deleted == False)
+    if status:
+        s_low = status.strip().lower()
+        if s_low == 'approved':
+            query = query.filter(
+                or_(
+                    Invoice.status.ilike('%approved%'),
+                    Invoice.status.ilike('%settled%'),
+                    Invoice.status.ilike('%paid%')
+                )
+            )
+        elif s_low in ['workflow', 'active', 'pending']:
+            query = query.filter(
+                ~or_(
+                    Invoice.status.ilike('%approved%'),
+                    Invoice.status.ilike('%settled%'),
+                    Invoice.status.ilike('%paid%')
+                )
+            )
+    invoices = query.order_by(Invoice.created_at.desc()).all()
     approved_invoice_ids = set()
     rejected_invoice_ids = set()
     if current_user:

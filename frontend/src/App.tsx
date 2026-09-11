@@ -9,6 +9,7 @@ import DataVerificationPage from "./components/DataVerificationPage.tsx";
 import ApprovalQueuePage from "./components/ApprovalQueuePage.tsx";
 import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
 import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
+import ApprovedDocumentsPage from "./components/ApprovedDocumentsPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
 
@@ -413,9 +414,9 @@ export default function App() {
     if (!isLoggedIn) return;
     
     const permissions = rolePermissions[currentUserRole] || (
-      currentUserRole === "admin" ? ["dashboard", "work-tracker", "upload", "data-verification", "admin"] :
-      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "admin"] :
-      ["dashboard", "work-tracker"]
+      currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "admin"] :
+      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "admin"] :
+      ["dashboard", "work-tracker", "approved-documents"]
     );
     
     const viewMapping: Record<string, string> = {
@@ -597,6 +598,7 @@ export default function App() {
                 currentUserUsername={currentUserUsername}
                 setCurrentView={setCurrentView}
                 onNavigateToWorkTracker={handleNavigateToWorkTracker}
+                onNavigateToApproved={() => setCurrentView("approved-documents")}
                 requireGRN={requireGRN}
               />
             )}
@@ -609,6 +611,17 @@ export default function App() {
                 currentUserEmail={currentUserEmail}
                 currentUserUsername={currentUserUsername}
                 initialStatusFilter={workTrackerInitialFilter}
+              />
+            )}
+
+            {currentView === "approved-documents" && (
+              <ApprovedDocumentsPage
+                documents={documents}
+                onViewDocument={handleViewDocument}
+                currentUserRole={currentUserRole}
+                currentUserEmail={currentUserEmail}
+                currentUserUsername={currentUserUsername}
+                onRefreshDocs={handleFullRefresh}
               />
             )}
 

@@ -134,12 +134,20 @@ export default function WorkTrackerPage({
     currentUserRole === 'admin' ? 'all' : 'assigned'
   );
 
+  // Work Tracker strictly manages active/workflow documents; Approved documents are excluded
+  const workflowBaseDocs = useMemo(() => {
+    return documents.filter(doc => {
+      const s = (doc.status || "").toLowerCase().trim();
+      return !s.includes("approved") && !s.includes("settled") && !s.includes("paid") && !s.includes("ready for payment");
+    });
+  }, [documents]);
+
   // Filter documents: non-admin users see strictly documents assigned to them (with fallback to all)
   const visibleDocs = useMemo(() => {
-    if (trackerScope === "all" || currentUserRole === "admin") return documents;
-    const filtered = documents.filter(doc => isAssignedToUser(doc) || !!doc.is_current_approver || !!doc.has_approved);
-    return filtered.length > 0 ? filtered : documents;
-  }, [documents, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
+    if (trackerScope === "all" || currentUserRole === "admin") return workflowBaseDocs;
+    const filtered = workflowBaseDocs.filter(doc => isAssignedToUser(doc) || !!doc.is_current_approver || !!doc.has_approved);
+    return filtered.length > 0 ? filtered : workflowBaseDocs;
+  }, [workflowBaseDocs, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
 
   // Derive dynamic document types (includes 'ALL' for cross-category views)
   const dynamicTypes = useMemo(() => {
@@ -219,12 +227,10 @@ export default function WorkTrackerPage({
         }
       }
 
-      // Status filter
+      // Status filter (strictly handles active workflow statuses: pending, hold, rejected, cancelled)
       if (statusFilter !== "all") {
         const st = (doc.status || "").toLowerCase();
-        if (statusFilter === "approved") {
-          if (!st.includes("approve") && !st.includes("paid") && !st.includes("ready") && !st.includes("settled")) return false;
-        } else if (statusFilter === "pending") {
+        if (statusFilter === "pending") {
           if (
             st.includes("reject") || 
             st.includes("cancel") || 
@@ -350,7 +356,6 @@ export default function WorkTrackerPage({
               <option value="pending">Pending</option>
               <option value="hold">On Hold</option>
               <option value="rejected">Rejected</option>
-              <option value="approved">Approved</option>
               <option value="cancelled">Cancelled</option>
             </select>
 

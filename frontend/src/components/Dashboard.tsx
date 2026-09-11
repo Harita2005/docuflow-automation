@@ -25,6 +25,7 @@ interface DashboardProps {
   currentUserUsername?: string;
   setCurrentView?: (view: string) => void;
   onNavigateToWorkTracker?: (statusFilter: string) => void;
+  onNavigateToApproved?: () => void;
   requireGRN?: boolean;
 }
 
@@ -37,7 +38,8 @@ export default function Dashboard({
   currentUserEmail = "",
   currentUserUsername = "",
   setCurrentView,
-  onNavigateToWorkTracker
+  onNavigateToWorkTracker,
+  onNavigateToApproved
 }: DashboardProps) {
   const [activeDocType, setActiveDocType] = useState<string>("ALL DOCUMENTS");
   const [kpiFilter, setKpiFilter] = useState<'all' | 'pending' | 'hold' | 'approved' | 'progress' | 'rejected'>('all');
@@ -150,6 +152,16 @@ export default function Dashboard({
       setCurrentView("work-tracker");
     } else {
       setKpiFilter(kpiFilter === status ? 'all' : status);
+    }
+  };
+
+  const handleApprovedCardClick = () => {
+    if (onNavigateToApproved) {
+      onNavigateToApproved();
+    } else if (setCurrentView) {
+      setCurrentView("approved-documents");
+    } else {
+      setKpiFilter(kpiFilter === 'approved' ? 'all' : 'approved');
     }
   };
 
@@ -355,17 +367,21 @@ export default function Dashboard({
 
         {/* Card 3: APPROVED */}
         <div 
-          onClick={() => setKpiFilter(kpiFilter === 'approved' ? 'all' : 'approved')}
-          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
-            kpiFilter === 'approved' ? 'border-emerald-600 ring-2 ring-emerald-600/40 bg-emerald-50/20' : 'border-[#E2E7E3] hover:border-emerald-300'
-          }`}
+          onClick={handleApprovedCardClick}
+          className="bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer border-[#E2E7E3] hover:border-emerald-400 hover:ring-2 hover:ring-emerald-400/20"
+          title="Click to view dedicated Approved Documents page"
         >
-          <div className="flex items-center gap-1">
-            <div className="h-5 w-5 rounded-md bg-[#E7F9F1] text-[#059669] flex items-center justify-center shrink-0 border border-[#A7F3D0]">
-              <CheckCircle2 className="h-3 w-3" />
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#E7F9F1] text-[#059669] flex items-center justify-center shrink-0 border border-[#A7F3D0]">
+                <CheckCircle2 className="h-3 w-3" />
+              </div>
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+                APPROVED
+              </span>
             </div>
-            <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
-              APPROVED
+            <span className="text-[7.5px] font-extrabold text-[#059669] bg-[#E7F9F1] px-1 py-0.2 rounded border border-[#A7F3D0]/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              OPEN PAGE →
             </span>
           </div>
 
@@ -387,7 +403,7 @@ export default function Dashboard({
               />
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>SETTLED</span>
+              <span>SETTLED REPOSITORY</span>
               <span>{approvedCount} OF {totalCount}</span>
             </div>
           </div>

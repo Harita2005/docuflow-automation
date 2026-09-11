@@ -1,23 +1,33 @@
-import sys
-from pathlib import Path
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
-from app.database import SessionLocal
-from app.models import WorkflowStepDefinition
+import pyodbc
 
 def update_approvers():
-    db = SessionLocal()
+    conn = pyodbc.connect(
+        'DRIVER={ODBC Driver 17 for SQL Server};'
+        'SERVER=127.0.0.1,1433;'
+        'DATABASE=DocuFlowDB;'
+        'Trusted_Connection=yes;'
+    )
+    cur = conn.cursor()
     try:
-        s1 = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 1).update({'approver_target': 'YUVASREE', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        s2 = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 2).update({'approver_target': 'Nattudurai', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        s3 = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number == 3).update({'approver_target': 'VIGNESH', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        s4 = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.stage_number >= 4).update({'approver_target': 'VARUNAN', 'approver_type': 'Specific Employee'}, synchronize_session=False)
-        db.commit()
-        print(f'[SUCCESS] Updated {s1} Stage 1 steps to YUVASREE, {s2} Stage 2 steps to Nattudurai, {s3} Stage 3 steps to VIGNESH, {s4} Stage 4+ steps to VARUNAN.')
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug('Handled exception: %s', e)
+        cur.execute("UPDATE workflow_step_definitions SET approver_target='YUVASREE', approver_type='Specific Employee' WHERE stage_number=1")
+        s1 = cur.rowcount
+        cur.execute("UPDATE workflow_step_definitions SET approver_target='Nattudurai', approver_type='Specific Employee' WHERE stage_number=2")
+        s2 = cur.rowcount
+        cur.execute("UPDATE workflow_step_definitions SET approver_target='VIGNESH', approver_type='Specific Employee' WHERE stage_number=3")
+        s3 = cur.rowcount
+        cur.execute("UPDATE workflow_step_definitions SET approver_target='VARUNAN', approver_type='Specific Employee' WHERE stage_number>=4")
+        s4 = cur.rowcount
+
+        # Also update active documents to point to the designated stage approver
+        cur.execute("UPDATE documents SET assigned_approver='YUVASREE' WHERE current_stage=1 AND status NOT IN ('Approved', 'Settled', 'Paid', 'Cancelled')")
+        cur.execute("UPDATE documents SET assigned_approver='Nattudurai' WHERE current_stage=2 AND status NOT IN ('Approved', 'Settled', 'Paid', 'Cancelled')")
+        cur.execute("UPDATE documents SET assigned_approver='VIGNESH' WHERE current_stage=3 AND status NOT IN ('Approved', 'Settled', 'Paid', 'Cancelled')")
+        cur.execute("UPDATE documents SET assigned_approver='VARUNAN' WHERE current_stage>=4 AND status NOT IN ('Approved', 'Settled', 'Paid', 'Cancelled')")
+
+        conn.commit()
+        print(f"[SUCCESS] Updated {s1} Stage 1 steps (YUVASREE), {s2} Stage 2 steps (Nattudurai), {s3} Stage 3 steps (VIGNESH), {s4} Stage 4+ steps (VARUNAN).")
     finally:
-        db.close()
+        conn.close()
+
 if __name__ == '__main__':
     update_approvers()
