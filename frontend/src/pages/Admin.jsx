@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, Calendar, CheckCircle2, RotateCw } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -62,9 +62,27 @@ export default function Admin() {
   const [sandboxResult, setSandboxResult] = useState(null);
   const [testingSandbox, setTestingSandbox] = useState(false);
 
+  // Audit Log Retention Policy State
+  const [retentionInfo, setRetentionInfo] = useState({
+    retention_days: 7,
+    default_retention_days: 7,
+    total_logs: 0,
+    oldest_log: null,
+    expired_logs_count: 0,
+    cutoff_timestamp: null,
+  });
+  const [retentionDraft, setRetentionDraft] = useState("7");
+  const [customDays, setCustomDays] = useState("");
+  const [isCustomRetention, setIsCustomRetention] = useState(false);
+  const [retentionSaving, setRetentionSaving] = useState(false);
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
+  const [cleaningUpLogs, setCleaningUpLogs] = useState(false);
+  const [retentionNotice, setRetentionNotice] = useState(null);
+
   useEffect(() => {
     fetchData();
     fetchAuditLogs();
+    fetchRetentionInfo();
 
     const handleUpdateAddAction = (e) => {
       setIsRootView(e.detail);
@@ -75,6 +93,10 @@ export default function Admin() {
 
   useEffect(() => {
     setIsRootView(true);
+    if (activeTab === "audit") {
+      fetchAuditLogs();
+      fetchRetentionInfo();
+    }
   }, [activeTab]);
 
   const fetchAuditLogs = async () => {
@@ -84,6 +106,103 @@ export default function Admin() {
       const res = await fetch('/api/admin/audit-logs', { headers });
       if (res.ok) setAuditLogs(await res.json());
     } catch {}
+  };
+
+  const fetchRetentionInfo = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs/retention', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setRetentionInfo(data);
+        const daysStr = String(data.retention_days);
+        if (["7", "14", "30", "90", "180", "365", "0"].includes(daysStr)) {
+          setRetentionDraft(daysStr);
+          setIsCustomRetention(false);
+        } else {
+          setRetentionDraft("custom");
+          setCustomDays(daysStr);
+          setIsCustomRetention(true);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load audit retention policy:", err);
+    }
+  };
+
+  const handleSaveRetention = async () => {
+    setRetentionSaving(true);
+    setRetentionNotice(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+      let days = 7;
+      if (isCustomRetention) {
+        days = parseInt(customDays, 10);
+        if (isNaN(days) || days < 0) days = 7;
+      } else {
+        days = parseInt(retentionDraft, 10);
+        if (isNaN(days) || days < 0) days = 7;
+      }
+
+      const res = await fetch('/api/admin/audit-logs/retention', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ retention_days: days, prune_immediately: false })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRetentionNotice({
+          type: 'success',
+          text: days === 0 
+            ? 'Policy saved: Logs retained indefinitely (no automatic expiry).' 
+            : `Policy saved: Logs retained for ${days} days (${days === 7 ? '1 week default' : 'extended policy'}).`
+        });
+        await fetchRetentionInfo();
+        await fetchAuditLogs();
+      } else {
+        const err = await res.json();
+        setRetentionNotice({ type: 'error', text: err.detail || 'Failed to update retention policy' });
+      }
+    } catch (e) {
+      setRetentionNotice({ type: 'error', text: e.message || 'Error saving retention' });
+    } finally {
+      setRetentionSaving(false);
+    }
+  };
+
+  const handleCleanupNow = async () => {
+    setCleaningUpLogs(true);
+    setRetentionNotice(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs/cleanup', {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRetentionNotice({
+          type: 'success',
+          text: `Purged ${data.pruned} expired log(s) older than ${data.retention_days} days.`
+        });
+        setCleanupModalOpen(false);
+        await fetchRetentionInfo();
+        await fetchAuditLogs();
+      } else {
+        const err = await res.json();
+        setRetentionNotice({ type: 'error', text: err.detail || 'Cleanup failed' });
+      }
+    } catch (e) {
+      setRetentionNotice({ type: 'error', text: e.message || 'Cleanup error' });
+    } finally {
+      setCleaningUpLogs(false);
+    }
   };
 
   const _handleTriggerSync = async () => {
@@ -897,6 +1016,121 @@ export default function Admin() {
             </div>
           </div>
         </div>
+
+        {/* Retention Policy Control Bar */}
+        <div className="bg-slate-50/90 border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-slate-700 font-semibold text-[11px]">
+              <Clock className="h-3.5 w-3.5 text-indigo-600" />
+              <span>Retention Policy:</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                retentionInfo.retention_days === 7 
+                  ? "bg-blue-50 text-blue-700 border-blue-200" 
+                  : retentionInfo.retention_days === 0
+                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+              }`}>
+                {retentionInfo.retention_days === 0 
+                  ? "Indefinite (Keep All)" 
+                  : `${retentionInfo.retention_days} Days ${retentionInfo.retention_days === 7 ? "(Default: 1 Week)" : "(Extended)"}`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] text-slate-500 font-medium">Keep logs for:</label>
+              <select
+                value={retentionDraft}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRetentionDraft(val);
+                  setIsCustomRetention(val === "custom");
+                  if (val !== "custom") setCustomDays("");
+                }}
+                className="text-[11px] font-medium bg-white border border-slate-300 rounded px-2 py-1 shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-700"
+              >
+                <option value="7">1 Week (7 Days) - Default</option>
+                <option value="14">2 Weeks (14 Days)</option>
+                <option value="30">1 Month (30 Days)</option>
+                <option value="90">3 Months (90 Days)</option>
+                <option value="180">6 Months (180 Days)</option>
+                <option value="365">1 Year (365 Days)</option>
+                <option value="custom">Custom Days...</option>
+                <option value="0">Indefinite (No Auto-Deletion)</option>
+              </select>
+
+              {isCustomRetention && (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="3650"
+                    placeholder="Days"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    className="w-20 text-[11px] font-medium bg-white border border-slate-300 rounded px-2 py-1 shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-700"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">days</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveRetention}
+                disabled={retentionSaving || (isCustomRetention && (!customDays || parseInt(customDays, 10) <= 0))}
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded shadow-sm transition-all"
+              >
+                {retentionSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                Save Policy
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {retentionInfo.expired_logs_count > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                  {retentionInfo.expired_logs_count} expired logs (&gt;{retentionInfo.retention_days}d)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCleanupModalOpen(true)}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded shadow-sm transition-all"
+                >
+                  <Trash2 className="h-3 w-3 text-rose-600" />
+                  Prune Expired
+                </button>
+              </div>
+            ) : (
+              <span className="text-[10px] text-slate-400 italic">
+                All logs within retention window ({retentionInfo.total_logs} total)
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { fetchRetentionInfo(); fetchAuditLogs(); }}
+              title="Refresh ledger and retention stats"
+              className="p-1 text-slate-400 hover:text-slate-600 transition-colors rounded"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {retentionNotice && (
+          <div className={`px-4 py-1.5 text-[10px] font-medium border-b flex items-center justify-between ${
+            retentionNotice.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}>
+            <span className="flex items-center gap-1.5">
+              {retentionNotice.type === 'success' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />}
+              {retentionNotice.text}
+            </span>
+            <button onClick={() => setRetentionNotice(null)} className="text-slate-400 hover:text-slate-700 font-bold ml-2">×</button>
+          </div>
+        )}
+
         <div className="p-0 overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -1070,6 +1304,60 @@ export default function Admin() {
               className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md transition"
             >
               Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Audit Log Cleanup Confirmation Modal */}
+    {cleanupModalOpen && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full animate-slideUp">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-rose-100 rounded-full text-rose-600">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Prune Expired Audit Logs</h3>
+          </div>
+          <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+            Are you sure you want to permanently prune expired audit logs? Active logs within the retention window will remain untouched.
+          </p>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 space-y-1.5 text-[11px]">
+            <div className="flex justify-between text-slate-600">
+              <span>Configured Retention:</span>
+              <span className="font-bold text-slate-800">{retentionInfo.retention_days} Days ({retentionInfo.retention_days === 7 ? 'Default 1 Week' : 'Custom'})</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Expired logs to delete:</span>
+              <span className="font-bold text-rose-600">{retentionInfo.expired_logs_count} entries</span>
+            </div>
+            {retentionInfo.cutoff_timestamp && (
+              <div className="flex justify-between text-slate-600">
+                <span>Cutoff date:</span>
+                <span className="font-mono text-[10px] text-slate-700">{new Date(retentionInfo.cutoff_timestamp).toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-600">
+              <span>Logs retained (within window):</span>
+              <span className="font-bold text-emerald-600">{Math.max(0, retentionInfo.total_logs - retentionInfo.expired_logs_count)} entries</span>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setCleanupModalOpen(false)}
+              disabled={cleaningUpLogs}
+              className="px-4 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCleanupNow}
+              disabled={cleaningUpLogs}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-md transition"
+            >
+              {cleaningUpLogs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {cleaningUpLogs ? "Purging..." : "Confirm & Prune"}
             </button>
           </div>
         </div>

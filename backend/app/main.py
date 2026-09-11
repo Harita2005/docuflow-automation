@@ -7,10 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config.settings import settings
-from .database.connection import engine
+from .database.connection import SessionLocal, engine
 from sqlalchemy import text
 from .database.models import Base
-from .routers.audit import router as audit_router
+from .routers.audit import prune_expired_audit_logs, router as audit_router
 from .routers.auth import router as auth_router
 from .routers.callback_integrations import router as callback_integrations_router
 from .routers.conditions import router as conditions_router
@@ -50,6 +50,13 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("IF COL_LENGTH('documents', 'file_size') IS NULL ALTER TABLE documents ADD file_size BIGINT NULL;"))
                 # is_mandatory on document_checklist_states
                 conn.execute(text("IF COL_LENGTH('document_checklist_states', 'is_mandatory') IS NULL ALTER TABLE document_checklist_states ADD is_mandatory BIT NULL DEFAULT 0;"))
+
+            # Automatic retention pruning for audit logs on startup
+            try:
+                with SessionLocal() as db_session:
+                    prune_expired_audit_logs(db_session)
+            except Exception as prune_err:
+                logger.warning(f"Audit log retention pruning deferred: {prune_err}")
         except Exception as exc:
             logger.warning(f"Database schema initialization deferred: {exc}")
     yield

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     EXCEL_PATH: Path = BASE_DIR / "data" / "SD Checklists.xlsx"
 
+    # Audit Log Retention (default 7 days / 1 week)
+    AUDIT_LOG_RETENTION_DAYS: int = 7
+
     # SMTP Configuration
     SMTP_HOST: str = "smtp.office365.com"
     SMTP_PORT: int = 587

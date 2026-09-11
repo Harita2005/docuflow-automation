@@ -43,5 +43,10 @@
     "key": "ORGANIZATION_NAME",
     "value": "DAAS",
     "description": "Organization / Company display name displayed on top header"
+  },
+  {
+    "key": "AUDIT_LOG_RETENTION_DAYS",
+    "value": "7",
+    "description": "Days to retain audit logs in application before pruning (default: 7)"
   }
 ]
