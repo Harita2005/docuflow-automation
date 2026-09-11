@@ -51,9 +51,9 @@ export default function App() {
   const [kickedReason, setKickedReason] = useState<string | null>(() => sessionStorage.getItem("sessionKickedReason") || null);
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
-    employee: ["dashboard", "work-tracker", "dapi-sync-back"],
-    settings_editor: ["dashboard", "work-tracker", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
-    admin: ["dashboard", "work-tracker", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
+    employee: ["dashboard", "work-tracker", "approved-documents", "dapi-sync-back"],
+    settings_editor: ["dashboard", "work-tracker", "approved-documents", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
+    admin: ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
   });
 
   // Multi-Tab Synchronization across tabs in the same browser

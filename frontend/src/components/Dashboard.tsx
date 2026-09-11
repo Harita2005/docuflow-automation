@@ -2,7 +2,10 @@ import { useState } from "react";
 import { 
   Clock, 
   PauseCircle, 
+  CheckCircle2, 
+  Activity, 
   XCircle, 
+  FileText, 
   ShieldCheck, 
   CalendarDays, 
   ChevronDown,
@@ -36,7 +39,7 @@ export default function Dashboard({
   currentUserUsername = "",
   setCurrentView,
   onNavigateToWorkTracker,
-  onNavigateToApproved: _onNavigateToApproved
+  onNavigateToApproved
 }: DashboardProps) {
   const [activeDocType, setActiveDocType] = useState<string>("ALL DOCUMENTS");
   const [kpiFilter, setKpiFilter] = useState<'all' | 'pending' | 'hold' | 'rejected'>('all');
@@ -118,33 +121,31 @@ export default function Dashboard({
     return s.includes("pending") || s.includes("initiated") || s.includes("progress") || s.includes("unrouted") || s.includes("verification") || s.includes("review");
   };
 
-  // Base dataset strictly for active workflow documents (Pending, Hold, Rejected)
-  // Approved documents are handled exclusively on the dedicated Approved Documents page
+  const isProgressStatus = (st: string) => {
+    const s = (st || "").toLowerCase();
+    if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
+    return s.includes("progress") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("stage") || s.includes("approv");
+  };
+
   const allAvailableDocs = (currentUserRole !== "admin" && documents && documents.length > 0)
     ? userAssignedDocs
     : displayDocs;
 
-  const baseDocs = allAvailableDocs.filter(d => !isApprovedStatus(d.status));
+  // Base dataset includes all documents for total visibility
+  const baseDocs = allAvailableDocs;
 
   const totalCount = baseDocs.length;
   const pendingCount = baseDocs.filter(d => isPendingStatus(d.status)).length;
   const holdCount = baseDocs.filter(d => isHoldStatus(d.status)).length;
+  const approvedCount = baseDocs.filter(d => isApprovedStatus(d.status)).length;
+  const progressCount = baseDocs.filter(d => isProgressStatus(d.status) || isPendingStatus(d.status)).length;
   const rejectedCount = baseDocs.filter(d => isRejectedStatus(d.status)).length;
 
   const pendingPercent = totalCount > 0 ? Math.round((pendingCount / totalCount) * 100) : 0;
   const holdPercent = totalCount > 0 ? Math.round((holdCount / totalCount) * 100) : 0;
+  const approvedPercent = totalCount > 0 ? Math.round((approvedCount / totalCount) * 100) : 0;
+  const progressPercent = totalCount > 0 ? Math.round((progressCount / totalCount) * 100) : 0;
   const rejectedPercent = totalCount > 0 ? Math.round((rejectedCount / totalCount) * 100) : 0;
-
-  const handleKpiCardClick = (status: 'pending' | 'hold' | 'rejected') => {
-    if (onNavigateToWorkTracker) {
-      onNavigateToWorkTracker(status);
-    } else if (setCurrentView) {
-      localStorage.setItem("workTrackerStatusFilter", status);
-      setCurrentView("work-tracker");
-    } else {
-      setKpiFilter(kpiFilter === status ? 'all' : status);
-    }
-  };
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {
@@ -251,157 +252,344 @@ export default function Dashboard({
   return (
     <div className="bg-[#F7F8F6] p-2 sm:p-2.5 space-y-2.5 animate-fadeIn font-sans text-slate-800 max-w-[1720px] mx-auto">
       
-      {/* 1. THREE KPI STATISTIC CARDS ROW (STRICTLY PENDING, HOLD, REJECTED) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+      {/* 1. SIX CURVED STATISTIC CARDS ROW */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 sm:gap-2">
         
-        {/* Card 1: PENDING */}
+        {/* Card 1: PENDING (Filter in Dashboard) */}
         <div 
-          onClick={() => handleKpiCardClick('pending')}
-          title="Click to view Pending documents in Work Tracker"
-          className={`bg-white border rounded-xl p-3 min-h-[96px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
-            kpiFilter === 'pending' ? 'border-[#FFBE00] ring-2 ring-[#FFBE00]/30' : 'border-[#E2E7E3] hover:border-[#FFBE00]'
+          onClick={() => setKpiFilter(kpiFilter === 'pending' ? 'all' : 'pending')}
+          title="Click to show Pending documents in Dashboard"
+          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
+            kpiFilter === 'pending'
+              ? 'border-[#FFBE00] ring-2 ring-[#FFBE00]/40 bg-[#FFFDF5]'
+              : 'border-[#E2E7E3] hover:border-[#FFBE00]'
           }`}
         >
           <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-1.5">
-              <div className="h-6 w-6 rounded-md bg-[#FFF7E2] text-[#D97706] flex items-center justify-center shrink-0 border border-[#FDE68A]">
-                <Clock className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#FFF7E2] text-[#D97706] flex items-center justify-center shrink-0 border border-[#FDE68A]">
+                <Clock className="h-3 w-3" />
               </div>
-              <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
                 PENDING
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[8.5px] font-extrabold text-slate-400 group-hover:text-[#D97706] transition-colors">
-              <span>WORK TRACKER</span>
-              <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-            </div>
+            {kpiFilter === 'pending' ? (
+              <span className="text-[7px] font-black bg-[#FFBE00] text-[#002F20] px-1 py-0.2 rounded">
+                ACTIVE
+              </span>
+            ) : (
+              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#D97706] transition-colors">
+                FILTER ↓
+              </span>
+            )}
           </div>
 
-          <div className="flex items-baseline justify-between my-auto px-0.5 pt-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-display leading-none">
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
               {pendingCount}
             </span>
-            <span className="text-[9px] font-extrabold text-[#D97706] bg-[#FFF7E2] px-2 py-0.5 rounded-full border border-[#FDE68A]/60">
-              {pendingPercent}% OF ACTIVE
+            <span className="text-[8px] font-extrabold text-[#D97706] bg-[#FFF7E2] px-1.5 py-0.5 rounded border border-[#FDE68A]/60">
+              {pendingPercent}% OF TOTAL
             </span>
           </div>
 
           {/* Dynamic Real-time Progress Bar */}
-          <div className="w-full space-y-1 mt-1.5">
-            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
               <div 
                 className="h-full rounded-full bg-[#FFBE00] transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(pendingCount > 0 ? 5 : 0, pendingPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>IN WORKFLOW PIPELINE</span>
-              <span>{pendingCount} OF {totalCount} ACTIVE</span>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>IN DASHBOARD</span>
+              <span>{pendingCount} OF {totalCount}</span>
             </div>
           </div>
 
           {/* Curved Bottom Accent Line */}
-          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#FFBE00] rounded-b-xl"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#FFBE00] rounded-b-xl"></div>
         </div>
 
-        {/* Card 2: HOLD */}
+        {/* Card 2: HOLD (Filter in Dashboard) */}
         <div 
-          onClick={() => handleKpiCardClick('hold')}
-          title="Click to view On Hold documents in Work Tracker"
-          className={`bg-white border rounded-xl p-3 min-h-[96px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
-            kpiFilter === 'hold' ? 'border-[#A855F7] ring-2 ring-[#A855F7]/30' : 'border-[#E2E7E3] hover:border-purple-400'
+          onClick={() => setKpiFilter(kpiFilter === 'hold' ? 'all' : 'hold')}
+          title="Click to show Hold documents in Dashboard"
+          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
+            kpiFilter === 'hold'
+              ? 'border-[#A855F7] ring-2 ring-[#A855F7]/40 bg-[#FAF5FF]'
+              : 'border-[#E2E7E3] hover:border-purple-400'
           }`}
         >
           <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-1.5">
-              <div className="h-6 w-6 rounded-md bg-[#F7E8FF] text-[#9333EA] flex items-center justify-center shrink-0 border border-[#F0ABFC]">
-                <PauseCircle className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#F7E8FF] text-[#9333EA] flex items-center justify-center shrink-0 border border-[#F0ABFC]">
+                <PauseCircle className="h-3 w-3" />
               </div>
-              <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
                 HOLD
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[8.5px] font-extrabold text-slate-400 group-hover:text-[#9333EA] transition-colors">
-              <span>WORK TRACKER</span>
-              <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-            </div>
+            {kpiFilter === 'hold' ? (
+              <span className="text-[7px] font-black bg-[#A855F7] text-white px-1 py-0.2 rounded">
+                ACTIVE
+              </span>
+            ) : (
+              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#9333EA] transition-colors">
+                FILTER ↓
+              </span>
+            )}
           </div>
 
-          <div className="flex items-baseline justify-between my-auto px-0.5 pt-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-display leading-none">
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
               {holdCount}
             </span>
-            <span className="text-[9px] font-extrabold text-[#9333EA] bg-[#F7E8FF] px-2 py-0.5 rounded-full border border-[#F0ABFC]/60">
-              {holdPercent}% OF ACTIVE
+            <span className="text-[8px] font-extrabold text-[#9333EA] bg-[#F7E8FF] px-1.5 py-0.5 rounded border border-[#F0ABFC]/60">
+              {holdPercent}% OF TOTAL
             </span>
           </div>
 
           {/* Dynamic Real-time Progress Bar */}
-          <div className="w-full space-y-1 mt-1.5">
-            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
               <div 
                 className="h-full rounded-full bg-[#A855F7] transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(holdCount > 0 ? 5 : 0, holdPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>PENDING CLARIFICATION</span>
-              <span>{holdCount} OF {totalCount} ACTIVE</span>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>IN DASHBOARD</span>
+              <span>{holdCount} OF {totalCount}</span>
             </div>
           </div>
 
           {/* Curved Bottom Accent Line */}
-          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#A855F7] rounded-b-xl"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#A855F7] rounded-b-xl"></div>
         </div>
 
-        {/* Card 3: REJECTED */}
+        {/* Card 3: APPROVED (Navigates to Approved Documents page) */}
         <div 
-          onClick={() => handleKpiCardClick('rejected')}
-          title="Click to view Rejected documents in Work Tracker"
-          className={`bg-white border rounded-xl p-3 min-h-[96px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
-            kpiFilter === 'rejected' ? 'border-[#EF4444] ring-2 ring-[#EF4444]/30' : 'border-[#E2E7E3] hover:border-rose-400'
-          }`}
+          onClick={() => {
+            if (onNavigateToApproved) {
+              onNavigateToApproved();
+            } else if (setCurrentView) {
+              setCurrentView("approved-documents");
+            }
+          }}
+          title="Click to open dedicated Approved Documents page"
+          className="bg-white border border-[#E2E7E3] hover:border-emerald-400 hover:ring-2 hover:ring-emerald-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-1.5">
-              <div className="h-6 w-6 rounded-md bg-[#FFECEF] text-[#DC2626] flex items-center justify-center shrink-0 border border-[#FECDD3]">
-                <XCircle className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#E7F9F1] text-[#059669] flex items-center justify-center shrink-0 border border-[#A7F3D0]">
+                <CheckCircle2 className="h-3 w-3" />
               </div>
-              <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
-                REJECTED
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+                APPROVED
               </span>
             </div>
-            <div className="flex items-center gap-1 text-[8.5px] font-extrabold text-slate-400 group-hover:text-[#DC2626] transition-colors">
-              <span>WORK TRACKER</span>
-              <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-            </div>
+            <span className="text-[7.5px] font-extrabold text-[#059669] bg-[#E7F9F1] px-1 py-0.2 rounded border border-[#A7F3D0]/60 group-hover:bg-[#059669] group-hover:text-white transition-all flex items-center gap-0.5">
+              <span>PAGE</span>
+              <ArrowRight className="h-2 w-2" />
+            </span>
           </div>
 
-          <div className="flex items-baseline justify-between my-auto px-0.5 pt-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-display leading-none">
-              {rejectedCount}
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+              {approvedCount}
             </span>
-            <span className="text-[9px] font-extrabold text-[#DC2626] bg-[#FFECEF] px-2 py-0.5 rounded-full border border-[#FECDD3]/60">
-              {rejectedPercent}% OF ACTIVE
+            <span className="text-[8px] font-extrabold text-[#059669] bg-[#E7F9F1] px-1.5 py-0.5 rounded border border-[#A7F3D0]/60">
+              {approvedPercent}% OF TOTAL
             </span>
           </div>
 
           {/* Dynamic Real-time Progress Bar */}
-          <div className="w-full space-y-1 mt-1.5">
-            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+              <div 
+                className="h-full rounded-full bg-[#10B981] transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(approvedCount > 0 ? 5 : 0, approvedPercent))}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>APPROVED REPOSITORY</span>
+              <span>{approvedCount} OF {totalCount}</span>
+            </div>
+          </div>
+
+          {/* Curved Bottom Accent Line */}
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#10B981] rounded-b-xl"></div>
+        </div>
+
+        {/* Card 4: PROGRESS (Navigates to Work Tracker) */}
+        <div 
+          onClick={() => {
+            if (onNavigateToWorkTracker) {
+              onNavigateToWorkTracker("all");
+            } else if (setCurrentView) {
+              localStorage.setItem("workTrackerStatusFilter", "all");
+              setCurrentView("work-tracker");
+            }
+          }}
+          title="Click to open Work Tracker"
+          className="bg-white border border-[#E2E7E3] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#EAF3FF] text-[#2563EB] flex items-center justify-center shrink-0 border border-[#BFDBFE]">
+                <Activity className="h-3 w-3" />
+              </div>
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+                PROGRESS
+              </span>
+            </div>
+            <span className="text-[7.5px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1 py-0.2 rounded border border-[#BFDBFE]/60 group-hover:bg-[#2563EB] group-hover:text-white transition-all flex items-center gap-0.5">
+              <span>TRACKER</span>
+              <ArrowRight className="h-2 w-2" />
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+              {progressCount}
+            </span>
+            <span className="text-[8px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1.5 py-0.5 rounded border border-[#BFDBFE]/60">
+              {progressPercent}% OF TOTAL
+            </span>
+          </div>
+
+          {/* Dynamic Real-time Progress Bar */}
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+              <div 
+                className="h-full rounded-full bg-[#3B82F6] transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(progressCount > 0 ? 5 : 0, progressPercent))}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>WORK TRACKER</span>
+              <span>{progressCount} OF {totalCount}</span>
+            </div>
+          </div>
+
+          {/* Curved Bottom Accent Line */}
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#3B82F6] rounded-b-xl"></div>
+        </div>
+
+        {/* Card 5: REJECTED (Filter in Dashboard) */}
+        <div 
+          onClick={() => setKpiFilter(kpiFilter === 'rejected' ? 'all' : 'rejected')}
+          title="Click to show Rejected documents in Dashboard"
+          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
+            kpiFilter === 'rejected'
+              ? 'border-[#EF4444] ring-2 ring-[#EF4444]/40 bg-[#FFF1F2]'
+              : 'border-[#E2E7E3] hover:border-rose-400'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#FFECEF] text-[#DC2626] flex items-center justify-center shrink-0 border border-[#FECDD3]">
+                <XCircle className="h-3 w-3" />
+              </div>
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+                REJECTED
+              </span>
+            </div>
+            {kpiFilter === 'rejected' ? (
+              <span className="text-[7px] font-black bg-[#EF4444] text-white px-1 py-0.2 rounded">
+                ACTIVE
+              </span>
+            ) : (
+              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#DC2626] transition-colors">
+                FILTER ↓
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+              {rejectedCount}
+            </span>
+            <span className="text-[8px] font-extrabold text-[#DC2626] bg-[#FFECEF] px-1.5 py-0.5 rounded border border-[#FECDD3]/60">
+              {rejectedPercent}% OF TOTAL
+            </span>
+          </div>
+
+          {/* Dynamic Real-time Progress Bar */}
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
               <div 
                 className="h-full rounded-full bg-[#EF4444] transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(rejectedCount > 0 ? 5 : 0, rejectedPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>RETURNED / VOIDED</span>
-              <span>{rejectedCount} OF {totalCount} ACTIVE</span>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>IN DASHBOARD</span>
+              <span>{rejectedCount} OF {totalCount}</span>
             </div>
           </div>
 
           {/* Curved Bottom Accent Line */}
-          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#EF4444] rounded-b-xl"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#EF4444] rounded-b-xl"></div>
+        </div>
+
+        {/* Card 6: TOTAL DOC (Shows all in Dashboard) */}
+        <div 
+          onClick={() => setKpiFilter('all')}
+          title="Click to show all documents in Dashboard"
+          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
+            kpiFilter === 'all'
+              ? 'border-[#003F28] ring-2 ring-[#003F28]/30 bg-emerald-50/20'
+              : 'border-[#E2E7E3] hover:border-[#003F28]/60'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              <div className="h-5 w-5 rounded-md bg-[#E6F7FF] text-[#0284C7] flex items-center justify-center shrink-0 border border-[#BAE6FD]">
+                <FileText className="h-3 w-3" />
+              </div>
+              <span className="text-[8.5px] font-black text-slate-700 uppercase tracking-wider font-display truncate">
+                TOTAL DOC
+              </span>
+            </div>
+            {kpiFilter === 'all' ? (
+              <span className="text-[7px] font-black bg-[#003F28] text-white px-1 py-0.2 rounded">
+                ALL
+              </span>
+            ) : (
+              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#0284C7] transition-colors">
+                SHOW ALL
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between my-auto px-0.5">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+              {totalCount}
+            </span>
+            <span className="text-[8px] font-extrabold text-[#0284C7] bg-[#E6F7FF] px-1.5 py-0.5 rounded border border-[#BAE6FD]/60">
+              100% ALL
+            </span>
+          </div>
+
+          {/* Dynamic Real-time Progress Bar */}
+          <div className="w-full space-y-0.5 mt-1">
+            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+              <div 
+                className="h-full rounded-full bg-[#003F28] transition-all duration-500"
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+              <span>ALL REGISTERED</span>
+              <span>{totalCount} TOTAL</span>
+            </div>
+          </div>
+
+          {/* Curved Bottom Accent Line */}
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#003F28] rounded-b-xl"></div>
         </div>
 
       </div>
@@ -413,9 +601,23 @@ export default function Dashboard({
         <div className="flex items-center justify-between pb-2 border-b border-slate-150">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="h-4 w-4 text-[#003F28]" />
-            <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display">
-              DOCUMENT LIST {kpiFilter !== 'all' && <span className="text-amber-700 font-bold ml-1">({kpiFilter.toUpperCase()})</span>}
+            <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display flex items-center">
+              DOCUMENT LIST
+              {kpiFilter !== 'all' && (
+                <span className="text-amber-700 font-bold ml-1">
+                  ({kpiFilter.toUpperCase()} — {filteredDocs.length} DOCS)
+                </span>
+              )}
             </h2>
+            {kpiFilter !== 'all' && (
+              <button
+                onClick={() => setKpiFilter('all')}
+                className="ml-2 text-[8px] font-black text-slate-600 hover:text-white hover:bg-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-300 transition-colors cursor-pointer"
+                title="Reset filter to show all documents"
+              >
+                SHOW ALL ✕
+              </button>
+            )}
           </div>
 
           {/* Date Filter Dropdown */}
