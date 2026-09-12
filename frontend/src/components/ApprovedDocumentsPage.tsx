@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { 
   CheckCircle2, 
   Search, 
@@ -11,7 +11,10 @@ import {
   FileText, 
   UserCheck, 
   X,
-  Filter
+  Filter,
+  ArrowUpDown,
+  SlidersHorizontal,
+  Loader2
 } from "lucide-react";
 import { DbInvoice } from "../types";
 
@@ -26,18 +29,18 @@ interface ApprovedDocumentsPageProps {
 
 const MONTH_NAMES = [
   { value: "all", label: "All Months" },
-  { value: "0", label: "January" },
-  { value: "1", label: "February" },
-  { value: "2", label: "March" },
-  { value: "3", label: "April" },
-  { value: "4", label: "May" },
-  { value: "5", label: "June" },
-  { value: "6", label: "July" },
-  { value: "7", label: "August" },
-  { value: "8", label: "September" },
-  { value: "9", label: "October" },
-  { value: "10", label: "November" },
-  { value: "11", label: "December" },
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
 ];
 
 export default function ApprovedDocumentsPage({
@@ -48,30 +51,77 @@ export default function ApprovedDocumentsPage({
   currentUserUsername: _currentUserUsername = "",
   onRefreshDocs
 }: ApprovedDocumentsPageProps) {
-  // Primary dedicated filters: Year, Month, Date Range, Doc Type & Search
+  // 1. Toolbar state: Search & Sort
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateFilterMode, setDateFilterMode] = useState<"month" | "range">("month");
-  const [selectedYear, setSelectedYear] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
-  const [selectedDocType, setSelectedDocType] = useState<string>("all");
-
-  // Sorting & Pagination states
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor" | "name">("date_desc");
+
+  // 2. Filter Popup open/close state & ref for click outside
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterPopupRef = useRef<HTMLDivElement>(null);
+
+  // 3. Applied Filters (Actively filtering data)
+  const [appliedYear, setAppliedYear] = useState<string>("all");
+  const [appliedMonth, setAppliedMonth] = useState<string>("all");
+  const [appliedDateMode, setAppliedDateMode] = useState<"specific" | "range">("specific");
+  const [appliedDate, setAppliedDate] = useState<string>("");
+  const [appliedFromDate, setAppliedFromDate] = useState<string>("");
+  const [appliedToDate, setAppliedToDate] = useState<string>("");
+  const [appliedDocType, setAppliedDocType] = useState<string>("all");
+
+  // 4. Draft Filters (Inside popup before user clicks "Apply Filters")
+  const [draftYear, setDraftYear] = useState<string>("all");
+  const [draftMonth, setDraftMonth] = useState<string>("all");
+  const [draftDateMode, setDraftDateMode] = useState<"specific" | "range">("specific");
+  const [draftDate, setDraftDate] = useState<string>("");
+  const [draftFromDate, setDraftFromDate] = useState<string>("");
+  const [draftToDate, setDraftToDate] = useState<string>("");
+  const [draftDocType, setDraftDocType] = useState<string>("all");
+
+  // 5. Server Data & Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [serverDocs, setServerDocs] = useState<DbInvoice[]>([]);
+  const [serverTotalCount, setServerTotalCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isUsingServerData, setIsUsingServerData] = useState<boolean>(true);
 
-  // Status check helper: strictly match Approved / Settled / Paid
-  const isApproved = (doc: DbInvoice): boolean => {
-    const s = (doc.status || "").toLowerCase().trim();
-    return s.includes("approved") || s.includes("settled") || s.includes("paid") || s.includes("ready for payment");
+  // Debounce search term by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Sync draft filters when popup opens
+  const handleOpenFilter = () => {
+    if (!isFilterOpen) {
+      setDraftYear(appliedYear);
+      setDraftMonth(appliedMonth);
+      setDraftDateMode(appliedDateMode);
+      setDraftDate(appliedDate);
+      setDraftFromDate(appliedFromDate);
+      setDraftToDate(appliedToDate);
+      setDraftDocType(appliedDocType);
+    }
+    setIsFilterOpen(!isFilterOpen);
   };
 
-  // Base list: strictly approved documents
-  const approvedDocs = useMemo(() => {
-    return documents.filter(isApproved);
-  }, [documents]);
+  // Close popup when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterPopupRef.current && !filterPopupRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFilterOpen]);
 
   // Date helpers
   const getDocDate = (doc: DbInvoice): Date | null => {
@@ -104,81 +154,161 @@ export default function ApprovedDocumentsPage({
     return `${year}-${month}-${day}`;
   };
 
-  const applyDatePreset = (days: number) => {
+  const applyDraftDatePreset = (days: number) => {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - days);
-    setFromDate(formatDateForInput(start));
-    setToDate(formatDateForInput(end));
+    setDraftFromDate(formatDateForInput(start));
+    setDraftToDate(formatDateForInput(end));
   };
 
-  const applyThisMonthPreset = () => {
+  const applyDraftThisMonthPreset = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    setFromDate(formatDateForInput(start));
-    setToDate(formatDateForInput(now));
+    setDraftFromDate(formatDateForInput(start));
+    setDraftToDate(formatDateForInput(now));
   };
 
-  // Available Years dynamically extracted from approved documents
+  // Base list helper for in-memory fallback
+  const isApproved = (doc: DbInvoice): boolean => {
+    const s = (doc.status || "").toLowerCase().trim();
+    return s.includes("approved") || s.includes("settled") || s.includes("paid") || s.includes("ready for payment");
+  };
+
+  const localApprovedDocs = useMemo(() => {
+    return documents.filter(isApproved);
+  }, [documents]);
+
+  // Available Years dynamically extracted
   const availableYears = useMemo(() => {
     const years = new Set<string>();
-    approvedDocs.forEach(d => {
-      const dt = getDocDate(d);
-      if (dt) {
-        years.add(String(dt.getFullYear()));
-      }
-    });
-    if (years.size === 0) {
-      years.add(String(new Date().getFullYear()));
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= currentYear - 4; y--) {
+      years.add(String(y));
     }
+    localApprovedDocs.forEach(d => {
+      const dt = getDocDate(d);
+      if (dt) years.add(String(dt.getFullYear()));
+    });
     return Array.from(years).sort().reverse();
-  }, [approvedDocs]);
+  }, [localApprovedDocs]);
 
-  // Available Document Types dynamically extracted from approved documents
+  // Available Document Types dynamically extracted
   const availableDocTypes = useMemo(() => {
-    const set = new Set(approvedDocs.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean));
+    const standardTypes = ["AP INVOICE", "PURCHASE ORDER", "SERVICE & MAINTENANCE", "AGREEMENT", "CONTRACT", "OTHER"];
+    const set = new Set<string>(standardTypes);
+    localApprovedDocs.forEach(d => {
+      const t = (d.document_type || "").toUpperCase().trim();
+      if (t) set.add(t);
+    });
     return Array.from(set).sort();
-  }, [approvedDocs]);
+  }, [localApprovedDocs]);
 
-  // Filtered and sorted documents list
-  const filteredAndSortedDocs = useMemo(() => {
-    const list = approvedDocs.filter(doc => {
+  // 6. Server-side API fetching
+  const fetchApprovedDocuments = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+      const params = new URLSearchParams();
+      params.set("page", String(currentPage));
+      params.set("page_size", String(pageSize));
+      params.set("sort_by", sortBy);
+
+      if (debouncedSearch.trim()) {
+        params.set("search", debouncedSearch.trim());
+      }
+      if (appliedYear !== "all") {
+        params.set("year", appliedYear);
+      }
+      if (appliedMonth !== "all") {
+        params.set("month", appliedMonth);
+      }
+      if (appliedDateMode === "specific" && appliedDate) {
+        params.set("date", appliedDate);
+      } else if (appliedDateMode === "range") {
+        if (appliedFromDate) params.set("from_date", appliedFromDate);
+        if (appliedToDate) params.set("to_date", appliedToDate);
+      }
+      if (appliedDocType !== "all") {
+        params.set("doc_type", appliedDocType);
+      }
+
+      const res = await fetch(`/api/documents/approved?${params.toString()}`, {
+        headers: {
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const totalHeader = res.headers.get("X-Total-Count");
+        const total = totalHeader !== null ? parseInt(totalHeader, 10) : (Array.isArray(data) ? data.length : 0);
+        setServerDocs(data);
+        setServerTotalCount(isNaN(total) ? data.length : total);
+        setIsUsingServerData(true);
+      } else {
+        console.warn("Server-side approved fetch failed, using local fallback");
+        setIsUsingServerData(false);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch approved documents from API:", err);
+      setIsUsingServerData(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, pageSize, sortBy, debouncedSearch, appliedYear, appliedMonth, appliedDateMode, appliedDate, appliedFromDate, appliedToDate, appliedDocType]);
+
+  // Trigger server fetch on dependency change
+  useEffect(() => {
+    fetchApprovedDocuments();
+  }, [fetchApprovedDocuments]);
+
+  // Reset pagination on filter or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, appliedYear, appliedMonth, appliedDateMode, appliedDate, appliedFromDate, appliedToDate, appliedDocType, sortBy, pageSize]);
+
+  // 7. Fallback in-memory filtering for offline / standalone mode
+  const fallbackFilteredDocs = useMemo(() => {
+    const list = localApprovedDocs.filter(doc => {
       const dt = getDocDate(doc);
 
-      // 1. Date Filtering: Either Custom Date Range or Month-Wise
-      if (dateFilterMode === "range") {
-        if (fromDate) {
-          const from = parseDateInput(fromDate);
+      // Year & Month Filter
+      if (appliedYear !== "all") {
+        if (!dt || String(dt.getFullYear()) !== appliedYear) return false;
+      }
+      if (appliedMonth !== "all") {
+        if (!dt || String(dt.getMonth() + 1) !== appliedMonth) return false;
+      }
+
+      // Date Filter
+      if (appliedDateMode === "specific" && appliedDate) {
+        if (!dt || formatDateForInput(dt) !== appliedDate) return false;
+      } else if (appliedDateMode === "range") {
+        if (appliedFromDate) {
+          const from = parseDateInput(appliedFromDate);
           if (from) {
             from.setHours(0, 0, 0, 0);
             if (!dt || dt.getTime() < from.getTime()) return false;
           }
         }
-        if (toDate) {
-          const to = parseDateInput(toDate);
+        if (appliedToDate) {
+          const to = parseDateInput(appliedToDate);
           if (to) {
             to.setHours(23, 59, 59, 999);
             if (!dt || dt.getTime() > to.getTime()) return false;
           }
         }
-      } else {
-        // Month-Wise mode: Year & Month Filter
-        if (selectedYear !== "all") {
-          if (!dt || String(dt.getFullYear()) !== selectedYear) return false;
-        }
-        if (selectedMonth !== "all") {
-          if (!dt || String(dt.getMonth()) !== selectedMonth) return false;
-        }
       }
 
-      // 2. Document Type Filter
-      if (selectedDocType !== "all") {
+      // Document Type Filter
+      if (appliedDocType !== "all") {
         const docType = (doc.document_type || "").toUpperCase().trim();
-        if (docType !== selectedDocType.toUpperCase().trim()) return false;
+        if (docType !== appliedDocType.toUpperCase().trim()) return false;
       }
 
-      // 3. Full-text Search Filter
-      const search = searchTerm.toLowerCase().trim();
+      // Search Filter
+      const search = debouncedSearch.toLowerCase().trim();
       if (search) {
         const vendor = (doc.vendor_name || "").toLowerCase();
         const invNum = (doc.invoice_number || "").toLowerCase();
@@ -205,7 +335,7 @@ export default function ApprovedDocumentsPage({
       return true;
     });
 
-    // Sorting
+    // Sort
     list.sort((a, b) => {
       if (sortBy === "date_desc") {
         const da = getDocDate(a)?.getTime() || 0;
@@ -233,21 +363,96 @@ export default function ApprovedDocumentsPage({
     });
 
     return list;
-  }, [approvedDocs, dateFilterMode, selectedYear, selectedMonth, fromDate, toDate, selectedDocType, searchTerm, sortBy]);
+  }, [localApprovedDocs, appliedYear, appliedMonth, appliedDateMode, appliedDate, appliedFromDate, appliedToDate, appliedDocType, debouncedSearch, sortBy]);
 
-  // Reset pagination on filter change
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, dateFilterMode, selectedYear, selectedMonth, fromDate, toDate, selectedDocType, sortBy, pageSize]);
-
-  // Pagination slicing
-  const totalPages = Math.ceil(filteredAndSortedDocs.length / pageSize) || 1;
-  const paginatedDocs = useMemo(() => {
+  // Documents to render
+  const displayedDocs = useMemo(() => {
+    if (isUsingServerData) {
+      return serverDocs;
+    }
     const start = (currentPage - 1) * pageSize;
-    return filteredAndSortedDocs.slice(start, start + pageSize);
-  }, [filteredAndSortedDocs, currentPage, pageSize]);
+    return fallbackFilteredDocs.slice(start, start + pageSize);
+  }, [isUsingServerData, serverDocs, fallbackFilteredDocs, currentPage, pageSize]);
 
-  // Format currency in Indian format
+  const totalRecordsCount = isUsingServerData ? serverTotalCount : fallbackFilteredDocs.length;
+  const totalPages = Math.ceil(totalRecordsCount / pageSize) || 1;
+
+  // Active filter count (strictly 4 filters: Year, Month, Date, Doc Type)
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedYear !== "all") count++;
+    if (appliedMonth !== "all") count++;
+    if (appliedDateMode === "specific" && appliedDate) count++;
+    if (appliedDateMode === "range" && (appliedFromDate || appliedToDate)) count++;
+    if (appliedDocType !== "all") count++;
+    return count;
+  }, [appliedYear, appliedMonth, appliedDateMode, appliedDate, appliedFromDate, appliedToDate, appliedDocType]);
+
+  const hasAnyFilterOrSearch = activeFilterCount > 0 || Boolean(searchTerm);
+
+  // Apply filters from Popup
+  const handleApplyFilters = () => {
+    setAppliedYear(draftYear);
+    setAppliedMonth(draftMonth);
+    setAppliedDateMode(draftDateMode);
+    setAppliedDate(draftDate);
+    setAppliedFromDate(draftFromDate);
+    setAppliedToDate(draftToDate);
+    setAppliedDocType(draftDocType);
+    setCurrentPage(1);
+    setIsFilterOpen(false);
+  };
+
+  // Clear all inside Popup
+  const handleClearDraftFilters = () => {
+    setDraftYear("all");
+    setDraftMonth("all");
+    setDraftDateMode("specific");
+    setDraftDate("");
+    setDraftFromDate("");
+    setDraftToDate("");
+    setDraftDocType("all");
+  };
+
+  // Clear all active filters everywhere
+  const handleClearAllFilters = () => {
+    setAppliedYear("all");
+    setAppliedMonth("all");
+    setAppliedDateMode("specific");
+    setAppliedDate("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
+    setAppliedDocType("all");
+    handleClearDraftFilters();
+    setSearchTerm("");
+    setDebouncedSearch("");
+    setCurrentPage(1);
+    setIsFilterOpen(false);
+  };
+
+  // Remove individual filter chip
+  const handleRemoveFilter = (filterKey: "year" | "month" | "date" | "docType") => {
+    if (filterKey === "year") {
+      setAppliedYear("all");
+      setDraftYear("all");
+    } else if (filterKey === "month") {
+      setAppliedMonth("all");
+      setDraftMonth("all");
+    } else if (filterKey === "date") {
+      setAppliedDate("");
+      setAppliedFromDate("");
+      setAppliedToDate("");
+      setDraftDate("");
+      setDraftFromDate("");
+      setDraftToDate("");
+    } else if (filterKey === "docType") {
+      setAppliedDocType("all");
+      setDraftDocType("all");
+    }
+    setCurrentPage(1);
+  };
+
+  // Currency Formatter
   const formatCurrency = (amount: number | string) => {
     const num = Number(amount || 0);
     return new Intl.NumberFormat("en-IN", {
@@ -257,11 +462,40 @@ export default function ApprovedDocumentsPage({
     }).format(num);
   };
 
-  // CSV Export handler
-  const handleExportCSV = () => {
-    if (filteredAndSortedDocs.length === 0) return;
+  // CSV Export
+  const handleExportCSV = async () => {
+    let exportList: DbInvoice[] = displayedDocs;
+    if (isUsingServerData && totalRecordsCount > displayedDocs.length) {
+      try {
+        const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+        const params = new URLSearchParams();
+        params.set("page", "1");
+        params.set("page_size", String(Math.min(totalRecordsCount, 5000)));
+        params.set("sort_by", sortBy);
+        if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+        if (appliedYear !== "all") params.set("year", appliedYear);
+        if (appliedMonth !== "all") params.set("month", appliedMonth);
+        if (appliedDateMode === "specific" && appliedDate) params.set("date", appliedDate);
+        else if (appliedDateMode === "range") {
+          if (appliedFromDate) params.set("from_date", appliedFromDate);
+          if (appliedToDate) params.set("to_date", appliedToDate);
+        }
+        if (appliedDocType !== "all") params.set("doc_type", appliedDocType);
+
+        const res = await fetch(`/api/documents/approved?${params.toString()}`, {
+          headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+        });
+        if (res.ok) {
+          exportList = await res.json();
+        }
+      } catch (e) {
+        console.error("Failed to export full dataset, exporting current page:", e);
+      }
+    }
+
+    if (exportList.length === 0) return;
     const headers = ["Document ID", "Invoice Number", "Vendor Name", "Document Type", "Division", "Amount", "Currency", "Status", "Approver", "Approved Date", "PO Number"];
-    const rows = filteredAndSortedDocs.map(d => [
+    const rows = exportList.map(d => [
       d.id,
       `"${(d.invoice_number || "").replace(/"/g, '""')}"`,
       `"${(d.vendor_name || "").replace(/"/g, '""')}"`,
@@ -285,25 +519,11 @@ export default function ApprovedDocumentsPage({
     document.body.removeChild(link);
   };
 
-  const hasActiveFilters = Boolean(
-    searchTerm || 
-    (dateFilterMode === "month" && (selectedYear !== "all" || selectedMonth !== "all")) || 
-    (dateFilterMode === "range" && (fromDate || toDate)) || 
-    selectedDocType !== "all"
-  );
-
-  const clearAllFilters = () => {
-    setSearchTerm("");
-    setSelectedYear("all");
-    setSelectedMonth("all");
-    setSelectedDocType("all");
-    setFromDate("");
-    setToDate("");
-  };
+  const selectedMonthLabel = MONTH_NAMES.find(m => m.value === appliedMonth)?.label || "Month";
 
   return (
     <div className="space-y-3 pb-8">
-      {/* 1. TOP HEADER BANNER (Reduced font size, compact & professional) */}
+      {/* 1. TOP HEADER BANNER */}
       <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
@@ -315,32 +535,33 @@ export default function ApprovedDocumentsPage({
                 Approved Documents
               </h1>
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
-                {approvedDocs.length} Settled
+                {totalRecordsCount} Settled
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Verified enterprise records filtered by Month, Date Range, and Document Type
+              Enterprise approval archive filtered by Year, Month, Date, and Document Type
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          {onRefreshDocs && (
-            <button
-              type="button"
-              onClick={onRefreshDocs}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition shadow-2xs cursor-pointer"
-              title="Refresh approved documents"
-            >
-              <RefreshCw className="h-3 w-3 text-slate-500" />
-              <span>Refresh</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (onRefreshDocs) onRefreshDocs();
+              fetchApprovedDocuments();
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition shadow-2xs cursor-pointer"
+            title="Refresh approved documents"
+          >
+            <RefreshCw className={`h-3 w-3 text-slate-500 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
 
           <button
             type="button"
             onClick={handleExportCSV}
-            disabled={filteredAndSortedDocs.length === 0}
+            disabled={totalRecordsCount === 0}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#003F28] hover:bg-[#002F1E] text-white text-[11px] font-semibold transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             title="Export filtered records to CSV"
           >
@@ -350,171 +571,235 @@ export default function ApprovedDocumentsPage({
         </div>
       </div>
 
-      {/* 2. DEDICATED PROFESSIONAL FILTERS: YEAR, MONTH, DOC TYPE & SEARCH */}
-      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by Document Name, Invoice #, Vendor, ID..."
-              className="w-full pl-8 pr-7 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-md text-[11px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#003F28] transition"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Core Dedicated Filters: Year, Month, Date Range, Doc Type */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Date Mode Toggle: By Month vs Custom Date Range */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setDateFilterMode("month")}
-                className={`px-2 py-1 text-[10px] font-bold rounded transition cursor-pointer flex items-center gap-1 ${
-                  dateFilterMode === "month"
-                    ? "bg-white text-slate-900 shadow-2xs font-extrabold"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-                title="Filter documents month-wise"
-              >
-                <Calendar className="h-3 w-3 text-slate-600" />
-                <span>Month</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateFilterMode("range")}
-                className={`px-2 py-1 text-[10px] font-bold rounded transition cursor-pointer flex items-center gap-1 ${
-                  dateFilterMode === "range"
-                    ? "bg-white text-[#003F28] shadow-2xs font-extrabold"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-                title="Filter documents by custom From - To date range"
-              >
-                <Calendar className="h-3 w-3 text-emerald-700" />
-                <span>Date Range</span>
-              </button>
+      {/* 2. MAIN TOOLBAR: [ Search Documents... ]   [ Filter ]   [ Sort ] */}
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs space-y-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+          {/* Main Toolbar Controls */}
+          <div className="flex flex-1 items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search Documents..."
+                className="w-full pl-8 pr-7 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-md text-[11px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#003F28] transition"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
-            {/* Date Inputs based on selected mode */}
-            {dateFilterMode === "month" ? (
-              <>
-                {/* Filter 1: Year */}
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Year:</span>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value)}
-                    className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">All Years</option>
-                    {availableYears.map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
+            {/* Filter Button & Filter Popup Container */}
+            <div className="relative" ref={filterPopupRef}>
+              <button
+                type="button"
+                onClick={handleOpenFilter}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[11px] font-semibold transition cursor-pointer shadow-2xs ${
+                  isFilterOpen || activeFilterCount > 0
+                    ? "bg-emerald-50 border-emerald-300 text-[#003F28]"
+                    : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                }`}
+                title="Open document filters"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                <span>Filter</span>
+                {activeFilterCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#003F28] text-white text-[9px] font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
 
-                {/* Filter 2: Month */}
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Month:</span>
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    {MONTH_NAMES.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            ) : (
-              /* Custom Date Range: From - To with Quick Presets */
-              <div className="flex flex-wrap items-center gap-1">
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From:</span>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
-                  />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">To:</span>
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
-                  />
-                  {(fromDate || toDate) && (
+              {/* FILTER POPUP PANEL (Contains ONLY Year, Month, Date, Document Type) */}
+              {isFilterOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-40 w-80 sm:w-96 bg-white border border-slate-200 rounded-lg shadow-xl p-3.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-[#003F28]" />
+                      <h3 className="text-xs font-bold text-slate-800">Filter Documents</h3>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => { setFromDate(""); setToDate(""); }}
-                      className="p-0.5 text-slate-400 hover:text-slate-600 ml-0.5 transition"
-                      title="Clear date range"
+                      onClick={() => setIsFilterOpen(false)}
+                      className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Quick Presets */}
-                <div className="hidden sm:flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset(7)}
-                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                    title="Last 7 days"
-                  >
-                    7D
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset(30)}
-                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                    title="Last 30 days"
-                  >
-                    30D
-                  </button>
-                  <button
-                    type="button"
-                    onClick={applyThisMonthPreset}
-                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                    title="This month to date"
-                  >
-                    This Month
-                  </button>
-                </div>
-              </div>
-            )}
+                  <div className="space-y-3">
+                    {/* 1. YEAR FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Year
+                      </label>
+                      <select
+                        value={draftYear}
+                        onChange={(e) => setDraftYear(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Years</option>
+                        {availableYears.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
 
-            {/* Filter 3: Document Type */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Doc Type:</span>
-              <select
-                value={selectedDocType}
-                onChange={(e) => setSelectedDocType(e.target.value)}
-                className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer max-w-[140px] truncate"
-              >
-                <option value="all">All Doc Types</option>
-                {availableDocTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
+                    {/* 2. MONTH FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Month
+                      </label>
+                      <select
+                        value={draftMonth}
+                        onChange={(e) => setDraftMonth(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        {MONTH_NAMES.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. DATE FILTER (Supports Specific Date or Date Range) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                          Date
+                        </label>
+                        <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setDraftDateMode("specific")}
+                            className={`px-2 py-0.5 text-[9.5px] font-bold rounded transition cursor-pointer ${
+                              draftDateMode === "specific"
+                                ? "bg-white text-slate-900 shadow-2xs font-extrabold"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            Specific Date
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDraftDateMode("range")}
+                            className={`px-2 py-0.5 text-[9.5px] font-bold rounded transition cursor-pointer ${
+                              draftDateMode === "range"
+                                ? "bg-white text-[#003F28] shadow-2xs font-extrabold"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            Date Range
+                          </button>
+                        </div>
+                      </div>
+
+                      {draftDateMode === "specific" ? (
+                        <input
+                          type="date"
+                          value={draftDate}
+                          onChange={(e) => setDraftDate(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                        />
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">From</span>
+                              <input
+                                type="date"
+                                value={draftFromDate}
+                                onChange={(e) => setDraftFromDate(e.target.value)}
+                                className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10.5px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">To</span>
+                              <input
+                                type="date"
+                                value={draftToDate}
+                                onChange={(e) => setDraftToDate(e.target.value)}
+                                className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10.5px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                          {/* Quick presets */}
+                          <div className="flex items-center gap-1 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => applyDraftDatePreset(7)}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              7 Days
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => applyDraftDatePreset(30)}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              30 Days
+                            </button>
+                            <button
+                              type="button"
+                              onClick={applyDraftThisMonthPreset}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              This Month
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4. DOCUMENT TYPE FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Document Type
+                      </label>
+                      <select
+                        value={draftDocType}
+                        onChange={(e) => setDraftDocType(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Document Types</option>
+                        {availableDocTypes.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* POPUP ACTION BUTTONS: [ Clear All ] and [ Apply Filters ] */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleClearDraftFilters}
+                      className="px-2.5 py-1 text-[10.5px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyFilters}
+                      className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002F1E] text-white text-[11px] font-semibold rounded-md transition shadow-2xs cursor-pointer"
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Sort Order */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+            {/* Sort Control */}
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5">
+              <ArrowUpDown className="h-3 w-3 text-slate-500 shrink-0" />
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sort:</span>
               <select
                 value={sortBy}
@@ -529,42 +814,137 @@ export default function ApprovedDocumentsPage({
                 <option value="name">Document Name</option>
               </select>
             </div>
-
-            {/* Clear Filters button */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 text-[10px] font-bold transition cursor-pointer"
-                title="Clear all active filters"
-              >
-                <span>Reset</span>
-                <X className="h-3 w-3" />
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Filter Summary Bar */}
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[10.5px] text-slate-500">
+        {/* 3. ACTIVE FILTER CHIPS (Shown above table when any filter is active) */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10.5px]">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+              Active Filters:
+            </span>
+
+            {/* Year Chip */}
+            {appliedYear !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Year: <strong className="font-bold">{appliedYear}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("year")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Year filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Month Chip */}
+            {appliedMonth !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Month: <strong className="font-bold">{selectedMonthLabel}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("month")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Month filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Specific Date Chip */}
+            {appliedDateMode === "specific" && appliedDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Date: <strong className="font-bold">{appliedDate}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("date")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Date filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Date Range Chip */}
+            {appliedDateMode === "range" && (appliedFromDate || appliedToDate) && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Date: <strong className="font-bold">{appliedFromDate || "..."} to {appliedToDate || "..."}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("date")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Date Range filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Document Type Chip */}
+            {appliedDocType !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Type: <strong className="font-bold">{appliedDocType}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("docType")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Document Type filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Clear All Chip */}
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition cursor-pointer ml-1"
+            >
+              <span>Clear All</span>
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Filter Summary Status */}
+        <div className="flex items-center justify-between pt-1 text-[10.5px] text-slate-500">
           <div className="flex items-center gap-2">
             <span>
-              Showing <strong className="text-slate-800 font-bold">{filteredAndSortedDocs.length}</strong> of {approvedDocs.length} approved documents
+              Showing <strong className="text-slate-800 font-bold">{displayedDocs.length}</strong> of {totalRecordsCount} records
             </span>
-            {hasActiveFilters && (
+            {hasAnyFilterOrSearch && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-semibold">
                 <Filter className="h-2.5 w-2.5" /> Filtered View
               </span>
             )}
+            {isLoading && (
+              <span className="inline-flex items-center gap-1 text-[9.5px] text-slate-400">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading...
+              </span>
+            )}
           </div>
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[10px] text-slate-400 hidden sm:block">
             Click any row to view complete document details
           </div>
         </div>
       </div>
 
-      {/* 3. COMPACT APPROVED DOCUMENTS TABLE */}
-      <div className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden">
+      {/* 4. COMPACT APPROVED DOCUMENTS TABLE */}
+      <div className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[0.5px] z-10 flex items-center justify-center pointer-events-none">
+            <div className="bg-white/90 border border-slate-200 rounded-md px-3 py-1.5 shadow-sm flex items-center gap-2 text-xs text-slate-700 font-semibold">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
+              <span>Updating results...</span>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-[10.5px]">
             <thead>
@@ -582,8 +962,8 @@ export default function ApprovedDocumentsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedDocs.length > 0 ? (
-                paginatedDocs.map((doc, idx) => {
+              {displayedDocs.length > 0 ? (
+                displayedDocs.map((doc, idx) => {
                   const globalIdx = (currentPage - 1) * pageSize + idx + 1;
                   const dt = getDocDate(doc);
                   const formattedDate = dt ? dt.toLocaleDateString("en-IN", {
@@ -677,14 +1057,14 @@ export default function ApprovedDocumentsPage({
                         No approved documents found
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {hasActiveFilters 
-                          ? "No documents match the selected Year, Month, Doc Type, or Search term."
+                        {hasAnyFilterOrSearch 
+                          ? "No documents match the selected Year, Month, Date, Doc Type, or Search term."
                           : "There are currently no approved documents in the repository."}
                       </p>
-                      {hasActiveFilters && (
+                      {hasAnyFilterOrSearch && (
                         <button
                           type="button"
-                          onClick={clearAllFilters}
+                          onClick={handleClearAllFilters}
                           className="mt-2.5 px-2.5 py-1 rounded-md bg-[#003F28] text-white text-[10.5px] font-semibold hover:bg-[#002F1E] transition cursor-pointer"
                         >
                           Reset Filters
@@ -698,8 +1078,8 @@ export default function ApprovedDocumentsPage({
           </table>
         </div>
 
-        {/* 4. COMPACT PAGINATION FOOTER */}
-        {filteredAndSortedDocs.length > 0 && (
+        {/* 5. COMPACT PAGINATION FOOTER */}
+        {totalRecordsCount > 0 && (
           <div className="bg-slate-50/70 border-t border-slate-200 px-3 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10.5px] text-slate-600">
             <div className="flex items-center gap-1.5">
               <span>Showing</span>
@@ -708,11 +1088,11 @@ export default function ApprovedDocumentsPage({
               </span>
               <span>to</span>
               <span className="font-bold text-slate-900">
-                {Math.min(currentPage * pageSize, filteredAndSortedDocs.length)}
+                {Math.min(currentPage * pageSize, totalRecordsCount)}
               </span>
               <span>of</span>
               <span className="font-bold text-slate-900">
-                {filteredAndSortedDocs.length}
+                {totalRecordsCount}
               </span>
               <span>records</span>
 

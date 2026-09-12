@@ -10,9 +10,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, func, extract
 from sqlalchemy.orm import Session
 from app.config.settings import settings
 from app.database.connection import SessionLocal, get_db
@@ -99,8 +99,198 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
 @router.get('/api/records/approved', response_model=List[InvoiceResponse])
 @router.get('/api/documents/approved', response_model=List[InvoiceResponse])
 @router.get('/api/invoices/approved', response_model=List[InvoiceResponse])
-def get_approved_invoices(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    return get_all_invoices(status="approved", db=db, current_user=current_user)
+def get_approved_invoices(
+    year: Optional[str] = Query(None),
+    month: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    doc_type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query('date_desc'),
+    page: Optional[int] = Query(None),
+    page_size: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    response: Response = None
+):
+    # 1. Base approved filter (Strictly approved / settled / paid)
+    approved_filter = or_(
+        Invoice.status.ilike('%approved%'),
+        Invoice.status.ilike('%settled%'),
+        Invoice.status.ilike('%paid%'),
+        Invoice.status.ilike('%ready for payment%'),
+        Invoice.current_stage >= 4
+    )
+    query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
+
+    # 2. Strict Access Control Enforcement:
+    # Admin: Can view all approved documents
+    # Normal User: Can view ONLY the approved documents where their own approval action is recorded
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    if not is_admin:
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
+        user_names = [name.strip() for name in user_names if name and name.strip()]
+        if not user_names:
+            if response:
+                response.headers["X-Total-Count"] = "0"
+            return []
+
+        or_user_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names]
+        user_approval_logs = db.query(AuditLog.invoice_id).filter(
+            AuditLog.action.ilike('%approve%'),
+            or_(*or_user_filters)
+        ).all()
+
+        user_approved_doc_ids = set()
+        for r in user_approval_logs:
+            if r[0]:
+                val = str(r[0]).strip()
+                user_approved_doc_ids.add(val)
+                if val.startswith('DOC-'):
+                    user_approved_doc_ids.add(val[4:])
+                else:
+                    user_approved_doc_ids.add(f'DOC-{val}')
+
+        if not user_approved_doc_ids:
+            if response:
+                response.headers["X-Total-Count"] = "0"
+            return []
+
+        query = query.filter(Invoice.id.in_(user_approved_doc_ids))
+
+    # 3. Filter: YEAR
+    if year and year.strip().lower() != 'all':
+        y_str = year.strip()
+        try:
+            y_int = int(y_str)
+            query = query.filter(
+                or_(
+                    Invoice.invoice_date.like(f'{y_str}-%'),
+                    Invoice.invoice_date.like(f'%/{y_str}'),
+                    Invoice.invoice_date.like(f'%/{y_str}%'),
+                    extract('year', Invoice.created_at) == y_int
+                )
+            )
+        except ValueError:
+            pass
+
+    # 4. Filter: MONTH
+    MONTH_MAP = {
+        'january': 1, 'february': 2, 'march': 3, 'april': 4,
+        'may': 5, 'june': 6, 'july': 7, 'august': 8,
+        'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    if month and month.strip().lower() != 'all':
+        m_raw = month.strip().lower()
+        m_val = None
+        if m_raw.isdigit():
+            num = int(m_raw)
+            if num == 0:
+                m_val = 1
+            elif 1 <= num <= 12:
+                m_val = num
+        elif m_raw in MONTH_MAP:
+            m_val = MONTH_MAP[m_raw]
+
+        if m_val and 1 <= m_val <= 12:
+            m_str = f"{m_val:02d}"
+            query = query.filter(
+                or_(
+                    Invoice.invoice_date.like(f'%-{m_str}-%'),
+                    Invoice.invoice_date.like(f'%/{m_str}/%'),
+                    Invoice.invoice_date.like(f'%-{m_val}-%'),
+                    extract('month', Invoice.created_at) == m_val
+                )
+            )
+
+    # 5. Filter: DATE (Specific Date and Date Range)
+    if date and date.strip():
+        d_str = date.strip()
+        query = query.filter(
+            or_(
+                Invoice.invoice_date.like(f'{d_str}%'),
+                func.date(Invoice.created_at) == d_str
+            )
+        )
+    if from_date and from_date.strip():
+        fd_str = from_date.strip()
+        query = query.filter(
+            or_(
+                Invoice.invoice_date >= fd_str,
+                func.date(Invoice.created_at) >= fd_str
+            )
+        )
+    if to_date and to_date.strip():
+        td_str = to_date.strip()
+        query = query.filter(
+            or_(
+                Invoice.invoice_date <= td_str,
+                func.date(Invoice.created_at) <= td_str
+            )
+        )
+
+    # 6. Filter: DOCUMENT TYPE
+    if doc_type and doc_type.strip().lower() != 'all':
+        dt_str = doc_type.strip()
+        query = query.filter(
+            or_(
+                Invoice.document_type.ilike(f'%{dt_str}%'),
+                Invoice.category.ilike(f'%{dt_str}%')
+            )
+        )
+
+    # 7. Filter: Search keyword
+    if search and search.strip():
+        s_term = f'%{search.strip()}%'
+        query = query.filter(
+            or_(
+                Invoice.invoice_number.ilike(s_term),
+                Invoice.vendor_name.ilike(s_term),
+                Invoice.id.ilike(s_term),
+                Invoice.po_number.ilike(s_term),
+                Invoice.tracking_id.ilike(s_term),
+                Invoice.division.ilike(s_term),
+                Invoice.document_type.ilike(s_term)
+            )
+        )
+
+    # 8. Sort order
+    if sort_by == 'date_asc':
+        query = query.order_by(Invoice.created_at.asc())
+    elif sort_by == 'amount_desc':
+        query = query.order_by(Invoice.amount.desc())
+    elif sort_by == 'amount_asc':
+        query = query.order_by(Invoice.amount.asc())
+    elif sort_by == 'vendor':
+        query = query.order_by(Invoice.vendor_name.asc())
+    elif sort_by == 'name':
+        query = query.order_by(Invoice.invoice_number.asc())
+    else:
+        query = query.order_by(Invoice.created_at.desc())
+
+    # 9. Count total matching records
+    total_count = query.count()
+    if response:
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
+
+    # 10. Server-side Pagination
+    if page and page_size and page >= 1 and page_size >= 1:
+        offset = (page - 1) * page_size
+        invoices = query.offset(offset).limit(page_size).all()
+    else:
+        invoices = query.all()
+
+    # 11. Serialization
+    results = []
+    for inv in invoices:
+        inv_res = InvoiceResponse.from_orm(inv)
+        inv_res.has_approved = True
+        inv_res.is_current_approver = False
+        results.append(inv_res)
+
+    return results
 
 @router.get('/api/records', response_model=List[InvoiceResponse])
 @router.get('/api/documents', response_model=List[InvoiceResponse])
@@ -1845,7 +2035,6 @@ def delete_checklist_template(rule_id: int, db: Session=Depends(get_db)):
     db.commit()
     return {'success': True}
 
-@router.get('/api/documents/approved')
 @router.get('/api/v1/approved-documents')
 @router.get('/api/admin/approved-documents')
 def get_approved_documents(db: Session=Depends(get_db)):
