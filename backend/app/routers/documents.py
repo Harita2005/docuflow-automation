@@ -1235,6 +1235,38 @@ async def upload_invoice_version(
     current_user: User = Depends(get_current_active_user)
 ):
     inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    status_upper = (inv.status or '').upper()
+    if any(term in status_upper for term in ['APPROVED', 'SETTLED', 'CANCEL', 'VOID']):
+        raise HTTPException(status_code=403, detail="Document is settled/closed. PDF replacement is not allowed.")
+
+    is_stage_1 = (inv.current_stage or 1) == 1
+    current_step_name = 'Attachment Status' if is_stage_1 else f'Stage {inv.current_stage or 1}'
+    if inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+        ).first()
+        if step and step.step_name:
+            current_step_name = step.step_name
+
+    is_attachment_status = is_stage_1 or 'attachment' in current_step_name.lower() or 'attachment' in status_upper
+    if not is_attachment_status:
+        raise HTTPException(
+            status_code=403,
+            detail="PDF replacement is restricted. Documents can only be replaced during Attachment Status (Stage 1)."
+        )
+
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    if not is_admin and inv.assigned_approver:
+        if not is_user_in_approver_pool(current_user, inv.assigned_approver):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access Denied: Only assigned approver ({inv.assigned_approver}) or administrator can replace the PDF for this document."
+            )
+
     content = await file.read()
     unique_filename, detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename

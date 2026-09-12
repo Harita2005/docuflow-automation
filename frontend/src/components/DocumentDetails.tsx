@@ -263,6 +263,10 @@ export default function DocumentDetails({
 
   const handleUploadVersion = async (file: File) => {
     if (!document) return;
+    if (!canReplacePdf) {
+      setActionError("⚠️ PDF replacement is restricted: You can only replace or attach the physical PDF during Attachment Status (Stage 1).");
+      return;
+    }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setActionError("Only PDF files are allowed to be attached.");
       return;
@@ -383,6 +387,12 @@ export default function DocumentDetails({
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
   const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
   const isDocumentLocked = isTerminal || !isCurrentApprover || (lockInfo.isLocked && !lockInfo.isSelf);
+  const isAttachmentStatus = !isTerminal && (
+    (document?.current_stage || 1) === 1 ||
+    (document?.status || "").toLowerCase().includes("attachment") ||
+    (document?.status || "").toLowerCase().includes("initiated")
+  );
+  const canReplacePdf = !isDocumentLocked && isAttachmentStatus;
 
   // Hierarchical FLAC resolution (Specific Scope -> Global Master -> Safe Baseline)
   const getFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
@@ -392,7 +402,6 @@ export default function DocumentDetails({
     }
     // Synced Data Protection: Prevent editing synced third-party data during Attachment Status
     const isSyncedFromErp = Boolean(document?.doc_key || (document as any)?.source_application);
-    const isAttachmentStatus = (document?.current_stage || 1) === 1 || (document?.status || "").toLowerCase().includes("attachment");
     if (isSyncedFromErp && isAttachmentStatus && raw === "edit") {
       if (["vendor_name", "invoice_num_date", "po_reference", "total_gross", "cost_center", "payment_terms", "hsn_tax", "line_items"].includes(fieldId)) {
         return "view";
@@ -1725,7 +1734,7 @@ export default function DocumentDetails({
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {!isDocumentLocked && (
+                {canReplacePdf && (
                   <label className="cursor-pointer px-2.5 py-1 rounded-md bg-[#005333] hover:bg-[#00663F] text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
                     <Upload className="h-3 w-3" />
                     <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
@@ -1771,7 +1780,7 @@ export default function DocumentDetails({
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (!isDocumentLocked && (document?.current_stage || 1) === 1 && e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    if (canReplacePdf && e.dataTransfer.files && e.dataTransfer.files[0]) {
                       handleUploadVersion(e.dataTransfer.files[0]);
                     }
                   }}
@@ -1782,13 +1791,13 @@ export default function DocumentDetails({
                   </div>
                   <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
-                    {isDocumentLocked 
-                      ? "This document is locked in read-only mode. Physical invoice attachment is pending from the Stage 1 initiator desk."
+                    {!canReplacePdf 
+                      ? "This document is locked in read-only mode or has advanced past Attachment Status. Physical invoice attachment is restricted."
                       : "This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record."
                     }
                   </p>
                   
-                  {!isDocumentLocked && (document?.current_stage || 1) === 1 && (
+                  {canReplacePdf && (
                     <>
                       <label className="cursor-pointer px-4 py-2.5 bg-[#003F28] hover:bg-[#005333] text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
                         <Plus className="h-4 w-4" />
