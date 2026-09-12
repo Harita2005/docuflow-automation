@@ -239,26 +239,6 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
             if s.stage_number not in seen_stages:
                 seen_stages.add(s.stage_number)
                 steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
-    if not steps_data:
-        # Fallback to standard workflow profile or generate 4 standard stages (YUVASREE, Nattudurai, VIGNESH, VARUNAN)
-        fallback_steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow').order_by(WorkflowStepDefinition.stage_number.asc(), WorkflowStepDefinition.id.asc()).all()
-        if fallback_steps:
-            for s in fallback_steps:
-                if s.stage_number not in seen_stages:
-                    seen_stages.add(s.stage_number)
-                    steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
-        else:
-            standard_approvers = ['YUVASREE', 'Nattudurai', 'VIGNESH', 'VARUNAN']
-            total = max(inv.total_stages or 4, 1)
-            for stg_num in range(1, total + 1):
-                appr_idx = min(stg_num - 1, len(standard_approvers) - 1)
-                steps_data.append({
-                    'stage_number': stg_num,
-                    'stage_name': f'Stage {stg_num}',
-                    'approver_target': standard_approvers[appr_idx],
-                    'action_required': 'Approve',
-                    'permissions': 'Approve / Reject'
-                })
     current_step_name = 'Stage 1'
     for s in steps_data:
         if s['stage_number'] == (inv.current_stage or 1):
@@ -266,17 +246,11 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
             break
     if inv.workflow_profile_id:
         step_def = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
-        if not step_def:
-            step_def = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow', WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
         if step_def and step_def.approver_target:
             targets = [step_def.approver_target.strip()]
             if step_def.delegate_approver and step_def.delegate_approver.strip():
                 targets.append(step_def.delegate_approver.strip())
             inv.assigned_approver = ', '.join(targets)
-        elif not inv.assigned_approver:
-            standard_approvers = ['YUVASREE', 'Nattudurai', 'VIGNESH', 'VARUNAN']
-            cur_stg = inv.current_stage or 1
-            inv.assigned_approver = standard_approvers[min(cur_stg - 1, len(standard_approvers) - 1)]
     is_curr = False
     if current_user and inv.assigned_approver:
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
@@ -838,17 +812,13 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
         next_step_name = f'Stage {next_stage_val}'
         if inv.workflow_profile_id:
             next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
-            if not next_step:
-                next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow', WorkflowStepDefinition.stage_number == next_stage_val).first()
             if next_step:
                 next_assigned_val = next_step.approver_target
                 next_step_name = next_step.step_name
                 next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
             else:
-                standard_approvers = ['YUVASREE', 'Nattudurai', 'VIGNESH', 'VARUNAN']
-                appr_idx = min(next_stage_val - 1, len(standard_approvers) - 1)
-                next_assigned_val = standard_approvers[appr_idx]
-                next_assigned_info = f'Advanced to Stage {next_stage_val}. Next Approver Assigned: {next_assigned_val}.'
+                next_assigned_val = 'Unassigned'
+                next_assigned_info = f'Advanced to Stage {next_stage_val}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
@@ -915,17 +885,13 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             next_step_name = f'Stage {inv.current_stage}'
             if inv.workflow_profile_id:
                 next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == inv.current_stage).first()
-                if not next_step:
-                    next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow', WorkflowStepDefinition.stage_number == inv.current_stage).first()
                 if next_step:
                     inv.assigned_approver = next_step.approver_target
                     next_step_name = next_step.step_name
                     next_assigned_info = f'Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
                 else:
-                    standard_approvers = ['YUVASREE', 'Nattudurai', 'VIGNESH', 'VARUNAN']
-                    appr_idx = min(inv.current_stage - 1, len(standard_approvers) - 1)
-                    inv.assigned_approver = standard_approvers[appr_idx]
-                    next_assigned_info = f'Advanced to Stage {inv.current_stage}. Next Approver Assigned: {inv.assigned_approver}.'
+                    inv.assigned_approver = 'Unassigned'
+                    next_assigned_info = f'Advanced to Stage {inv.current_stage}.'
             existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
             if not existing_next_items:
                 checklist_items = resolve_checklist_items(db, inv, next_step_name)

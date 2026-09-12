@@ -68,9 +68,17 @@ export default function Dashboard({
         invoice_number: d.invoice_number || `INV-${d.id.slice(0, 5)}`,
         invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
         status: d.status || "UNROUTED (NO RULE MATCHED)",
-        status_badge_type: (d.status && d.status.toLowerCase().includes("initiated")
-          ? (d.status.toLowerCase().includes("attachment") ? "initiated_attachment" : "initiated_first")
-          : "unrouted") as any,
+        status_badge_type: (() => {
+          const s = (d.status || "").toLowerCase();
+          if (!s || s.includes("unrouted") || s.includes("no rule")) return "unrouted";
+          if (s.includes("attachment")) return "initiated_attachment";
+          if (s.includes("initiated") || s.includes("first")) return "initiated_first";
+          if (s.includes("approved") || s.includes("settled") || s.includes("paid")) return "approved";
+          if (s.includes("progress") || s.includes("stage")) return "in_progress";
+          if (s.includes("escalat")) return "escalated";
+          if (s.includes("reject") || s.includes("cancel") || s.includes("fail")) return "rejected";
+          return "in_progress";
+        })() as any,
         amount: d.amount || 45000,
         assigned_approver: d.assigned_approver,
         is_current_approver: d.is_current_approver
@@ -210,16 +218,7 @@ export default function Dashboard({
   const renderStatusBadge = (statusText: string, badgeType?: string) => {
     const sLower = statusText.toLowerCase();
 
-    if (badgeType === "initiated_first" || sLower.includes("first approval") || sLower.includes("initiated (first")) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
-          <span className="h-1 w-1 rounded-full bg-[#E65100]" />
-          INITIATED (FIRST APPROVAL)
-        </span>
-      );
-    }
-
-    if (badgeType === "initiated_attachment" || sLower.includes("attachment status") || sLower.includes("initiated (attachment")) {
+    if (sLower.includes("attachment status") || sLower.includes("initiated (attachment")) {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
           <span className="h-1 w-1 rounded-full bg-[#E65100]" />
@@ -228,10 +227,11 @@ export default function Dashboard({
       );
     }
 
-    if (badgeType === "unrouted" || sLower.includes("unrouted") || sLower.includes("no rule")) {
+    if (badgeType === "initiated_first" || sLower.includes("first approval") || sLower.includes("initiated (first") || sLower === "initiated") {
       return (
-        <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
-          UNROUTED (NO RULE MATCHED)
+        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
+          <span className="h-1 w-1 rounded-full bg-[#E65100]" />
+          INITIATED (FIRST APPROVAL)
         </span>
       );
     }
@@ -240,7 +240,42 @@ export default function Dashboard({
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
           <span className="h-1 w-1 rounded-full bg-[#059669]" />
-          {statusText}
+          {statusText.toUpperCase()}
+        </span>
+      );
+    }
+
+    if (sLower.includes("progress") || sLower.includes("stage")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EBF5FF] text-[#1E40AF] border border-[#BFDBFE]">
+          <span className="h-1 w-1 rounded-full bg-[#2563EB]" />
+          {statusText.toUpperCase()}
+        </span>
+      );
+    }
+
+    if (sLower.includes("escalat")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]">
+          <span className="h-1 w-1 rounded-full bg-[#D97706]" />
+          {statusText.toUpperCase()}
+        </span>
+      );
+    }
+
+    if (sLower.includes("reject") || sLower.includes("cancel") || sLower.includes("fail")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA]">
+          <span className="h-1 w-1 rounded-full bg-[#EF4444]" />
+          {statusText.toUpperCase()}
+        </span>
+      );
+    }
+
+    if (badgeType === "unrouted" || sLower.includes("unrouted") || sLower.includes("no rule") || !sLower) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
+          UNROUTED (NO RULE MATCHED)
         </span>
       );
     }
