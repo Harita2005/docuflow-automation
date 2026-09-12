@@ -288,7 +288,7 @@ export default function Dashboard({
   };
 
   return (
-    <div className="bg-[#F7F8F6] p-2 sm:p-2.5 space-y-2.5 animate-fadeIn font-sans text-slate-800 max-w-[1720px] mx-auto">
+    <div className="bg-[#FAF8F3] p-2 sm:p-2.5 space-y-2.5 animate-fadeIn font-sans text-slate-800 max-w-[1720px] mx-auto">
       
       {/* 1. FIVE CURVED STATISTIC CARDS ROW (STRICTLY WORKFLOW QUEUES & DESTINATIONS) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2">
@@ -300,7 +300,7 @@ export default function Dashboard({
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
             kpiFilter === 'pending'
               ? 'border-[#FFBE00] ring-2 ring-[#FFBE00]/40 bg-[#FFFDF5]'
-              : 'border-[#E2E7E3] hover:border-[#FFBE00]'
+              : 'border-[#E8E4DA] hover:border-[#FFBE00]'
           }`}
         >
           <div className="flex items-center justify-between gap-1">
@@ -357,7 +357,7 @@ export default function Dashboard({
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
             kpiFilter === 'hold'
               ? 'border-[#A855F7] ring-2 ring-[#A855F7]/40 bg-[#FAF5FF]'
-              : 'border-[#E2E7E3] hover:border-purple-400'
+              : 'border-[#E8E4DA] hover:border-purple-400'
           }`}
         >
           <div className="flex items-center justify-between gap-1">
@@ -414,7 +414,7 @@ export default function Dashboard({
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
             kpiFilter === 'rejected'
               ? 'border-[#EF4444] ring-2 ring-[#EF4444]/40 bg-[#FFF1F2]'
-              : 'border-[#E2E7E3] hover:border-rose-400'
+              : 'border-[#E8E4DA] hover:border-rose-400'
           }`}
         >
           <div className="flex items-center justify-between gap-1">
@@ -475,7 +475,7 @@ export default function Dashboard({
             }
           }}
           title="Click to open Work Tracker"
-          className="bg-white border border-[#E2E7E3] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
+          className="bg-white border border-[#E8E4DA] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1">
@@ -529,7 +529,7 @@ export default function Dashboard({
             }
           }}
           title="Click to open dedicated Approved Documents page"
-          className="bg-white border border-[#E2E7E3] hover:border-emerald-400 hover:ring-2 hover:ring-emerald-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
+          className="bg-white border border-[#E8E4DA] hover:border-emerald-400 hover:ring-2 hover:ring-emerald-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1">
@@ -576,10 +576,10 @@ export default function Dashboard({
       </div>
 
       {/* 2. DOCUMENT LIST CONTAINER */}
-      <div className="bg-white border border-[#E3E8E4] rounded-[12px] p-3 sm:p-3.5 shadow-2xs space-y-2.5">
+      <div className="bg-white border border-[#E8E4DA] rounded-[12px] p-3 sm:p-3.5 shadow-2xs space-y-2.5">
         
         {/* Header & Date Filter */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+        <div className="flex items-center justify-between pb-2 border-b border-[#EAE6DD]">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="h-4 w-4 text-[#003F28]" />
             <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display flex items-center">
@@ -596,7 +596,7 @@ export default function Dashboard({
               className={`flex items-center gap-1 px-2 py-0.5 border rounded text-[9.5px] font-bold transition-colors cursor-pointer ${
                 timeRange !== "ALL TIME"
                   ? "bg-[#003F28] text-white border-[#003F28]"
-                  : "bg-[#F7F8F6] border-slate-250 text-slate-700 hover:bg-slate-100"
+                  : "bg-[#FAF8F3] border-[#E8E4DA] text-slate-700 hover:bg-slate-100"
               }`}
             >
               <CalendarDays className="h-3 w-3" />
@@ -680,7 +680,7 @@ export default function Dashboard({
                   className={`px-2 py-0.5 rounded-[14px] text-[8.5px] font-extrabold uppercase tracking-wider transition-all duration-200 flex items-center gap-1 cursor-pointer shadow-2xs ${
                     isActive
                       ? "bg-[#003F28] text-white border border-[#003F28]"
-                      : "bg-white text-slate-700 border border-[#E2E7E3] hover:bg-slate-100 hover:border-slate-300"
+                      : "bg-white text-slate-700 border border-[#E8E4DA] hover:bg-slate-100 hover:border-slate-300"
                   }`}
                 >
                   <span>{filter.label}</span>
@@ -702,12 +702,12 @@ export default function Dashboard({
               <div
                 key={doc.id}
                 onClick={() => onViewDocument(doc.id)}
-                className="bg-white border border-[#E6EAE7] rounded-[7px] px-3 py-1.5 hover:border-[#003F28] hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-2.5 cursor-pointer group"
+                className="bg-white border border-[#EAE6DD] rounded-[7px] px-3 py-1.5 hover:border-[#003F28] hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-2.5 cursor-pointer group"
               >
                 {/* Left Side: Icon & Details */}
                 <div className="flex items-center gap-2.5 min-w-0">
                   {/* Clock Icon Box */}
-                  <div className="h-6 w-6 rounded bg-[#F7F8F6] border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 group-hover:bg-emerald-50 group-hover:text-[#003F28] transition-colors">
+                  <div className="h-6 w-6 rounded bg-[#FAF8F3] border border-[#E8E4DA] flex items-center justify-center text-slate-500 shrink-0 group-hover:bg-emerald-50 group-hover:text-[#003F28] transition-colors">
                     <Clock className="h-3 w-3" />
                   </div>
 
@@ -772,7 +772,7 @@ export default function Dashboard({
               </div>
             ))
           ) : (
-            <div className="py-6 text-center text-slate-400 bg-slate-50 rounded-md border border-dashed border-slate-200">
+            <div className="py-6 text-center text-slate-400 bg-[#FAF8F3]/60 rounded-md border border-dashed border-[#E8E4DA]">
               <p className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
                 No documents found for status: {kpiFilter.toUpperCase()}
               </p>

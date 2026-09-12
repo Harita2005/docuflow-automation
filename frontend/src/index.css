@@ -13,11 +13,11 @@
   --color-primary-700: #1d4ed8;
   --color-primary-900: #1e3a8a;
   
-  --color-brand-gray: #F8FAFC;
+  --color-brand-gray: #FAF8F3;
 }
 
 body {
-  background-color: #F8FAFC;
+  background-color: #FAF8F3;
   color: #0F172A;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

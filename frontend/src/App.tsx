@@ -538,7 +538,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen w-full bg-[#F8FAFC] text-slate-900 flex font-sans overflow-hidden">
+    <div className="h-screen w-full bg-[#FAF8F3] text-slate-900 flex font-sans overflow-hidden">
       
       {/* Sleek Navigation Sidebar */}
       <Sidebar
