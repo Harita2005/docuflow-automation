@@ -1561,8 +1561,8 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=D
         
     smtp_host = (config.smtp_server if config and config.smtp_server else 'smtp.office365.com').strip()
     smtp_port = config.port if (config and config.port) else 587
-    smtp_user = (config.username if config and config.username else '').strip() or os.getenv('SMTP_USER', '') or os.getenv('SMTP_USERNAME', '') or getattr(settings, 'SMTP_USER', '') or 'communication@ramrajcotton.net'
-    smtp_pass = (config.encrypted_password if config and config.encrypted_password else '').strip() or os.getenv('SMTP_PASS', '') or os.getenv('SMTP_PASSWORD', '') or getattr(settings, 'SMTP_PASS', '') or 'QDjuS8BvQWq6bY'
+    smtp_user = (config.username if config and config.username else '').strip() or os.getenv('SMTP_USER', '') or os.getenv('SMTP_USERNAME', '') or getattr(settings, 'SMTP_USER', '') or ''
+    smtp_pass = (config.encrypted_password if config and config.encrypted_password else '').strip() or os.getenv('SMTP_PASS', '') or os.getenv('SMTP_PASSWORD', '') or getattr(settings, 'SMTP_PASS', '') or ''
     sender_email = (config.sender_email if config and config.sender_email else None) or smtp_user or 'no-reply@docuflow.net'
     sender_name = (config.sender_name if config and config.sender_name else None) or 'DocuFlow Alerts'
 

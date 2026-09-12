@@ -159,7 +159,7 @@ export default function ChecklistConditionBuilder() {
     setChkWfCategoryFilter(targetWfObj?.workflow_category || 'ALL');
 
     if (r) {
-      let parsedItems = [];
+      let parsedItems;
       const txt = (r.item_text || '').trim();
       if (txt.includes(' || ')) {
         parsedItems = txt.split(' || ').map(s => s.trim()).filter(Boolean);

@@ -75,7 +75,7 @@ export default function Dashboard({
         assigned_approver: d.assigned_approver,
         is_current_approver: d.is_current_approver
       }))
-: []
+    : [];
 
   // Filter documents strictly by assigned user if not admin
   const isAssignedToUser = (doc: any) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, Calendar, CheckCircle2, RotateCw } from 'lucide-react';
+import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, CheckCircle2, RotateCw } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -155,7 +155,7 @@ export default function Admin() {
         body: JSON.stringify({ retention_days: days, prune_immediately: false })
       });
       if (res.ok) {
-        const data = await res.json();
+        await res.json();
         setRetentionNotice({
           type: 'success',
           text: days === 0 

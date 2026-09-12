@@ -12,7 +12,6 @@ import {
   X,
   Key,
 } from "lucide-react";
-import kolamSolidImg from "../assets/kolam_solid_white.png";
 
 type MFAMethod = "EMAIL" | "SMS" | "AUTHENTICATOR";
 

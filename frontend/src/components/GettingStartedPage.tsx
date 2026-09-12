@@ -84,7 +84,7 @@ export default function GettingStartedPage({
     setSimStep(stepIndex);
     const timeStr = new Date().toLocaleTimeString();
     
-    let newLogs: string[] = [];
+    let newLogs: string[];
     if (stepIndex === 1) {
       newLogs = [
         `[${timeStr}] [EMAIL-INTAKE] Monitored mailbox discovered new attachment from 'v.shirley@acme-manufacturing.com'`,

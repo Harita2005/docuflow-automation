@@ -43,15 +43,18 @@ const MONTH_NAMES = [
 export default function ApprovedDocumentsPage({
   documents,
   onViewDocument,
-  currentUserRole = "employee",
-  currentUserEmail = "",
-  currentUserUsername = "",
+  currentUserRole: _currentUserRole = "employee",
+  currentUserEmail: _currentUserEmail = "",
+  currentUserUsername: _currentUserUsername = "",
   onRefreshDocs
 }: ApprovedDocumentsPageProps) {
-  // Primary dedicated filters: Year, Month, Doc Type & Search
+  // Primary dedicated filters: Year, Month, Date Range, Doc Type & Search
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilterMode, setDateFilterMode] = useState<"month" | "range">("month");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
   const [selectedDocType, setSelectedDocType] = useState<string>("all");
 
   // Sorting & Pagination states
@@ -70,12 +73,50 @@ export default function ApprovedDocumentsPage({
     return documents.filter(isApproved);
   }, [documents]);
 
-  // Date helper
+  // Date helpers
   const getDocDate = (doc: DbInvoice): Date | null => {
     const dateVal = doc.invoice_date || doc.created_at;
     if (!dateVal) return null;
+    if (typeof dateVal === "string") {
+      const match = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+      }
+    }
     const d = new Date(dateVal);
     return isNaN(d.getTime()) ? null : d;
+  };
+
+  const parseDateInput = (val: string): Date | null => {
+    if (!val) return null;
+    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDateForInput = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyDatePreset = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    setFromDate(formatDateForInput(start));
+    setToDate(formatDateForInput(end));
+  };
+
+  const applyThisMonthPreset = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    setFromDate(formatDateForInput(start));
+    setToDate(formatDateForInput(now));
   };
 
   // Available Years dynamically extracted from approved documents
@@ -104,23 +145,39 @@ export default function ApprovedDocumentsPage({
     const list = approvedDocs.filter(doc => {
       const dt = getDocDate(doc);
 
-      // 1. Year Filter
-      if (selectedYear !== "all") {
-        if (!dt || String(dt.getFullYear()) !== selectedYear) return false;
+      // 1. Date Filtering: Either Custom Date Range or Month-Wise
+      if (dateFilterMode === "range") {
+        if (fromDate) {
+          const from = parseDateInput(fromDate);
+          if (from) {
+            from.setHours(0, 0, 0, 0);
+            if (!dt || dt.getTime() < from.getTime()) return false;
+          }
+        }
+        if (toDate) {
+          const to = parseDateInput(toDate);
+          if (to) {
+            to.setHours(23, 59, 59, 999);
+            if (!dt || dt.getTime() > to.getTime()) return false;
+          }
+        }
+      } else {
+        // Month-Wise mode: Year & Month Filter
+        if (selectedYear !== "all") {
+          if (!dt || String(dt.getFullYear()) !== selectedYear) return false;
+        }
+        if (selectedMonth !== "all") {
+          if (!dt || String(dt.getMonth()) !== selectedMonth) return false;
+        }
       }
 
-      // 2. Month Filter
-      if (selectedMonth !== "all") {
-        if (!dt || String(dt.getMonth()) !== selectedMonth) return false;
-      }
-
-      // 3. Document Type Filter
+      // 2. Document Type Filter
       if (selectedDocType !== "all") {
         const docType = (doc.document_type || "").toUpperCase().trim();
         if (docType !== selectedDocType.toUpperCase().trim()) return false;
       }
 
-      // 4. Full-text Search Filter
+      // 3. Full-text Search Filter
       const search = searchTerm.toLowerCase().trim();
       if (search) {
         const vendor = (doc.vendor_name || "").toLowerCase();
@@ -176,12 +233,12 @@ export default function ApprovedDocumentsPage({
     });
 
     return list;
-  }, [approvedDocs, selectedYear, selectedMonth, selectedDocType, searchTerm, sortBy]);
+  }, [approvedDocs, dateFilterMode, selectedYear, selectedMonth, fromDate, toDate, selectedDocType, searchTerm, sortBy]);
 
   // Reset pagination on filter change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedYear, selectedMonth, selectedDocType, sortBy, pageSize]);
+  }, [searchTerm, dateFilterMode, selectedYear, selectedMonth, fromDate, toDate, selectedDocType, sortBy, pageSize]);
 
   // Pagination slicing
   const totalPages = Math.ceil(filteredAndSortedDocs.length / pageSize) || 1;
@@ -230,8 +287,8 @@ export default function ApprovedDocumentsPage({
 
   const hasActiveFilters = Boolean(
     searchTerm || 
-    selectedYear !== "all" || 
-    selectedMonth !== "all" || 
+    (dateFilterMode === "month" && (selectedYear !== "all" || selectedMonth !== "all")) || 
+    (dateFilterMode === "range" && (fromDate || toDate)) || 
     selectedDocType !== "all"
   );
 
@@ -240,6 +297,8 @@ export default function ApprovedDocumentsPage({
     setSelectedYear("all");
     setSelectedMonth("all");
     setSelectedDocType("all");
+    setFromDate("");
+    setToDate("");
   };
 
   return (
@@ -260,7 +319,7 @@ export default function ApprovedDocumentsPage({
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Verified enterprise records filtered by Year, Month, and Document Type
+              Verified enterprise records filtered by Month, Date Range, and Document Type
             </p>
           </div>
         </div>
@@ -315,36 +374,129 @@ export default function ApprovedDocumentsPage({
             )}
           </div>
 
-          {/* Core Dedicated Filters: Year, Month, Doc Type */}
+          {/* Core Dedicated Filters: Year, Month, Date Range, Doc Type */}
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* Filter 1: Year */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Year:</span>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
+            {/* Date Mode Toggle: By Month vs Custom Date Range */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDateFilterMode("month")}
+                className={`px-2 py-1 text-[10px] font-bold rounded transition cursor-pointer flex items-center gap-1 ${
+                  dateFilterMode === "month"
+                    ? "bg-white text-slate-900 shadow-2xs font-extrabold"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+                title="Filter documents month-wise"
               >
-                <option value="all">All Years</option>
-                {availableYears.map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
+                <Calendar className="h-3 w-3 text-slate-600" />
+                <span>Month</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateFilterMode("range")}
+                className={`px-2 py-1 text-[10px] font-bold rounded transition cursor-pointer flex items-center gap-1 ${
+                  dateFilterMode === "range"
+                    ? "bg-white text-[#003F28] shadow-2xs font-extrabold"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+                title="Filter documents by custom From - To date range"
+              >
+                <Calendar className="h-3 w-3 text-emerald-700" />
+                <span>Date Range</span>
+              </button>
             </div>
 
-            {/* Filter 2: Month */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Month:</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-              >
-                {MONTH_NAMES.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
+            {/* Date Inputs based on selected mode */}
+            {dateFilterMode === "month" ? (
+              <>
+                {/* Filter 1: Year */}
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Year:</span>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">All Years</option>
+                    {availableYears.map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Filter 2: Month */}
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Month:</span>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="bg-transparent text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    {MONTH_NAMES.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              /* Custom Date Range: From - To with Quick Presets */
+              <div className="flex flex-wrap items-center gap-1">
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From:</span>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                  />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">To:</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                  />
+                  {(fromDate || toDate) && (
+                    <button
+                      type="button"
+                      onClick={() => { setFromDate(""); setToDate(""); }}
+                      className="p-0.5 text-slate-400 hover:text-slate-600 ml-0.5 transition"
+                      title="Clear date range"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Quick Presets */}
+                <div className="hidden sm:flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset(7)}
+                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                    title="Last 7 days"
+                  >
+                    7D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset(30)}
+                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                    title="Last 30 days"
+                  >
+                    30D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyThisMonthPreset}
+                    className="px-1.5 py-1 text-[9.5px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                    title="This month to date"
+                  >
+                    This Month
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Filter 3: Document Type */}
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">

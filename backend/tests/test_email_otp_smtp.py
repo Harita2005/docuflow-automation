@@ -3,7 +3,6 @@ import smtplib
 import ssl
 from unittest.mock import patch, MagicMock
 from app.database.models import OTPVerification, User
-from app.services.otp_service import verify_hashed_otp
 
 
 def test_smtp_auth_failure_returns_502(client, seed_test_data):
