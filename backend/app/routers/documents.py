@@ -1698,8 +1698,8 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                     WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
                     WorkflowStepDefinition.stage_number == stg_num
                 ).first()
-            except Exception:
-                pass
+            except (ValueError, IndexError) as exc:
+                logger.debug("Failed parsing stage number from stage_name: %s", exc)
         if not step and (clean_stage.lower() == 'attachment status' or clean_stage.lower() == 'stage 1'):
             step = db.query(WorkflowStepDefinition).filter(
                 WorkflowStepDefinition.profile_name == inv.workflow_profile_id,

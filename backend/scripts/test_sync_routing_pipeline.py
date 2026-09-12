@@ -1,17 +1,13 @@
-import json
 import os
-import sys
 from fastapi import HTTPException
 from app.database.connection import SessionLocal
-from app.database.models import Invoice, InvoiceChecklistState, WorkflowProfile, WorkflowStepDefinition, User
+from app.database.models import Invoice, InvoiceChecklistState, User
 from app.schemas.schemas import DocumentSyncRequest
 from app.routers.sync import _upsert_single_document
 from app.routers.documents import (
-    find_invoice_by_identifier,
     check_approval_authorization,
     update_invoice,
     get_all_invoices,
-    resolve_checklist_items,
 )
 from app.schemas.schemas import InvoiceUpdate
 from app.services.escalation_service import can_stage_escalate, is_physical_attachment_present

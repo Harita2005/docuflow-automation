@@ -113,8 +113,8 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
             except AttributeError:
                 if str(resolved_cwd).startswith(str(base_upload)) or str(resolved_cwd).startswith(str(base_pdf)):
                     return resolved_cwd
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed resolving relative to cwd: %s", exc)
 
     # Normalize backslashes for cross-platform matching
     norm_path = raw_path_str.replace('\\', '/')

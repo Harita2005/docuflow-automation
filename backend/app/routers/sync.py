@@ -204,8 +204,8 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     if existing and existing.custom_data:
         try:
             custom_dict.update(json.loads(existing.custom_data) if isinstance(existing.custom_data, str) else existing.custom_data)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed parsing existing custom_data: %s", exc)
     if req.custom_data and isinstance(req.custom_data, dict):
         custom_dict.update(req.custom_data)
     custom_data_str = json.dumps(custom_dict) if custom_dict else None

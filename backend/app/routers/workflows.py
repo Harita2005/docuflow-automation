@@ -266,7 +266,6 @@ def publish_configurations(payload: dict, db: Session=Depends(get_db)):
 
 @router.get('/api/workflows/{invoice_id}/escalate-check')
 def check_invoice_escalation_status(invoice_id: str, db: Session=Depends(get_db)):
-    from app.database.models import Invoice
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import can_stage_escalate
     inv = find_invoice_by_identifier(db, invoice_id)
