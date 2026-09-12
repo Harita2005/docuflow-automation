@@ -124,6 +124,10 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
         db.execute(text("\n            UPDATE integration.source_records \n            SET canonical_document_id = :doc_id, status = 'NORMALIZED'\n            WHERE source_record_id = :rec_id\n        "), {'doc_id': doc_id, 'rec_id': source_rec_id})
         db.execute(text('DELETE FROM core.document_metadata WHERE document_id = :doc_id'), {'doc_id': doc_id})
         metadata_items = [('amount', str(getattr(req, 'amount', 0.0))), ('base_amount', str(getattr(req, 'base_amount', 0.0) or 0.0)), ('tax_amount', str(getattr(req, 'tax_amount', 0.0) or 0.0)), ('cgst', str(getattr(req, 'cgst', 0.0) or 0.0)), ('sgst', str(getattr(req, 'sgst', 0.0) or 0.0)), ('igst', str(getattr(req, 'igst', 0.0) or 0.0)), ('vendor_code', getattr(req, 'vendor_code', '') or ''), ('vendor_name', getattr(req, 'vendor_name', '') or ''), ('cost_center', getattr(req, 'cost_center', '') or ''), ('plant', getattr(req, 'plant', '') or ''), ('payment_terms', getattr(req, 'payment_terms', '') or '')]
+        if req.custom_data and isinstance(req.custom_data, dict):
+            for ck, cv in req.custom_data.items():
+                if cv is not None and str(ck) not in [m[0] for m in metadata_items]:
+                    metadata_items.append((str(ck), str(cv)))
         for k, v in metadata_items:
             db.execute(text('\n                INSERT INTO core.document_metadata (document_id, meta_key, meta_value, created_at)\n                VALUES (:doc_id, :key, :val, SYSUTCDATETIME())\n            '), {'doc_id': doc_id, 'key': k, 'val': v})
         db.execute(text('\n            INSERT INTO rules.rule_evaluation_runs (document_id, run_time, correlation_id)\n            VALUES (:doc_id, SYSUTCDATETIME(), NEWID())\n        '), {'doc_id': doc_id})
@@ -196,7 +200,15 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         calculated_base = round(req.amount / 1.18, 2)
         calculated_tax = round(req.amount - calculated_base, 2)
     line_items_str = json.dumps(req.line_items) if req.line_items else None
-    custom_data_str = json.dumps(req.custom_data) if req.custom_data else None
+    custom_dict = {}
+    if existing and existing.custom_data:
+        try:
+            custom_dict.update(json.loads(existing.custom_data) if isinstance(existing.custom_data, str) else existing.custom_data)
+        except Exception:
+            pass
+    if req.custom_data and isinstance(req.custom_data, dict):
+        custom_dict.update(req.custom_data)
+    custom_data_str = json.dumps(custom_dict) if custom_dict else None
     if existing:
         existing.doc_num = req.doc_num or existing.doc_num
         existing.vendor_name = req.vendor_name or existing.vendor_name

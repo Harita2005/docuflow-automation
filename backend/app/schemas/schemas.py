@@ -305,10 +305,29 @@ class DocumentSyncRequest(BaseModel):
                 data['DocRefNo'] = doc_num
             elif inv_num and (not doc_num):
                 data['document_number'] = inv_num
+
+            # Collect any dynamic third-party fields into custom_data
+            standard_keys = {
+                'doc_key', 'DocKey', 'doc_num', 'DocNum', 'doc_entry', 'DocEntry',
+                'company_code', 'CompanyCode', 'division', 'document_type', 'TransType',
+                'category', 'Category', 'cost_center', 'CostCenter', 'plant', 'Branch',
+                'vendor_name', 'CardName', 'vendor_code', 'CardCode', 'vendor_gstin', 'GSTIN',
+                'invoice_number', 'DocRefNo', 'document_number', 'invoice_date', 'DocDate',
+                'po_number', 'PONumber', 'amount', 'DocTotal', 'base_amount', 'tax_amount',
+                'currency', 'payment_terms', 'line_items', 'custom_data', 'auto_route',
+                'access_token', 'accessToken', 'token', 'Token', 'api_key', 'apiKey', 'secret_key', 'secretKey'
+            }
+            existing_custom = dict(data.get('custom_data') or {})
+            for k, v in data.items():
+                if k not in standard_keys and v is not None:
+                    existing_custom[k] = v
+            if existing_custom:
+                data['custom_data'] = existing_custom
         return data
 
     class Config:
         populate_by_name = True
+        extra = 'allow'
 
 class DocumentSyncResponse(BaseModel):
     success: bool

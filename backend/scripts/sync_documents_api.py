@@ -6,7 +6,6 @@ receives a 60-minute JWT Bearer token, and syncs 2 sample documents to /api/sync
 """
 
 import sys
-import json
 import argparse
 import requests
 

@@ -165,24 +165,23 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         doc_div = (inv.division or '').strip().upper()
         if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
             continue
-        if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
-            filtered_invoices.append(inv)
-            continue
-        if inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver):
-            filtered_invoices.append(inv)
-            continue
-        is_prior_pool_member = False
-        if inv.workflow_profile_id and (inv.current_stage or 1) > 1:
-            for prior_stg in range(1, inv.current_stage or 1):
-                if (inv.workflow_profile_id, prior_stg) in user_pool_stages:
-                    is_prior_pool_member = True
-                    break
-        if is_prior_pool_member:
-            filtered_invoices.append(inv)
-            continue
-        if authorize_document_access(current_user, inv):
-            filtered_invoices.append(inv)
-            continue
+        
+        is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
+        if is_terminal:
+            if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
+                filtered_invoices.append(inv)
+                continue
+            if authorize_document_access(current_user, inv):
+                filtered_invoices.append(inv)
+                continue
+        else:
+            # Active workflow: STRICT ACCESS. Only the current assigned approver pool or users who already signed off can view.
+            if inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver):
+                filtered_invoices.append(inv)
+                continue
+            if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
+                filtered_invoices.append(inv)
+                continue
     results = []
     for inv in filtered_invoices:
         is_curr = False
@@ -233,16 +232,21 @@ def get_synced_pending_documents(db: Session=Depends(get_db), current_user: User
 def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     steps_data = []
+    seen_stages = set()
     if inv.workflow_profile_id:
-        steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).order_by(WorkflowStepDefinition.stage_number.asc(), WorkflowStepDefinition.id.asc()).all()
         for s in steps:
-            steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
+            if s.stage_number not in seen_stages:
+                seen_stages.add(s.stage_number)
+                steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
     if not steps_data:
         # Fallback to standard workflow profile or generate 4 standard stages (YUVASREE, Nattudurai, VIGNESH, VARUNAN)
-        fallback_steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow').order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        fallback_steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == 'VCC_Test_flow').order_by(WorkflowStepDefinition.stage_number.asc(), WorkflowStepDefinition.id.asc()).all()
         if fallback_steps:
             for s in fallback_steps:
-                steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
+                if s.stage_number not in seen_stages:
+                    seen_stages.add(s.stage_number)
+                    steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
         else:
             standard_approvers = ['YUVASREE', 'Nattudurai', 'VIGNESH', 'VARUNAN']
             total = max(inv.total_stages or 4, 1)
@@ -304,8 +308,18 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         doc_div = (inv.division or '').strip().upper()
         if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
             raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
-        if not is_curr and (not has_appr) and (not has_rej) and (not is_prior_pool_member) and not authorize_document_access(current_user, inv):
-            raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
+        
+        is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
+        if is_terminal:
+            if not has_appr and not has_rej and not is_prior_pool_member and not authorize_document_access(current_user, inv):
+                raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
+        else:
+            # Active document: strictly restricted to current stage approver pool or prior sign-off members
+            if not is_curr and not has_appr and not has_rej and not is_prior_pool_member:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
+                )
     inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
@@ -320,6 +334,19 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
 def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     update_data = payload.dict(exclude_unset=True)
+
+    # Protect synced ERP data during Attachment Status
+    is_synced = bool(inv.doc_key or getattr(inv, 'source_application', None))
+    is_attachment_stage = (inv.current_stage or 1) == 1 or 'attachment' in (inv.status or '').lower()
+    if is_synced and is_attachment_stage:
+        synced_fields = {'amount', 'base_amount', 'tax_amount', 'invoice_number', 'invoice_date', 'vendor_name', 'vendor_code', 'vendor_gstin', 'po_number', 'cost_center', 'plant', 'division'}
+        for sf in synced_fields:
+            if sf in update_data and update_data[sf] is not None and getattr(inv, sf) != update_data[sf]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Data Sync Protection: This document was synced from third-party ERP. Core financial field '{sf}' cannot be edited during Attachment Status."
+                )
+
     for field, val in update_data.items():
         if hasattr(inv, field) and val is not None:
             setattr(inv, field, val)
@@ -670,6 +697,13 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             raise HTTPException(status_code=403, detail=f'Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document.')
     if require_compliance and db:
         is_stage_1 = (inv.current_stage or 1) == 1
+        current_step_name = 'Attachment Status' if is_stage_1 else f'Stage {inv.current_stage or 1}'
+        if inv.workflow_profile_id:
+            step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
+            if step and step.step_name:
+                current_step_name = step.step_name
+        is_attachment_stage = is_stage_1 or 'attachment' in current_step_name.lower() or 'attachment' in (inv.status or '').lower()
+
         has_attachment = False
         if inv.file_url and inv.file_url.strip():
             try:
@@ -679,13 +713,10 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                     has_attachment = True
             except Exception:
                 has_attachment = False
-        if is_stage_1 and (not has_attachment):
+
+        if is_attachment_stage and (not has_attachment):
             raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical invoice PDF file must be attached and uploaded before approving Stage 1 (Attachment Status).')
-        current_step_name = 'Attachment Status' if is_stage_1 else f'Stage {inv.current_stage or 1}'
-        if inv.workflow_profile_id:
-            step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
-            if step and step.step_name:
-                current_step_name = step.step_name
+
         checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
         if not checklist_items:
             default_items = resolve_checklist_items(db, inv, current_step_name)
@@ -695,10 +726,10 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                 checklist_items.append(item)
             db.commit()
         if checklist_items:
-            unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
+            unchecked_mandatory = [item for item in checklist_items if not item.is_checked]
             if unchecked_mandatory:
                 missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])
-                raise HTTPException(status_code=400, detail=f"Compliance Checklist Incomplete: The following mandatory checklist items must be verified and checked before approving: {missing_items_str}")
+                raise HTTPException(status_code=400, detail=f"Compliance Checklist Incomplete: The following checklist items must be verified and checked before approving: {missing_items_str}")
 
 @router.post('/api/workflows/approve')
 @router.post('/api/workflow/approve')
@@ -1644,8 +1675,84 @@ def get_erp_po_details(po_number: str, db: Session=Depends(get_db)):
     return {'po_number': po_number, 'vendor_name': inv.vendor_name if inv else 'COIMBATORE TEXTILE TOOLS', 'amount': inv.amount if inv else 35000.0, 'status': 'Approved', 'items': []}
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
-    # Checklists removed per user directive
-    return []
+    """
+    Resolves compliance checklist items for an invoice at a given workflow stage:
+    1. Check WorkflowStepDefinition.checklist_json for matching workflow_profile_id and stage
+    2. Check ChecklistTemplate table for matching workflow_profile and stage_name
+    3. Check ChecklistRule table matching division, category, workflow_profile, and stage_name
+    4. Fallback: If Stage 1 / Attachment Status and no items configured, provide standard physical compliance items.
+    """
+    items: List[str] = []
+    clean_stage = (stage_name or '').strip()
+
+    # 1. Check WorkflowStepDefinition
+    if inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.step_name.ilike(clean_stage)
+        ).first()
+        if not step and clean_stage.lower().startswith('stage '):
+            try:
+                stg_num = int(clean_stage.split()[1])
+                step = db.query(WorkflowStepDefinition).filter(
+                    WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+                    WorkflowStepDefinition.stage_number == stg_num
+                ).first()
+            except Exception:
+                pass
+        if not step and (clean_stage.lower() == 'attachment status' or clean_stage.lower() == 'stage 1'):
+            step = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+                WorkflowStepDefinition.stage_number == 1
+            ).first()
+
+        if step and step.checklist_json:
+            try:
+                parsed = json.loads(step.checklist_json)
+                if isinstance(parsed, list):
+                    for itm in parsed:
+                        txt = str(itm).strip()
+                        if txt and txt not in items:
+                            items.append(txt)
+            except Exception as e:
+                logger.debug("Failed parsing step.checklist_json: %s", e)
+
+    # 2. Check ChecklistTemplate
+    if not items and inv.workflow_profile_id:
+        tpls = db.query(ChecklistTemplate).filter(
+            ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
+            ChecklistTemplate.stage_name.ilike(clean_stage),
+            ChecklistTemplate.is_active == True
+        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
+        for t in tpls:
+            splits = [s.strip() for s in t.item_text.split(',') if s.strip()] if ',' in t.item_text else [t.item_text.strip()]
+            for s in splits:
+                if s and s not in items:
+                    items.append(s)
+
+    # 3. Check ChecklistRule
+    if not items:
+        query = db.query(ChecklistRule).filter(
+            ChecklistRule.is_active == True,
+            (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
+        )
+        if inv.workflow_profile_id:
+            query = query.filter((ChecklistRule.workflow_profile == inv.workflow_profile_id) | (ChecklistRule.workflow_profile == 'ALL'))
+        if inv.division:
+            query = query.filter((ChecklistRule.division == inv.division) | (ChecklistRule.division == 'ALL'))
+        if inv.category:
+            query = query.filter((ChecklistRule.category == inv.category) | (ChecklistRule.category == 'ALL'))
+        rules = query.order_by(ChecklistRule.sequence_order.asc()).all()
+        for r in rules:
+            txt = (r.item_text or '').strip()
+            if txt and txt not in items:
+                items.append(txt)
+
+    # 4. Standard fallback for Attachment Status if empty
+    if not items and ('attachment' in clean_stage.lower() or clean_stage in ['Stage 1', 'Attachment Status']):
+        items = ["Attachment", "Total amount", "vendor name"]
+
+    return items
 
 @router.get('/api/invoices/{invoice_id}/checklist')
 def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db)):

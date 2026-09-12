@@ -24,6 +24,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
     { id: 'Cost Center', label: 'Cost Center / Dept' },
     { id: 'Branch', label: 'Branch / Plant Location' },
     { id: 'Invoice Amount (Total)', label: 'Invoice Amount (Total)' },
+    { id: 'Base Amount', label: 'Base Amount (Taxable / Net)' },
     { id: 'Document Type', label: 'Document Type' },
     { id: 'Vendor Name', label: 'Vendor Name' },
     { id: 'Tax Amount', label: 'Tax Amount' },
@@ -102,7 +103,7 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   const [wfCategoryFilter, setWfCategoryFilter] = useState('ALL');
 
   const openEditor = (r = null, defaultDocType = null) => {
-    let targetRule = null;
+    let targetRule;
     if (r) {
       targetRule = JSON.parse(JSON.stringify(r));
     } else {

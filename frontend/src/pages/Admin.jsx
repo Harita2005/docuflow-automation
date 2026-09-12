@@ -140,7 +140,7 @@ export default function Admin() {
         "Content-Type": "application/json",
         ...(token ? { "Authorization": `Bearer ${token}` } : {})
       };
-      let days = 7;
+      let days;
       if (isCustomRetention) {
         days = parseInt(customDays, 10);
         if (isNaN(days) || days < 0) days = 7;

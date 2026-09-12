@@ -390,6 +390,14 @@ export default function DocumentDetails({
     if (isDocumentLocked && raw === "edit") {
       return "view";
     }
+    // Synced Data Protection: Prevent editing synced third-party data during Attachment Status
+    const isSyncedFromErp = Boolean(document?.doc_key || (document as any)?.source_application);
+    const isAttachmentStatus = (document?.current_stage || 1) === 1 || (document?.status || "").toLowerCase().includes("attachment");
+    if (isSyncedFromErp && isAttachmentStatus && raw === "edit") {
+      if (["vendor_name", "invoice_num_date", "po_reference", "total_gross", "cost_center", "payment_terms", "hsn_tax", "line_items"].includes(fieldId)) {
+        return "view";
+      }
+    }
     return raw;
   };
 
@@ -578,7 +586,12 @@ export default function DocumentDetails({
         setWorkflowInstance(data.workflow_instance || null);
         setWorkflowSteps(data.workflow_steps || []);
         setActiveApprovalLog(data.active_approval_log || null);
-        setWorkflowStepDefinitions(data.workflow_step_definitions || []);
+        const rawSteps = data.workflow_step_definitions || [];
+        const uniqueSteps = rawSteps.filter(
+          (step: any, index: number, self: any[]) =>
+            index === self.findIndex((t: any) => t.stage_number === step.stage_number)
+        );
+        setWorkflowStepDefinitions(uniqueSteps);
       }
       const wfRes = await fetch(`/api/workflows`, { headers });
       if (wfRes.ok) {
@@ -1082,6 +1095,18 @@ export default function DocumentDetails({
                 {document.document_type || "DOCUMENT"}
               </span>
               {getStatusBadge()}
+              {document.workflow_profile_id && (
+                <span className="document-details-meta-badge px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[9px] font-bold text-emerald-800 flex items-center gap-1 shrink-0" title={`Active Workflow Profile: ${document.workflow_profile_id}`}>
+                  <Shield className="h-2.5 w-2.5 text-[#003F28]" />
+                  Flow: {document.workflow_profile_id}
+                </span>
+              )}
+              {Boolean(document.doc_key) && ((document?.current_stage || 1) === 1 || (document?.status || "").toLowerCase().includes("attachment")) && (
+                <span className="document-details-meta-badge px-2 py-1 rounded-md bg-blue-50 border border-blue-200 text-[9px] font-bold text-blue-800 flex items-center gap-1 shrink-0" title="Synced from third-party ERP. Financial and header fields are locked in read-only mode during Attachment Status.">
+                  <Database className="h-2.5 w-2.5 text-blue-600" />
+                  ERP Data (Locked)
+                </span>
+              )}
             </div>
           </div>
 
@@ -1287,9 +1312,16 @@ export default function DocumentDetails({
               title="Click to view full Approval Timeline & Audit Trail"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black text-slate-800 flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-[#003F28]" /> Approval Workflow
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-black text-slate-800 flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 text-[#003F28]" /> Approval Workflow
+                  </span>
+                  {document?.workflow_profile_id && (
+                    <span className="text-[9.5px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shadow-3xs">
+                      {document.workflow_profile_id}
+                    </span>
+                  )}
+                </div>
                 <span className="px-2 py-0.5 rounded-md border border-slate-200 text-[8px] font-bold text-slate-600">View Timeline →</span>
               </div>
               {/* Horizontal Stepper */}
@@ -1977,11 +2009,16 @@ export default function DocumentDetails({
                   <Clock className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
                     <span>Approval Timeline & Audit Trail</span>
                     <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
                       {formatDocNumber(document.id, document.document_type, (document as any).category)}
                     </span>
+                    {document?.workflow_profile_id && (
+                      <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-2 py-0.5 rounded border border-emerald-600/70">
+                        Flow: {document.workflow_profile_id}
+                      </span>
+                    )}
                   </h3>
                   <p className="text-[10.5px] text-emerald-100/80 font-medium">
                     {vendorName || document.vendor_name || "Vendor"} • ₹{Number(amount || document.amount || 0).toLocaleString('en-IN')}

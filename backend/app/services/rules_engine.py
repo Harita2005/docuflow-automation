@@ -103,10 +103,10 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
             if clean_r_str and clean_d_str:
                 num_doc = float(clean_d_str)
                 num_rule = float(clean_r_str)
-                is_greater_or_equal = '>=' in op_str or '>=' in raw_r or 'greater than or equal' in op_str or ('greater_or_equal' in op_str)
-                is_greater = ('>' in op_str or '>' in raw_r or 'greater' in op_str) and (not is_greater_or_equal)
-                is_less_or_equal = '<=' in op_str or '<=' in raw_r or 'less than or equal' in op_str or ('less_or_equal' in op_str)
-                is_less = ('<' in op_str or '<' in raw_r or 'less' in op_str) and (not is_less_or_equal)
+                is_greater_or_equal = '>=' in op_str or '>=' in raw_r or 'greater than or equal' in op_str or ('greater_or_equal' in op_str) or op_str in ['gte', '>=']
+                is_greater = ('>' in op_str or '>' in raw_r or 'greater' in op_str or op_str in ['gt', '>']) and (not is_greater_or_equal)
+                is_less_or_equal = '<=' in op_str or '<=' in raw_r or 'less than or equal' in op_str or ('less_or_equal' in op_str) or op_str in ['lte', '<=']
+                is_less = ('<' in op_str or '<' in raw_r or 'less' in op_str or op_str in ['lt', '<']) and (not is_less_or_equal)
                 if is_greater_or_equal:
                     return num_doc >= num_rule
                 if is_greater:
@@ -115,7 +115,7 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
                     return num_doc <= num_rule
                 if is_less:
                     return num_doc < num_rule
-                if op_str in ['equals', '==', '=', '']:
+                if op_str in ['equals', '==', '=', '', 'eq']:
                     if '>=' in raw_r:
                         return num_doc >= num_rule
                     elif '>' in raw_r or 'greater' in raw_r:
@@ -135,9 +135,9 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
     clean_doc = sanitize_text(doc_val)
     clean_rule_items = [sanitize_text(it) for it in rule_items]
     op = operator.strip().lower()
-    if op in ['equals', '==', '=']:
+    if op in ['equals', '==', '=', 'eq']:
         return str_doc in rule_items or clean_doc in clean_rule_items or any((clean_doc == cit for cit in clean_rule_items))
-    if op in ['not equals', '!=', '!==']:
+    if op in ['not equals', '!=', '!==', 'neq']:
         return str_doc not in rule_items and clean_doc not in clean_rule_items
     if op in ['contains any of', 'contains any of (or)', 'contains']:
         return any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
@@ -183,23 +183,57 @@ def match_condition(rule: Any, document: Any) -> bool:
             field_val = get_val(document, 'vendor_name') or ''
         elif clean_field_key in ['documenttype', 'doctype', 'type']:
             field_val = inferred_doc_type
+        elif clean_field_key in ['baseamount', 'base_amount', 'taxableamount', 'subtotal', 'netamount']:
+            field_val = float(get_val(document, 'base_amount') or 0.0)
         elif clean_field_key in ['invoiceamounttotal', 'amount', 'invoiceamount', 'totalamount', 'grossamount']:
-            field_val = float(get_val(document, 'amount') or 0.0)
+            gross_val = float(get_val(document, 'amount') or 0.0)
+            base_val = float(get_val(document, 'base_amount') or 0.0)
+            op_clean = operator.strip().lower()
+            if op_clean in ['equals', '==', '=', '', 'eq']:
+                # If rule specifies an amount with equals, match if it equals either gross total or taxable base
+                if match_field_value(val, gross_val, operator):
+                    return True
+                if base_val > 0 and match_field_value(val, base_val, operator):
+                    return True
+                return False
+            field_val = gross_val
         elif clean_field_key in ['taxamount', 'tax', 'gstamount']:
             field_val = float(get_val(document, 'tax_amount') or 0.0)
         else:
-            field_mapping = {'Division': get_val(document, 'division') or '', 'Company': get_val(document, 'division') or '', 'Plant': get_val(document, 'plant') or '', 'Branch': get_val(document, 'plant') or '', 'Category': cat_val or inferred_doc_type, 'Cost Center': get_val(document, 'cost_center') or '', 'Vendor Name': get_val(document, 'vendor_name') or '', 'Vendor Type': 'Standard', 'Document Type': inferred_doc_type, 'Invoice Amount (Total)': float(get_val(document, 'amount') or 0.0), 'Amount': float(get_val(document, 'amount') or 0.0), 'Tax Amount': float(get_val(document, 'tax_amount') or 0.0)}
+            field_mapping = {
+                'Division': get_val(document, 'division') or '',
+                'Company': get_val(document, 'division') or '',
+                'Plant': get_val(document, 'plant') or '',
+                'Branch': get_val(document, 'plant') or '',
+                'Category': cat_val or inferred_doc_type,
+                'Cost Center': get_val(document, 'cost_center') or '',
+                'Vendor Name': get_val(document, 'vendor_name') or '',
+                'Vendor Type': 'Standard',
+                'Document Type': inferred_doc_type,
+                'Invoice Amount (Total)': float(get_val(document, 'amount') or 0.0),
+                'Base Amount': float(get_val(document, 'base_amount') or 0.0),
+                'Amount': float(get_val(document, 'amount') or 0.0),
+                'Tax Amount': float(get_val(document, 'tax_amount') or 0.0)
+            }
             field_val = field_mapping.get(field)
         if field_val is None:
             custom_data = get_val(document, 'custom_data')
             if custom_data:
                 try:
                     custom_dict = json.loads(custom_data) if isinstance(custom_data, str) else custom_data
-                    field_val = custom_dict.get(field, '')
+                    if isinstance(custom_dict, dict):
+                        if field in custom_dict:
+                            field_val = custom_dict[field]
+                        else:
+                            norm_target = sanitize_text(field)
+                            for ck, cv in custom_dict.items():
+                                if sanitize_text(ck) == norm_target or ck.lower().strip() == field.lower().strip():
+                                    field_val = cv
+                                    break
                 except Exception as exc:
                     logger.debug('Handled exception: %s', exc)
-            else:
-                field_val = ''
+            if field_val is None:
+                field_val = get_val(document, field) or ''
         return match_field_value(val, field_val, operator)
     div_val = get_val(rule, 'division')
     cat_val = get_val(rule, 'category')

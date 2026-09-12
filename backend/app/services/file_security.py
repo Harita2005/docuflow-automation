@@ -91,17 +91,9 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
     base_upload = settings.UPLOAD_DIR.resolve()
     base_pdf = settings.PDF_STORAGE_DIR.resolve()
 
-    clean_path = raw_path_str
-    if '/uploads/' in clean_path:
-        clean_path = clean_path.split('/uploads/')[-1]
-    elif '/stored_pdfs/' in clean_path:
-        clean_path = clean_path.split('/stored_pdfs/')[-1]
-    elif clean_path.startswith('/api/documents/') and clean_path.endswith('/file'):
-        doc_id = clean_path.split('/api/documents/')[1].split('/file')[0]
-        clean_path = f'{doc_id}.pdf'
-
-    p = Path(clean_path)
-    if p.is_absolute() or clean_path.startswith('/') or clean_path.startswith('\\') or p.drive:
+    # If it's an absolute path, root path, or has a drive, ensure it's within safe directories
+    p = Path(raw_path_str)
+    if p.is_absolute() or raw_path_str.startswith('/') or raw_path_str.startswith('\\') or p.drive:
         resolved_p = p.resolve()
         try:
             if resolved_p.is_relative_to(base_upload) or resolved_p.is_relative_to(base_pdf):
@@ -111,16 +103,58 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
                 return resolved_p
         raise HTTPException(status_code=403, detail='Access Denied: Path outside allowed directories.')
 
+    # Try resolving relative to current working directory (e.g., 'backend\\uploads\\...')
+    try:
+        resolved_cwd = (Path.cwd() / p).resolve()
+        if resolved_cwd.is_file():
+            try:
+                if resolved_cwd.is_relative_to(base_upload) or resolved_cwd.is_relative_to(base_pdf):
+                    return resolved_cwd
+            except AttributeError:
+                if str(resolved_cwd).startswith(str(base_upload)) or str(resolved_cwd).startswith(str(base_pdf)):
+                    return resolved_cwd
+    except Exception:
+        pass
+
+    # Normalize backslashes for cross-platform matching
+    norm_path = raw_path_str.replace('\\', '/')
+    clean_path = norm_path
+    if '/uploads/' in clean_path:
+        clean_path = clean_path.split('/uploads/')[-1]
+    elif clean_path.startswith('uploads/'):
+        clean_path = clean_path.split('uploads/')[-1]
+    elif '/stored_pdfs/' in clean_path:
+        clean_path = clean_path.split('/stored_pdfs/')[-1]
+    elif clean_path.startswith('stored_pdfs/'):
+        clean_path = clean_path.split('stored_pdfs/')[-1]
+    elif clean_path.startswith('/api/documents/') and clean_path.endswith('/file'):
+        doc_id = clean_path.split('/api/documents/')[1].split('/file')[0]
+        clean_path = f'{doc_id}.pdf'
+    elif clean_path.startswith('/api/records/') and clean_path.endswith('/file'):
+        doc_id = clean_path.split('/api/records/')[1].split('/file')[0]
+        clean_path = f'{doc_id}.pdf'
+
     clean_rel = clean_path.lstrip('/\\')
     target_path = (base_upload / clean_rel).resolve()
     target_pdf_path = (base_pdf / clean_rel).resolve()
 
+    # Also check base file name in case folder prefix remained
+    base_file_name = Path(clean_rel).name
+    target_upload_base = (base_upload / base_file_name).resolve()
+    target_pdf_base = (base_pdf / base_file_name).resolve()
+
+    for cand in [target_path, target_upload_base, target_pdf_path, target_pdf_base]:
+        try:
+            if cand.is_file():
+                if cand.is_relative_to(base_upload) or cand.is_relative_to(base_pdf):
+                    return cand
+        except AttributeError:
+            if cand.is_file() and (str(cand).startswith(str(base_upload)) or str(cand).startswith(str(base_pdf))):
+                return cand
+
+    # Default fallback to target_path if it is safely within base_upload
     try:
         if target_path.is_relative_to(base_upload):
-            if target_path.exists():
-                return target_path
-            if target_pdf_path.is_relative_to(base_pdf) and target_pdf_path.exists():
-                return target_pdf_path
             return target_path
     except AttributeError:
         if str(target_path).startswith(str(base_upload)):

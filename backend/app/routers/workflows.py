@@ -133,11 +133,11 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session=Depends(ge
             existing.auto_cancel_enabled = payload.auto_cancel_enabled or False
             existing.auto_cancel_condition = payload.auto_cancel_condition
             db.flush()
-            db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == payload.profile_name).delete(synchronize_session='fetch')
         else:
             existing = WorkflowProfile(profile_name=payload.profile_name, workflow_code=payload.workflow_code, workflow_category=payload.workflow_category, workflow_type=payload.workflow_type, description=payload.description, status=payload.status, approval_threshold=payload.approval_threshold, rejection_handling=payload.rejection_handling, reminder_interval_hours=payload.reminder_interval_hours, escalation_after_hours=payload.escalation_after_hours, auto_escalation=payload.auto_escalation, rule_action=payload.rule_action or 'WORKFLOW_ROUTE', cancel_reason=payload.cancel_reason, auto_approve_enabled=payload.auto_approve_enabled or False, auto_approve_condition=payload.auto_approve_condition, auto_cancel_enabled=payload.auto_cancel_enabled or False, auto_cancel_condition=payload.auto_cancel_condition)
             db.add(existing)
             db.flush()
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == payload.profile_name).delete(synchronize_session='fetch')
         db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == payload.profile_name).delete(synchronize_session='fetch')
         for step in payload.steps:
             new_step = WorkflowStepDefinition(profile_name=payload.profile_name, stage_number=step.stage_number, step_name=step.step_name, approver_type=step.approver_type, approver_target=step.approver_target, delegate_approver=step.delegate_approver, document_type=step.document_type, action_required=step.action_required, permissions=step.permissions, sla_hours=step.sla_hours, checklist_json=json.dumps(step.checklist_items) if step.checklist_items else None)
@@ -263,3 +263,21 @@ def publish_configurations(payload: dict, db: Session=Depends(get_db)):
     db.add(SystemLog(invoice_id=None, action='Publish Drafts', user='Admin Engine', details=f'System configurations updated. Published {changes} items.'))
     db.commit()
     return {'success': True, 'message': f'Successfully published {changes} config changes.'}
+
+@router.get('/api/workflows/{invoice_id}/escalate-check')
+def check_invoice_escalation_status(invoice_id: str, db: Session=Depends(get_db)):
+    from app.database.models import Invoice
+    from app.routers.documents import find_invoice_by_identifier
+    from app.services.escalation_service import can_stage_escalate
+    inv = find_invoice_by_identifier(db, invoice_id)
+    can_esc, reason = can_stage_escalate(inv, db)
+    return {'document_id': inv.id, 'can_escalate': can_esc, 'current_stage': inv.current_stage or 1, 'reason': reason}
+
+@router.post('/api/workflows/{invoice_id}/escalate')
+def execute_invoice_escalation(invoice_id: str, payload: dict = {}, db: Session=Depends(get_db)):
+    from app.routers.documents import find_invoice_by_identifier
+    from app.services.escalation_service import escalate_invoice_stage
+    inv = find_invoice_by_identifier(db, invoice_id)
+    user_name = payload.get('user') or 'Escalation Engine'
+    reason = payload.get('reason') or 'SLA Threshold Exceeded'
+    return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)
