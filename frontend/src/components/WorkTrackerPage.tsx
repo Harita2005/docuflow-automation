@@ -28,6 +28,7 @@ export default function WorkTrackerPage({
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
     return initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
   });
@@ -424,100 +425,42 @@ export default function WorkTrackerPage({
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             
-            {/* Dynamic Table Header based on activeTab */}
-            <thead className="bg-slate-50 border-b border-slate-200 text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-              {activeTabCategory === "AP INVOICE" && (
-                <tr>
-                  <th className="py-2.5 px-3 w-[9%]">ID</th>
-                  <th className="py-2.5 px-3 w-[20%]">Supplier / Vendor &amp; GSTIN</th>
-                  <th className="py-2.5 px-3 w-[12%]">Invoice # &amp; Date</th>
-                  <th className="py-2.5 px-3 w-[12%]">PO Reference</th>
-                  <th className="py-2.5 px-3 w-[12%] text-right">Gross Value (₹)</th>
-                  <th className="py-2.5 px-3 w-[9%] text-right">Tax (GST)</th>
-                  <th className="py-2.5 px-3 w-[7%] text-center">Stage</th>
-                  <th className="py-2.5 px-3 w-[9%] text-center">Status</th>
-                  <th className="py-2.5 px-3 w-[11%]">Assigned Approver</th>
-                  <th className="py-2.5 px-3 w-[8%] text-center">Action</th>
-                </tr>
-              )}
-
-              {activeTabCategory === "GENERAL RECORDS" && (
-                <tr>
-                  <th className="py-2.5 px-3 w-[10%]">Record ID</th>
-                  <th className="py-2.5 px-3 w-[18%]">Submitter / Employee</th>
-                  <th className="py-2.5 px-3 w-[14%]">Cost Center &amp; Division</th>
-                  <th className="py-2.5 px-3 w-[16%]">Category / Description</th>
-                  <th className="py-2.5 px-3 w-[12%] text-right">Gross Value (₹)</th>
-                  <th className="py-2.5 px-3 w-[7%] text-center">Stage</th>
-                  <th className="py-2.5 px-3 w-[9%] text-center">Status</th>
-                  <th className="py-2.5 px-3 w-[14%]">Assigned Approver</th>
-                  <th className="py-2.5 px-3 w-[8%] text-center">Action</th>
-                </tr>
-              )}
-
-              {activeTabCategory === "PURCHASE ORDER" && (
-                <tr>
-                  <th className="py-2.5 px-3 w-[12%]">PO Number</th>
-                  <th className="py-2.5 px-3 w-[22%]">Supplier / Vendor</th>
-                  <th className="py-2.5 px-3 w-[14%]">Plant / Division</th>
-                  <th className="py-2.5 px-3 w-[10%]">Order Date</th>
-                  <th className="py-2.5 px-3 w-[14%] text-right">Total PO Value (₹)</th>
-                  <th className="py-2.5 px-3 w-[8%] text-center">Stage</th>
-                  <th className="py-2.5 px-3 w-[10%] text-center">Status</th>
-                  <th className="py-2.5 px-3 w-[10%] text-center">Action</th>
-                </tr>
-              )}
-
-              {activeTabCategory === "GOODS RECEIPT" && (
-                <tr>
-                  <th className="py-2.5 px-3 w-[12%]">GRN Ref</th>
-                  <th className="py-2.5 px-3 w-[14%]">PO Reference</th>
-                  <th className="py-2.5 px-3 w-[22%]">Supplier / Vendor</th>
-                  <th className="py-2.5 px-3 w-[12%]">Intake Date</th>
-                  <th className="py-2.5 px-3 w-[12%] text-center">Quality Check</th>
-                  <th className="py-2.5 px-3 w-[8%] text-center">Stage</th>
-                  <th className="py-2.5 px-3 w-[10%] text-center">Status</th>
-                  <th className="py-2.5 px-3 w-[10%] text-center">Action</th>
-                </tr>
-              )}
-
-              {activeTabCategory === "ALL" && (
-                <tr>
-                  <th className="py-2.5 px-3 w-[9%]">ID</th>
-                  <th className="py-2.5 px-3 w-[20%]">Supplier / Vendor</th>
-                  <th className="py-2.5 px-3 w-[12%]">Document Ref</th>
-                  <th className="py-2.5 px-3 w-[13%]">PO Reference</th>
-                  <th className="py-2.5 px-3 w-[11%] text-right">Gross Value (₹)</th>
-                  <th className="py-2.5 px-3 w-[8%] text-center">Stage</th>
-                  <th className="py-2.5 px-3 w-[9%] text-center">Status</th>
-                  <th className="py-2.5 px-3 w-[12%]">Assigned To</th>
-                  <th className="py-2.5 px-3 w-[6%] text-center">Action</th>
-                </tr>
-              )}
+            {/* Enterprise Compact Table Header (8 Columns) */}
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
+              <tr>
+                <th className="py-2 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer h-3.5 w-3.5"
+                    checked={filteredAndSortedDocs.length > 0 && selectedDocIds.length === filteredAndSortedDocs.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedDocIds(filteredAndSortedDocs.map(d => d.id));
+                      } else {
+                        setSelectedDocIds([]);
+                      }
+                    }}
+                    title="Select All"
+                  />
+                </th>
+                <th className="py-2 px-3 w-[15%]">Document ID</th>
+                <th className="py-2 px-3 w-[26%]">Supplier / Vendor</th>
+                <th className="py-2 px-3 w-[14%]">Document Type</th>
+                <th className="py-2 px-3 w-[15%] text-right">Amount (₹)</th>
+                <th className="py-2 px-3 w-[11%] text-center">Current Stage</th>
+                <th className="py-2 px-3 w-[10%] text-center">Status</th>
+                <th className="py-2 px-3 w-[9%] text-center">Action</th>
+              </tr>
             </thead>
 
-            {/* Dynamic Table Body based on activeTab */}
+            {/* Enterprise Compact Table Body */}
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {filteredAndSortedDocs.map((doc) => {
                 const vendorName = doc.vendor_name || "Enterprise Supplier";
-                const vendorInitials = vendorName
-                  .split(" ")
-                  .slice(0, 2)
-                  .map(w => w[0])
-                  .join("")
-                  .toUpperCase() || "V";
-
                 const grossAmount = Number(doc.amount || 0);
-                const taxableBase = Math.round(grossAmount / 1.18);
-                const gstTaxAmount = Math.round(grossAmount - taxableBase);
-                const cleanId = String(doc.id || "").replace(/^#/, "").replace(/^•/, "").trim();
                 const displayId = formatDocNumber(doc.id, doc.document_type, (doc as any).category);
-
-                const displayPaymentTerms = (terms: string) => {
-                  if (!terms) return "Net 30 Days";
-                  const cleanTerms = terms.replace(/^Net\s+/i, "").trim();
-                  return `Net ${cleanTerms}`;
-                };
+                const docDate = doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "");
+                const isSelected = selectedDocIds.includes(doc.id);
 
                 // Helper for Stage Pill
                 const renderStageBadge = () => {
@@ -526,21 +469,21 @@ export default function WorkTrackerPage({
 
                   if (status === "Settled" || status === "Approved" || status === "Paid" || status === "Ready for Payment") {
                     return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                         Approved
                       </span>
                     );
                   }
                   if (status === "On Hold") {
                     return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
                         Stage {stageNum}
                       </span>
                     );
                   }
                   if (status === "Rejected" || status === "Failed") {
                     return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
                         Stage {stageNum}
                       </span>
                     );
@@ -552,7 +495,7 @@ export default function WorkTrackerPage({
                     : "bg-amber-50 text-amber-700 border border-amber-200";
 
                   return (
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold ${badgeClass}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${badgeClass}`}>
                       Stage {stageNum}
                     </span>
                   );
@@ -565,7 +508,7 @@ export default function WorkTrackerPage({
 
                   if (isCompleted) {
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         <span>Approved</span>
                       </span>
@@ -573,7 +516,7 @@ export default function WorkTrackerPage({
                   }
                   if (status === "On Hold") {
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
                         <span>On Hold</span>
                       </span>
@@ -581,7 +524,7 @@ export default function WorkTrackerPage({
                   }
                   if (status === "Rejected" || status === "Failed" || status === "Cancelled") {
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                         <span>{status === "Cancelled" ? "Cancelled" : "Rejected"}</span>
                       </span>
@@ -593,7 +536,7 @@ export default function WorkTrackerPage({
 
                   if (isActionRequired) {
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                         <span>Pending</span>
                       </span>
@@ -602,7 +545,7 @@ export default function WorkTrackerPage({
 
                   if (hasApprovedByUser) {
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                         <span>In Progress</span>
                       </span>
@@ -610,38 +553,10 @@ export default function WorkTrackerPage({
                   }
 
                   return (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-slate-50 text-slate-700 border border-slate-200">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200">
                       <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                       <span>In Progress</span>
                     </span>
-                  );
-                };
-
-                // Helper for Approver Cell
-                const renderApproverCell = () => {
-                  const rawApprover = (doc.assigned_approver || "-").trim();
-                  const approverList = rawApprover.split(",").map(a => a.trim()).filter(Boolean);
-                  const firstApprover = approverList[0] || "-";
-                  const extraCount = approverList.length - 1;
-
-                  return (
-                    <div className="flex flex-col min-w-0" title={rawApprover}>
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="font-bold text-[10px] text-slate-800 truncate block">
-                          {firstApprover}
-                        </span>
-                        {extraCount > 0 && (
-                          <span className="text-[8.5px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1 rounded shrink-0">
-                            +{extraCount}
-                          </span>
-                        )}
-                      </div>
-                      {rawApprover !== "-" && (
-                        <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate block">
-                          {getApproverRole(rawApprover)}
-                        </span>
-                      )}
-                    </div>
                   );
                 };
 
@@ -653,383 +568,89 @@ export default function WorkTrackerPage({
                       e.stopPropagation();
                       onViewDocument(doc.id);
                     }}
-                    className="px-2.5 py-1 border border-[#003F28]/20 bg-[#003F28]/10 hover:bg-[#003F28] hover:text-white font-bold text-[9.5px] rounded-md transition-all cursor-pointer flex items-center justify-center gap-0.5 mx-auto text-[#003F28]"
+                    className="px-2.5 py-1 border border-[#003F28]/20 bg-[#003F28]/10 hover:bg-[#003F28] hover:text-white font-medium text-[11px] rounded transition-all cursor-pointer inline-flex items-center justify-center gap-1 mx-auto text-[#003F28]"
                   >
                     <span>Review</span>
-                    <span>&gt;</span>
+                    <span>→</span>
                   </button>
                 );
 
-                // --- TAB 1: AP INVOICE ROW ---
-                if (activeTabCategory === "AP INVOICE") {
-                  return (
-                    <tr 
-                      key={doc.id} 
-                      onClick={() => onViewDocument(doc.id)}
-                      className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
-                    >
-                      <td className="py-2.5 px-3 align-middle w-[9%] min-w-0">
-                        <span className="text-[9.5px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate inline-block max-w-full" title={displayId}>
-                          {displayId}
-                        </span>
-                      </td>
+                const docTypeLabel = doc.document_type || "AP Invoice";
 
-                      <td className="py-2.5 px-3 align-middle w-[20%] min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
-                            {vendorInitials}
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-[11px] text-slate-900 truncate block group-hover:text-indigo-600 transition uppercase" title={vendorName}>
-                              {vendorName}
-                            </span>
-                            <div className="flex items-center gap-1 text-[8.5px] text-slate-400 font-normal truncate">
-                              <span>{(doc as any).vendor_gstin ? `GSTIN: ${(doc as any).vendor_gstin}` : "GSTIN: 33AAAAA0000A1Z5"}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                        <div className="flex flex-col space-y-0.5 min-w-0">
-                          <span className="font-bold text-[11px] text-slate-900 truncate block" title={doc.invoice_number || `INV-${cleanId}`}>
-                            {doc.invoice_number || `INV-${cleanId}`}
-                          </span>
-                          <span className="text-[9.5px] text-slate-500 font-medium whitespace-nowrap">
-                            {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                            {displayPaymentTerms(doc.payment_terms || "")}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                        <span className="text-[9.5px] font-semibold text-indigo-600 font-mono truncate block" title={doc.po_number || `PO-2026-${cleanId}`}>
-                          {doc.po_number || `PO-2026-${cleanId}`}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-right w-[12%]">
-                        <div className="flex flex-col items-end">
-                          <span className="font-extrabold text-[11px] text-slate-900 whitespace-nowrap">
-                            ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                            Base: ₹{taxableBase.toLocaleString('en-IN')}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-right w-[9%]">
-                        <div className="flex flex-col items-end">
-                          <span className="font-bold text-[10px] text-slate-700 whitespace-nowrap">
-                            ₹{gstTaxAmount.toLocaleString('en-IN')}
-                          </span>
-                          <span className="text-[8.5px] text-slate-400 font-medium whitespace-nowrap">
-                            18% GST
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[7%]">
-                        {renderStageBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[9%]">
-                        {renderStatusBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[11%] min-w-0">
-                        {renderApproverCell()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[8%]">
-                        {renderActionButton()}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // --- TAB 2: GENERAL RECORDS / VCC ROW ---
-                if (activeTabCategory === "GENERAL RECORDS") {
-                  const employeeName = doc.vendor_name || (doc as any).employee_name || "Enterprise Employee";
-                  const costCenter = (doc as any).cost_center || "CC-4020 (IT Ops)";
-                  const division = (doc as any).division || "Corporate";
-                  const category = doc.document_type || "General Record";
-
-                  return (
-                    <tr 
-                      key={doc.id} 
-                      onClick={() => onViewDocument(doc.id)}
-                      className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
-                    >
-                      <td className="py-2.5 px-3 align-middle w-[10%] min-w-0">
-                        <span className="text-[9.5px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate inline-block max-w-full" title={displayId}>
-                          {displayId}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[18%] min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-6 w-6 rounded bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center font-bold text-[9px] shrink-0">
-                            {employeeName.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="font-bold text-[11px] text-slate-900 truncate block group-hover:text-indigo-600 transition" title={employeeName}>
-                            {employeeName}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[14%] min-w-0">
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-[10px] text-slate-800 truncate block" title={costCenter}>
-                            {costCenter}
-                          </span>
-                          <span className="text-[8.5px] text-slate-400 font-medium truncate block">
-                            {division}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[16%] min-w-0">
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-[10px] text-indigo-600 truncate block" title={category}>
-                            {category}
-                          </span>
-                          <span className="text-[8.5px] text-slate-400 font-normal truncate block">
-                            {doc.invoice_number || "Expense Voucher"}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-right w-[12%]">
-                        <span className="font-extrabold text-[11px] text-slate-900 whitespace-nowrap">
-                          ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[7%]">
-                        {renderStageBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[9%]">
-                        {renderStatusBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[14%] min-w-0">
-                        {renderApproverCell()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[8%]">
-                        {renderActionButton()}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // --- TAB 3: PURCHASE ORDER ROW ---
-                if (activeTabCategory === "PURCHASE ORDER") {
-                  const poNum = doc.po_number || doc.invoice_number || `PO-2026-${cleanId}`;
-                  const plant = (doc as any).plant || "Plant-01 (Chennai Hub)";
-
-                  return (
-                    <tr 
-                      key={doc.id} 
-                      onClick={() => onViewDocument(doc.id)}
-                      className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
-                    >
-                      <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                        <span className="text-[9.5px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 truncate inline-block max-w-full" title={poNum}>
-                          {poNum}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[22%] min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
-                            {vendorInitials}
-                          </div>
-                          <span className="font-bold text-[11px] text-slate-900 truncate block group-hover:text-indigo-600 transition uppercase" title={vendorName}>
-                            {vendorName}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[14%] min-w-0">
-                        <span className="text-[10px] font-medium text-slate-700 truncate block" title={plant}>
-                          {plant}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[10%] min-w-0">
-                        <span className="text-[9.5px] text-slate-600 font-medium whitespace-nowrap">
-                          {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-right w-[14%]">
-                        <span className="font-extrabold text-[11px] text-slate-900 whitespace-nowrap">
-                          ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[8%]">
-                        {renderStageBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[10%]">
-                        {renderStatusBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[10%]">
-                        {renderActionButton()}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // --- TAB 4: GOODS RECEIPT / GRN ROW ---
-                if (activeTabCategory === "GOODS RECEIPT") {
-                  const grnRef = doc.invoice_number || `GRN-2026-${cleanId}`;
-                  const poRef = doc.po_number || `PO-2026-${cleanId}`;
-
-                  return (
-                    <tr 
-                      key={doc.id} 
-                      onClick={() => onViewDocument(doc.id)}
-                      className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
-                    >
-                      <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                        <span className="text-[9.5px] font-mono font-bold text-slate-800 bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 truncate inline-block max-w-full" title={grnRef}>
-                          {grnRef}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[14%] min-w-0">
-                        <span className="text-[9.5px] font-semibold text-indigo-600 font-mono truncate block" title={poRef}>
-                          {poRef}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[22%] min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
-                            {vendorInitials}
-                          </div>
-                          <span className="font-bold text-[11px] text-slate-900 truncate block group-hover:text-indigo-600 transition uppercase" title={vendorName}>
-                            {vendorName}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                        <span className="text-[9.5px] text-slate-600 font-medium whitespace-nowrap">
-                          {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[12%]">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                          <span>Passed</span>
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[8%]">
-                        {renderStageBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[10%]">
-                        {renderStatusBadge()}
-                      </td>
-
-                      <td className="py-2.5 px-3 align-middle text-center w-[10%]">
-                        {renderActionButton()}
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // --- DEFAULT / ALL RECORDS ROW ---
                 return (
                   <tr 
                     key={doc.id} 
                     onClick={() => onViewDocument(doc.id)}
-                    className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
+                    className={`hover:bg-slate-50/70 transition-colors group cursor-pointer ${isSelected ? 'bg-indigo-50/40' : ''}`}
                   >
-                    <td className="py-2.5 px-3 align-middle w-[9%] min-w-0">
-                      <span className="text-[9.5px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate inline-block max-w-full" title={displayId}>
-                        {displayId}
-                      </span>
+                    {/* 1. Checkbox */}
+                    <td 
+                      className="py-2 px-3 align-middle text-center w-10"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer h-3.5 w-3.5"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDocIds(prev => [...prev, doc.id]);
+                          } else {
+                            setSelectedDocIds(prev => prev.filter(id => id !== doc.id));
+                          }
+                        }}
+                      />
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle w-[20%] min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center font-bold text-[9px] shrink-0">
-                          {vendorInitials}
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-[11px] text-slate-900 truncate block group-hover:text-indigo-600 transition uppercase" title={vendorName}>
-                            {vendorName}
+                    {/* 2. Document ID */}
+                    <td className="py-2 px-3 align-middle w-[15%] min-w-0">
+                      <div className="flex flex-col min-w-0 leading-tight">
+                        <span className="text-[12px] font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate" title={displayId}>
+                          {displayId}
+                        </span>
+                        {docDate && (
+                          <span className="text-[10.5px] text-slate-400 truncate mt-0.5">
+                            {docDate}
                           </span>
-                          <div className="flex items-center gap-1 text-[8.5px] text-slate-400 font-normal truncate">
-                            <span>{(doc as any).vendor_gstin ? `GSTIN: ${(doc as any).vendor_gstin}` : ""}</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                      <div className="flex flex-col space-y-0.5 min-w-0">
-                        <span className="font-bold text-[11px] text-slate-900 truncate block" title={doc.invoice_number || `INV-${cleanId}`}>
-                          {doc.invoice_number || `INV-${cleanId}`}
-                        </span>
-                        <span className="text-[9.5px] text-slate-500 font-medium whitespace-nowrap">
-                          {doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "-")}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                          {displayPaymentTerms(doc.payment_terms || "")}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="py-2.5 px-3 align-middle w-[13%] min-w-0">
-                      <span className="text-[9.5px] font-semibold text-indigo-600 font-mono truncate block" title={doc.po_number || `PO-2026-${cleanId}`}>
-                        {doc.po_number || `PO-2026-${cleanId}`}
+                    {/* 3. Supplier / Vendor */}
+                    <td className="py-2 px-3 align-middle w-[26%] min-w-0">
+                      <span className="text-[12px] font-semibold text-slate-900 truncate block" title={vendorName}>
+                        {vendorName}
                       </span>
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle text-right w-[11%]">
-                      <div className="flex flex-col items-end">
-                        <span className="font-extrabold text-[11px] text-slate-900 whitespace-nowrap">
-                          ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                          Base: ₹{taxableBase.toLocaleString('en-IN')}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">
-                          +18% GST
-                        </span>
-                      </div>
+                    {/* 4. Document Type */}
+                    <td className="py-2 px-3 align-middle w-[14%] min-w-0">
+                      <span className="text-[11.5px] text-slate-600 truncate block">
+                        {docTypeLabel}
+                      </span>
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle text-center w-[8%]">
+                    {/* 5. Amount (₹) */}
+                    <td className="py-2 px-3 align-middle text-right w-[15%] whitespace-nowrap">
+                      <span className="text-[12px] font-semibold text-slate-900">
+                        ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </td>
+
+                    {/* 6. Current Stage */}
+                    <td className="py-2 px-3 align-middle text-center w-[11%]">
                       {renderStageBadge()}
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle text-center w-[9%]">
+                    {/* 7. Status */}
+                    <td className="py-2 px-3 align-middle text-center w-[10%]">
                       {renderStatusBadge()}
                     </td>
 
-                    <td className="py-2.5 px-3 align-middle w-[12%] min-w-0">
-                      {renderApproverCell()}
-                    </td>
-
-                    <td className="py-2.5 px-3 align-middle text-center w-[6%]">
+                    {/* 8. Action */}
+                    <td className="py-2 px-3 align-middle text-center w-[9%]">
                       {renderActionButton()}
                     </td>
-
                   </tr>
                 );
               })}
