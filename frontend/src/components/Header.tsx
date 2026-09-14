@@ -1,4 +1,4 @@
-import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, GitFork } from "lucide-react";
+import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface HeaderProps {
@@ -300,32 +300,10 @@ export default function Header({
 
                 <button
                   onClick={() => {
-                    setCurrentView("workflow-rules");
-                    setProfileDropdownOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-1 text-[10px] text-slate-700 hover:bg-slate-50 transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
-                >
-                  <GitFork className="h-3 w-3 text-slate-500" />
-                  <span>Workflow &amp; Rules</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setCurrentView("admin");
-                    setProfileDropdownOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-1 text-[10px] text-slate-700 hover:bg-slate-50 transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Settings className="h-3 w-3 text-slate-500" />
-                  <span>Control Settings</span>
-                </button>
-
-                <button
-                  onClick={() => {
                     onLogout();
                     setProfileDropdownOpen(false);
                   }}
-                  className="w-full text-left px-3 py-1 text-[10px] text-rose-600 hover:bg-rose-50 transition-colors font-bold flex items-center gap-1.5 border-t border-slate-100 mt-0.5 cursor-pointer"
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-rose-600 hover:bg-rose-50 transition-colors font-bold flex items-center gap-1.5 cursor-pointer mt-0.5"
                 >
                   <LogOut className="h-3 w-3" />
                   <span>Sign Out</span>

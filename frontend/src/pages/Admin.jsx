@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, CheckCircle2, RotateCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, CheckCircle2, RotateCw } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -437,21 +437,6 @@ export default function Admin() {
         </div>
 
         <div className="relative z-10 flex-1 space-y-4 overflow-y-auto custom-scrollbar">
-          {/* WORKFLOW & RULES STUDIO SHORTCUT */}
-          <div className="px-2 py-2 mb-2 bg-white/10 rounded-lg border border-white/15">
-            <div className="flex items-center gap-1.5">
-              <Network className="h-3.5 w-3.5 text-[#FFBF00]" />
-              <span className="text-[10px] font-bold text-white">Workflow &amp; Rules</span>
-            </div>
-            <p className="text-[8.5px] text-emerald-100/70 mt-1">Flows, Conditions, Checklists &amp; AI Templates</p>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("navigate-view", { detail: "workflow-rules" }))}
-              className="mt-2 w-full text-center px-2 py-1 bg-[#FFBF00] text-[#002F20] text-[9.5px] font-bold rounded hover:bg-[#ffc926] transition cursor-pointer"
-            >
-              Open Workflow Studio &rarr;
-            </button>
-          </div>
 
           {/* WORKSPACE & ACCESS */}
           <div className="space-y-0.5">

@@ -381,6 +381,7 @@ export default function FlowBuilder({ users = [] }) {
       });
 
       if (res.ok) {
+        const savedData = await res.json().catch(() => ({}));
         await fetchWorkflows();
         setSelectedCategory(category);
         setSelectedSubCategory(docType);
@@ -388,7 +389,9 @@ export default function FlowBuilder({ users = [] }) {
         const savedDocType = payload.workflow_type;
         setEditingWorkflow(null);
         setSavedWorkflowModal({
+          id: savedData?.id,
           profile_name: savedProfileName,
+          workflow_code: savedData?.workflow_code || payload.workflow_code,
           document_type: savedDocType,
           category: category
         });
@@ -769,9 +772,19 @@ export default function FlowBuilder({ users = [] }) {
                                           localStorage.setItem("adminActiveTab", "matrix");
                                           localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
                                           localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
+                                          if (wf.id) localStorage.setItem("docuflow_target_condition_wf_id", String(wf.id));
+                                          if (wf.workflow_code) localStorage.setItem("docuflow_target_condition_wf_code", wf.workflow_code);
+                                          localStorage.setItem("docuflow_target_condition_is_linked", "true");
                                           window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
                                           window.dispatchEvent(new CustomEvent("open-condition-editor", {
-                                            detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
+                                            detail: {
+                                              target_workflow_id: wf.profile_name,
+                                              workflow_id: wf.id,
+                                              workflow_code: wf.workflow_code,
+                                              workflow_name: wf.profile_name,
+                                              document_type: wf.workflow_type || '',
+                                              is_linked_context: true
+                                            }
                                           }));
                                         }}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold transition cursor-pointer"
@@ -787,16 +800,26 @@ export default function FlowBuilder({ users = [] }) {
                                           localStorage.setItem("adminActiveTab", "matrix");
                                           localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
                                           localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
+                                          if (wf.id) localStorage.setItem("docuflow_target_condition_wf_id", String(wf.id));
+                                          if (wf.workflow_code) localStorage.setItem("docuflow_target_condition_wf_code", wf.workflow_code);
+                                          localStorage.setItem("docuflow_target_condition_is_linked", "true");
                                           window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
                                           window.dispatchEvent(new CustomEvent("open-condition-editor", {
-                                            detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
+                                            detail: {
+                                              target_workflow_id: wf.profile_name,
+                                              workflow_id: wf.id,
+                                              workflow_code: wf.workflow_code,
+                                              workflow_name: wf.profile_name,
+                                              document_type: wf.workflow_type || '',
+                                              is_linked_context: true
+                                            }
                                           }));
                                         }}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 border border-dashed border-slate-300 hover:border-emerald-300 rounded text-[9.5px] font-medium transition cursor-pointer"
                                         title="Click to configure routing condition for this workflow"
                                       >
                                         <Plus className="h-2.5 w-2.5" />
-                                        <span>Link Policy</span>
+                                        <span>Link Condition</span>
                                       </button>
                                     )}
                                   </td>
@@ -1784,18 +1807,30 @@ export default function FlowBuilder({ users = [] }) {
               onClick={() => {
                 const targetWf = savedWorkflowModal.profile_name;
                 const docType = savedWorkflowModal.document_type;
+                const wfId = savedWorkflowModal.id;
+                const wfCode = savedWorkflowModal.workflow_code;
                 setSavedWorkflowModal(null);
                 localStorage.setItem("adminActiveTab", "matrix");
                 localStorage.setItem("docuflow_target_condition_wf", targetWf);
                 localStorage.setItem("docuflow_target_condition_doctype", docType || '');
+                if (wfId) localStorage.setItem("docuflow_target_condition_wf_id", String(wfId));
+                if (wfCode) localStorage.setItem("docuflow_target_condition_wf_code", wfCode);
+                localStorage.setItem("docuflow_target_condition_is_linked", "true");
                 window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
                 window.dispatchEvent(new CustomEvent("open-condition-editor", {
-                  detail: { target_workflow_id: targetWf, document_type: docType || '' }
+                  detail: {
+                    target_workflow_id: targetWf,
+                    workflow_id: wfId,
+                    workflow_code: wfCode,
+                    workflow_name: targetWf,
+                    document_type: docType || '',
+                    is_linked_context: true
+                  }
                 }));
               }}
               className="px-4 py-1.5 text-xs font-semibold text-white bg-[#003F28] hover:bg-[#002f1e] rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Create Condition & Save</span>
+              <span>Link Condition</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

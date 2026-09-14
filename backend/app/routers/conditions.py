@@ -41,17 +41,30 @@ def save_business_rule(
             detail="Access Denied: Missing required permission 'condition:write'."
         )
 
-    target_wf_raw = (payload.target_workflow_id or payload.workflow_code or '').strip()
+    wf_id_val = getattr(payload, 'workflow_id', None) or payload.target_workflow_id or payload.workflow_code or ''
+    target_wf_raw = str(wf_id_val).strip()
     if not target_wf_raw:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A valid target workflow must be specified for the condition rule."
         )
 
+    from sqlalchemy import or_
+    wf_filters = [
+        WorkflowProfile.profile_name == target_wf_raw,
+        WorkflowProfile.workflow_code == target_wf_raw
+    ]
+    if target_wf_raw.isdigit():
+        wf_filters.append(WorkflowProfile.id == int(target_wf_raw))
+    if payload.workflow_code and str(payload.workflow_code).strip():
+        wf_filters.append(WorkflowProfile.workflow_code == str(payload.workflow_code).strip())
+    if payload.target_workflow_id and str(payload.target_workflow_id).strip():
+        wf_filters.append(WorkflowProfile.profile_name == str(payload.target_workflow_id).strip())
+
     target_profile = db.query(WorkflowProfile).filter(
-        (WorkflowProfile.profile_name == target_wf_raw) |
-        (WorkflowProfile.workflow_code == target_wf_raw)
-    ).filter(WorkflowProfile.is_deleted == False).first()
+        or_(*wf_filters),
+        WorkflowProfile.is_deleted == False
+    ).first()
 
     if not target_profile:
         raise HTTPException(
@@ -73,6 +86,13 @@ def save_business_rule(
         if rule_id:
             rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
         if not rule:
+            # Check by target workflow to prevent duplicate condition policies for the same workflow
+            rule = db.query(BusinessRule).filter(
+                (BusinessRule.target_workflow_id == target_profile.profile_name) |
+                (BusinessRule.target_workflow_id == target_profile.workflow_code),
+                BusinessRule.is_deleted == False
+            ).first()
+        if not rule:
             rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
         
         # Check duplicate rule_name across other rules
@@ -88,10 +108,13 @@ def save_business_rule(
                 BusinessRule.is_deleted == False
             ).first()
         if duplicate:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"A policy rule with name '{payload.rule_name}' already exists."
-            )
+            if duplicate.target_workflow_id in (target_profile.profile_name, target_profile.workflow_code):
+                rule = duplicate
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"A policy rule with name '{payload.rule_name}' already exists."
+                )
 
         raw_conds = payload.conditions_json if payload.conditions_json is not None else payload.conditions
         if raw_conds is None:

@@ -176,7 +176,7 @@ def save_workflow_profile(
         db.commit()
         db.refresh(existing)
         wf_code = ensure_workflow_code(existing, db)
-        return {'success': True, 'profile_name': payload.profile_name, 'workflow_code': wf_code}
+        return {'success': True, 'id': existing.id, 'profile_name': payload.profile_name, 'workflow_code': wf_code}
     except Exception as e:
         logger.debug('Handled exception: %s', e)
         raise HTTPException(status_code=500, detail=f'Database error while saving workflow: {str(e)}')

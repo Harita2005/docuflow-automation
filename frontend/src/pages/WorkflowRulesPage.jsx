@@ -279,29 +279,29 @@ export default function WorkflowRulesPage() {
   ];
 
   return (
-    <div className='admin-settings-theme flex flex-col h-[calc(100vh-4.5rem)] w-full font-sans overflow-hidden px-4 py-2'>
+    <div className='admin-settings-theme flex flex-col h-[calc(100vh-4.2rem)] w-full font-sans overflow-hidden px-3 py-1.5'>
       
       {/* Unified Workflow & Rules Header Bar */}
-      <div className='shrink-0 mb-2 border border-slate-200/80 bg-white/95 backdrop-blur-md rounded-xl p-3 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3'>
-        <div className='flex items-center gap-3'>
-          <div className='h-9 w-9 rounded-lg bg-gradient-to-br from-[#003F28] to-[#002B1B] text-white flex items-center justify-center shadow-xs'>
-            <Network className='h-5 w-5 text-[#FFBF00]' />
+      <div className='shrink-0 mb-1.5 border border-slate-200/80 bg-white/95 backdrop-blur-md rounded-lg p-2 px-3 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2'>
+        <div className='flex items-center gap-2.5'>
+          <div className='h-7 w-7 rounded-md bg-gradient-to-br from-[#003F28] to-[#002B1B] text-white flex items-center justify-center shadow-2xs'>
+            <Network className='h-4 w-4 text-[#FFBF00]' />
           </div>
           <div>
-            <div className='flex items-center gap-2'>
-              <h1 className='text-sm font-bold text-slate-900 tracking-tight'>Workflow &amp; Rules Studio</h1>
-              <span className='text-[9.5px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800'>
+            <div className='flex items-center gap-1.5'>
+              <h1 className='text-xs font-bold text-slate-900 tracking-tight'>Workflow &amp; Rules Studio</h1>
+              <span className='text-[8.5px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200/60'>
                 4 Unified Engines
               </span>
             </div>
-            <p className='text-[10px] text-slate-500 mt-0.5'>
+            <p className='text-[9.5px] text-slate-500'>
               Configure approval flow pipelines, routing condition matrices, compliance checklists, and AI field templates.
             </p>
           </div>
         </div>
 
         {/* 4 Engine Switcher Tabs */}
-        <div className='flex items-center bg-slate-100/90 p-1 rounded-lg border border-slate-200'>
+        <div className='flex items-center bg-slate-100/90 p-0.5 rounded-md border border-slate-200/80'>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -309,14 +309,14 @@ export default function WorkflowRulesPage() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ' + (
+                className={'flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ' + (
                   isActive
                     ? 'bg-white text-[#003F28] font-bold shadow-2xs border border-slate-200/60'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                 )}
                 title={item.desc}
               >
-                <Icon className={'h-3.5 w-3.5 ' + (isActive ? 'text-[#003F28]' : 'text-slate-400')} />
+                <Icon className={'h-3 w-3 ' + (isActive ? 'text-[#003F28]' : 'text-slate-400')} />
                 <span>{item.label}</span>
               </button>
             );
@@ -324,11 +324,11 @@ export default function WorkflowRulesPage() {
         </div>
 
         {/* Action Buttons: Add Category, New Template, Discard, Publish */}
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-1.5'>
           {(activeTab === 'routing' || activeTab === 'matrix') && isRootView && (
             <button 
               onClick={() => window.dispatchEvent(new Event('open-add-category'))} 
-              className='flex items-center gap-1.5 px-3 py-1.5 bg-[#003F28] text-white hover:bg-[#002f1e] font-bold text-[10.5px] rounded-lg transition shadow-2xs cursor-pointer'
+              className='flex items-center gap-1 px-2.5 py-1 bg-[#003F28] text-white hover:bg-[#002f1e] font-bold text-[10px] rounded-md transition shadow-2xs cursor-pointer'
             >
               <Plus className='h-3 w-3' /> Add Category
             </button>
@@ -337,31 +337,31 @@ export default function WorkflowRulesPage() {
           {activeTab === 'templates' && (
             <button
               onClick={() => openEditTemplate(null)}
-              className='flex items-center gap-1.5 px-3 py-1.5 bg-[#003F28] text-white hover:bg-[#002f1e] font-bold text-[10.5px] rounded-lg transition shadow-2xs cursor-pointer'
+              className='flex items-center gap-1 px-2.5 py-1 bg-[#003F28] text-white hover:bg-[#002f1e] font-bold text-[10px] rounded-md transition shadow-2xs cursor-pointer'
             >
               <Plus className='h-3 w-3' /> New Template
             </button>
           )}
 
           {hasChanges && (
-            <div className='flex items-center gap-1.5 pl-2 border-l border-slate-200'>
-              <span className='text-[10px] text-amber-700 font-bold flex items-center gap-1'>
-                <AlertTriangle className='h-3 w-3 text-amber-600' /> Draft Changes
+            <div className='flex items-center gap-1 pl-1.5 border-l border-slate-200'>
+              <span className='text-[9.5px] text-amber-700 font-bold flex items-center gap-1'>
+                <AlertTriangle className='h-2.5 w-2.5 text-amber-600' /> Draft
               </span>
               <button 
                 onClick={discardChanges}
                 disabled={publishing}
-                className='px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100 rounded-md transition cursor-pointer'
+                className='px-2 py-0.5 text-[9.5px] font-bold text-slate-500 hover:bg-slate-100 rounded transition cursor-pointer'
               >
                 Discard
               </button>
               <button 
                 onClick={publishChanges}
                 disabled={publishing}
-                className='flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-bold rounded-lg shadow-2xs transition disabled:opacity-50 cursor-pointer'
+                className='flex items-center gap-1 px-2.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[9.5px] rounded transition shadow-2xs cursor-pointer'
               >
-                {publishing ? <Loader2 className='h-3 w-3 animate-spin' /> : <Send className='h-3 w-3' />}
-                Publish Live
+                {publishing ? <Loader2 className='h-2.5 w-2.5 animate-spin' /> : <Save className='h-2.5 w-2.5' />}
+                Publish
               </button>
             </div>
           )}
@@ -402,52 +402,45 @@ export default function WorkflowRulesPage() {
         {activeTab === 'templates' && (
           <div className='flex flex-col gap-4 mt-1'>
             {editingTemplate && (
-              <div className='bg-emerald-50/40 p-4 border border-emerald-100 rounded-xl shadow-xs'>
+              <div className='bg-white border border-slate-200 rounded-lg p-2'>
                 <form onSubmit={handleSaveTemplateLocal} className='space-y-4 relative'>
-                  <button 
-                    type='button' 
-                    onClick={() => { setEditingTemplate(null); setTemplateFields([]); }} 
-                    className='absolute top-1 right-1 text-slate-400 hover:text-slate-600 cursor-pointer'
-                  >
-                    <X className='h-4 w-4' />
-                  </button>
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                     <div>
-                      <label className='block text-[10px] font-bold text-slate-600 uppercase mb-1'>Template Name</label>
+                  <label className='block text-[11px] font-bold text-slate-600 uppercase mb-1'>Template Name</label>
                       <input 
                         type='text' 
                         name='name' 
                         defaultValue={editingTemplate.name} 
                         required 
                         placeholder='e.g., Commercial Invoice, Transport Bilty'
-                        className='w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium' 
+                        className='w-full text-[13px] p-1.5 border border-slate-200 rounded-lg bg-white font-medium' 
                       />
                     </div>
                     <div>
-                      <label className='block text-[10px] font-bold text-slate-600 uppercase mb-1'>Description</label>
+                      <label className='block text-[11px] font-bold text-slate-600 uppercase mb-1'>Description</label>
                       <input 
                         type='text' 
                         name='description' 
                         defaultValue={editingTemplate.description} 
                         placeholder='Purpose and applicability of template'
-                        className='w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium' 
+                        className='w-full text-[13px] p-1.5 border border-slate-200 rounded-lg bg-white font-medium' 
                       />
                     </div>
                   </div>
                   <div className='pt-2 border-t border-emerald-100'>
-                    <label className='block text-[10px] font-bold text-slate-600 uppercase mb-1'>Global AI Extraction Prompt</label>
+                    <label className='block text-[11px] font-bold text-slate-600 uppercase mb-1'>Global AI Extraction Prompt</label>
                     <textarea 
                       name='instructions' 
                       value={templateInstructions} 
                       onChange={e => setTemplateInstructions(e.target.value)} 
-                      rows={2} 
+                      rows={3} 
                       placeholder='e.g., The document is a purchase invoice. Ensure you extract invoice_number, total_amount, and gst_number accurately.' 
-                      className='w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-medium resize-none'
+                      className='w-full text-[13px] p-1.5 border border-slate-200 rounded-lg bg-white font-medium resize-none h-20'
                     />
                   </div>
                   <div className='pt-2 border-t border-emerald-100'>
                     <div className='flex items-center justify-between mb-2'>
-                      <label className='block text-[10px] font-bold text-slate-700 uppercase'>Document Extraction Fields</label>
+                      <label className='block text-[11px] font-bold text-slate-700 uppercase'>Document Extraction Fields</label>
                       <button 
                         type='button' 
                         onClick={() => setTemplateFields([...templateFields, { id: Date.now(), name: '', type: 'string', description: '', required: false, rolesVisible: [], rolesEditable: [] }])} 
@@ -458,7 +451,7 @@ export default function WorkflowRulesPage() {
                     </div>
                     <div className='space-y-2'>
                       {templateFields.map((field, idx) => (
-                        <div key={field.id} className='flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200 shadow-2xs'>
+                        <div key={field.id} className='flex gap-2 items-center bg-white p-1 rounded-sm border border-slate-200'>
                           <input
                             type='text'
                             placeholder='Field Name (e.g. invoice_number)'
@@ -525,63 +518,70 @@ export default function WorkflowRulesPage() {
                       )}
                     </div>
                   </div>
-                  <div className='flex justify-end pt-2'>
-                    <button 
-                      type='submit' 
-                      className='flex items-center gap-1.5 px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-[10px] font-bold rounded-lg shadow-2xs transition-colors uppercase tracking-wider cursor-pointer'
-                    >
-                      <Save className='h-3 w-3' /> Save Draft
-                    </button>
-                  </div>
+                    <div className='flex justify-end space-x-2 pt-2'>
+                      <button 
+                        type='button' 
+                        onClick={() => { setEditingTemplate(null); setTemplateFields([]); }}
+                        className='px-3 py-1.5 bg-gray-200 text-slate-800 text-[10px] font-medium rounded-lg hover:bg-gray-300 transition-colors cursor-pointer'
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type='submit' 
+                        className='flex items-center gap-1.5 px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-[10px] font-bold rounded-lg shadow-2xs transition-colors uppercase tracking-wider cursor-pointer'
+                      >
+                        <Save className='h-3 w-3' /> Save Draft
+                      </button>
+                    </div>
                 </form>
               </div>
             )}
 
             {!selectedTemplateCategory ? (
-              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5'>
                 <div 
                   onClick={() => setSelectedTemplateCategory('Vendor Payment Workflows')} 
-                  className='bg-white p-4 rounded-xl shadow-2xs border border-slate-200 hover:border-emerald-500 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full'
+                  className='bg-white p-3 rounded-lg shadow-2xs border border-slate-200 hover:border-emerald-500 hover:shadow-xs cursor-pointer transition-all flex items-center justify-between group text-left w-full'
                 >
-                  <div className='flex items-center gap-3'>
-                    <div className='h-9 w-9 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:bg-[#003F28] group-hover:text-white transition-colors'>
-                      <Sparkles className='h-4.5 w-4.5' />
+                  <div className='flex items-center gap-2.5'>
+                    <div className='h-7 w-7 rounded-md bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:bg-[#003F28] group-hover:text-white transition-colors'>
+                      <Sparkles className='h-3.5 w-3.5' />
                     </div>
                     <div>
-                      <h3 className='font-bold text-slate-800 text-xs tracking-wide group-hover:text-emerald-900 transition-colors'>
+                      <h3 className='font-bold text-slate-800 text-xs tracking-tight group-hover:text-emerald-900 transition-colors'>
                         Vendor Payment Workflows
                       </h3>
-                      <p className='text-[10px] font-medium text-slate-500 mt-0.5'>{templates.length} Templates Configured</p>
+                      <p className='text-[9.5px] font-medium text-slate-500 mt-0.5'>{templates.length} Templates Configured</p>
                     </div>
                   </div>
-                  <div className='flex items-center gap-2'>
+                  <div className='flex items-center gap-1.5'>
                     <button 
                       onClick={(e) => { e.stopPropagation(); setTemplateCategoryDeleteTarget('Vendor Payment Workflows'); }} 
-                      className='p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100' 
+                      className='p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100' 
                       title='Delete Category'
                     >
-                      <Trash2 className='h-4 w-4' />
+                      <Trash2 className='h-3 w-3' />
                     </button>
-                    <ArrowRight className='h-4 w-4 text-slate-300 group-hover:text-emerald-700 transition-colors' />
+                    <ArrowRight className='h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-700 transition-colors' />
                   </div>
                 </div>
               </div>
             ) : (
-              <div className='flex flex-col gap-4'>
-                <div className='flex flex-col md:flex-row justify-between md:items-center bg-white px-4 py-2.5 rounded-xl shadow-2xs border border-slate-200 gap-4'>
-                  <div className='flex items-center gap-3'>
+              <div className='flex flex-col gap-2.5'>
+                <div className='flex flex-col md:flex-row justify-between md:items-center bg-white px-3 py-2 rounded-lg shadow-2xs border border-slate-200 gap-2.5'>
+                  <div className='flex items-center gap-2'>
                     <button 
                       aria-label='Back' 
                       onClick={() => setSelectedTemplateCategory(null)} 
-                      className='text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer'
+                      className='text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-md hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer'
                     >
-                      <ArrowRight className='h-3.5 w-3.5 rotate-180' />
+                      <ArrowRight className='h-3 w-3 rotate-180' />
                     </button>
                     <div>
-                      <h3 className='text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5'>
-                        <Sparkles className='h-3.5 w-3.5 text-emerald-700' /> {selectedTemplateCategory}
+                      <h3 className='text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1'>
+                        <Sparkles className='h-3 w-3 text-emerald-700' /> {selectedTemplateCategory}
                       </h3>
-                      <p className='text-[10px] text-slate-500 mt-0.5'>
+                      <p className='text-[9.5px] text-slate-500'>
                         Document extraction models, schemas, and AI instructions for this category.
                       </p>
                     </div>

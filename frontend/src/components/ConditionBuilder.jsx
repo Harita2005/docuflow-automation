@@ -134,6 +134,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedConditionSuccessModal, setSavedConditionSuccessModal] = useState(null);
+  const [isWorkflowLinkedContext, setIsWorkflowLinkedContext] = useState(false);
+  const [linkedWorkflowContext, setLinkedWorkflowContext] = useState(null);
 
   // Custom Fields System
   const [availableFields, setAvailableFields] = useState(() => {
@@ -181,12 +183,34 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
     const handleOpenCondition = (e) => {
       const targetWf = e?.detail?.target_workflow_id || localStorage.getItem("docuflow_target_condition_wf");
       const dt = e?.detail?.document_type || localStorage.getItem("docuflow_target_condition_doctype");
+      const wfId = e?.detail?.workflow_id || localStorage.getItem("docuflow_target_condition_wf_id");
+      const wfCode = e?.detail?.workflow_code || localStorage.getItem("docuflow_target_condition_wf_code");
+      const isLinked = e?.detail?.is_linked_context || localStorage.getItem("docuflow_target_condition_is_linked") === "true";
+
       if (targetWf) {
         localStorage.removeItem("docuflow_target_condition_wf");
         localStorage.removeItem("docuflow_target_condition_doctype");
+        localStorage.removeItem("docuflow_target_condition_wf_id");
+        localStorage.removeItem("docuflow_target_condition_wf_code");
+        localStorage.removeItem("docuflow_target_condition_is_linked");
+
+        // Inspect existing workflows to find workflow object
+        const targetWfObj = workflows.find(w => 
+          (wfId && String(w.id) === String(wfId)) ||
+          w.profile_name === targetWf || 
+          w.workflow_code === targetWf || 
+          (wfCode && w.workflow_code === wfCode)
+        );
+
+        const linkedMeta = {
+          id: wfId || targetWfObj?.id,
+          profile_name: targetWfObj?.profile_name || targetWf,
+          workflow_code: wfCode || targetWfObj?.workflow_code,
+          workflow_type: dt || targetWfObj?.workflow_type,
+          workflow_category: targetWfObj?.workflow_category
+        };
 
         // Inspect existing rules to find if this workflow ALREADY has a condition policy
-        const targetWfObj = workflows.find(w => w.profile_name === targetWf || w.workflow_code === targetWf || String(w.id) === String(targetWf));
         const existingRule = rules.find(r => 
           (r.target_workflow_id && (
             r.target_workflow_id === targetWf ||
@@ -196,15 +220,16 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
             r.workflow_code === targetWf ||
             (targetWfObj && (r.workflow_code === targetWfObj.workflow_code || r.workflow_code === targetWfObj.profile_name))
           )) ||
-          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().includes(targetWfObj.profile_name.toLowerCase()))
+          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().trim() === targetWfObj.profile_name.toLowerCase().trim()) ||
+          (r.rule_name && r.rule_name.toLowerCase().trim() === targetWf.toLowerCase().trim())
         );
 
         if (existingRule) {
           // Open existing condition policy in edit mode - NEVER duplicate
-          openEditor(existingRule);
+          openEditor(existingRule, dt || targetWfObj?.workflow_type || existingRule.document_type, targetWfObj?.profile_name || targetWf, isLinked, linkedMeta);
         } else {
           // No condition exists yet, open new condition pre-associated with target workflow
-          openEditor(null, dt || targetWfObj?.workflow_type || 'AP Invoice', targetWf);
+          openEditor(null, dt || targetWfObj?.workflow_type || 'AP Invoice', targetWfObj?.profile_name || targetWf, isLinked, linkedMeta);
         }
       }
     };
@@ -213,10 +238,31 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
     const savedTarget = localStorage.getItem("docuflow_target_condition_wf");
     if (savedTarget) {
       const savedDoc = localStorage.getItem("docuflow_target_condition_doctype");
+      const savedWfId = localStorage.getItem("docuflow_target_condition_wf_id");
+      const savedWfCode = localStorage.getItem("docuflow_target_condition_wf_code");
+      const savedIsLinked = localStorage.getItem("docuflow_target_condition_is_linked") === "true";
       localStorage.removeItem("docuflow_target_condition_wf");
       localStorage.removeItem("docuflow_target_condition_doctype");
+      localStorage.removeItem("docuflow_target_condition_wf_id");
+      localStorage.removeItem("docuflow_target_condition_wf_code");
+      localStorage.removeItem("docuflow_target_condition_is_linked");
+
       setTimeout(() => {
-        const targetWfObj = workflows.find(w => w.profile_name === savedTarget || w.workflow_code === savedTarget || String(w.id) === String(savedTarget));
+        const targetWfObj = workflows.find(w => 
+          (savedWfId && String(w.id) === String(savedWfId)) ||
+          w.profile_name === savedTarget || 
+          w.workflow_code === savedTarget || 
+          (savedWfCode && w.workflow_code === savedWfCode)
+        );
+
+        const linkedMeta = {
+          id: savedWfId || targetWfObj?.id,
+          profile_name: targetWfObj?.profile_name || savedTarget,
+          workflow_code: savedWfCode || targetWfObj?.workflow_code,
+          workflow_type: savedDoc || targetWfObj?.workflow_type,
+          workflow_category: targetWfObj?.workflow_category
+        };
+
         const existingRule = rules.find(r => 
           (r.target_workflow_id && (
             r.target_workflow_id === savedTarget ||
@@ -226,13 +272,14 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
             r.workflow_code === savedTarget ||
             (targetWfObj && (r.workflow_code === targetWfObj.workflow_code || r.workflow_code === targetWfObj.profile_name))
           )) ||
-          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().includes(targetWfObj.profile_name.toLowerCase()))
+          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().trim() === targetWfObj.profile_name.toLowerCase().trim()) ||
+          (r.rule_name && r.rule_name.toLowerCase().trim() === savedTarget.toLowerCase().trim())
         );
 
         if (existingRule) {
-          openEditor(existingRule);
+          openEditor(existingRule, savedDoc || targetWfObj?.workflow_type || existingRule.document_type, targetWfObj?.profile_name || savedTarget, savedIsLinked, linkedMeta);
         } else {
-          openEditor(null, savedDoc || targetWfObj?.workflow_type || 'AP Invoice', savedTarget);
+          openEditor(null, savedDoc || targetWfObj?.workflow_type || 'AP Invoice', targetWfObj?.profile_name || savedTarget, savedIsLinked, linkedMeta);
         }
       }, 250);
     }
@@ -261,29 +308,35 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
   // Derive workflow code from target workflow
   const selectedWorkflowObj = useMemo(() => {
+    if (linkedWorkflowContext) return linkedWorkflowContext;
     if (!targetWorkflowId) return null;
     return workflows.find(w => w.profile_name === targetWorkflowId || w.workflow_code === targetWorkflowId || String(w.id) === String(targetWorkflowId));
-  }, [targetWorkflowId, workflows]);
+  }, [linkedWorkflowContext, targetWorkflowId, workflows]);
 
   const workflowCode = useMemo(() => {
     if (selectedWorkflowObj) {
-      return selectedWorkflowObj.workflow_code || 'WF-' + (selectedWorkflowObj.id || '001');
+      return selectedWorkflowObj.workflow_code || (selectedWorkflowObj.id ? 'WF-' + String(selectedWorkflowObj.id).padStart(3, '0') : 'WF-001');
     }
     return '';
   }, [selectedWorkflowObj]);
 
   // Open the One-Page Condition Builder for Create or Edit
-  const openEditor = (r = null, defaultDocType = null, defaultTargetWf = null) => {
+  const openEditor = (r = null, defaultDocType = null, defaultTargetWf = null, isLinkedContext = false, linkedWfMeta = null) => {
     setValidationErrors({});
+    setIsWorkflowLinkedContext(!!isLinkedContext);
+    setLinkedWorkflowContext(linkedWfMeta || null);
+
     if (r) {
       setEditingRule(r);
-      setRuleName(r.rule_name || '');
-      setDocType(r.document_type || 'AP Invoice');
+      const wfTarget = linkedWfMeta?.profile_name || r.target_workflow_id || defaultTargetWf || '';
+      const derivedRuleName = isLinkedContext ? (r.rule_name || linkedWfMeta?.profile_name || wfTarget) : (r.rule_name || '');
+      setRuleName(derivedRuleName);
+      setDocType(r.document_type || defaultDocType || linkedWfMeta?.workflow_type || 'AP Invoice');
       setDescription(r.description || '');
-      setRuleCategory(r.rule_category || selectedCategory || 'Vendor Payment Workflows');
-      setTargetWorkflowId(r.target_workflow_id || '');
+      setRuleCategory(r.rule_category || linkedWfMeta?.workflow_category || selectedCategory || 'Vendor Payment Workflows');
+      setTargetWorkflowId(wfTarget);
 
-      const matchedWf = workflows.find(w => w.profile_name === r.target_workflow_id || w.workflow_code === r.target_workflow_id);
+      const matchedWf = linkedWfMeta || workflows.find(w => w.profile_name === wfTarget || w.workflow_code === wfTarget);
       setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
 
       let parsedConds = [];
@@ -320,18 +373,18 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       setMatchType(detectedMatchType);
       setConditions(formatted);
     } else {
-      const initialTarget = defaultTargetWf || (workflows.length > 0 ? workflows[0].profile_name : '');
-      const matchedWf = workflows.find(w => w.profile_name === initialTarget || w.workflow_code === initialTarget);
-      const initialDocType = defaultDocType || selectedSubCategory || 'AP Invoice';
+      const initialTarget = linkedWfMeta?.profile_name || defaultTargetWf || (workflows.length > 0 ? workflows[0].profile_name : '');
+      const matchedWf = linkedWfMeta || workflows.find(w => w.profile_name === initialTarget || w.workflow_code === initialTarget);
+      const initialDocType = defaultDocType || linkedWfMeta?.workflow_type || selectedSubCategory || 'AP Invoice';
 
       setEditingRule({
         id: 'tmp-' + Date.now(),
         is_new: true
       });
-      setRuleName(matchedWf ? `${matchedWf.profile_name} Rule` : '');
+      setRuleName(isLinkedContext ? (linkedWfMeta?.profile_name || initialTarget) : (matchedWf ? `${matchedWf.profile_name} Rule` : ''));
       setDocType(initialDocType);
       setDescription('');
-      setRuleCategory(selectedCategory || 'Vendor Payment Workflows');
+      setRuleCategory(linkedWfMeta?.workflow_category || selectedCategory || 'Vendor Payment Workflows');
       setTargetWorkflowId(initialTarget);
       setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
       setMatchType('ALL');
@@ -553,6 +606,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
         priority: editingRule.priority || (rules.length + 1) * 10,
         target_workflow_id: targetWorkflowId,
         workflow_code: workflowCode,
+        workflow_id: linkedWorkflowContext?.id || selectedWorkflowObj?.id,
         description: description.trim(),
         rule_action: editingRule.rule_action || 'WORKFLOW_ROUTE',
         cancel_reason: editingRule.cancel_reason || null,
@@ -574,10 +628,18 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
       if (res.ok) {
         const savedData = await res.json();
-        if (isNew) {
-          setRules([...rules.filter(r => r.id !== editingRule.id), savedData]);
+        const existingIdx = rules.findIndex(r => 
+          r.id === savedData.id || 
+          r.id === editingRule.id ||
+          (r.target_workflow_id && savedData.target_workflow_id && r.target_workflow_id === savedData.target_workflow_id) ||
+          (r.rule_name && savedData.rule_name && r.rule_name.toLowerCase().trim() === savedData.rule_name.toLowerCase().trim())
+        );
+        if (existingIdx !== -1) {
+          const updated = [...rules];
+          updated[existingIdx] = savedData;
+          setRules(updated);
         } else {
-          setRules(rules.map(r => r.id === editingRule.id ? savedData : r));
+          setRules([...rules.filter(r => r.id !== editingRule.id), savedData]);
         }
       } else {
         const fallbackObj = {
@@ -585,10 +647,18 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           ...rulePayload,
           id: editingRule.id || `tmp-${Date.now()}`
         };
-        if (isNew) {
-          setRules([...rules.filter(r => r.id !== editingRule.id), fallbackObj]);
+        const existingIdx = rules.findIndex(r => 
+          r.id === fallbackObj.id || 
+          r.id === editingRule.id ||
+          (r.target_workflow_id && fallbackObj.target_workflow_id && r.target_workflow_id === fallbackObj.target_workflow_id) ||
+          (r.rule_name && fallbackObj.rule_name && r.rule_name.toLowerCase().trim() === fallbackObj.rule_name.toLowerCase().trim())
+        );
+        if (existingIdx !== -1) {
+          const updated = [...rules];
+          updated[existingIdx] = fallbackObj;
+          setRules(updated);
         } else {
-          setRules(rules.map(r => r.id === editingRule.id ? fallbackObj : r));
+          setRules([...rules.filter(r => r.id !== editingRule.id), fallbackObj]);
         }
       }
 
@@ -717,183 +787,258 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           <div className="lg:col-span-8 flex flex-col gap-2.5">
             
             {/* 1. CONDITION & TARGET WORKFLOW ROUTING */}
-            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
-                    1
+            {isWorkflowLinkedContext ? (
+              <section className="bg-white border border-slate-200/90 rounded-lg p-3 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
+                      1
+                    </div>
+                    <div>
+                      <span className="text-[8px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-1 py-0.2 rounded">
+                        Condition For
+                      </span>
+                      <h2 className="text-xs font-black text-slate-900 mt-0.5 flex items-center gap-1.5">
+                        <span>{ruleName || targetWorkflowId}</span>
+                        <span className="text-slate-300 font-normal">·</span>
+                        <span className="font-mono text-[10.5px] text-emerald-700 font-bold">
+                          {workflowCode || 'WF-001'}
+                        </span>
+                      </h2>
+                    </div>
                   </div>
-                  <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                    Condition & Target Workflow
-                  </h2>
-                </div>
-                <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Destination</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {/* Condition Name */}
-                <div className="sm:col-span-2">
-                  <label htmlFor="condNameInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Condition Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="condNameInput"
-                    type="text"
-                    value={ruleName}
-                    onChange={e => {
-                      setRuleName(e.target.value);
-                      if (validationErrors.ruleName) {
-                        const errs = { ...validationErrors };
-                        delete errs.ruleName;
-                        setValidationErrors(errs);
-                      }
-                    }}
-                    placeholder="e.g. High Value Purchase Approval"
-                    className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 transition-colors ${
-                      validationErrors.ruleName 
-                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
-                        : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
-                    }`}
-                  />
-                  {validationErrors.ruleName && (
-                    <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                      <AlertTriangle className="h-2 w-2" /> {validationErrors.ruleName}
-                    </p>
-                  )}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    Workflow Linked
+                  </span>
                 </div>
 
-                {/* Document Type */}
-                <div>
-                  <label htmlFor="docTypeSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Document Type <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="docTypeSelect"
-                      value={docType}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Condition Name */}
+                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
+                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Condition Name
+                    </span>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10.5px] font-bold text-slate-900 truncate" title={ruleName}>
+                        {ruleName || targetWorkflowId}
+                      </span>
+                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-slate-200 text-slate-700">
+                        Auto
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Target Workflow */}
+                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
+                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Target Workflow
+                    </span>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10.5px] font-bold text-slate-900 truncate" title={targetWorkflowId}>
+                        {targetWorkflowId}
+                      </span>
+                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Linked
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Workflow Code */}
+                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
+                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Workflow Code
+                    </span>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10.5px] font-mono font-bold text-slate-900 truncate">
+                        {workflowCode || '—'}
+                      </span>
+                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Linked
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
+                      1
+                    </div>
+                    <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                      Condition & Target Workflow
+                    </h2>
+                  </div>
+                  <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Destination</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                  {/* Condition Name */}
+                  <div className="sm:col-span-2">
+                    <label htmlFor="condNameInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Condition Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="condNameInput"
+                      type="text"
+                      value={ruleName}
                       onChange={e => {
-                        setDocType(e.target.value);
-                        if (validationErrors.docType) {
+                        setRuleName(e.target.value);
+                        if (validationErrors.ruleName) {
                           const errs = { ...validationErrors };
-                          delete errs.docType;
+                          delete errs.ruleName;
                           setValidationErrors(errs);
                         }
                       }}
-                      className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 appearance-none cursor-pointer ${
-                        validationErrors.docType 
+                      placeholder="e.g. High Value Purchase Approval"
+                      className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 transition-colors ${
+                        validationErrors.ruleName 
                           ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
                           : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
                       }`}
-                    >
-                      <option value="">-- Select Type --</option>
-                      {STANDARD_DOC_TYPES.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Category Filter */}
-                <div>
-                  <label htmlFor="wfCategorySelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Category Filter
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="wfCategorySelect"
-                      value={wfCategoryFilter}
-                      onChange={e => setWfCategoryFilter(e.target.value)}
-                      className="w-full text-[10.5px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
-                    >
-                      <option value="ALL">All Categories ({workflows.length})</option>
-                      {workflowCategories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Target Workflow */}
-                <div>
-                  <label htmlFor="targetWfSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Target Workflow <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="targetWfSelect"
-                      value={targetWorkflowId}
-                      onChange={e => {
-                        const newWf = e.target.value;
-                        setTargetWorkflowId(newWf);
-                        const matched = workflows.find(w => w.profile_name === newWf || w.workflow_code === newWf);
-                        if (matched && !ruleName.trim()) {
-                          setRuleName(matched.profile_name);
-                        }
-                        if (validationErrors.targetWorkflowId) {
-                          const errs = { ...validationErrors };
-                          delete errs.targetWorkflowId;
-                          setValidationErrors(errs);
-                        }
-                      }}
-                      className={`w-full text-[10.5px] px-2 py-1 bg-white border rounded outline-none font-bold appearance-none cursor-pointer ${
-                        validationErrors.targetWorkflowId
-                          ? 'border-rose-400 text-rose-900 focus:border-rose-500'
-                          : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
-                      }`}
-                    >
-                      <option value="">-- Select Workflow --</option>
-                      {workflows
-                        .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
-                        .map(w => (
-                          <option key={w.profile_name} value={w.profile_name}>
-                            [{w.workflow_code || 'WF-001'}] {w.profile_name}
-                          </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
-                  </div>
-                  {validationErrors.targetWorkflowId && (
-                    <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                      <AlertTriangle className="h-2 w-2" /> {validationErrors.targetWorkflowId}
-                    </p>
-                  )}
-                </div>
-
-                {/* Workflow Code */}
-                <div>
-                  <label className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Workflow Code
-                  </label>
-                  <div className="w-full text-[10.5px] px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold flex items-center justify-between">
-                    <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
-                      {workflowCode || 'Derived'}
-                    </span>
-                    {workflowCode && (
-                      <span className="text-[7.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded flex items-center gap-0.5">
-                        <CheckCircle2 className="h-2 w-2" /> Linked
-                      </span>
+                    />
+                    {validationErrors.ruleName && (
+                      <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                        <AlertTriangle className="h-2 w-2" /> {validationErrors.ruleName}
+                      </p>
                     )}
                   </div>
-                </div>
 
-                {/* Description */}
-                <div className="sm:col-span-2 md:col-span-3">
-                  <label htmlFor="condDescInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                    Description <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    id="condDescInput"
-                    type="text"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="Brief summary of when this condition triggers and business justification..."
-                    className="w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border border-slate-200 rounded outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
-                  />
+                  {/* Document Type */}
+                  <div>
+                    <label htmlFor="docTypeSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Document Type <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="docTypeSelect"
+                        value={docType}
+                        onChange={e => {
+                          setDocType(e.target.value);
+                          if (validationErrors.docType) {
+                            const errs = { ...validationErrors };
+                            delete errs.docType;
+                            setValidationErrors(errs);
+                          }
+                        }}
+                        className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 appearance-none cursor-pointer ${
+                          validationErrors.docType 
+                            ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
+                            : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                        }`}
+                      >
+                        <option value="">-- Select Type --</option>
+                        {STANDARD_DOC_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Category Filter */}
+                  <div>
+                    <label htmlFor="wfCategorySelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Category Filter
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="wfCategorySelect"
+                        value={wfCategoryFilter}
+                        onChange={e => setWfCategoryFilter(e.target.value)}
+                        className="w-full text-[10.5px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                      >
+                        <option value="ALL">All Categories ({workflows.length})</option>
+                        {workflowCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Target Workflow */}
+                  <div>
+                    <label htmlFor="targetWfSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Target Workflow <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="targetWfSelect"
+                        value={targetWorkflowId}
+                        onChange={e => {
+                          const newWf = e.target.value;
+                          setTargetWorkflowId(newWf);
+                          const matched = workflows.find(w => w.profile_name === newWf || w.workflow_code === newWf);
+                          if (matched && !ruleName.trim()) {
+                            setRuleName(matched.profile_name);
+                          }
+                          if (validationErrors.targetWorkflowId) {
+                            const errs = { ...validationErrors };
+                            delete errs.targetWorkflowId;
+                            setValidationErrors(errs);
+                          }
+                        }}
+                        className={`w-full text-[10.5px] px-2 py-1 bg-white border rounded outline-none font-bold appearance-none cursor-pointer ${
+                          validationErrors.targetWorkflowId
+                            ? 'border-rose-400 text-rose-900 focus:border-rose-500'
+                            : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
+                        }`}
+                      >
+                        <option value="">-- Select Workflow --</option>
+                        {workflows
+                          .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
+                          .map(w => (
+                            <option key={w.profile_name} value={w.profile_name}>
+                              [{w.workflow_code || 'WF-001'}] {w.profile_name}
+                            </option>
+                          ))}
+                      </select>
+                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                    </div>
+                    {validationErrors.targetWorkflowId && (
+                      <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                        <AlertTriangle className="h-2 w-2" /> {validationErrors.targetWorkflowId}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Workflow Code */}
+                  <div>
+                    <label className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Workflow Code
+                    </label>
+                    <div className="w-full text-[10.5px] px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold flex items-center justify-between">
+                      <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
+                        {workflowCode || 'Derived'}
+                      </span>
+                      {workflowCode && (
+                        <span className="text-[7.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded flex items-center gap-0.5">
+                          <CheckCircle2 className="h-2 w-2" /> Linked
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div className="sm:col-span-2 md:col-span-3">
+                    <label htmlFor="condDescInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                      Description <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="condDescInput"
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="Brief summary of when this condition triggers and business justification..."
+                      className="w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border border-slate-200 rounded outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
+                    />
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
 
             {/* 2. MATCH CONDITIONS (Compact) */}
             <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
@@ -1508,8 +1653,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
         </div>
       </div>
 
-      {/* Rules Grid (Dense Responsive Grid: 4 cols 2xl, 3 cols lg, 2 cols sm) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5 w-full items-stretch">
+      {/* Rules Grid (Compact Enterprise Grid: 5 cols 2xl, 4 cols xl, 3 cols lg, 2 cols sm) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 w-full items-stretch">
         {filteredRules.map((r, idx) => {
           let parsed = { conditions: [] };
           try { parsed = JSON.parse(r.conditions_json); } catch {}
@@ -1519,73 +1664,55 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           return (
             <div 
               key={r.id} 
-              className="bg-white border border-slate-200/90 rounded-lg p-3 shadow-2xs hover:shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between h-full group"
+              className="bg-white border border-slate-200/90 rounded-lg p-2.5 shadow-2xs hover:shadow-xs hover:border-emerald-400 transition-all flex flex-col justify-between group"
             >
               {/* Card Top / Header */}
               <div>
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wider border border-slate-200/60">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[8.5px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider border border-slate-200/60">
                     Priority {idx + 1}
                   </span>
-                  <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200/80 uppercase tracking-wider">
-                    {condList.length} Cond{condList.length !== 1 ? 's' : ''}
+                  <span className="text-[8.5px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200/70 uppercase tracking-wider">
+                    {condList.length} Criteria
                   </span>
                 </div>
 
                 {/* Rule Title & Doc Type */}
-                <div className="mt-2">
-                  <h3 className="font-bold text-slate-900 text-xs tracking-tight leading-snug line-clamp-1" title={r.rule_name}>
+                <div className="mt-1.5">
+                  <h3 className="font-bold text-slate-900 text-xs tracking-tight leading-snug truncate" title={r.rule_name}>
                     {r.rule_name || 'Unnamed Condition'}
                   </h3>
-                  <span className="inline-block text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                  <span className="inline-block text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
                     {r.document_type || 'AP Invoice'}
                   </span>
                 </div>
 
-                {/* Compact Condition Rows/Chips */}
-                <div className="space-y-1 mt-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
-                    Conditions
-                  </span>
-                  <div className="space-y-1">
-                    {condList.slice(0, 3).map((c, ci) => (
-                      <div 
-                        key={ci} 
-                        className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200/70 rounded px-2 py-1 gap-1.5"
-                      >
-                        <span className="font-medium text-slate-700 truncate max-w-[45%]" title={c.field}>
-                          {c.field}
-                        </span>
-                        <span className="text-[9.5px] font-mono font-bold text-slate-500 px-1 py-0.2 rounded bg-white border border-slate-200 shrink-0">
-                          {c.operator === 'greater_than_or_equal' || c.operator === '>=' ? '≥' :
-                           c.operator === 'less_than_or_equal' || c.operator === '<=' ? '≤' :
-                           c.operator === 'equals' || c.operator === '==' ? '=' :
-                           c.operator === 'not_equals' || c.operator === '!=' ? '≠' :
-                           c.operator === 'greater_than' || c.operator === '>' ? '>' :
-                           c.operator === 'less_than' || c.operator === '<' ? '<' :
-                           c.operator}
-                        </span>
-                        <span className="font-semibold text-slate-900 truncate max-w-[40%] text-right font-mono" title={String(c.value)}>
-                          {String(c.value)}
-                        </span>
-                      </div>
-                    ))}
-                    {condList.length > 3 && (
-                      <div className="text-[9.5px] font-semibold text-slate-400 text-center py-0.2">
-                        +{condList.length - 3} more condition{condList.length - 3 !== 1 ? 's' : ''}
-                      </div>
-                    )}
-                    {condList.length === 0 && (
-                      <div className="text-[10px] text-slate-400 italic py-0.5">
-                        Matches all {r.document_type || 'documents'}
-                      </div>
-                    )}
-                  </div>
+                {/* Criteria Identification Tags (Only criteria names for identification) */}
+                <div className="mt-2 flex flex-wrap items-center gap-1 min-h-[22px]">
+                  {condList.slice(0, 3).map((c, ci) => (
+                    <span 
+                      key={ci} 
+                      className="inline-flex items-center text-[9.5px] font-medium bg-slate-50 text-slate-700 border border-slate-200/70 px-1.5 py-0.5 rounded truncate max-w-[120px]" 
+                      title={`${c.field} (${c.operator} ${c.value})`}
+                    >
+                      {c.field}
+                    </span>
+                  ))}
+                  {condList.length > 3 && (
+                    <span className="text-[9px] font-bold text-slate-400 px-1">
+                      +{condList.length - 3}
+                    </span>
+                  )}
+                  {condList.length === 0 && (
+                    <span className="text-[9.5px] text-slate-400 italic">
+                      All {r.document_type || 'Documents'}
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Card Footer: Target Workflow & Actions */}
-              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+              <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
                 <div 
                   onClick={() => {
                     localStorage.setItem("adminActiveTab", "routing");
@@ -1601,7 +1728,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                   title={targetWf ? `Click to view workflow: ${targetWf.workflow_code || 'WF'} - ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}
                 >
                   <GitMerge className="h-3 w-3 text-[#003F28] shrink-0 group-hover/wf:scale-110 transition-transform" />
-                  <span className="text-[11px] font-semibold text-slate-700 truncate group-hover/wf:text-emerald-800">
+                  <span className="text-[10.5px] font-semibold text-slate-700 truncate group-hover/wf:text-emerald-800">
                     {targetWf ? (
                       <>
                         <span className="font-bold text-slate-900">{targetWf.workflow_code || 'WF'}</span>

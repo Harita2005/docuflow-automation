@@ -948,14 +948,12 @@ export default function ApprovedDocumentsPage({
           <table className="w-full text-left border-collapse text-[10.5px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold tracking-wider uppercase text-[9.5px]">
-                <th className="py-2 px-2.5 w-8 text-center">#</th>
+                <th className="py-2 px-2.5 w-8 text-center"><input type="checkbox" className="form-checkbox h-3 w-3" /></th>
                 <th className="py-2 px-2.5">Doc ID</th>
-                <th className="py-2 px-2.5">Document / Invoice #</th>
-                <th className="py-2 px-2.5">Vendor / Party</th>
+                <th className="py-2 px-2.5">Supplier / Vendor</th>
                 <th className="py-2 px-2.5">Doc Type</th>
-                <th className="py-2 px-2.5">Approved Date</th>
-                <th className="py-2 px-2.5">Approver</th>
                 <th className="py-2 px-2.5 text-right">Amount</th>
+                <th className="py-2 px-2.5">Current Stage</th>
                 <th className="py-2 px-2.5 text-center">Status</th>
                 <th className="py-2 px-2.5 text-center w-14">Action</th>
               </tr>
@@ -978,54 +976,42 @@ export default function ApprovedDocumentsPage({
                       className="hover:bg-slate-50/80 cursor-pointer transition group"
                     >
                       {/* Row index */}
-                      <td className="py-2 px-2.5 text-center text-slate-400 font-mono text-[9.5px]">
-                        {globalIdx}
-                      </td>
+                      <td className="py-1.5 px-2.5 text-center"><input type="checkbox" className="form-checkbox h-3 w-3" /></td>
 
                       {/* Document ID */}
-                      <td className="py-2 px-2.5 font-mono font-bold text-slate-800 text-[9.5px]">
+                      <td className="py-1.5 px-2.5 font-mono font-bold text-slate-800 text-[9.5px]">
                         <span className="text-[#003F28] group-hover:underline">
                           {doc.id}
                         </span>
                       </td>
 
-                      {/* Document Name / Invoice # */}
-                      <td className="py-2 px-2.5 font-semibold text-slate-900 max-w-[160px] truncate text-[10.5px]">
-                        {doc.invoice_number || doc.file_name || doc.id}
-                      </td>
+
 
                       {/* Vendor / Party */}
-                      <td className="py-2 px-2.5 text-slate-700 max-w-[160px] truncate text-[10px]" title={doc.vendor_name}>
+                      <td className="py-1.5 px-2.5 text-slate-700 max-w-[160px] truncate text-[10px]" title={doc.vendor_name}>
                         {doc.vendor_name || "-"}
                       </td>
 
                       {/* Document Type */}
-                      <td className="py-2 px-2.5">
+                      <td className="py-1.5 px-2.5">
                         <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                           {doc.document_type || "AP INVOICE"}
                         </span>
                       </td>
 
-                      {/* Approved Date */}
-                      <td className="py-2 px-2.5 text-slate-600 whitespace-nowrap text-[10px]">
-                        {formattedDate}
-                      </td>
-
-                      {/* Approver */}
-                      <td className="py-2 px-2.5 text-slate-700 max-w-[130px] truncate text-[10px]" title={doc.assigned_approver || "Verified"}>
-                        <div className="flex items-center gap-1">
-                          <UserCheck className="h-3 w-3 text-emerald-600 shrink-0" />
-                          <span className="truncate">{doc.assigned_approver || "Verified"}</span>
-                        </div>
-                      </td>
-
-                      {/* Amount */}
-                      <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap text-[10px]">
+                      <td className="py-1.5 px-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap text-[10px]">
                         {formatCurrency(doc.amount)}
                       </td>
 
+
+
+                      {/* Current Stage */}
+                      <td className="py-1.5 px-2.5 text-slate-600 whitespace-nowrap text-[10px]">
+                        {formattedDate}
+                      </td>
+
                       {/* Status */}
-                      <td className="py-2 px-2.5 text-center whitespace-nowrap">
+                      <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
                           {doc.status || "APPROVED"}

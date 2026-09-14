@@ -226,19 +226,22 @@ export default function ChecklistConditionBuilder() {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       };
 
-      const payload = {
+      // Build payload for checklist rule. Global rules include only division, category, stage, and items.
+      const basePayload = {
         id: String(editingRule.id).startsWith('tmp-') ? null : editingRule.id,
         rule_name: editingRule.rule_name || `CHK_${editingRule.division}_${(editingRule.category || '').slice(0, 15)}`,
         division: editingRule.division || 'ALL',
         category: editingRule.category || 'ALL',
-        branch: editingRule.branch || 'ALL',
-        workflow_profile: editingRule.workflow_profile || 'ALL',
         stage_name: editingRule.stage_name || 'Attachment Status',
         item_text: (editingRule.itemsList || []).join(' || '),
         is_mandatory: editingRule.is_mandatory ?? true,
         is_active: editingRule.is_active ?? true,
         sequence_order: editingRule.sequence_order || 1
       };
+      // Attach flow‑specific fields only when this is a flow‑specific rule.
+      const payload = editingRule.workflow_profile && editingRule.workflow_profile !== 'ALL'
+        ? { ...basePayload, branch: editingRule.branch || 'ALL', workflow_profile: editingRule.workflow_profile }
+        : basePayload;
 
       const res = await fetch('/api/admin/checklist-rules', {
         method: 'POST',
@@ -972,38 +975,42 @@ export default function ChecklistConditionBuilder() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Branch / Plant Location
-                    </label>
-                    <select 
-                      value={editingRule.branch || 'ALL'}
-                      onChange={e => setEditingRule({ ...editingRule, branch: e.target.value })}
-                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
-                    >
-                      {availableBranches.map(br => (
-                        <option key={br} value={br}>{br === 'ALL' ? 'ALL Locations' : br}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {editingRule.workflow_profile && editingRule.workflow_profile !== 'ALL' && (
+                    <>
+                      <div className="flex flex-col">
+                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Branch / Plant Location
+                        </label>
+                        <select 
+                          value={editingRule.branch || 'ALL'}
+                          onChange={e => setEditingRule({ ...editingRule, branch: e.target.value })}
+                          className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                        >
+                          {availableBranches.map(br => (
+                            <option key={br} value={br}>{br === 'ALL' ? 'ALL Locations' : br}</option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Associated Workflow Profile
-                    </label>
-                    <select 
-                      value={editingRule.workflow_profile || 'ALL'}
-                      onChange={e => setEditingRule({ ...editingRule, workflow_profile: e.target.value })}
-                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
-                    >
-                      <option value="ALL">ALL Workflows (Global Rule)</option>
-                      {workflows.map(w => (
-                        <option key={w.profile_name} value={w.profile_name}>
-                          {w.workflow_code ? `${w.workflow_code} • ` : ''}{w.profile_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="flex flex-col">
+                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Associated Workflow Profile
+                        </label>
+                        <select 
+                          value={editingRule.workflow_profile || 'ALL'}
+                          onChange={e => setEditingRule({ ...editingRule, workflow_profile: e.target.value })}
+                          className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                        >
+                          <option value="ALL">ALL Workflows (Global Rule)</option>
+                          {workflows.map(w => (
+                            <option key={w.profile_name} value={w.profile_name}>
+                              {w.workflow_code ? `${w.workflow_code} • ` : ''}{w.profile_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
