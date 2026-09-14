@@ -2381,6 +2381,21 @@ def save_checklist_template(payload: dict, db: Session=Depends(get_db)):
         if not rule:
             raise HTTPException(status_code=404, detail='Checklist rule not found')
     else:
+        # Enforce uniqueness for global rules (division + category + stage) when workflow_profile is null or ALL
+        wf_profile = payload.get('workflow_profile')
+        is_global = (wf_profile is None) or (wf_profile == 'ALL')
+        if is_global:
+            div = payload.get('division', 'ALL')
+            cat = payload.get('category', 'ALL')
+            stage = payload.get('stage_name', 'Attachment Status')
+            dup = db.query(ChecklistRule).filter(
+                (ChecklistRule.division == div) | (ChecklistRule.division == 'ALL') | (ChecklistRule.division.is_(None)),
+                (ChecklistRule.category == cat) | (ChecklistRule.category == 'ALL') | (ChecklistRule.category.is_(None)),
+                ChecklistRule.stage_name == stage,
+                (ChecklistRule.workflow_profile == wf_profile) | (ChecklistRule.workflow_profile == 'ALL') | (ChecklistRule.workflow_profile.is_(None))
+            ).first()
+            if dup:
+                raise HTTPException(status_code=400, detail='Global checklist rule already exists for this division, category, and stage')
         rule = ChecklistRule()
         db.add(rule)
     rule.rule_name = payload.get('rule_name', 'Checklist Rule')
