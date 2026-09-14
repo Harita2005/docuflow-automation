@@ -642,52 +642,49 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   // =========================================================================
   if (editingRule) {
     return (
-      <div className="flex flex-col gap-3.5 max-w-4xl mx-auto w-full pb-10 animate-in fade-in duration-150">
+      <div className="flex flex-col gap-2 max-w-7xl mx-auto w-full pb-6 animate-in fade-in duration-150">
         
-        {/* 1. HEADER (Compact) */}
-        <div className="bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        {/* 1. COMPACT HEADER */}
+        <div className="bg-white border border-slate-200/80 rounded-lg px-3 py-2 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <div 
                 onClick={handleCancel}
-                className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#003F28] hover:text-emerald-900 cursor-pointer transition-colors mb-0.5 group"
+                className="flex items-center gap-1.5 text-[8.5px] font-extrabold uppercase tracking-widest text-[#003F28] hover:text-emerald-900 cursor-pointer transition-colors mb-0.5 group"
               >
                 <ArrowLeft className="h-2.5 w-2.5 group-hover:-translate-x-0.5 transition-transform" />
                 <span>POLICY MATRIX</span>
                 <span className="text-slate-300 font-normal">&gt;</span>
                 <span className="text-slate-500">CONFIGURE CONDITION</span>
               </div>
-              <h1 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
                 <span>Configure Condition</span>
                 {editingRule.is_new ? (
-                  <span className="text-[8.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                  <span className="text-[8px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
                     New
                   </span>
                 ) : (
-                  <span className="text-[8.5px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                  <span className="text-[8px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
                     Editing
                   </span>
                 )}
               </h1>
-              <p className="text-[10px] text-slate-500 font-medium">
-                Define conditions to determine the workflow assigned to matching synced documents.
-              </p>
               {targetWorkflowId && (
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold">
-                  <GitMerge className="h-3 w-3 text-emerald-700 shrink-0" />
+                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 mt-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9px] font-bold">
+                  <GitMerge className="h-2.5 w-2.5 text-emerald-700 shrink-0" />
                   <span>Workflow: <strong className="text-slate-900">{workflowCode || targetWorkflowId}</strong> ({selectedWorkflowObj?.profile_name || targetWorkflowId})</span>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+            <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   handleCancel();
                   window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
                 }}
-                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1"
                 title="Return to Flow Builder"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -696,7 +693,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] rounded-md transition-colors cursor-pointer"
+                className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] rounded transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -704,7 +701,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                 type="button"
                 onClick={handleSaveCondition}
                 disabled={isSaving}
-                className="px-3 py-1.5 bg-[#003F28] hover:bg-[#002f1e] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1 bg-[#003F28] hover:bg-[#002f1e] disabled:opacity-50 text-white font-bold text-[10px] rounded transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
               >
                 <Check className="h-3 w-3" />
                 <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
@@ -713,731 +710,600 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           </div>
         </div>
 
-        {/* 2. CONDITION DETAILS (Compact) */}
-        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
-                1
+        {/* 2-COLUMN RESPONSIVE LAYOUT (FITS HORIZONTALLY & VERTICALLY) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-start">
+          
+          {/* LEFT COLUMN: CONFIGURATION (8 cols) */}
+          <div className="lg:col-span-8 flex flex-col gap-2.5">
+            
+            {/* 1. CONDITION & TARGET WORKFLOW ROUTING */}
+            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
+                    1
+                  </div>
+                  <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                    Condition & Target Workflow
+                  </h2>
+                </div>
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Destination</span>
               </div>
-              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
-                Condition Details
-              </h2>
-            </div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase">Core Information</span>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {/* Condition Name */}
-            <div>
-              <label htmlFor="condNameInput" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Condition Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                id="condNameInput"
-                type="text"
-                value={ruleName}
-                onChange={e => {
-                  setRuleName(e.target.value);
-                  if (validationErrors.ruleName) {
-                    const errs = { ...validationErrors };
-                    delete errs.ruleName;
-                    setValidationErrors(errs);
-                  }
-                }}
-                placeholder="e.g. High Value Machinery Purchase Approval"
-                className={`w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border rounded-md outline-none font-semibold text-slate-800 transition-colors ${
-                  validationErrors.ruleName 
-                    ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
-                    : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
-                }`}
-              />
-              {validationErrors.ruleName && (
-                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.ruleName}
-                </p>
-              )}
-            </div>
-
-            {/* Document Type */}
-            <div>
-              <label htmlFor="docTypeSelect" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Document Type <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  id="docTypeSelect"
-                  value={docType}
-                  onChange={e => {
-                    setDocType(e.target.value);
-                    if (validationErrors.docType) {
-                      const errs = { ...validationErrors };
-                      delete errs.docType;
-                      setValidationErrors(errs);
-                    }
-                  }}
-                  className={`w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border rounded-md outline-none font-semibold text-slate-800 appearance-none transition-colors cursor-pointer ${
-                    validationErrors.docType 
-                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
-                      : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
-                  }`}
-                >
-                  <option value="">-- Select Document Type --</option>
-                  {STANDARD_DOC_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-              </div>
-              {validationErrors.docType && (
-                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.docType}
-                </p>
-              )}
-            </div>
-
-            {/* Description */}
-            <div className="md:col-span-2">
-              <label htmlFor="condDescInput" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Description <span className="text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <input
-                id="condDescInput"
-                type="text"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Brief summary of when this condition triggers and business justification..."
-                className="w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-md outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* 3. WORKFLOW ASSIGNMENT (Compact) */}
-        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
-                2
-              </div>
-              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
-                Workflow Assignment
-              </h2>
-            </div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase">Routing Destination</span>
-          </div>
-
-          <p className="text-[10px] text-slate-500 font-medium">
-            This section determines which workflow receives a document when this condition matches.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-slate-50/60 border border-slate-200/70 p-2.5 rounded-lg">
-            {/* Document Category Filter */}
-            <div>
-              <label htmlFor="wfCategorySelect" className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Document Category
-              </label>
-              <div className="relative">
-                <select
-                  id="wfCategorySelect"
-                  value={wfCategoryFilter}
-                  onChange={e => setWfCategoryFilter(e.target.value)}
-                  className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
-                >
-                  <option value="ALL">All Categories ({workflows.length})</option>
-                  {workflowCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Target Workflow */}
-            <div>
-              <label htmlFor="targetWfSelect" className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Target Workflow <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  id="targetWfSelect"
-                  value={targetWorkflowId}
-                  onChange={e => {
-                    const newWf = e.target.value;
-                    setTargetWorkflowId(newWf);
-                    const matched = workflows.find(w => w.profile_name === newWf || w.workflow_code === newWf);
-                    if (matched && !ruleName.trim()) {
-                      setRuleName(matched.profile_name);
-                    }
-                    if (validationErrors.targetWorkflowId) {
-                      const errs = { ...validationErrors };
-                      delete errs.targetWorkflowId;
-                      setValidationErrors(errs);
-                    }
-                  }}
-                  className={`w-full text-[11px] px-2.5 py-1.5 bg-white border rounded-md outline-none font-bold appearance-none cursor-pointer shadow-2xs transition-colors ${
-                    validationErrors.targetWorkflowId
-                      ? 'border-rose-400 text-rose-900 focus:border-rose-500'
-                      : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
-                  }`}
-                >
-                  <option value="">-- Select Workflow --</option>
-                  {workflows
-                    .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
-                    .map(w => (
-                      <option key={w.profile_name} value={w.profile_name}>
-                        [{w.workflow_code || 'WF-001'}] {w.profile_name}
-                      </option>
-                    ))}
-                </select>
-                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-              </div>
-              {validationErrors.targetWorkflowId && (
-                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.targetWorkflowId}
-                </p>
-              )}
-            </div>
-
-            {/* Workflow Code (Read-only / Auto-populated) */}
-            <div>
-              <label className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
-                Workflow Code
-              </label>
-              <div className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md font-mono font-bold flex items-center justify-between shadow-2xs">
-                <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
-                  {workflowCode || 'Derived'}
-                </span>
-                {workflowCode && (
-                  <span className="text-[8.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
-                    <CheckCircle2 className="h-2 w-2" /> Linked
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. MATCH CONDITIONS (Compact) */}
-        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
-                3
-              </div>
-              <div>
-                <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
-                  Match Conditions
-                </h2>
-                <p className="text-[10px] text-slate-500 font-medium">
-                  Define the synced document data that must match before this workflow is assigned.
-                </p>
-              </div>
-            </div>
-
-            {/* Match Logic Selector: ALL vs ANY */}
-            <div className="flex items-center gap-2 bg-slate-100/80 p-0.5 rounded-md border border-slate-200 self-start sm:self-auto">
-              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Match:</span>
-              <label className={`flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                matchType === 'ALL' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}>
-                <input
-                  type="radio"
-                  name="matchType"
-                  checked={matchType === 'ALL'}
-                  onChange={() => setMatchType('ALL')}
-                  className="accent-[#003F28] h-3 w-3"
-                />
-                <span>ALL conditions</span>
-              </label>
-              <label className={`flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                matchType === 'ANY' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}>
-                <input
-                  type="radio"
-                  name="matchType"
-                  checked={matchType === 'ANY'}
-                  onChange={() => setMatchType('ANY')}
-                  className="accent-[#003F28] h-3 w-3"
-                />
-                <span>ANY condition</span>
-              </label>
-            </div>
-          </div>
-
-          {validationErrors.conditions && (
-            <div className="p-2 bg-rose-50 border border-rose-200 rounded-md text-[10.5px] font-bold text-rose-700 flex items-center gap-1.5">
-              <AlertTriangle className="h-3 w-3 shrink-0" />
-              <span>{validationErrors.conditions}</span>
-            </div>
-          )}
-
-          {/* Condition Rows List */}
-          <div className="space-y-2 pt-0.5">
-            {conditions.map((cond, idx) => {
-              const fieldMeta = getFieldMeta(cond.field);
-              const fieldType = fieldMeta.type || 'text';
-              const validOperators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.text;
-              const masterOptions = getFieldMasterOptions(cond.field);
-              const isMultiSelect = cond.operator === 'is one of' || cond.operator === 'is not one of';
-              const rowError = validationErrors[`row_${idx}`];
-
-              const selectedItems = cond.value 
-                ? cond.value.split(',').map(s => s.trim()).filter(Boolean) 
-                : [];
-
-              return (
-                <div 
-                  key={idx} 
-                  className={`flex flex-col gap-1.5 p-2.5 rounded-lg border transition-all ${
-                    rowError 
-                      ? 'bg-rose-50/20 border-rose-300' 
-                      : 'bg-slate-50/70 border-slate-200/80 hover:border-slate-300 hover:bg-white'
-                  }`}
-                >
-                  {/* Logical Operator Badge */}
-                  {idx > 0 && (
-                    <div className="self-start -mt-1 mb-0.5">
-                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded border tracking-wider ${
-                        matchType === 'ANY' 
-                          ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      }`}>
-                        {matchType === 'ANY' ? 'OR' : 'AND'}
-                      </span>
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {/* Condition Name */}
+                <div className="sm:col-span-2">
+                  <label htmlFor="condNameInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Condition Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="condNameInput"
+                    type="text"
+                    value={ruleName}
+                    onChange={e => {
+                      setRuleName(e.target.value);
+                      if (validationErrors.ruleName) {
+                        const errs = { ...validationErrors };
+                        delete errs.ruleName;
+                        setValidationErrors(errs);
+                      }
+                    }}
+                    placeholder="e.g. High Value Purchase Approval"
+                    className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 transition-colors ${
+                      validationErrors.ruleName 
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
+                        : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                    }`}
+                  />
+                  {validationErrors.ruleName && (
+                    <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-2 w-2" /> {validationErrors.ruleName}
+                    </p>
                   )}
+                </div>
 
-                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
-                    {/* 1. Field Dropdown */}
-                    <div className="w-full md:w-52 shrink-0">
-                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
-                        Field
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={cond.field}
-                          onChange={e => handleFieldChange(idx, e.target.value)}
-                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
-                        >
-                          <optgroup label="SYNCED DOCUMENT FIELDS">
-                            {DEFAULT_CONDITION_FIELDS.map(f => (
-                              <option key={f.id} value={f.id}>{f.label}</option>
-                            ))}
-                          </optgroup>
-                          {availableFields.length > DEFAULT_CONDITION_FIELDS.length && (
-                            <optgroup label="CUSTOM FIELDS">
-                              {availableFields.slice(DEFAULT_CONDITION_FIELDS.length).map(f => (
-                                <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                {/* Document Type */}
+                <div>
+                  <label htmlFor="docTypeSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Document Type <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="docTypeSelect"
+                      value={docType}
+                      onChange={e => {
+                        setDocType(e.target.value);
+                        if (validationErrors.docType) {
+                          const errs = { ...validationErrors };
+                          delete errs.docType;
+                          setValidationErrors(errs);
+                        }
+                      }}
+                      className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 appearance-none cursor-pointer ${
+                        validationErrors.docType 
+                          ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
+                          : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                      }`}
+                    >
+                      <option value="">-- Select Type --</option>
+                      {STANDARD_DOC_TYPES.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Category Filter */}
+                <div>
+                  <label htmlFor="wfCategorySelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Category Filter
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="wfCategorySelect"
+                      value={wfCategoryFilter}
+                      onChange={e => setWfCategoryFilter(e.target.value)}
+                      className="w-full text-[10.5px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                    >
+                      <option value="ALL">All Categories ({workflows.length})</option>
+                      {workflowCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Target Workflow */}
+                <div>
+                  <label htmlFor="targetWfSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Target Workflow <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="targetWfSelect"
+                      value={targetWorkflowId}
+                      onChange={e => {
+                        const newWf = e.target.value;
+                        setTargetWorkflowId(newWf);
+                        const matched = workflows.find(w => w.profile_name === newWf || w.workflow_code === newWf);
+                        if (matched && !ruleName.trim()) {
+                          setRuleName(matched.profile_name);
+                        }
+                        if (validationErrors.targetWorkflowId) {
+                          const errs = { ...validationErrors };
+                          delete errs.targetWorkflowId;
+                          setValidationErrors(errs);
+                        }
+                      }}
+                      className={`w-full text-[10.5px] px-2 py-1 bg-white border rounded outline-none font-bold appearance-none cursor-pointer ${
+                        validationErrors.targetWorkflowId
+                          ? 'border-rose-400 text-rose-900 focus:border-rose-500'
+                          : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
+                      }`}
+                    >
+                      <option value="">-- Select Workflow --</option>
+                      {workflows
+                        .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
+                        .map(w => (
+                          <option key={w.profile_name} value={w.profile_name}>
+                            [{w.workflow_code || 'WF-001'}] {w.profile_name}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                  </div>
+                  {validationErrors.targetWorkflowId && (
+                    <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-2 w-2" /> {validationErrors.targetWorkflowId}
+                    </p>
+                  )}
+                </div>
+
+                {/* Workflow Code */}
+                <div>
+                  <label className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Workflow Code
+                  </label>
+                  <div className="w-full text-[10.5px] px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold flex items-center justify-between">
+                    <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
+                      {workflowCode || 'Derived'}
+                    </span>
+                    {workflowCode && (
+                      <span className="text-[7.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded flex items-center gap-0.5">
+                        <CheckCircle2 className="h-2 w-2" /> Linked
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="sm:col-span-2 md:col-span-3">
+                  <label htmlFor="condDescInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    Description <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    id="condDescInput"
+                    type="text"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Brief summary of when this condition triggers and business justification..."
+                    className="w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border border-slate-200 rounded outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* 2. MATCH CONDITIONS (Compact) */}
+            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-100 pb-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
+                    2
+                  </div>
+                  <div>
+                    <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                      Match Conditions
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Match Logic Selector: ALL vs ANY */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded border border-slate-200 self-start sm:self-auto">
+                  <span className="text-[8px] font-bold text-slate-500 uppercase px-1">Match:</span>
+                  <label className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                    matchType === 'ALL' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="matchType"
+                      checked={matchType === 'ALL'}
+                      onChange={() => setMatchType('ALL')}
+                      className="accent-[#003F28] h-2.5 w-2.5"
+                    />
+                    <span>ALL conditions</span>
+                  </label>
+                  <label className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                    matchType === 'ANY' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="matchType"
+                      checked={matchType === 'ANY'}
+                      onChange={() => setMatchType('ANY')}
+                      className="accent-[#003F28] h-2.5 w-2.5"
+                    />
+                    <span>ANY condition</span>
+                  </label>
+                </div>
+              </div>
+
+              {validationErrors.conditions && (
+                <div className="p-1.5 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-700 flex items-center gap-1">
+                  <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                  <span>{validationErrors.conditions}</span>
+                </div>
+              )}
+
+              {/* Condition Rows List */}
+              <div className="space-y-1.5 pt-0.5">
+                {conditions.map((cond, idx) => {
+                  const fieldMeta = getFieldMeta(cond.field);
+                  const fieldType = fieldMeta.type || 'text';
+                  const validOperators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.text;
+                  const masterOptions = getFieldMasterOptions(cond.field);
+                  const isMultiSelect = cond.operator === 'is one of' || cond.operator === 'is not one of';
+                  const rowError = validationErrors[`row_${idx}`];
+
+                  const selectedItems = cond.value 
+                    ? cond.value.split(',').map(s => s.trim()).filter(Boolean) 
+                    : [];
+
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`flex flex-col gap-1 p-2 rounded border transition-all ${
+                        rowError 
+                          ? 'bg-rose-50/20 border-rose-300' 
+                          : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-white'
+                      }`}
+                    >
+                      {/* Logical Operator Badge */}
+                      {idx > 0 && (
+                        <div className="self-start -mt-0.5 mb-0.5">
+                          <span className={`text-[7.5px] font-black uppercase px-1 py-0.2 rounded border tracking-wider ${
+                            matchType === 'ANY' 
+                              ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          }`}>
+                            {matchType === 'ANY' ? 'OR' : 'AND'}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full">
+                        {/* 1. Field Dropdown */}
+                        <div className="w-full sm:w-44 shrink-0">
+                          <div className="relative">
+                            <select
+                              value={cond.field}
+                              onChange={e => handleFieldChange(idx, e.target.value)}
+                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                            >
+                              <optgroup label="SYNCED DOCUMENT FIELDS">
+                                {DEFAULT_CONDITION_FIELDS.map(f => (
+                                  <option key={f.id} value={f.id}>{f.label}</option>
+                                ))}
+                              </optgroup>
+                              {availableFields.length > DEFAULT_CONDITION_FIELDS.length && (
+                                <optgroup label="CUSTOM FIELDS">
+                                  {availableFields.slice(DEFAULT_CONDITION_FIELDS.length).map(f => (
+                                    <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              <optgroup label="ACTIONS">
+                                <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
+                              </optgroup>
+                            </select>
+                            <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                          </div>
+                        </div>
+
+                        {/* 2. Operator Dropdown */}
+                        <div className="w-full sm:w-36 shrink-0">
+                          <div className="relative">
+                            <select
+                              value={cond.operator}
+                              onChange={e => handleOperatorChange(idx, e.target.value)}
+                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                            >
+                              {validOperators.map(op => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
                               ))}
-                            </optgroup>
-                          )}
-                          <optgroup label="ACTIONS">
-                            <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
-                          </optgroup>
-                        </select>
-                        <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    {/* 2. Operator Dropdown */}
-                    <div className="w-full md:w-44 shrink-0">
-                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
-                        Operator
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={cond.operator}
-                          onChange={e => handleOperatorChange(idx, e.target.value)}
-                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
-                        >
-                          {validOperators.map(op => (
-                            <option key={op.value} value={op.value}>{op.label}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    {/* 3. Value Control */}
-                    <div className="flex-1 min-w-0">
-                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
-                        Value / Target
-                      </label>
-                      
-                      {/* NUMBER INPUT */}
-                      {fieldType === 'number' && (
-                        <div className="relative">
-                          {fieldMeta.isCurrency && (
-                            <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-slate-400 pointer-events-none">
-                              ₹
-                            </span>
-                          )}
-                          <input
-                            type="number"
-                            step="any"
-                            value={cond.value}
-                            onChange={e => handleValueChange(idx, e.target.value)}
-                            placeholder={fieldMeta.isCurrency ? "100000" : "0"}
-                            className={`w-full text-[11px] py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs ${
-                              fieldMeta.isCurrency ? 'pl-6 pr-2.5' : 'px-2.5'
-                            }`}
-                          />
+                            </select>
+                            <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                          </div>
                         </div>
-                      )}
 
-                      {/* DATE INPUT */}
-                      {fieldType === 'date' && (
-                        <input
-                          type="date"
-                          value={cond.value}
-                          onChange={e => handleValueChange(idx, e.target.value)}
-                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
-                        />
-                      )}
-
-                      {/* BOOLEAN SELECT */}
-                      {fieldType === 'boolean' && (
-                        <div className="relative">
-                          <select
-                            value={cond.value}
-                            onChange={e => handleValueChange(idx, e.target.value)}
-                            className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
-                          >
-                            <option value="true">Yes</option>
-                            <option value="false">No</option>
-                          </select>
-                          <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-                        </div>
-                      )}
-
-                      {/* SELECT DROPDOWN / MULTI-SELECT */}
-                      {fieldType === 'select' && (
-                        <div>
-                          {isMultiSelect ? (
+                        {/* 3. Value Control */}
+                        <div className="flex-1 min-w-0">
+                          {/* NUMBER INPUT */}
+                          {fieldType === 'number' && (
                             <div className="relative">
-                              <div
-                                onClick={() => {
-                                  setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx);
-                                  setMultiSelectSearch('');
-                                  setCustomTagInput('');
-                                }}
-                                className="w-full min-h-[32px] p-1 bg-white border border-slate-200 hover:border-[#003F28] rounded-md cursor-pointer flex items-center justify-between gap-1.5 shadow-2xs transition-colors"
-                              >
-                                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-                                  {selectedItems.length > 0 ? (
-                                    selectedItems.map((item, itIdx) => (
-                                      <span
-                                        key={itIdx}
-                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold rounded"
-                                      >
-                                        <span>{item}</span>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const updated = selectedItems.filter((_, i) => i !== itIdx);
-                                            handleValueChange(idx, updated.join(', '));
-                                          }}
-                                          className="text-emerald-500 hover:text-rose-600 font-black cursor-pointer ml-0.5"
-                                        >
-                                          ×
-                                        </button>
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span className="text-[10px] text-slate-400 font-medium px-1 italic">
-                                      Select {cond.field}...
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-[9px] font-bold text-[#003F28] shrink-0 bg-emerald-50/70 px-1.5 py-0.2 rounded border border-emerald-100">
-                                  {selectedItems.length} ▼
+                              {fieldMeta.isCurrency && (
+                                <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                  ₹
                                 </span>
-                              </div>
+                              )}
+                              <input
+                                type="number"
+                                step="any"
+                                value={cond.value}
+                                onChange={e => handleValueChange(idx, e.target.value)}
+                                placeholder={fieldMeta.isCurrency ? "100000" : "0"}
+                                className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
+                                  fieldMeta.isCurrency ? 'pl-5 pr-2' : 'px-2'
+                                }`}
+                              />
+                            </div>
+                          )}
+
+                          {/* DATE INPUT */}
+                          {fieldType === 'date' && (
+                            <input
+                              type="date"
+                              value={cond.value}
+                              onChange={e => handleValueChange(idx, e.target.value)}
+                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
+                            />
+                          )}
+
+                          {/* BOOLEAN SELECT */}
+                          {fieldType === 'boolean' && (
+                            <select
+                              value={cond.value}
+                              onChange={e => handleValueChange(idx, e.target.value)}
+                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] cursor-pointer"
+                            >
+                              <option value="true">True (Yes)</option>
+                              <option value="false">False (No)</option>
+                            </select>
+                          )}
+
+                          {/* MULTI SELECT */}
+                          {isMultiSelect && (
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx)}
+                                className="w-full text-left text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 flex items-center justify-between"
+                              >
+                                <span className="truncate">
+                                  {selectedItems.length > 0
+                                    ? `${selectedItems.length} selected: ${selectedItems.slice(0, 2).join(', ')}${selectedItems.length > 2 ? '...' : ''}`
+                                    : '-- Select Values --'}
+                                </span>
+                                <ChevronDown className="h-2.5 w-2.5 text-slate-400 shrink-0 ml-1" />
+                              </button>
 
                               {activeMultiSelectIdx === idx && (
-                                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-2 space-y-2 animate-in fade-in duration-100 max-h-60 overflow-y-auto">
-                                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                                    <span className="text-[9px] font-extrabold uppercase text-slate-600">
-                                      Select {cond.field}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setActiveMultiSelectIdx(null)}
-                                      className="text-slate-400 hover:text-slate-600 p-0.5 rounded"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  </div>
-
-                                  <div className="relative">
-                                    <Search className="h-3 w-3 text-slate-400 absolute left-2 top-2" />
-                                    <input
-                                      type="text"
-                                      value={multiSelectSearch}
-                                      onChange={e => setMultiSelectSearch(e.target.value)}
-                                      placeholder={`Filter...`}
-                                      className="w-full text-[10.5px] pl-7 pr-2 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:bg-white focus:border-[#003F28]"
-                                    />
-                                  </div>
-
-                                  <div className="flex gap-1">
-                                    <input
-                                      type="text"
-                                      value={customTagInput}
-                                      onChange={e => setCustomTagInput(e.target.value)}
-                                      onKeyDown={e => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          const val = customTagInput.trim();
-                                          if (val && !selectedItems.includes(val)) {
-                                            const updated = [...selectedItems, val];
-                                            handleValueChange(idx, updated.join(', '));
-                                            setCustomTagInput('');
-                                          }
-                                        }
-                                      }}
-                                      placeholder="Custom value..."
-                                      className="flex-1 text-[10.5px] px-2 py-1 border border-slate-200 rounded outline-none focus:border-[#003F28]"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const val = customTagInput.trim();
-                                        if (val && !selectedItems.includes(val)) {
-                                          const updated = [...selectedItems, val];
-                                          handleValueChange(idx, updated.join(', '));
-                                          setCustomTagInput('');
-                                        }
-                                      }}
-                                      className="px-2 py-1 bg-[#003F28] text-white text-[9px] font-bold rounded hover:bg-[#003220]"
-                                    >
-                                      Add
-                                    </button>
-                                  </div>
-
-                                  <div className="max-h-36 overflow-y-auto space-y-0.5 border border-slate-100 rounded p-1">
-                                    {masterOptions
-                                      .filter(opt => !multiSelectSearch || opt.toLowerCase().includes(multiSelectSearch.toLowerCase()))
-                                      .map(opt => {
-                                        const isChecked = selectedItems.includes(opt);
-                                        return (
-                                          <label
-                                            key={opt}
-                                            className={`flex items-center justify-between px-1.5 py-1 text-[10.5px] rounded cursor-pointer transition-colors ${
-                                              isChecked ? 'bg-emerald-50 text-emerald-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
-                                            }`}
-                                          >
-                                            <span className="truncate mr-2">{opt}</span>
-                                            <input
-                                              type="checkbox"
-                                              checked={isChecked}
-                                              onChange={() => {
-                                                let updated;
-                                                if (isChecked) {
-                                                  updated = selectedItems.filter(x => x !== opt);
-                                                } else {
-                                                  updated = [...selectedItems, opt];
-                                                }
-                                                handleValueChange(idx, updated.join(', '));
-                                              }}
-                                              className="rounded text-[#003F28] focus:ring-[#003F28] h-3 w-3 cursor-pointer"
-                                            />
-                                          </label>
-                                        );
-                                      })}
+                                <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded shadow-lg p-1.5 max-h-48 overflow-y-auto">
+                                  <div className="space-y-0.5">
+                                    {masterOptions.map(opt => {
+                                      const checked = selectedItems.includes(opt);
+                                      return (
+                                        <label
+                                          key={opt}
+                                          className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer text-[10px] font-medium"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => {
+                                              const newSet = checked 
+                                                ? selectedItems.filter(s => s !== opt) 
+                                                : [...selectedItems, opt];
+                                              handleValueChange(idx, newSet.join(', '));
+                                            }}
+                                            className="h-3 w-3 accent-[#003F28] rounded"
+                                          />
+                                          <span className={checked ? 'font-bold text-slate-900' : 'text-slate-700'}>
+                                            {opt}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
                             </div>
-                          ) : (
+                          )}
+
+                          {/* STANDARD DROPDOWN */}
+                          {!isMultiSelect && fieldType === 'select' && (
                             <div className="relative">
-                              <input
-                                type="text"
-                                list={`list-${idx}-${cond.field}`}
+                              <select
                                 value={cond.value}
                                 onChange={e => handleValueChange(idx, e.target.value)}
-                                placeholder={`Select or type ${cond.field}...`}
-                                className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
-                              />
-                              <datalist id={`list-${idx}-${cond.field}`}>
-                                {masterOptions.map((opt, oIdx) => (
-                                  <option key={oIdx} value={opt} />
+                                className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                              >
+                                <option value="">-- Select Value --</option>
+                                {masterOptions.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
                                 ))}
-                              </datalist>
+                              </select>
+                              <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                             </div>
                           )}
+
+                          {/* TEXT INPUT */}
+                          {!isMultiSelect && fieldType === 'text' && (
+                            <input
+                              type="text"
+                              value={cond.value}
+                              onChange={e => handleValueChange(idx, e.target.value)}
+                              placeholder={`Enter ${cond.field.toLowerCase()}...`}
+                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
+                            />
+                          )}
                         </div>
-                      )}
 
-                      {/* GENERIC TEXT INPUT */}
-                      {fieldType === 'text' && (
-                        <input
-                          type="text"
-                          value={cond.value}
-                          onChange={e => handleValueChange(idx, e.target.value)}
-                          placeholder={`Enter ${cond.field}...`}
-                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
-                        />
+                        {/* 4. Delete Row Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCondition(idx)}
+                          disabled={conditions.length === 1}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-20 rounded transition cursor-pointer shrink-0 self-end sm:self-center"
+                          title="Remove condition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {rowError && (
+                        <p className="text-[8.5px] font-bold text-rose-600 pl-1 flex items-center gap-1">
+                          <AlertTriangle className="h-2 w-2" /> {rowError}
+                        </p>
                       )}
                     </div>
-
-                    {/* 4. Delete Row Button */}
-                    <div className="shrink-0 self-end md:self-center">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCondition(idx)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-md transition-colors cursor-pointer shadow-2xs"
-                        title="Delete this condition row"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {rowError && (
-                    <p className="text-[9.5px] font-bold text-rose-600 pl-1 flex items-center gap-1">
-                      <AlertTriangle className="h-2.5 w-2.5" /> {rowError}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Add Condition & Clear Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleAddCondition}
-              disabled={conditions.length >= 10}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 text-[#003F28] font-bold text-[10.5px] rounded-md transition-colors shadow-2xs cursor-pointer"
-            >
-              <Plus className="h-3 w-3" />
-              <span>Add Condition ({conditions.length}/10)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClearAll}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 text-slate-600 font-bold text-[10.5px] rounded-md transition-colors shadow-2xs cursor-pointer"
-            >
-              <Trash2 className="h-3 w-3" />
-              <span>Clear All</span>
-            </button>
-          </div>
-        </section>
-
-        {/* 5. RULE PREVIEW (Compact) */}
-        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
-                4
+                  );
+                })}
               </div>
-              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
-                Rule Preview
-              </h2>
-            </div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase">Live Evaluation</span>
+
+              {/* Add Condition & Clear Actions */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleAddCondition}
+                  disabled={conditions.length >= 10}
+                  className="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 text-[#003F28] font-bold text-[9.5px] rounded transition shadow-2xs cursor-pointer"
+                >
+                  <Plus className="h-2.5 w-2.5" />
+                  <span>Add Condition ({conditions.length}/10)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-700 text-slate-600 font-bold text-[9.5px] rounded transition cursor-pointer"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                  <span>Clear All</span>
+                </button>
+              </div>
+            </section>
           </div>
 
-          {previewData.isComplete ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 font-mono text-[10.5px]">
-              {/* IF BLOCK */}
-              <div className="space-y-1">
+          {/* RIGHT COLUMN: LIVE RULE PREVIEW & ACTIONS (4 cols) */}
+          <div className="lg:col-span-4 flex flex-col gap-2.5 sticky top-2">
+            
+            {/* 3. RULE PREVIEW (Compact) */}
+            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="bg-[#003F28] text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
-                    IF
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-500 font-sans">
-                    Synced document matches ({matchType === 'ANY' ? 'any condition' : 'all conditions'}):
-                  </span>
+                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
+                    3
+                  </div>
+                  <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                    Live Evaluation
+                  </h2>
                 </div>
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Preview</span>
+              </div>
 
-                <div className="pl-5 space-y-0.5">
-                  {previewData.formattedConditions.map((fc, i) => (
-                    <div key={i} className="flex flex-wrap items-center gap-1 text-slate-800">
-                      {i > 0 && (
-                        <span className={`text-[8.5px] font-black uppercase px-1 py-0.2 rounded ${
-                          matchType === 'ANY' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
-                        }`}>
-                          {matchType === 'ANY' ? 'OR' : 'AND'}
-                        </span>
-                      )}
-                      <span className="font-bold text-slate-900 font-sans">{fc.fieldLabel}</span>
-                      <span className="text-slate-500 font-sans italic">{fc.operatorLabel}</span>
-                      <span className="font-black text-[#003F28] font-mono bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
-                        {fc.valueLabel}
+              {previewData.isComplete ? (
+                <div className="bg-slate-50 border border-slate-200 rounded p-2 space-y-2 font-mono text-[9.5px]">
+                  {/* IF BLOCK */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1">
+                      <span className="bg-[#003F28] text-white text-[8px] font-black px-1 py-0.2 rounded uppercase">
+                        IF
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-500 font-sans">
+                        Matches ({matchType === 'ANY' ? 'ANY' : 'ALL'}):
                       </span>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* THEN BLOCK */}
-              <div className="pt-1.5 border-t border-slate-200/80 space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
-                    THEN
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-500 font-sans">
-                    Workflow Routing Action:
-                  </span>
-                </div>
-
-                <div className="pl-5 space-y-0.5 font-sans">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-medium text-[10.5px]">Route to:</span>
-                    <span className="font-black text-slate-900 text-[11px] bg-white border border-slate-200 px-1.5 py-0.2 rounded shadow-2xs">
-                      {previewData.targetWorkflowName}
-                    </span>
+                    <div className="pl-3 space-y-0.5">
+                      {previewData.formattedConditions.map((fc, i) => (
+                        <div key={i} className="flex flex-wrap items-center gap-1 text-slate-800">
+                          {i > 0 && (
+                            <span className={`text-[7.5px] font-black uppercase px-0.5 py-0.2 rounded ${
+                              matchType === 'ANY' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
+                            }`}>
+                              {matchType === 'ANY' ? 'OR' : 'AND'}
+                            </span>
+                          )}
+                          <span className="font-bold text-slate-900 font-sans">{fc.fieldLabel}</span>
+                          <span className="text-slate-500 font-sans italic">{fc.operatorLabel}</span>
+                          <span className="font-black text-[#003F28] font-mono bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
+                            {fc.valueLabel}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-medium text-[10.5px]">Workflow Code:</span>
-                    <span className="font-mono font-bold text-[#003F28] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[10.5px]">
-                      {previewData.workflowCode}
-                    </span>
+
+                  {/* THEN BLOCK */}
+                  <div className="pt-1.5 border-t border-slate-200/80 space-y-1">
+                    <div className="flex items-center gap-1">
+                      <span className="bg-emerald-600 text-white text-[8px] font-black px-1 py-0.2 rounded uppercase">
+                        THEN
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-500 font-sans">
+                        Routing Action:
+                      </span>
+                    </div>
+
+                    <div className="pl-3 space-y-0.5 font-sans">
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500 font-medium text-[9.5px]">Route to:</span>
+                        <span className="font-black text-slate-900 text-[10px] bg-white border border-slate-200 px-1 py-0.2 rounded shadow-2xs">
+                          {previewData.targetWorkflowName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500 font-medium text-[9.5px]">Code:</span>
+                        <span className="font-mono font-bold text-[#003F28] bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 text-[9.5px]">
+                          {previewData.workflowCode}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center">
-              <p className="text-[10.5px] font-bold text-slate-500">
-                Complete all conditions to preview this rule.
-              </p>
-              <p className="text-[9.5px] text-slate-400 mt-0.5 font-medium">
-                Missing required items: {previewData.issues.join(', ')}
-              </p>
-            </div>
-          )}
-        </section>
+              ) : (
+                <div className="p-2.5 bg-slate-50 border border-dashed border-slate-200 rounded text-center">
+                  <p className="text-[9.5px] font-bold text-slate-500">
+                    Complete conditions to preview rule.
+                  </p>
+                  <p className="text-[8.5px] text-slate-400 mt-0.5 font-medium">
+                    Missing: {previewData.issues.join(', ')}
+                  </p>
+                </div>
+              )}
+            </section>
 
-        {/* 6. SAVE / CANCEL (Compact) */}
-        <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-[11px] rounded-md transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-
-          <div className="flex items-center gap-2.5">
-            <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
-              Changes route matching synced documents automatically.
-            </span>
-            <button
-              type="button"
-              onClick={handleSaveCondition}
-              disabled={isSaving}
-              className="px-4 py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="h-3 w-3" />
-              <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
-            </button>
+            {/* QUICK ACTIONS CARD */}
+            <div className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={handleSaveCondition}
+                disabled={isSaving}
+                className="w-full py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[10.5px] rounded transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Check className="h-3 w-3" />
+                <span>{isSaving ? 'Saving...' : 'Save & Publish Condition'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="w-full py-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-[10px] rounded transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1587,32 +1453,32 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   });
 
   return (
-    <div className="flex flex-col gap-4 w-full pb-10">
+    <div className="flex flex-col gap-2.5 w-full pb-6">
       {/* Top Header Bar */}
-      <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
           {selectedCategory && (
             <button
               onClick={() => {
                 if (selectedSubCategory) setSelectedSubCategory(null);
                 else setSelectedCategory(null);
               }}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition-colors cursor-pointer"
               title="Back"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </button>
           )}
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-slate-900 tracking-tight">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xs font-bold text-slate-900 tracking-tight">
                 Condition Policy Matrix
               </h1>
-              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
-                {rules.length} Rules Active
+              <span className="text-[9.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                {rules.length} Active
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            <p className="text-[10px] text-slate-500 font-medium">
               {selectedCategory 
                 ? `Showing rules under ${selectedCategory}`
                 : "Manage workflow routing condition policies for synced documents."}
@@ -1620,30 +1486,30 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="relative w-full sm:w-64">
-            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+        <div className="flex items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="h-3 w-3 text-slate-400 absolute left-2 top-2" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search condition rules..."
-              className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] font-medium transition"
+              className="w-full text-[11px] pl-7 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-md outline-none focus:bg-white focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] font-medium transition"
             />
           </div>
 
           <button
             onClick={() => openEditor(null)}
-            className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+            className="px-2.5 py-1 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-[11px] rounded-md transition shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3" />
             <span>Create Condition</span>
           </button>
         </div>
       </div>
 
-      {/* Rules Grid (Responsive: 3 cols desktop, 2 cols tablet, 1 col mobile) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full items-stretch">
+      {/* Rules Grid (Dense Responsive Grid: 4 cols 2xl, 3 cols lg, 2 cols sm) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5 w-full items-stretch">
         {filteredRules.map((r, idx) => {
           let parsed = { conditions: [] };
           try { parsed = JSON.parse(r.conditions_json); } catch {}
@@ -1653,44 +1519,44 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           return (
             <div 
               key={r.id} 
-              className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs hover:shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between h-full group"
+              className="bg-white border border-slate-200/90 rounded-lg p-3 shadow-2xs hover:shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between h-full group"
             >
               {/* Card Top / Header */}
               <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded uppercase tracking-wider border border-slate-200/60">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wider border border-slate-200/60">
                     Priority {idx + 1}
                   </span>
-                  <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 uppercase tracking-wider">
-                    {condList.length} Condition{condList.length !== 1 ? 's' : ''}
+                  <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200/80 uppercase tracking-wider">
+                    {condList.length} Cond{condList.length !== 1 ? 's' : ''}
                   </span>
                 </div>
 
                 {/* Rule Title & Doc Type */}
-                <div className="mt-2.5">
-                  <h3 className="font-bold text-slate-900 text-sm tracking-tight leading-snug line-clamp-1" title={r.rule_name}>
+                <div className="mt-2">
+                  <h3 className="font-bold text-slate-900 text-xs tracking-tight leading-snug line-clamp-1" title={r.rule_name}>
                     {r.rule_name || 'Unnamed Condition'}
                   </h3>
-                  <span className="inline-block text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">
+                  <span className="inline-block text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
                     {r.document_type || 'AP Invoice'}
                   </span>
                 </div>
 
                 {/* Compact Condition Rows/Chips */}
-                <div className="space-y-1.5 mt-3">
-                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block">
+                <div className="space-y-1 mt-2">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
                     Conditions
                   </span>
-                  <div className="space-y-1.5">
-                    {condList.slice(0, 4).map((c, ci) => (
+                  <div className="space-y-1">
+                    {condList.slice(0, 3).map((c, ci) => (
                       <div 
                         key={ci} 
-                        className="flex items-center justify-between text-xs bg-slate-50/90 border border-slate-200/80 rounded-lg px-2.5 py-1.5 gap-2"
+                        className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200/70 rounded px-2 py-1 gap-1.5"
                       >
-                        <span className="font-semibold text-slate-800 truncate max-w-[45%]" title={c.field}>
+                        <span className="font-medium text-slate-700 truncate max-w-[45%]" title={c.field}>
                           {c.field}
                         </span>
-                        <span className="text-[10px] font-mono font-bold text-slate-500 px-1.5 py-0.5 rounded bg-white border border-slate-200 shrink-0">
+                        <span className="text-[9.5px] font-mono font-bold text-slate-500 px-1 py-0.2 rounded bg-white border border-slate-200 shrink-0">
                           {c.operator === 'greater_than_or_equal' || c.operator === '>=' ? '≥' :
                            c.operator === 'less_than_or_equal' || c.operator === '<=' ? '≤' :
                            c.operator === 'equals' || c.operator === '==' ? '=' :
@@ -1699,19 +1565,19 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                            c.operator === 'less_than' || c.operator === '<' ? '<' :
                            c.operator}
                         </span>
-                        <span className="font-bold text-slate-900 truncate max-w-[40%] text-right font-mono" title={String(c.value)}>
+                        <span className="font-semibold text-slate-900 truncate max-w-[40%] text-right font-mono" title={String(c.value)}>
                           {String(c.value)}
                         </span>
                       </div>
                     ))}
-                    {condList.length > 4 && (
-                      <div className="text-[10px] font-bold text-slate-400 text-center py-0.5">
-                        +{condList.length - 4} more condition{condList.length - 4 !== 1 ? 's' : ''}
+                    {condList.length > 3 && (
+                      <div className="text-[9.5px] font-semibold text-slate-400 text-center py-0.2">
+                        +{condList.length - 3} more condition{condList.length - 3 !== 1 ? 's' : ''}
                       </div>
                     )}
                     {condList.length === 0 && (
-                      <div className="text-[11px] text-slate-400 italic py-1">
-                        No specific conditions configured (Matches all {r.document_type || 'documents'})
+                      <div className="text-[10px] text-slate-400 italic py-0.5">
+                        Matches all {r.document_type || 'documents'}
                       </div>
                     )}
                   </div>
@@ -1719,7 +1585,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
               </div>
 
               {/* Card Footer: Target Workflow & Actions */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
                 <div 
                   onClick={() => {
                     localStorage.setItem("adminActiveTab", "routing");
@@ -1731,15 +1597,15 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                       window.dispatchEvent(new CustomEvent("open-workflow-editor", { detail: { profile_name: targetWf.profile_name } }));
                     }
                   }}
-                  className="flex items-center gap-1.5 truncate min-w-0 flex-1 hover:text-emerald-700 cursor-pointer transition-colors group/wf" 
+                  className="flex items-center gap-1 truncate min-w-0 flex-1 hover:text-emerald-700 cursor-pointer transition-colors group/wf" 
                   title={targetWf ? `Click to view workflow: ${targetWf.workflow_code || 'WF'} - ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}
                 >
-                  <GitMerge className="h-3.5 w-3.5 text-[#003F28] shrink-0 group-hover/wf:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-700 truncate group-hover/wf:text-emerald-800">
+                  <GitMerge className="h-3 w-3 text-[#003F28] shrink-0 group-hover/wf:scale-110 transition-transform" />
+                  <span className="text-[11px] font-semibold text-slate-700 truncate group-hover/wf:text-emerald-800">
                     {targetWf ? (
                       <>
                         <span className="font-bold text-slate-900">{targetWf.workflow_code || 'WF'}</span>
-                        <span className="text-slate-400 mx-1">&bull;</span>
+                        <span className="text-slate-400 mx-0.5">&bull;</span>
                         <span>{targetWf.profile_name}</span>
                       </>
                     ) : (
@@ -1748,22 +1614,22 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => openEditor(r)}
-                    className="p-1.5 text-slate-400 hover:text-emerald-800 hover:bg-emerald-50 rounded-md transition cursor-pointer"
+                    className="p-1 text-slate-400 hover:text-emerald-800 hover:bg-emerald-50 rounded transition cursor-pointer"
                     title="Edit Condition Policy"
                   >
-                    <Edit2 className="h-3.5 w-3.5" />
+                    <Edit2 className="h-3 w-3" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmTarget(r.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
                     title="Delete Condition Policy"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               </div>

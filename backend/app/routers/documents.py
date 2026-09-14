@@ -117,12 +117,58 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
     if inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
         return inv.assigned_approver or ''
 
-    curr_stage = inv.current_stage or 1
-    step_def = db.query(WorkflowStepDefinition).filter(
+    # Fetch all defined steps for this workflow profile
+    steps = db.query(WorkflowStepDefinition).filter(
         (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
-        (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
-        WorkflowStepDefinition.stage_number == curr_stage
-    ).first()
+        (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip()))
+    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+
+    step_count = len(steps)
+    if step_count > 0:
+        if inv.total_stages != step_count:
+            inv.total_stages = step_count
+            db.add(inv)
+
+        curr_stage = inv.current_stage or 1
+        # Check if all stages in this workflow have completed (e.g. stage exceeded step_count or final step approved)
+        if curr_stage > step_count:
+            inv.current_stage = step_count
+            inv.status = 'Approved'
+            archive_approved_pdf(inv)
+            try:
+                db.add(inv)
+                db.commit()
+                db.refresh(inv)
+            except Exception as e:
+                logger.warning(f"Error persisting completed status: {e}")
+                db.rollback()
+            return inv.assigned_approver or ''
+
+        if curr_stage == step_count:
+            final_log = db.query(AuditLog).filter(
+                AuditLog.invoice_id == str(inv.id),
+                AuditLog.action.ilike(f'%Approved (Stage {step_count})%')
+            ).first()
+            if final_log:
+                inv.status = 'Approved'
+                archive_approved_pdf(inv)
+                try:
+                    db.add(inv)
+                    db.commit()
+                    db.refresh(inv)
+                except Exception as e:
+                    logger.warning(f"Error persisting completed status for final stage: {e}")
+                    db.rollback()
+                return inv.assigned_approver or ''
+
+    curr_stage = inv.current_stage or 1
+    step_def = next((s for s in steps if s.stage_number == curr_stage), None) if step_count > 0 else None
+    if not step_def:
+        step_def = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+            WorkflowStepDefinition.stage_number == curr_stage
+        ).first()
 
     if step_def and step_def.approver_target and step_def.approver_target.strip():
         targets = [step_def.approver_target.strip()]
@@ -166,17 +212,16 @@ def get_approved_invoices(
         Invoice.status.ilike('%approved%'),
         Invoice.status.ilike('%settled%'),
         Invoice.status.ilike('%paid%'),
-        Invoice.status.ilike('%ready for payment%'),
-        Invoice.current_stage >= 4
+        Invoice.status.ilike('%ready for payment%')
     )
     query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
 
     # 2. Strict Access Control Enforcement:
     # Admin: Can view all approved documents
-    # Normal User: Can view ONLY the approved documents where their own approval action is recorded
+    # Flow Members & Sign-offs: Can view approved documents where they are a flow member, approver, or signed off
     is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     if not is_admin:
-        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
         user_names = [name.strip() for name in user_names if name and name.strip()]
         if not user_names:
             if response:
@@ -199,12 +244,27 @@ def get_approved_invoices(
                 else:
                     user_approved_doc_ids.add(f'DOC-{val}')
 
-        if not user_approved_doc_ids:
+        # Also find all workflow profiles where user is a stage member in the flow
+        wf_step_or = []
+        for name in user_names:
+            wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
+            wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
+        user_wf_profiles = [row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0]]
+
+        access_or = []
+        if user_approved_doc_ids:
+            access_or.append(Invoice.id.in_(user_approved_doc_ids))
+        if user_wf_profiles:
+            access_or.append(Invoice.workflow_profile_id.in_(user_wf_profiles))
+        for name in user_names:
+            access_or.append(Invoice.assigned_approver.ilike(f'%{name}%'))
+
+        if not access_or:
             if response:
                 response.headers["X-Total-Count"] = "0"
             return []
 
-        query = query.filter(Invoice.id.in_(user_approved_doc_ids))
+        query = query.filter(or_(*access_or))
 
     # 3. Filter: YEAR
     if year and year.strip().lower() != 'all':
@@ -365,6 +425,14 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                     rejected_invoice_ids.add(raw_id)
                     rejected_invoice_ids.add(doc_id_clean)
 
+        wf_step_or = []
+        for name in user_names:
+            wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
+            wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
+        user_wf_profiles = set(row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0])
+    else:
+        user_wf_profiles = set()
+
     user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     filtered_invoices = []
     
@@ -385,16 +453,17 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         doc_key_clean = str(inv.id).replace('DOC-', '')
         has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
         has_rejected_this_doc = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
+        is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
 
         if is_terminal:
-            if has_approved_this_doc or has_rejected_this_doc:
+            if has_approved_this_doc or has_rejected_this_doc or is_member_of_flow:
                 filtered_invoices.append(inv)
                 continue
             if authorize_document_access(current_user, inv):
                 filtered_invoices.append(inv)
                 continue
         else:
-            # Active workflow: STRICT ACCESS.
+            # Active workflow:
             # 1. User is in the CURRENT active stage approver pool (Pending)
             if inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver):
                 filtered_invoices.append(inv)
@@ -403,13 +472,17 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
             if has_approved_this_doc:
                 filtered_invoices.append(inv)
                 continue
-            # Future-stage approvers and peer approvers who did not sign off are strictly excluded
+            # 3. User is a member in the workflow flow (In Progress / Tracking)
+            if is_member_of_flow:
+                filtered_invoices.append(inv)
+                continue
 
     results = []
     for inv in filtered_invoices:
         doc_key_clean = str(inv.id).replace('DOC-', '')
         has_appr = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
         has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
+        is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
         
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_curr = False
@@ -423,7 +496,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                 if not (is_curr and is_active_flow):
                     continue
             elif s_req in ['in_progress', 'tracking']:
-                if not (has_appr and is_active_flow):
+                if not ((has_appr or user_is_admin or is_member_of_flow) and is_active_flow):
                     continue
             elif s_req == 'approved':
                 if not (inv.status in ['Approved', 'Settled', 'Paid']):
@@ -1050,22 +1123,22 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 
-    if (inv.current_stage or 1) < (inv.total_stages or 1):
-        next_stage_val = (inv.current_stage or 1) + 1
-        next_step_name = f'Stage {next_stage_val}'
-        if inv.workflow_profile_id:
-            next_step = db.query(WorkflowStepDefinition).filter(
-                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
-                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
-                WorkflowStepDefinition.stage_number == next_stage_val
-            ).first()
-            if next_step and next_step.approver_target:
-                targets = [next_step.approver_target.strip()]
-                if next_step.delegate_approver and next_step.delegate_approver.strip():
-                    targets.append(next_step.delegate_approver.strip())
-                next_assigned_val = ', '.join(targets)
-                next_step_name = next_step.step_name
-                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
+    next_step = None
+    if inv.workflow_profile_id:
+        next_step = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+            WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
+        ).first()
+
+    if next_step and next_step.approver_target:
+        next_stage_val = prev_stage_num + 1
+        targets = [next_step.approver_target.strip()]
+        if next_step.delegate_approver and next_step.delegate_approver.strip():
+            targets.append(next_step.delegate_approver.strip())
+        next_assigned_val = ', '.join(targets)
+        next_step_name = next_step.step_name
+        next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
@@ -1081,6 +1154,7 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
         next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
         next_status_val = 'Approved'
+        next_stage_val = prev_stage_num
         archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
@@ -1139,18 +1213,22 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 
-    if (inv.current_stage or 1) < (inv.total_stages or 1):
-        next_stage_val = (inv.current_stage or 1) + 1
-        next_step_name = f'Stage {next_stage_val}'
-        if inv.workflow_profile_id:
-            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
-            if next_step:
-                next_assigned_val = next_step.approver_target
-                next_step_name = next_step.step_name
-                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
-            else:
-                next_assigned_val = 'Unassigned'
-                next_assigned_info = f'Advanced to Stage {next_stage_val}.'
+    next_step = None
+    if inv.workflow_profile_id:
+        next_step = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+            WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
+        ).first()
+
+    if next_step and next_step.approver_target:
+        next_stage_val = prev_stage_num + 1
+        targets = [next_step.approver_target.strip()]
+        if next_step.delegate_approver and next_step.delegate_approver.strip():
+            targets.append(next_step.delegate_approver.strip())
+        next_assigned_val = ', '.join(targets)
+        next_step_name = next_step.step_name
+        next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
@@ -1166,6 +1244,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
         next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
         next_status_val = 'Approved'
+        next_stage_val = prev_stage_num
         archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
@@ -1225,18 +1304,22 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
         next_stage_val = prev_stage_num
         next_assigned_val = inv.assigned_approver
         next_checklist_val = inv.checklist_state
-        if (inv.current_stage or 1) < (inv.total_stages or 1):
-            next_stage_val = (inv.current_stage or 1) + 1
-            next_step_name = f'Stage {next_stage_val}'
-            if inv.workflow_profile_id:
-                next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
-                if next_step:
-                    next_assigned_val = next_step.approver_target
-                    next_step_name = next_step.step_name
-                    next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
-                else:
-                    next_assigned_val = 'Unassigned'
-                    next_assigned_info = f'Advanced to Stage {next_stage_val}.'
+        next_step = None
+        if inv.workflow_profile_id:
+            next_step = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
+            ).first()
+
+        if next_step and next_step.approver_target:
+            next_stage_val = prev_stage_num + 1
+            targets = [next_step.approver_target.strip()]
+            if next_step.delegate_approver and next_step.delegate_approver.strip():
+                targets.append(next_step.delegate_approver.strip())
+            next_assigned_val = ', '.join(targets)
+            next_step_name = next_step.step_name
+            next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
             existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
             if not existing_next_items:
                 checklist_items = resolve_checklist_items(db, inv, next_step_name)
@@ -1252,6 +1335,7 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             next_status_val = f'In Progress (Stage {next_stage_val})'
         else:
             next_status_val = 'Approved'
+            next_stage_val = prev_stage_num
             archive_approved_pdf(inv)
 
         rows_affected = db.query(Invoice).filter(
