@@ -184,7 +184,28 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       if (targetWf) {
         localStorage.removeItem("docuflow_target_condition_wf");
         localStorage.removeItem("docuflow_target_condition_doctype");
-        openEditor(null, dt || 'AP Invoice', targetWf);
+
+        // Inspect existing rules to find if this workflow ALREADY has a condition policy
+        const targetWfObj = workflows.find(w => w.profile_name === targetWf || w.workflow_code === targetWf || String(w.id) === String(targetWf));
+        const existingRule = rules.find(r => 
+          (r.target_workflow_id && (
+            r.target_workflow_id === targetWf ||
+            (targetWfObj && (r.target_workflow_id === targetWfObj.profile_name || r.target_workflow_id === targetWfObj.workflow_code))
+          )) ||
+          (r.workflow_code && (
+            r.workflow_code === targetWf ||
+            (targetWfObj && (r.workflow_code === targetWfObj.workflow_code || r.workflow_code === targetWfObj.profile_name))
+          )) ||
+          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().includes(targetWfObj.profile_name.toLowerCase()))
+        );
+
+        if (existingRule) {
+          // Open existing condition policy in edit mode - NEVER duplicate
+          openEditor(existingRule);
+        } else {
+          // No condition exists yet, open new condition pre-associated with target workflow
+          openEditor(null, dt || targetWfObj?.workflow_type || 'AP Invoice', targetWf);
+        }
       }
     };
     window.addEventListener('open-condition-editor', handleOpenCondition);
@@ -195,12 +216,29 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       localStorage.removeItem("docuflow_target_condition_wf");
       localStorage.removeItem("docuflow_target_condition_doctype");
       setTimeout(() => {
-        openEditor(null, savedDoc || 'AP Invoice', savedTarget);
+        const targetWfObj = workflows.find(w => w.profile_name === savedTarget || w.workflow_code === savedTarget || String(w.id) === String(savedTarget));
+        const existingRule = rules.find(r => 
+          (r.target_workflow_id && (
+            r.target_workflow_id === savedTarget ||
+            (targetWfObj && (r.target_workflow_id === targetWfObj.profile_name || r.target_workflow_id === targetWfObj.workflow_code))
+          )) ||
+          (r.workflow_code && (
+            r.workflow_code === savedTarget ||
+            (targetWfObj && (r.workflow_code === targetWfObj.workflow_code || r.workflow_code === targetWfObj.profile_name))
+          )) ||
+          (r.rule_name && targetWfObj && r.rule_name.toLowerCase().includes(targetWfObj.profile_name.toLowerCase()))
+        );
+
+        if (existingRule) {
+          openEditor(existingRule);
+        } else {
+          openEditor(null, savedDoc || targetWfObj?.workflow_type || 'AP Invoice', savedTarget);
+        }
       }, 250);
     }
 
     return () => window.removeEventListener('open-condition-editor', handleOpenCondition);
-  }, [workflows]);
+  }, [workflows, rules]);
 
   // Master options helper
   const getFieldMasterOptions = (fieldName) => {
@@ -634,9 +672,27 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
               <p className="text-[10px] text-slate-500 font-medium">
                 Define conditions to determine the workflow assigned to matching synced documents.
               </p>
+              {targetWorkflowId && (
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold">
+                  <GitMerge className="h-3 w-3 text-emerald-700 shrink-0" />
+                  <span>Workflow: <strong className="text-slate-900">{workflowCode || targetWorkflowId}</strong> ({selectedWorkflowObj?.profile_name || targetWorkflowId})</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  handleCancel();
+                  window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
+                }}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                title="Return to Flow Builder"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                <span>Back to Flow</span>
+              </button>
               <button
                 type="button"
                 onClick={handleCancel}
@@ -648,7 +704,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                 type="button"
                 onClick={handleSaveCondition}
                 disabled={isSaving}
-                className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-[#003F28] hover:bg-[#002f1e] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="h-3 w-3" />
                 <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
@@ -1664,9 +1720,22 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
               {/* Card Footer: Target Workflow & Actions */}
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 truncate min-w-0 flex-1" title={targetWf ? `${targetWf.workflow_code || 'WF'} - ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}>
-                  <GitMerge className="h-3.5 w-3.5 text-[#003F28] shrink-0" />
-                  <span className="text-xs font-semibold text-slate-700 truncate">
+                <div 
+                  onClick={() => {
+                    localStorage.setItem("adminActiveTab", "routing");
+                    if (targetWf) {
+                      localStorage.setItem("docuflow_target_workflow_open", targetWf.profile_name);
+                    }
+                    window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
+                    if (targetWf) {
+                      window.dispatchEvent(new CustomEvent("open-workflow-editor", { detail: { profile_name: targetWf.profile_name } }));
+                    }
+                  }}
+                  className="flex items-center gap-1.5 truncate min-w-0 flex-1 hover:text-emerald-700 cursor-pointer transition-colors group/wf" 
+                  title={targetWf ? `Click to view workflow: ${targetWf.workflow_code || 'WF'} - ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}
+                >
+                  <GitMerge className="h-3.5 w-3.5 text-[#003F28] shrink-0 group-hover/wf:scale-110 transition-transform" />
+                  <span className="text-xs font-semibold text-slate-700 truncate group-hover/wf:text-emerald-800">
                     {targetWf ? (
                       <>
                         <span className="font-bold text-slate-900">{targetWf.workflow_code || 'WF'}</span>

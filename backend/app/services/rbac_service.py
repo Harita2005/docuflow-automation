@@ -36,6 +36,8 @@ def check_permission(user: User, permission_code: str, db: Session) -> bool:
 
     return False
 
+user_has_permission = check_permission
+
 def require_permission(permission_code: str):
     def dependency(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         if not check_permission(user, permission_code, db):

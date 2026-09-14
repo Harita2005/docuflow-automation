@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks, GitMerge } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, 
+  ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks, 
+  GitMerge, ChevronLeft, ChevronRight, CheckSquare, RefreshCw
+} from 'lucide-react';
 
 const STAGE_PRESET_OPTIONS = [
   "Attachment Status",
@@ -172,9 +176,78 @@ export default function FlowBuilder({ users = [] }) {
     }
   };
 
+  const [conditions, setConditions] = useState([]);
+  const [checklistRules, setChecklistRules] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  const fetchConditions = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/routing-rules', {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConditions(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch routing conditions:", e);
+    }
+  };
+
+  const fetchChecklistRules = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/checklist-rules', {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChecklistRules(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch checklist rules:", e);
+    }
+  };
+
   useEffect(() => {
     fetchWorkflows();
+    fetchConditions();
+    fetchChecklistRules();
   }, []);
+
+  // Listen for open-workflow-editor event from Condition Matrix or Checklists
+  useEffect(() => {
+    const handleOpenWf = (e) => {
+      const targetName = e?.detail?.profile_name || localStorage.getItem("docuflow_target_workflow_open");
+      if (targetName && workflows.length > 0) {
+        localStorage.removeItem("docuflow_target_workflow_open");
+        const found = workflows.find(w => w.profile_name === targetName || w.workflow_code === targetName);
+        if (found) {
+          setSelectedCategory(found.workflow_category || 'Vendor Payment Workflows');
+          openEditor(found, found.workflow_category);
+        }
+      }
+    };
+    window.addEventListener('open-workflow-editor', handleOpenWf);
+
+    const saved = localStorage.getItem("docuflow_target_workflow_open");
+    if (saved && workflows.length > 0) {
+      localStorage.removeItem("docuflow_target_workflow_open");
+      const found = workflows.find(w => w.profile_name === saved || w.workflow_code === saved);
+      if (found) {
+        setSelectedCategory(found.workflow_category || 'Vendor Payment Workflows');
+        openEditor(found, found.workflow_category);
+      }
+    }
+
+    return () => window.removeEventListener('open-workflow-editor', handleOpenWf);
+  }, [workflows]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedSubCategory]);
 
   const fetchWorkflows = async () => {
     setLoading(true);
@@ -603,67 +676,223 @@ export default function FlowBuilder({ users = [] }) {
                   </div>
                 )}
 
-                {/* Direct Workflow Cards Grid */}
+                {/* Scalable Dense Enterprise Table View */}
                 {displayedWorkflows.length === 0 ? (
                   <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center">
                     <Network className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-slate-700">No workflows in this category yet</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Click "Create Workflow" above to add the first approval flow.</p>
+                    <p className="text-xs font-bold text-slate-700">No workflows found</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Try clearing search filters or click "Create Workflow" above to add one.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayedWorkflows.map((wf, index) => (
-                      <div key={wf.profile_name} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col p-3 relative">
-                    <div className="absolute top-3 right-3">
-                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${wf.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {wf.status}
-                      </span>
+                  <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
+                            <th className="py-2.5 px-3.5">Workflow Code & Name</th>
+                            <th className="py-2.5 px-3">Type</th>
+                            <th className="py-2.5 px-3">Approval Stages</th>
+                            <th className="py-2.5 px-3">Routing Condition</th>
+                            <th className="py-2.5 px-3">Checklist Rules</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3 text-right pr-4">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {displayedWorkflows
+                            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                            .map((wf, index) => {
+                              const linkedCondition = conditions.find(c => 
+                                (c.target_workflow_id && (c.target_workflow_id === wf.profile_name || c.target_workflow_id === wf.workflow_code)) ||
+                                (c.workflow_code && (c.workflow_code === wf.profile_name || c.workflow_code === wf.workflow_code))
+                              );
+                              const linkedChecklists = checklistRules.filter(c => 
+                                c.workflow_profile === wf.profile_name || c.workflow_profile === wf.workflow_code || (c.rule_name && c.rule_name.includes(wf.profile_name))
+                              );
+                              const steps = Array.isArray(wf.steps) ? wf.steps : [];
+
+                              return (
+                                <tr key={wf.profile_name} className="hover:bg-slate-50/80 transition-colors group">
+                                  {/* Workflow Code & Name */}
+                                  <td className="py-2.5 px-3.5 align-middle">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-[10px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80 shrink-0">
+                                        {wf.workflow_code || 'NO-CODE'}
+                                      </span>
+                                      <div className="min-w-0">
+                                        <div 
+                                          onClick={() => openEditor(wf, selectedCategory, index)}
+                                          className="font-bold text-slate-900 text-xs hover:text-blue-600 cursor-pointer truncate" 
+                                          title={wf.profile_name}
+                                        >
+                                          {wf.profile_name}
+                                        </div>
+                                        {wf.description && (
+                                          <p className="text-[10px] text-slate-400 truncate max-w-xs font-normal">
+                                            {wf.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Type */}
+                                  <td className="py-2.5 px-3 align-middle text-slate-600 font-semibold text-[11px]">
+                                    <span className="truncate max-w-[120px] block" title={wf.workflow_type || 'Custom'}>
+                                      {wf.workflow_type || 'Custom'}
+                                    </span>
+                                  </td>
+
+                                  {/* Approval Stages */}
+                                  <td className="py-2.5 px-3 align-middle">
+                                    <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                                      <span className="text-[9.5px] font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60 shrink-0">
+                                        {steps.length} Stage{steps.length !== 1 ? 's' : ''}
+                                      </span>
+                                      {steps.slice(0, 2).map((st, si) => (
+                                        <span key={si} className="text-[9px] font-medium text-slate-600 bg-white border border-slate-200 px-1.5 py-0.2 rounded truncate max-w-[90px]" title={st.title || st.step_name}>
+                                          {st.title || st.step_name}
+                                        </span>
+                                      ))}
+                                      {steps.length > 2 && (
+                                        <span className="text-[8.5px] font-bold text-slate-400">+{steps.length - 2}</span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Routing Condition */}
+                                  <td className="py-2.5 px-3 align-middle">
+                                    {linkedCondition ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          localStorage.setItem("adminActiveTab", "matrix");
+                                          localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
+                                          localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
+                                          window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
+                                          window.dispatchEvent(new CustomEvent("open-condition-editor", {
+                                            detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
+                                          }));
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold transition cursor-pointer"
+                                        title={`Linked condition: ${linkedCondition.rule_name}. Click to view or edit.`}
+                                      >
+                                        <GitMerge className="h-2.5 w-2.5 text-emerald-700" />
+                                        <span className="truncate max-w-[120px]">{linkedCondition.rule_name}</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          localStorage.setItem("adminActiveTab", "matrix");
+                                          localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
+                                          localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
+                                          window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
+                                          window.dispatchEvent(new CustomEvent("open-condition-editor", {
+                                            detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
+                                          }));
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 border border-dashed border-slate-300 hover:border-emerald-300 rounded text-[9.5px] font-medium transition cursor-pointer"
+                                        title="Click to configure routing condition for this workflow"
+                                      >
+                                        <Plus className="h-2.5 w-2.5" />
+                                        <span>Link Policy</span>
+                                      </button>
+                                    )}
+                                  </td>
+
+                                  {/* Checklist Rules */}
+                                  <td className="py-2.5 px-3 align-middle">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        localStorage.setItem("adminActiveTab", "checklists");
+                                        localStorage.setItem("docuflow_target_checklist_wf", wf.profile_name);
+                                        window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "checklists" }));
+                                        window.dispatchEvent(new CustomEvent("open-checklist-for-workflow", {
+                                          detail: { workflow_profile: wf.profile_name, workflow_code: wf.workflow_code }
+                                        }));
+                                      }}
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold transition cursor-pointer border ${
+                                        linkedChecklists.length > 0
+                                          ? "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                                          : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                                      }`}
+                                      title="Click to view checklist verification rules for this workflow"
+                                    >
+                                      <ListChecks className="h-2.5 w-2.5 text-blue-600" />
+                                      <span>{linkedChecklists.length} Rule{linkedChecklists.length !== 1 ? 's' : ''}</span>
+                                    </button>
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="py-2.5 px-3 align-middle">
+                                    <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                      wf.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                    }`}>
+                                      {wf.status || 'Active'}
+                                    </span>
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="py-2.5 px-3 align-middle text-right pr-4">
+                                    <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        type="button" 
+                                        onClick={() => openEditor(wf, selectedCategory, index)}
+                                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
+                                        title="Open Flow Editor"
+                                      >
+                                        <Edit2 className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button 
+                                        type="button" 
+                                        onClick={() => handleDelete(wf.profile_name)}
+                                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                                        title="Delete Workflow"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
                     </div>
 
-                    <div className="pr-16 mb-1.5">
-                      <h3 className="font-bold text-slate-900 text-xs truncate" title={wf.profile_name}>
-                        {wf.profile_name}
-                      </h3>
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 truncate">
-                        {wf.workflow_code || 'NO-CODE'} <span className="text-slate-300">•</span> {wf.workflow_type || 'Custom'}
-                      </p>
-                    </div>
-                    
-                    <div className="mb-1.5 flex-1">
-                      <p className="text-[11px] text-slate-500 line-clamp-2 leading-snug">
-                        {wf.description || 'No description provided.'}
-                      </p>
-                    </div>
-                    
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-auto">
-                      <div className="text-[10px] font-bold text-slate-700 flex items-center gap-1.5 truncate">
-                        <Network className="h-3 w-3 flex-shrink-0" /> {wf.steps?.length || 0} Steps
+                    {/* Pagination Bar */}
+                    {displayedWorkflows.length > itemsPerPage && (
+                      <div className="p-2.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between text-[11px] text-slate-500">
+                        <div>
+                          Showing <strong className="text-slate-800">{(currentPage - 1) * itemsPerPage + 1}</strong>–<strong className="text-slate-800">{Math.min(currentPage * itemsPerPage, displayedWorkflows.length)}</strong> of <strong className="text-slate-800">{displayedWorkflows.length}</strong> workflows
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="px-2 font-bold text-slate-700">
+                            Page {currentPage} of {Math.ceil(displayedWorkflows.length / itemsPerPage)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(displayedWorkflows.length / itemsPerPage), p + 1))}
+                            disabled={currentPage >= Math.ceil(displayedWorkflows.length / itemsPerPage)}
+                            className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
+                          >
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          title="Configure Routing Conditions in Condition Matrix"
-                          onClick={() => {
-                            localStorage.setItem("adminActiveTab", "matrix");
-                            localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
-                            localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
-                            window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
-                            window.dispatchEvent(new CustomEvent("open-condition-editor", {
-                              detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
-                            }));
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
-                        >
-                          <GitMerge className="h-3.5 w-3.5" />
-                        </button>
-                        <button type="button" aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
-                        <button type="button" aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div>
-</div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
             </div>
           );
         })()}

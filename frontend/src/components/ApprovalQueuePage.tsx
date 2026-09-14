@@ -48,10 +48,10 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
           // Hide already approved and terminal states from the pending queue
           const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
           if (terminalStates.includes(inv.status)) return false;
+          if (inv.has_approved) return false;
 
-          if (currentUserRole === "admin") return true; // Admins can view all pending queue items
-          if (inv.status === "AI Processed" && currentUserRole === "ap_executive") return true;
-          
+          // Pending IF AND ONLY IF current user is assigned approver for current stage
+          if (inv.is_current_approver) return true;
           if (inv.activeApprovalLog && inv.activeApprovalLog.status === 'Pending') {
              return !!inv.is_current_approver;
           }

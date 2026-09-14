@@ -1,24 +1,66 @@
 import logging
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.auth import get_current_active_user, get_current_user_optional
 from app.database.connection import get_db
-from app.database.models import BusinessRule, Document, WorkflowStepDefinition
+from app.database.models import BusinessRule, Document, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import BusinessRuleSchema
+from app.services.rbac_service import check_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Policy Matrix & Conditions'])
 
+@router.get('/api/conditions', response_model=List[BusinessRuleSchema])
 @router.get('/api/admin/conditions', response_model=List[BusinessRuleSchema])
 @router.get('/api/admin/routing-rules', response_model=List[BusinessRuleSchema])
-def get_business_rules(db: Session=Depends(get_db)):
+def get_business_rules(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    if current_user and not check_permission(current_user, 'condition:read', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'condition:read'."
+        )
     rules = db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
     return rules
 
+@router.post('/api/conditions', response_model=BusinessRuleSchema)
 @router.post('/api/admin/conditions', response_model=BusinessRuleSchema)
 @router.post('/api/admin/conditions/save', response_model=BusinessRuleSchema)
 @router.post('/api/admin/routing-rules', response_model=BusinessRuleSchema)
-def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db)):
+def save_business_rule(
+    payload: BusinessRuleSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'condition:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'condition:write'."
+        )
+
+    target_wf_raw = (payload.target_workflow_id or payload.workflow_code or '').strip()
+    if not target_wf_raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid target workflow must be specified for the condition rule."
+        )
+
+    target_profile = db.query(WorkflowProfile).filter(
+        (WorkflowProfile.profile_name == target_wf_raw) |
+        (WorkflowProfile.workflow_code == target_wf_raw)
+    ).filter(WorkflowProfile.is_deleted == False).first()
+
+    if not target_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Target workflow '{target_wf_raw}' does not exist or has been deleted. Cannot attach conditions to invalid workflows."
+        )
+
+    target_wf = target_profile.profile_name
+
     try:
         rule_id = None
         if payload.id:
@@ -32,8 +74,25 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
             rule = db.query(BusinessRule).filter(BusinessRule.id == rule_id).filter(BusinessRule.is_deleted == False).first()
         if not rule:
             rule = db.query(BusinessRule).filter(BusinessRule.rule_name == payload.rule_name).filter(BusinessRule.is_deleted == False).first()
-        target_wf = payload.target_workflow_id or payload.workflow_code or ''
         
+        # Check duplicate rule_name across other rules
+        if rule:
+            duplicate = db.query(BusinessRule).filter(
+                BusinessRule.rule_name == payload.rule_name,
+                BusinessRule.id != rule.id,
+                BusinessRule.is_deleted == False
+            ).first()
+        else:
+            duplicate = db.query(BusinessRule).filter(
+                BusinessRule.rule_name == payload.rule_name,
+                BusinessRule.is_deleted == False
+            ).first()
+        if duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A policy rule with name '{payload.rule_name}' already exists."
+            )
+
         raw_conds = payload.conditions_json if payload.conditions_json is not None else payload.conditions
         if raw_conds is None:
             conds = '[]'
@@ -46,7 +105,7 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
         if rule:
             rule.rule_name = payload.rule_name
             rule.rule_category = payload.rule_category or 'Vendor Payment Workflows'
-            rule.document_type = payload.document_type or 'AP INVOICE'
+            rule.document_type = payload.document_type or target_profile.workflow_type or 'AP INVOICE'
             rule.priority = payload.priority or 10
             rule.target_workflow_id = target_wf
             rule.conditions_json = conds
@@ -55,7 +114,18 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
             rule.cancel_reason = payload.cancel_reason
             rule.is_active = payload.is_active if payload.is_active is not None else True
         else:
-            rule = BusinessRule(rule_name=payload.rule_name, rule_category=payload.rule_category or 'Vendor Payment Workflows', document_type=payload.document_type or 'AP INVOICE', priority=payload.priority or 10, target_workflow_id=target_wf, conditions_json=conds, description=payload.description, rule_action=payload.rule_action or 'WORKFLOW_ROUTE', cancel_reason=payload.cancel_reason, is_active=payload.is_active if payload.is_active is not None else True)
+            rule = BusinessRule(
+                rule_name=payload.rule_name,
+                rule_category=payload.rule_category or 'Vendor Payment Workflows',
+                document_type=payload.document_type or target_profile.workflow_type or 'AP INVOICE',
+                priority=payload.priority or 10,
+                target_workflow_id=target_wf,
+                conditions_json=conds,
+                description=payload.description,
+                rule_action=payload.rule_action or 'WORKFLOW_ROUTE',
+                cancel_reason=payload.cancel_reason,
+                is_active=payload.is_active if payload.is_active is not None else True
+            )
             db.add(rule)
         db.commit()
         db.refresh(rule)
@@ -63,14 +133,23 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
         try:
             from sqlalchemy import or_
             from app.services.rules_engine import evaluate_business_rules_full
-            pending_docs = db.query(Document).filter(or_(Document.status == 'Pending Approval', Document.status.like('%Unrouted%'), Document.workflow_profile_id.is_(None)), Document.is_deleted == False).all()
+            pending_docs = db.query(Document).filter(
+                or_(
+                    Document.status == 'Pending Approval',
+                    Document.status.like('%Unrouted%'),
+                    Document.workflow_profile_id.is_(None)
+                ),
+                Document.is_deleted == False
+            ).all()
             for p_doc in pending_docs:
                 rule_res = evaluate_business_rules_full(db, p_doc)
                 if rule_res and rule_res.get('target_workflow_id'):
                     wf_name = rule_res['target_workflow_id']
                     rule_act = rule_res.get('rule_action', 'WORKFLOW_ROUTE')
                     p_doc.workflow_profile_id = wf_name
-                    steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == wf_name).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+                    steps = db.query(WorkflowStepDefinition).filter(
+                        WorkflowStepDefinition.profile_name == wf_name
+                    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
                     p_doc.total_stages = len(steps) if steps else 2
                     if rule_act == 'AUTO_APPROVE':
                         p_doc.status = 'Approved'
@@ -94,6 +173,9 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
             logger.debug('Handled exception during rule re-evaluation: %s', eval_err)
             
         return rule
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         logger.error('Error saving business rule: %s', e)
         db.rollback()
@@ -101,12 +183,23 @@ def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db))
 
 @router.delete('/api/admin/conditions/{rule_id}')
 @router.delete('/api/admin/routing-rules/{rule_id}')
-def delete_business_rule(rule_id: str, db: Session=Depends(get_db)):
+def delete_business_rule(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'condition:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'condition:write'."
+        )
     try:
+        import datetime
         r_id = int(rule_id)
-        rule = db.query(BusinessRule).filter(BusinessRule.id == r_id).first()
+        rule = db.query(BusinessRule).filter(BusinessRule.id == r_id, BusinessRule.is_deleted == False).first()
         if rule:
-            db.delete(rule)
+            rule.is_deleted = True
+            rule.deleted_at = datetime.datetime.utcnow()
             db.commit()
     except Exception as e:
         logger.debug('Error deleting business rule: %s', e)

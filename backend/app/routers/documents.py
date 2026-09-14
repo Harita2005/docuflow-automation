@@ -83,7 +83,14 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
     if not user or not pool_str:
         return False
     pool = [s.strip().lower() for s in pool_str.split(',') if s.strip()]
-    raw_handles = [(user.username or '').strip().lower(), (user.employee_id or '').strip().lower(), (user.employee_name or '').strip().lower(), (user.email or '').strip().lower()]
+    raw_handles = [
+        (user.username or '').strip().lower(),
+        (user.employee_id or '').strip().lower(),
+        (user.employee_name or '').strip().lower(),
+        (user.name or '').strip().lower(),
+        (user.email or '').strip().lower(),
+        (user.role or '').strip().lower()
+    ]
     user_handles = [h for h in raw_handles if h]
     for h in user_handles:
         if h in pool:
@@ -96,6 +103,45 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
             if h == target.replace('-', '_') or target == h.replace('-', '_'):
                 return True
     return False
+
+def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
+    """
+    Dynamically synchronizes an active document's assigned_approver from the current 
+    workflow step definition. If the member was changed in between, this ensures the newly 
+    assigned member is persisted in the database and authorized for approval.
+    """
+    if not inv or not inv.workflow_profile_id:
+        return inv.assigned_approver or ''
+    
+    # Completed terminal documents retain their final audit state
+    if inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
+        return inv.assigned_approver or ''
+
+    curr_stage = inv.current_stage or 1
+    step_def = db.query(WorkflowStepDefinition).filter(
+        (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+        (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+        WorkflowStepDefinition.stage_number == curr_stage
+    ).first()
+
+    if step_def and step_def.approver_target and step_def.approver_target.strip():
+        targets = [step_def.approver_target.strip()]
+        if step_def.delegate_approver and step_def.delegate_approver.strip():
+            targets.append(step_def.delegate_approver.strip())
+        canonical_target = ', '.join(targets)
+        
+        if inv.assigned_approver != canonical_target:
+            inv.assigned_approver = canonical_target
+            try:
+                db.add(inv)
+                db.commit()
+                db.refresh(inv)
+            except Exception as e:
+                logger.warning(f"Error persisting synced approver: {e}")
+                db.rollback()
+        return canonical_target
+
+    return inv.assigned_approver or ''
 
 @router.get('/api/records/approved', response_model=List[InvoiceResponse])
 @router.get('/api/documents/approved', response_model=List[InvoiceResponse])
@@ -323,17 +369,8 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
     filtered_invoices = []
     
     for inv in invoices:
-        # Dynamically set assigned_approver based on current stage
-        if inv.workflow_profile_id:
-            step_def = db.query(WorkflowStepDefinition).filter(
-                WorkflowStepDefinition.profile_name == inv.workflow_profile_id, 
-                WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
-            ).first()
-            if step_def and step_def.approver_target:
-                targets = [step_def.approver_target.strip()]
-                if step_def.delegate_approver and step_def.delegate_approver.strip():
-                    targets.append(step_def.delegate_approver.strip())
-                inv.assigned_approver = ', '.join(targets)
+        # Dynamically synchronize assigned_approver from workflow definition
+        sync_document_approver_from_workflow(db, inv)
 
         if user_is_admin:
             filtered_invoices.append(inv)
@@ -376,7 +413,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_curr = False
-        if is_active_flow and inv.assigned_approver:
+        if is_active_flow and inv.assigned_approver and not has_appr:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
 
         # Status filter query parameter enforcement
@@ -455,18 +492,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         if s['stage_number'] == (inv.current_stage or 1):
             current_step_name = s['stage_name']
             break
-    if inv.workflow_profile_id:
-        step_def = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
-        if step_def and step_def.approver_target:
-            targets = [step_def.approver_target.strip()]
-            if step_def.delegate_approver and step_def.delegate_approver.strip():
-                targets.append(step_def.delegate_approver.strip())
-            inv.assigned_approver = ', '.join(targets)
-    is_curr = False
-    if current_user and inv.assigned_approver:
-        is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
-        if is_active_flow:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
+    sync_document_approver_from_workflow(db, inv)
     has_appr = False
     has_rej = False
     if current_user:
@@ -481,6 +507,11 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                     has_appr = True
                 if 'reject' in act or 'return' in act or 'cancel' in act:
                     has_rej = True
+    is_curr = False
+    if current_user and inv.assigned_approver and not has_appr:
+        is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
+        if is_active_flow:
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
     is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     completed_by_peer = False
     curr_stg = inv.current_stage or 1
@@ -706,8 +737,6 @@ def archive_approved_pdf(inv: Invoice):
             src_path = upload_path
         elif legacy_storage_path and legacy_storage_path.is_relative_to(legacy_root) and legacy_storage_path.exists():
             src_path = legacy_storage_path
-        elif (settings.UPLOAD_DIR / 'sample_invoice.pdf').exists():
-            src_path = (settings.UPLOAD_DIR / 'sample_invoice.pdf').resolve()
         if src_path and src_path.exists():
             base_root = get_storage_root_path().resolve()
             dest_approved = get_archived_pdf_path(inv).resolve()
@@ -716,7 +745,7 @@ def archive_approved_pdf(inv: Invoice):
                 if src_path != dest_approved:
                     shutil.copy2(str(src_path), str(dest_approved))
                     logger.info(f'[Archive] Successfully archived approved PDF for document {inv.id}')
-                    if upload_path and upload_path.exists() and (upload_path != dest_approved) and (upload_path.name != 'sample_invoice.pdf'):
+                    if upload_path and upload_path.exists() and (upload_path != dest_approved):
                         try:
                             upload_path.unlink()
                         except Exception as exc:
@@ -907,38 +936,40 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         if has_user_approved:
             raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
 
-    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
-    if not is_admin:
-        approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
-        user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
-        user_handles = [h for h in user_handles if h]
-        
-        is_authorized = False
+    if db and inv:
+        sync_document_approver_from_workflow(db, inv)
+
+    approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
+    user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
+    user_handles = [h for h in user_handles if h]
+    
+    is_authorized = is_user_in_approver_pool(user, inv.assigned_approver)
+    if not is_authorized:
         for handle in user_handles:
             if handle in approvers or any((handle == app or handle in app or app in handle for app in approvers)):
                 is_authorized = True
                 break
-        
-        if not is_authorized:
-            # Check if user was assigned to an earlier stage (which is already completed) or future stage
-            if db and inv.workflow_profile_id:
-                steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).all()
-                user_stages = []
-                for st in steps:
-                    step_targets = [s.strip().lower() for s in (st.approver_target or '').split(',') if s.strip()]
-                    for handle in user_handles:
-                        if handle in step_targets or any((handle == t or handle in t or t in handle for t in step_targets)):
-                            user_stages.append(st.stage_number)
-                            break
-                if user_stages:
-                    max_user_stage = max(user_stages)
-                    min_user_stage = min(user_stages)
-                    if max_user_stage < (inv.current_stage or 1):
-                        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
-                    elif min_user_stage > (inv.current_stage or 1):
-                        raise HTTPException(status_code=403, detail=f"Access Denied: You are assigned to Stage {min_user_stage}, but the document is currently at Stage {inv.current_stage or 1}. You cannot approve until preceding stages are completed.")
+    
+    if not is_authorized:
+        # Check if user was assigned to an earlier stage (which is already completed) or future stage
+        if db and inv.workflow_profile_id:
+            steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).all()
+            user_stages = []
+            for st in steps:
+                step_targets = [s.strip().lower() for s in (st.approver_target or '').split(',') if s.strip()]
+                for handle in user_handles:
+                    if handle in step_targets or any((handle == t or handle in t or t in handle for t in step_targets)):
+                        user_stages.append(st.stage_number)
+                        break
+            if user_stages:
+                max_user_stage = max(user_stages)
+                min_user_stage = min(user_stages)
+                if max_user_stage < (inv.current_stage or 1):
+                    raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+                elif min_user_stage > (inv.current_stage or 1):
+                    raise HTTPException(status_code=403, detail=f"Access Denied: You are assigned to Stage {min_user_stage}, but the document is currently at Stage {inv.current_stage or 1}. You cannot approve until preceding stages are completed.")
 
-            raise HTTPException(status_code=403, detail=f"Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document.")
+        raise HTTPException(status_code=403, detail=f"Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document.")
 
     if require_compliance and db:
         is_stage_1 = (inv.current_stage or 1) == 1
@@ -1023,11 +1054,18 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
         next_stage_val = (inv.current_stage or 1) + 1
         next_step_name = f'Stage {next_stage_val}'
         if inv.workflow_profile_id:
-            next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
-            if next_step:
-                next_assigned_val = next_step.approver_target
+            next_step = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                WorkflowStepDefinition.stage_number == next_stage_val
+            ).first()
+            if next_step and next_step.approver_target:
+                targets = [next_step.approver_target.strip()]
+                if next_step.delegate_approver and next_step.delegate_approver.strip():
+                    targets.append(next_step.delegate_approver.strip())
+                next_assigned_val = ', '.join(targets)
                 next_step_name = next_step.step_name
-                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
+                next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
         existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
         if not existing_next_items:
             checklist_items = resolve_checklist_items(db, inv, next_step_name)
@@ -1342,6 +1380,53 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'invoice': inv}
 
+TEN_MB = 10 * 1024 * 1024
+
+def process_and_validate_pdf_size(file_path: Path, detected_type: str) -> int:
+    """
+    Enforces the 10 MB maximum accepted upload limit.
+    If PDF <= 10 MB: accept normally.
+    If PDF > 10 MB: attempt safe compression down to <= 10 MB.
+    If compressed PDF <= 10 MB: accept and proceed.
+    If compressed PDF is still > 10 MB: safely delete the file and raise 413 error.
+    """
+    if not file_path.exists():
+        return 0
+    current_size = file_path.stat().st_size
+    if detected_type == 'pdf':
+        if current_size > TEN_MB:
+            try:
+                compress_pdf(file_path, target_max_bytes=TEN_MB)
+            except Exception as exc:
+                logger.warning("Compression error on %s: %s", file_path.name, exc)
+            
+            final_size = file_path.stat().st_size if file_path.exists() else current_size
+            if final_size > TEN_MB:
+                if file_path.exists():
+                    try:
+                        file_path.unlink()
+                    except Exception:
+                        pass
+                raise HTTPException(
+                    status_code=413,
+                    detail="PDF exceeds the 10 MB limit. We attempted compression, but the file is still too large."
+                )
+            return final_size
+        else:
+            return current_size
+    else:
+        if current_size > TEN_MB:
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass
+            raise HTTPException(
+                status_code=413,
+                detail="File exceeds the 10 MB limit."
+            )
+        return current_size
+
 @router.post('/api/documents/upload')
 async def upload_document(
     file: UploadFile = File(...),
@@ -1356,17 +1441,17 @@ async def upload_document(
     current_user: User = Depends(get_current_active_user)
 ):
     import uuid
+    from app.services.rbac_service import check_permission
+    if not check_permission(current_user, 'doc:create', db):
+        raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")
+
     content = await file.read()
     unique_filename, detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
 
-    if detected_type == 'pdf':
-        try:
-            compress_pdf(file_path)
-        except Exception as exc:
-            logger.debug('Handled compression exception: %s', exc)
+    final_file_size = process_and_validate_pdf_size(file_path, detected_type)
 
     ocr_data = {}
     if detected_type == 'pdf':
@@ -1406,7 +1491,7 @@ async def upload_document(
         file_url=f'/api/documents/{new_id}/file',
         file_path=str(file_path),
         file_name=file.filename,
-        file_size=len(content),
+        file_size=final_file_size,
         status='Pending Approval',
         current_stage=1,
         total_stages=2,
@@ -1487,6 +1572,10 @@ async def upload_and_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
+    from app.services.rbac_service import check_permission
+    if not check_permission(current_user, 'doc:create', db):
+        raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload attachments.")
+
     inv = db.query(Invoice).filter(Invoice.id == synced_doc_id).first()
     if not inv:
         raise HTTPException(status_code=404, detail='Synced staging document not found')
@@ -1495,14 +1584,10 @@ async def upload_and_route(
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
-    if detected_type == 'pdf':
-        try:
-            compress_pdf(file_path)
-        except Exception as exc:
-            logger.debug('Handled exception: %s', exc)
+    final_file_size = process_and_validate_pdf_size(file_path, detected_type)
     inv.file_url = f'/api/documents/{inv.id}/file'
     inv.file_path = str(file_path)
-    inv.file_size = len(content)
+    inv.file_size = final_file_size
     inv.file_name = file.filename
     if document_type:
         inv.document_type = document_type

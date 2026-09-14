@@ -8,7 +8,9 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
+RAW_UPLOAD_MAX_BYTES = 35 * 1024 * 1024  # 35MB buffer for compression attempt
+FINAL_MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024  # 10MB maximum accepted final PDF size
+MAX_FILE_SIZE_BYTES = RAW_UPLOAD_MAX_BYTES
 
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg'}
 MAGIC_BYTES = {
@@ -52,10 +54,10 @@ def check_pdf_safety(file_bytes: bytes):
             )
 
 def validate_uploaded_file(file: UploadFile, content: bytes) -> Tuple[str, str]:
-    if len(content) > MAX_FILE_SIZE_BYTES:
+    if len(content) > RAW_UPLOAD_MAX_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f'Payload Too Large: Uploaded file size ({len(content) / (1024*1024):.1f}MB) exceeds the 15MB limit.'
+            detail=f'Payload Too Large: Uploaded file size ({len(content) / (1024*1024):.1f}MB) exceeds maximum allowable size for upload and compression.'
         )
     if len(content) == 0:
         raise HTTPException(status_code=400, detail='Uploaded file is empty.')

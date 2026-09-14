@@ -188,16 +188,18 @@ export default function App() {
   const isDocumentPendingForUser = (doc: DbInvoice) => {
     const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
     if (terminalStates.includes(doc.status)) return false;
+    if ((doc as any).has_approved) return false;
 
-    // Check if the user is explicitly assigned to it
-    const isAssigned = doc.is_current_approver || 
-      (doc.assigned_approver && 
-       doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim()).includes(currentUserUsername.toLowerCase()));
+    // Check if the user is explicitly assigned to it at current stage
+    if (doc.is_current_approver) return true;
 
-    if (isAssigned) return true;
-
-    if (doc.status === "Data Verification Pending") {
-      return currentUserRole === "admin" || currentUserRole === "ap_executive";
+    if (doc.assigned_approver) {
+      const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
+      const userHandles = [
+        (currentUserUsername || '').toLowerCase(),
+        (currentUserRole || '').toLowerCase()
+      ].filter(Boolean);
+      if (userHandles.some(h => approvers.includes(h))) return true;
     }
 
     return false;

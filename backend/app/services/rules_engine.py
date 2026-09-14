@@ -463,15 +463,27 @@ def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict
             if isinstance(conds, dict) and 'conditions' in conds:
                 conds = conds['conditions']
             if evaluate_rule_conditions(conds, invoice):
-                print(f"[RulesEngine] Matched rule '{rule.rule_name}' -> workflow '{rule.target_workflow_id}', action '{rule.rule_action}'")
+                if rule.target_workflow_id:
+                    profile = db.query(WorkflowProfile).filter(
+                        (WorkflowProfile.profile_name == rule.target_workflow_id) |
+                        (WorkflowProfile.workflow_code == rule.target_workflow_id)
+                    ).filter(WorkflowProfile.is_deleted == False).first()
+                    if not profile:
+                        logger.warning("[RulesEngine] Skipping rule '%s' because target workflow '%s' is inactive or deleted.", rule.rule_name, rule.target_workflow_id)
+                        continue
+                    canonical_target_wf = profile.profile_name
+                else:
+                    profile = None
+                    canonical_target_wf = None
+
+                logger.info("[RulesEngine] Matched rule '%s' -> workflow '%s', action '%s'", rule.rule_name, canonical_target_wf, rule.rule_action)
                 effective_action = rule.rule_action or 'WORKFLOW_ROUTE'
                 effective_cancel_reason = rule.cancel_reason
-                if effective_action == 'WORKFLOW_ROUTE' and rule.target_workflow_id:
-                    profile = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == rule.target_workflow_id).first()
-                    if profile and profile.rule_action and (profile.rule_action != 'WORKFLOW_ROUTE'):
+                if effective_action == 'WORKFLOW_ROUTE' and profile:
+                    if profile.rule_action and (profile.rule_action != 'WORKFLOW_ROUTE'):
                         effective_action = profile.rule_action
                         effective_cancel_reason = profile.cancel_reason or f'Auto-cancelled via Workflow Profile: {profile.profile_name}'
-                return {'rule_name': rule.rule_name, 'target_workflow_id': rule.target_workflow_id, 'rule_action': effective_action, 'cancel_reason': effective_cancel_reason}
+                return {'rule_name': rule.rule_name, 'target_workflow_id': canonical_target_wf, 'rule_action': effective_action, 'cancel_reason': effective_cancel_reason}
         except Exception as e:
             logger.debug('Handled exception: %s', e)
     return None

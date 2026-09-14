@@ -2,12 +2,15 @@ import logging
 import datetime
 import json
 import re
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+import urllib.parse
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.auth import get_current_active_user, get_current_user_optional
 from app.database.connection import get_db
-from app.database.models import AuditLog, BusinessRule, ChecklistTemplate, SystemLog, WorkflowProfile, WorkflowStepDefinition
+from app.database.models import AuditLog, BusinessRule, ChecklistTemplate, Invoice, SystemLog, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import WorkflowProfileSchema
+from app.services.rbac_service import check_permission
 from collections import defaultdict
 
 router = APIRouter(tags=['Workflow Administration'])
@@ -112,7 +115,16 @@ def get_workflow_steps(db: Session=Depends(get_db)):
 
 @router.post('/api/admin/workflows')
 @router.post('/api/admin/workflows/save')
-def save_workflow_profile(payload: WorkflowProfileSchema, db: Session=Depends(get_db)):
+def save_workflow_profile(
+    payload: WorkflowProfileSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     try:
         existing = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == payload.profile_name).filter(WorkflowProfile.is_deleted == False).first()
         if existing:
@@ -146,6 +158,21 @@ def save_workflow_profile(payload: WorkflowProfileSchema, db: Session=Depends(ge
                 for item_text in step.checklist_items:
                     chk = ChecklistTemplate(workflow_profile=payload.profile_name, stage_name=step.step_name or f'Stage {step.stage_number}', item_text=item_text, is_mandatory=True)
                     db.add(chk)
+            # Immediately synchronize all active documents assigned to this workflow at this stage
+            if step.approver_target and step.approver_target.strip():
+                targets = [step.approver_target.strip()]
+                if step.delegate_approver and step.delegate_approver.strip():
+                    targets.append(step.delegate_approver.strip())
+                target_str = ', '.join(targets)
+                db.query(Invoice).filter(
+                    (Invoice.workflow_profile_id == payload.profile_name) |
+                    (Invoice.workflow_profile_id.ilike(payload.profile_name.strip())),
+                    Invoice.current_stage == step.stage_number,
+                    Invoice.status.notin_(['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed'])
+                ).update({
+                    Invoice.assigned_approver: target_str,
+                    Invoice.updated_at: datetime.datetime.utcnow()
+                }, synchronize_session=False)
         db.commit()
         db.refresh(existing)
         wf_code = ensure_workflow_code(existing, db)
@@ -175,21 +202,43 @@ def get_single_workflow_profile(profile_name: str, db: Session=Depends(get_db)):
 
 @router.delete('/api/admin/categories/{category_name}')
 @router.delete('/api/categories/{category_name}')
-def delete_category_endpoint(category_name: str, db: Session=Depends(get_db)):
+def delete_category_endpoint(
+    category_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     raw_name = category_name.strip()
     decoded = urllib.parse.unquote(raw_name)
     profiles = db.query(WorkflowProfile).filter((WorkflowProfile.workflow_category == raw_name) | (WorkflowProfile.workflow_category == decoded) | WorkflowProfile.workflow_category.ilike(raw_name) | WorkflowProfile.workflow_category.ilike(decoded)).filter(WorkflowProfile.is_deleted == False).all()
     for p in profiles:
         p.is_deleted = True
         p.deleted_at = datetime.datetime.utcnow()
-        db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
+        db.query(BusinessRule).filter(
+            (BusinessRule.target_workflow_id == p.profile_name) |
+            (BusinessRule.target_workflow_id == p.workflow_code)
+        ).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
     db.query(BusinessRule).filter((BusinessRule.rule_category == raw_name) | (BusinessRule.rule_category == decoded) | BusinessRule.rule_category.ilike(raw_name) | BusinessRule.rule_category.ilike(decoded)).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
     db.commit()
     return {'success': True, 'category': decoded, 'deleted_workflows': len(profiles)}
 
 @router.delete('/api/admin/workflows/{profile_name}')
 @router.delete('/api/workflows/{profile_name}')
-def delete_workflow_profile(profile_name: str, db: Session=Depends(get_db)):
+@router.delete('/api/workflows/profiles/{profile_name}')
+def delete_workflow_profile(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     raw_name = profile_name.strip()
     decoded = urllib.parse.unquote(raw_name)
     profiles = db.query(WorkflowProfile).filter(
@@ -203,7 +252,10 @@ def delete_workflow_profile(profile_name: str, db: Session=Depends(get_db)):
     for p in profiles:
         p.is_deleted = True
         p.deleted_at = datetime.datetime.utcnow()
-        db.query(BusinessRule).filter(BusinessRule.target_workflow_id == p.profile_name).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
+        db.query(BusinessRule).filter(
+            (BusinessRule.target_workflow_id == p.profile_name) |
+            (BusinessRule.target_workflow_id == p.workflow_code)
+        ).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
     db.commit()
     return {'success': True, 'deleted': profile_name}
 

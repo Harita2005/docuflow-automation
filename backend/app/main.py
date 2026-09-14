@@ -17,6 +17,7 @@ from .routers.conditions import router as conditions_router
 from .routers.documents import router as documents_router
 from .routers.events import router as events_router
 from .routers.integrations import router as integrations_router
+from .routers.roles import permission_router as permissions_router, router as roles_router
 from .routers.sync import router as sync_router
 from .routers.sync_router import router as m2m_sync_router
 from .routers.users import admin_router as admin_users_router, router as users_router
@@ -93,6 +94,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_users_router)
+app.include_router(roles_router)
+app.include_router(permissions_router)
 app.include_router(documents_router)
 app.include_router(workflows_router)
 app.include_router(conditions_router)

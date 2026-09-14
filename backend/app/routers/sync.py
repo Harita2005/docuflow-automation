@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Any, Union
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.config.settings import settings
 from app.database.connection import get_db
@@ -192,6 +193,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     existing: Optional[Invoice] = None
     if req.doc_key:
         existing = db.query(Invoice).filter(Invoice.doc_key == str(req.doc_key)).first()
+        if not existing:
+            prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
+            existing = db.query(Invoice).filter(or_(Invoice.id == str(req.doc_key), Invoice.id == f'{prefix}-{req.doc_key}', Invoice.id == f'DOC-{req.doc_key}')).first()
     if not existing and req.invoice_number:
         existing = db.query(Invoice).filter(Invoice.invoice_number == req.invoice_number, Invoice.division == effective_division).first()
     calculated_base = req.base_amount
@@ -238,9 +242,18 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
         key = req.doc_key if req.doc_key else timestamp % 100000
         doc_id = f'{prefix}-{key}'
-        new_inv = Invoice(id=doc_id, doc_key=str(req.doc_key) if req.doc_key is not None else None, doc_num=str(req.doc_num) if req.doc_num is not None else None, doc_date=req.invoice_date, vendor_name=req.vendor_name or 'Unknown Vendor', vendor_code=req.vendor_code, vendor_gstin=req.vendor_gstin, invoice_number=req.invoice_number or f'INV-{timestamp % 10000}', invoice_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'), po_number=req.po_number, amount=req.amount, base_amount=calculated_base or 0.0, tax_amount=calculated_tax or 0.0, currency=req.currency or 'INR', document_type=req.document_type or 'AP INVOICE', division=effective_division, category=req.category, cost_center=req.cost_center, plant=req.plant, payment_terms=req.payment_terms or 'Net 30', status='Pending Approval', current_stage=1, total_stages=2, line_items_json=line_items_str, custom_data=custom_data_str)
-        db.add(new_inv)
-        target_inv = new_inv
+        existing_by_id = db.query(Invoice).filter(Invoice.id == doc_id).first()
+        if existing_by_id:
+            target_inv = existing_by_id
+            target_inv.doc_num = req.doc_num or target_inv.doc_num
+            target_inv.vendor_name = req.vendor_name or target_inv.vendor_name
+            target_inv.amount = req.amount if req.amount > 0 else target_inv.amount
+            target_inv.is_deleted = False
+            target_inv.deleted_at = None
+        else:
+            new_inv = Invoice(id=doc_id, doc_key=str(req.doc_key) if req.doc_key is not None else None, doc_num=str(req.doc_num) if req.doc_num is not None else None, doc_date=req.invoice_date, vendor_name=req.vendor_name or 'Unknown Vendor', vendor_code=req.vendor_code, vendor_gstin=req.vendor_gstin, invoice_number=req.invoice_number or f'INV-{timestamp % 10000}', invoice_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'), po_number=req.po_number, amount=req.amount, base_amount=calculated_base or 0.0, tax_amount=calculated_tax or 0.0, currency=req.currency or 'INR', document_type=req.document_type or 'AP INVOICE', division=effective_division, category=req.category, cost_center=req.cost_center, plant=req.plant, payment_terms=req.payment_terms or 'Net 30', status='Pending Approval', current_stage=1, total_stages=2, line_items_json=line_items_str, custom_data=custom_data_str)
+            db.add(new_inv)
+            target_inv = new_inv
     db.commit()
     db.refresh(target_inv)
     db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == target_inv.id).delete()
@@ -248,7 +261,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         for itm in req.line_items:
             db.add(InvoiceLineItem(invoice_id=target_inv.id, description=itm.get('description') or itm.get('item_description') or 'Line Item', quantity=float(itm.get('quantity') or 1.0), unit_price=float(itm.get('unit_price') or itm.get('amount') or 0.0), amount=float(itm.get('amount') or 0.0), warranty_text=itm.get('warranty_text'), serial_numbers=','.join(itm.get('serial_numbers')) if isinstance(itm.get('serial_numbers'), list) else itm.get('serial_numbers')))
     db.commit()
-    if req.auto_route and target_inv.status not in ['Approved', 'Cancelled']:
+    if req.auto_route and target_inv.status not in ['Approved', 'Cancelled', 'Settled', 'Paid', 'Ready for Payment']:
         from app.services.rules_engine import evaluate_business_rules_full
         rule_eval_res = evaluate_business_rules_full(db, target_inv)
         target_wf = rule_eval_res.get('target_workflow_id') if rule_eval_res else None
