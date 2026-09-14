@@ -5,7 +5,8 @@ import {
   Settings, 
   Layers,
   ChevronLeft,
-  CheckCircle2
+  CheckCircle2,
+  GitFork
 } from "lucide-react";
 
 
@@ -189,8 +190,8 @@ export default function Sidebar({
   const isExpanded = !collapsed;
 
   const permissions = rolePermissions?.[currentUserRole] || (
-    currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
-    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+    currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
     ["dashboard", "work-tracker", "approved-documents", "dapi-sync-back"]
   );
 
@@ -207,6 +208,7 @@ export default function Sidebar({
     {
       group: "ADMINISTRATION",
       items: [
+        { id: "workflow-rules", label: "Workflow & Rules", icon: GitFork },
         { id: "admin", label: "Control Settings", icon: Settings },
       ]
     }

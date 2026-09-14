@@ -12,6 +12,7 @@ import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
 import ApprovedDocumentsPage from "./components/ApprovedDocumentsPage.tsx";
 import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
+import WorkflowRulesPage from "./pages/WorkflowRulesPage.jsx";
 
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types.ts";
@@ -52,8 +53,8 @@ export default function App() {
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
     employee: ["dashboard", "work-tracker", "approved-documents", "dapi-sync-back"],
-    settings_editor: ["dashboard", "work-tracker", "approved-documents", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
-    admin: ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
+    settings_editor: ["dashboard", "work-tracker", "approved-documents", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
+    admin: ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
   });
 
   // Multi-Tab Synchronization across tabs in the same browser
@@ -97,11 +98,20 @@ export default function App() {
       }
     };
 
+    const handleNavigateView = (e: any) => {
+      if (e.detail) {
+        setCurrentView(e.detail);
+        setSelectedDocId(null);
+      }
+    };
+
     window.addEventListener("storage", handleStorage);
+    window.addEventListener("navigate-view", handleNavigateView);
 
     return () => {
       if (authChannel) authChannel.close();
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("navigate-view", handleNavigateView);
     };
   }, []);
 
@@ -652,6 +662,10 @@ export default function App() {
               <PaymentReadinessPage
                 onRefreshStats={handleFullRefresh}
               />
+            )}
+
+            {currentView === "workflow-rules" && (
+              <WorkflowRulesPage />
             )}
 
             {currentView === "admin" && (

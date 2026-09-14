@@ -1,4 +1,4 @@
-import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown } from "lucide-react";
+import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, GitFork } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface HeaderProps {
@@ -297,6 +297,17 @@ export default function Header({
                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Signed in as</p>
                   <p className="text-[10px] text-slate-700 font-bold truncate mt-0.5">{currentUserEmail}</p>
                 </div>
+
+                <button
+                  onClick={() => {
+                    setCurrentView("workflow-rules");
+                    setProfileDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1 text-[10px] text-slate-700 hover:bg-slate-50 transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
+                >
+                  <GitFork className="h-3 w-3 text-slate-500" />
+                  <span>Workflow &amp; Rules</span>
+                </button>
 
                 <button
                   onClick={() => {

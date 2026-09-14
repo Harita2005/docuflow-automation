@@ -101,21 +101,25 @@ export default function DocumentUpload({
     fetchWorkflows();
   }, []);
 
-  // Direct navigation to Flow Builder canvas in Admin
+  // Direct navigation to Flow Builder canvas in Workflow & Rules Studio
   const handleGoToFlowBuilder = () => {
+    localStorage.setItem("workflowActiveTab", "routing");
     localStorage.setItem("adminActiveTab", "routing");
+    window.dispatchEvent(new CustomEvent("set-workflow-tab", { detail: "routing" }));
     window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
-    setCurrentView("admin");
+    setCurrentView("workflow-rules");
   };
 
-  // Direct navigation to Condition Matrix in Admin
+  // Direct navigation to Condition Matrix in Workflow & Rules Studio
   const handleGoToConditionBuilder = (targetWf?: string) => {
+    localStorage.setItem("workflowActiveTab", "matrix");
     localStorage.setItem("adminActiveTab", "matrix");
     if (targetWf) {
       localStorage.setItem("docuflow_target_condition_wf", targetWf);
     }
+    window.dispatchEvent(new CustomEvent("set-workflow-tab", { detail: "matrix" }));
     window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
-    setCurrentView("admin");
+    setCurrentView("workflow-rules");
   };
 
   // Handler for document type change - automatically switches to that type's default workflow
