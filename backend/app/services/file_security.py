@@ -8,7 +8,7 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25MB
+MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
 
 ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg'}
 MAGIC_BYTES = {
@@ -55,7 +55,7 @@ def validate_uploaded_file(file: UploadFile, content: bytes) -> Tuple[str, str]:
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f'Payload Too Large: Uploaded file size ({len(content) / (1024*1024):.1f}MB) exceeds the 25MB limit.'
+            detail=f'Payload Too Large: Uploaded file size ({len(content) / (1024*1024):.1f}MB) exceeds the 15MB limit.'
         )
     if len(content) == 0:
         raise HTTPException(status_code=400, detail='Uploaded file is empty.')

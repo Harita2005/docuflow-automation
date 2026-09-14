@@ -50,189 +50,7 @@ export const INITIAL_ROLES = [
   { id: "employee", name: "General Employee", badge: "Employee", color: "bg-slate-100 text-slate-700 border-slate-200" }
 ];
 
-const MOCKUP_USERS_RBAC = [
-  { 
-    id: "mock-1", 
-    user_uid: "USR-200001", 
-    employee_id: "EMP-20001", 
-    name: "Shane Nguyen", 
-    employee_name: "Shane Nguyen",
-    username: "shanengu", 
-    email: "shanengu@labourlink.com", 
-    phone_number: "+91 98401 23001",
-    role: "ap_specialist", // Consultant
-    dept: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Onboarded",
-    is_new: true,
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2023-06-07T09:30:00.000Z",
-    created_at: "2023-06-07T09:30:00.000Z" 
-  },
-  { 
-    id: "mock-2", 
-    user_uid: "USR-200002", 
-    employee_id: "EMP-20002", 
-    name: "Arlene McCoy", 
-    employee_name: "Arlene McCoy",
-    username: "arlenemccoy", 
-    email: "arlenemccoy@labourlink.com", 
-    phone_number: "+91 98401 23002",
-    role: "ap_specialist", // Consultant
-    dept: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "AUTHENTICATOR",
-    created_by: "System Initializer",
-    created_on: "2022-01-24T10:00:00.000Z",
-    created_at: "2022-01-24T10:00:00.000Z" 
-  },
-  { 
-    id: "mock-3", 
-    user_uid: "USR-200003", 
-    employee_id: "EMP-20003", 
-    name: "Guy Hawkins", 
-    employee_name: "Guy Hawkins",
-    username: "guyhawk", 
-    email: "guyhawk@labourlink.com", 
-    phone_number: "+91 98401 23003",
-    role: "admin", // Administrator
-    dept: "IT Governance", 
-    division: "VCC", 
-    is_active: false, 
-    status: "Inactive",
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2020-04-18T11:15:00.000Z",
-    created_at: "2020-04-18T11:15:00.000Z" 
-  },
-  { 
-    id: "mock-4", 
-    user_uid: "USR-200004", 
-    employee_id: "EMP-20004", 
-    name: "Dianne Russell", 
-    employee_name: "Dianne Russell",
-    username: "diannerussell", 
-    email: "diannerussell@labourlink.com", 
-    phone_number: "+91 98401 23004",
-    role: "manager", // Manager
-    dept: "Operations Management", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "SMS",
-    created_by: "System Initializer",
-    created_on: "2022-02-02T12:00:00.000Z",
-    created_at: "2022-02-02T12:00:00.000Z" 
-  },
-  { 
-    id: "mock-5", 
-    user_uid: "USR-200005", 
-    employee_id: "EMP-20005", 
-    name: "Albert Flores", 
-    employee_name: "Albert Flores",
-    username: "albertflores", 
-    email: "albertflores@labourlink.com", 
-    phone_number: "+91 98401 23005",
-    role: "ap_specialist", // Consultant
-    dept: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Pending",
-    mfa_enabled: false,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2022-06-29T14:30:00.000Z",
-    created_at: "2022-06-29T14:30:00.000Z" 
-  },
-  { 
-    id: "mock-6", 
-    user_uid: "USR-200006", 
-    employee_id: "EMP-20006", 
-    name: "Jacob Jones", 
-    employee_name: "Jacob Jones",
-    username: "jacobjones", 
-    email: "jacobjones@labourlink.com", 
-    phone_number: "+91 98401 23006",
-    role: "admin", // Administrator
-    dept: "IT Governance", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "AUTHENTICATOR",
-    created_by: "System Initializer",
-    created_on: "2021-10-30T08:15:00.000Z",
-    created_at: "2021-10-30T08:15:00.000Z" 
-  },
-  { 
-    id: "mock-7", 
-    user_uid: "USR-200007", 
-    employee_id: "EMP-20007", 
-    name: "Kathryn Murphy", 
-    employee_name: "Kathryn Murphy",
-    username: "kathryn", 
-    email: "kathryn@labourlink.com", 
-    phone_number: "+91 98401 23007",
-    role: "manager", // Manager
-    dept: "Operations Management", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "SMS",
-    created_by: "System Initializer",
-    created_on: "2022-12-23T15:20:00.000Z",
-    created_at: "2022-12-23T15:20:00.000Z" 
-  },
-  { 
-    id: "mock-8", 
-    user_uid: "USR-200008", 
-    employee_id: "EMP-20008", 
-    name: "Marvin McKinney", 
-    employee_name: "Marvin McKinney",
-    username: "marvin", 
-    email: "marvin@labourlink.com", 
-    phone_number: "+91 98401 23008",
-    role: "ap_specialist", // Consultant
-    dept: "Consultancy Services", 
-    division: "VCC", 
-    is_active: false, 
-    status: "Inactive",
-    mfa_enabled: false,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2023-05-17T11:00:00.000Z",
-    created_at: "2023-05-17T11:00:00.000Z" 
-  },
-  { 
-    id: "mock-9", 
-    user_uid: "USR-200009", 
-    employee_id: "EMP-20009", 
-    name: "Darlene Robertson", 
-    employee_name: "Darlene Robertson",
-    username: "darlene", 
-    email: "darlenerobert@labourlink.com", 
-    phone_number: "+91 98401 23009",
-    role: "ap_specialist", // Consultant
-    dept: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2022-08-14T09:00:00.000Z",
-    created_at: "2022-08-14T09:00:00.000Z" 
-  }
-];
+
 
 const ICON_MAP = {
   Shield,
@@ -778,8 +596,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
         setSelectedUser(null);
       }
     } catch(e) {
-      console.error(e);
-      setUsers(MOCKUP_USERS_RBAC);
+      console.error("Failed to load users from API:", e);
+      setUsers([]);
       setSelectedUser(null);
     } finally {
       setLoading(false);
@@ -945,27 +763,29 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setSelectedUser(prev => ({ ...prev, role: newRole }));
     setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: newRole } : u));
     
-    if (String(selectedUser.id).startsWith("mock")) {
-      return;
-    }
-    
     try {
       const token = localStorage.getItem("authToken");
       await fetch(`/api/users/${selectedUser.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
         body: JSON.stringify({
-          employee_id: selectedUser.employee_id || selectedUser.username,
+          role: newRole,
+          employee_id: selectedUser.employee_id,
           employee_name: selectedUser.name,
           name: selectedUser.name,
           email: selectedUser.email,
           username: selectedUser.username,
-          role: newRole,
           department: selectedUser.department || selectedUser.dept,
           division: selectedUser.division || "VCC"
         })
       });
-    } catch {}
+      setSuccessMsg(`✓ Role for "${selectedUser.name}" updated to "${newRole.toUpperCase()}".`);
+      setTimeout(() => setSuccessMsg(""), 3500);
+    } catch(err) {
+      console.error(err);
+      setErrorMsg("Failed to update user role.");
+      setTimeout(() => setErrorMsg(""), 3500);
+    }
   };
 
   const handleToggleStatus = async (user) => {
@@ -986,10 +806,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
       }));
     }
 
-    if (String(user.id).startsWith("mock")) {
-      return;
-    }
-
     try {
       const token = localStorage.getItem("authToken");
       await fetch(`/api/users/${user.id}/status`, {
@@ -1003,12 +819,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const deleteUser = async (id, name, empId) => {
     if (!isAdmin) return;
     if (!window.confirm(`Are you sure you want to deactivate and remove employee ${name} (${empId})?`)) return;
-    
-    if (String(id).startsWith("mock")) {
-      setUsers(prev => prev.filter(u => u.id !== id));
-      if (selectedUser?.id === id) setSelectedUser(null);
-      return;
-    }
 
     try {
       const token = localStorage.getItem("authToken");
@@ -1092,32 +902,24 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
       setUserOverrides(updatedOverrides);
 
-      if (String(selectedUser.id).startsWith("mock")) {
-        setUsers(prev => prev.map(u => u.id === selectedUser.id ? { 
-          ...u, 
-          role: panelUserGroup,
-          status: u.is_active ? "Active" : "Inactive"
-        } : u));
-      } else {
-        const payload = {
-          employee_id: selectedUser.employee_id || selectedUser.username,
-          employee_name: selectedUser.name,
-          name: selectedUser.name,
-          email: selectedUser.email,
-          username: selectedUser.username,
-          role: panelUserGroup,
-          department: selectedUser.department || selectedUser.dept,
-          division: selectedUser.division || "VCC"
-        };
+      const payload = {
+        employee_id: selectedUser.employee_id || selectedUser.username,
+        employee_name: selectedUser.name,
+        name: selectedUser.name,
+        email: selectedUser.email,
+        username: selectedUser.username,
+        role: panelUserGroup,
+        department: selectedUser.department || selectedUser.dept,
+        division: selectedUser.division || "VCC"
+      };
 
-        await fetch(`/api/users/${selectedUser.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(payload)
-        });
+      await fetch(`/api/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
 
-        setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: panelUserGroup } : u));
-      }
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: panelUserGroup } : u));
 
       setSuccessMsg(`✓ Permissions for "${selectedUser.name}" saved successfully!`);
       setSelectedUser(null); 
@@ -1331,21 +1133,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
         payload.password = editingUserModal.password.trim();
       }
 
-      if (String(editingUserModal.id).startsWith("mock")) {
-        setUsers(prev => prev.map(u => u.id === editingUserModal.id ? { ...u, ...payload, name: payload.employee_name } : u));
-      } else {
-        const res = await fetch(`/api/users/${editingUserModal.id}`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || "Failed to update employee details");
-        }
-        const updated = await res.json();
-        setUsers(prev => prev.map(u => u.id === editingUserModal.id ? { ...u, ...updated, name: updated.name || updated.employee_name } : u));
+      const res = await fetch(`/api/users/${editingUserModal.id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to update employee details");
       }
+      const updated = await res.json();
+      setUsers(prev => prev.map(u => u.id === editingUserModal.id ? { ...u, ...updated, name: updated.name || updated.employee_name } : u));
 
       setSuccessMsg(`✓ Profile for "${editingUserModal.employee_name || editingUserModal.name}" updated successfully!`);
       setEditingUserModal(null);

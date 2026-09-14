@@ -1,11 +1,25 @@
 import logging
 import re
 import json
+import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from app.database.models import BusinessRule, Invoice, WorkflowProfile, WorkflowStepDefinition
 
 logger = logging.getLogger(__name__)
+
+def parse_date_str(val: Any) -> Optional[datetime.date]:
+    if isinstance(val, (datetime.date, datetime.datetime)):
+        return val.date() if isinstance(val, datetime.datetime) else val
+    if not val:
+        return None
+    s = str(val).strip()
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%m/%d/%Y'):
+        try:
+            return datetime.datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 def infer_document_type(category: str='', trans_type: str='', wf_name: str='', doc_type: str='') -> str:
     if doc_type and doc_type.upper() not in ['AP INVOICE', '']:
@@ -135,20 +149,33 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
     clean_doc = sanitize_text(doc_val)
     clean_rule_items = [sanitize_text(it) for it in rule_items]
     op = operator.strip().lower()
+    if op in ['before', 'after', 'on or before', 'on or after']:
+        d_doc = parse_date_str(doc_val)
+        d_rule = parse_date_str(rule_val)
+        if d_doc and d_rule:
+            if op == 'before':
+                return d_doc < d_rule
+            elif op == 'after':
+                return d_doc > d_rule
+            elif op == 'on or before':
+                return d_doc <= d_rule
+            elif op == 'on or after':
+                return d_doc >= d_rule
+        return False
     if op in ['equals', '==', '=', 'eq']:
         return str_doc in rule_items or clean_doc in clean_rule_items or any((clean_doc == cit for cit in clean_rule_items))
-    if op in ['not equals', '!=', '!==', 'neq']:
+    if op in ['not equals', '!=', '!==', 'neq', 'not equal']:
         return str_doc not in rule_items and clean_doc not in clean_rule_items
-    if op in ['contains any of', 'contains any of (or)', 'contains']:
+    if op in ['contains any of', 'contains any of (or)', 'contains', 'is one of', 'in', 'in (comma-separated)']:
         return any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
+    if op in ['does not contain', 'not contains']:
+        return not any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
     if op in ['starts with', 'starts_with']:
         return any(str_doc.startswith(it) for it in rule_items)
     if op in ['ends with', 'ends_with']:
         return any(str_doc.endswith(it) for it in rule_items)
-    if op in ['in', 'in (comma-separated)']:
-        return str_doc in rule_items
-    if op in ['not in']:
-        return str_doc not in rule_items
+    if op in ['not in', 'is not one of']:
+        return str_doc not in rule_items and clean_doc not in clean_rule_items
     # Invalid or unrecognized operator MUST return False, never silently True
     return False
 
@@ -361,7 +388,6 @@ def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
     - Document context: division, department
     - Organizational hierarchy: user's division/department matching document's
     - Only active users (is_active == True)
-    - Deterministic fallback to Admin / Division Head if no approver is found.
     """
     from app.database.models import User
     if not step:
@@ -413,24 +439,13 @@ def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
                 if u not in resolved_users:
                     resolved_users.append(u)
 
-    # Fallback if no active approver resolved
+    # If no active approver resolved, log warning and return empty list
     if not resolved_users:
         logger.warning(
             f"[ApproverResolution] No active approvers found for step '{getattr(step, 'step_name', 'Step')}' "
             f"(stage {getattr(step, 'stage_number', 1)}, target '{getattr(step, 'approver_target', '')}') "
-            f"on doc {getattr(doc, 'id', 'N/A')}. Escalating to Division Head / Admins."
+            f"on doc {getattr(doc, 'id', 'N/A')}."
         )
-        if doc_div:
-            div_admins = db.query(User).filter(
-                User.is_active == True,
-                User.role.in_(['admin', 'gm', 'md', 'jmd']),
-                (User.division.ilike(doc_div)) | (User.division.in_(['GLOBAL', 'HQ']))
-            ).all()
-            if div_admins:
-                resolved_users.extend(div_admins)
-        if not resolved_users:
-            all_admins = db.query(User).filter(User.is_active == True, User.role == 'admin').all()
-            resolved_users.extend(all_admins)
 
     return resolved_users
 

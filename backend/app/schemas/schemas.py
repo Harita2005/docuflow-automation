@@ -177,6 +177,7 @@ class InvoiceResponse(InvoiceBase):
     is_current_approver: Optional[bool] = None
     has_approved: Optional[bool] = None
     has_rejected: Optional[bool] = None
+    completed_by_peer: Optional[bool] = None
 
     class Config:
         from_attributes = True

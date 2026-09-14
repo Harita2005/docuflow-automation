@@ -27,190 +27,6 @@ import {
   Sliders
 } from 'lucide-react';
 
-const MOCKUP_USERS = [
-  { 
-    id: "mock-1", 
-    user_uid: "USR-200001", 
-    employee_id: "EMP-20001", 
-    name: "Shane Nguyen", 
-    employee_name: "Shane Nguyen",
-    username: "shanengu", 
-    email: "shanengu@labourlink.com", 
-    phone_number: "+91 98401 23001",
-    role: "ap_specialist", // Consultant
-    department: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Onboarded",
-    is_new: true, // "New" badge next to Shane's name
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2023-06-07T09:30:00.000Z",
-    created_at: "2023-06-07T09:30:00.000Z" 
-  },
-  { 
-    id: "mock-2", 
-    user_uid: "USR-200002", 
-    employee_id: "EMP-20002", 
-    name: "Arlene McCoy", 
-    employee_name: "Arlene McCoy",
-    username: "arlenemccoy", 
-    email: "arlenemccoy@labourlink.com", 
-    phone_number: "+91 98401 23002",
-    role: "ap_specialist", // Consultant
-    department: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "AUTHENTICATOR",
-    created_by: "System Initializer",
-    created_on: "2022-01-24T10:00:00.000Z",
-    created_at: "2022-01-24T10:00:00.000Z" 
-  },
-  { 
-    id: "mock-3", 
-    user_uid: "USR-200003", 
-    employee_id: "EMP-20003", 
-    name: "Guy Hawkins", 
-    employee_name: "Guy Hawkins",
-    username: "guyhawk", 
-    email: "guyhawk@labourlink.com", 
-    phone_number: "+91 98401 23003",
-    role: "admin", // Administrator
-    department: "IT Governance", 
-    division: "VCC", 
-    is_active: false, 
-    status: "Inactive",
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2020-04-18T11:15:00.000Z",
-    created_at: "2020-04-18T11:15:00.000Z" 
-  },
-  { 
-    id: "mock-4", 
-    user_uid: "USR-200004", 
-    employee_id: "EMP-20004", 
-    name: "Dianne Russell", 
-    employee_name: "Dianne Russell",
-    username: "diannerussell", 
-    email: "diannerussell@labourlink.com", 
-    phone_number: "+91 98401 23004",
-    role: "manager", // Manager
-    department: "Operations Management", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "SMS",
-    created_by: "System Initializer",
-    created_on: "2022-02-02T12:00:00.000Z",
-    created_at: "2022-02-02T12:00:00.000Z" 
-  },
-  { 
-    id: "mock-5", 
-    user_uid: "USR-200005", 
-    employee_id: "EMP-20005", 
-    name: "Albert Flores", 
-    employee_name: "Albert Flores",
-    username: "albertflores", 
-    email: "albertflores@labourlink.com", 
-    phone_number: "+91 98401 23005",
-    role: "ap_specialist", // Consultant
-    department: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Pending",
-    mfa_enabled: false,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2022-06-29T14:30:00.000Z",
-    created_at: "2022-06-29T14:30:00.000Z" 
-  },
-  { 
-    id: "mock-6", 
-    user_uid: "USR-200006", 
-    employee_id: "EMP-20006", 
-    name: "Jacob Jones", 
-    employee_name: "Jacob Jones",
-    username: "jacobjones", 
-    email: "jacobjones@labourlink.com", 
-    phone_number: "+91 98401 23006",
-    role: "admin", // Administrator
-    department: "IT Governance", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "AUTHENTICATOR",
-    created_by: "System Initializer",
-    created_on: "2021-10-30T08:15:00.000Z",
-    created_at: "2021-10-30T08:15:00.000Z" 
-  },
-  { 
-    id: "mock-7", 
-    user_uid: "USR-200007", 
-    employee_id: "EMP-20007", 
-    name: "Kathryn Murphy", 
-    employee_name: "Kathryn Murphy",
-    username: "kathryn", 
-    email: "kathryn@labourlink.com", 
-    phone_number: "+91 98401 23007",
-    role: "manager", // Manager
-    department: "Operations Management", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "SMS",
-    created_by: "System Initializer",
-    created_on: "2022-12-23T15:20:00.000Z",
-    created_at: "2022-12-23T15:20:00.000Z" 
-  },
-  { 
-    id: "mock-8", 
-    user_uid: "USR-200008", 
-    employee_id: "EMP-20008", 
-    name: "Marvin McKinney", 
-    employee_name: "Marvin McKinney",
-    username: "marvin", 
-    email: "marvin@labourlink.com", 
-    phone_number: "+91 98401 23008",
-    role: "ap_specialist", // Consultant
-    department: "Consultancy Services", 
-    division: "VCC", 
-    is_active: false, 
-    status: "Inactive",
-    mfa_enabled: false,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2023-05-17T11:00:00.000Z",
-    created_at: "2023-05-17T11:00:00.000Z" 
-  },
-  { 
-    id: "mock-9", 
-    user_uid: "USR-200009", 
-    employee_id: "EMP-20009", 
-    name: "Darlene Robertson", 
-    employee_name: "Darlene Robertson",
-    username: "darlene", 
-    email: "darlenerobert@labourlink.com", 
-    phone_number: "+91 98401 23009",
-    role: "ap_specialist", // Consultant
-    department: "Consultancy Services", 
-    division: "VCC", 
-    is_active: true, 
-    status: "Active",
-    mfa_enabled: true,
-    mfa_type: "EMAIL",
-    created_by: "System Initializer",
-    created_on: "2022-08-14T09:00:00.000Z",
-    created_at: "2022-08-14T09:00:00.000Z" 
-  }
-];
-
 const PERMISSION_DEFINITIONS = [
   {
     id: "doc:verify",
@@ -308,7 +124,7 @@ const SYSTEM_ROLES = [
 ];
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(MOCKUP_USERS);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -436,23 +252,16 @@ export default function AdminUsers() {
             created_at: u.created_at || u.created_on || new Date().toISOString()
           }));
 
-          // Merge backend DB users with mockup template, prioritizing mockup formatting
-          const merged = [...MOCKUP_USERS];
-          dbUsers.forEach(dbU => {
-            if (!merged.some(m => m.email.toLowerCase() === dbU.email.toLowerCase())) {
-              merged.push(dbU);
-            }
-          });
-          setUsers(merged);
+          setUsers(dbUsers);
         } else {
-          setUsers(MOCKUP_USERS);
+          setUsers([]);
         }
       } else {
-        setUsers(MOCKUP_USERS);
+        setUsers([]);
       }
     } catch (e) { 
-      console.error(e);
-      setUsers(MOCKUP_USERS);
+      console.error("Failed to load users from API:", e);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -517,19 +326,6 @@ export default function AdminUsers() {
       const token = localStorage.getItem("authToken");
       const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
       
-      // If it's a mock user, perform local mock update
-      if (editingUser?.id && String(editingUser.id).startsWith("mock")) {
-        setUsers(prev => prev.map(u => u.id === editingUser.id ? { 
-          ...u, 
-          ...payload, 
-          status: is_active ? "Active" : "Inactive"
-        } : u));
-        setToastMsg(`✓ User "${name}" updated successfully (Local).`);
-        setTimeout(() => setToastMsg(""), 3500);
-        setEditingUser(null);
-        return;
-      }
-
       const url = editingUser?.id && !editingUser.isNew ? `/api/users/${editingUser.id}` : '/api/users';
       const method = editingUser?.id && !editingUser.isNew ? 'PUT' : 'POST';
       
@@ -545,28 +341,15 @@ export default function AdminUsers() {
         fetchUsers();
         setEditingUser(null);
       } else {
-        // Fallback optimistic update
-        if (editingUser?.id && !editingUser.isNew) {
-          setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...payload } : u));
-        } else {
-          const randomBuf = new Uint32Array(1);
-          window.crypto.getRandomValues(randomBuf);
-          const newUid = `USR-${100000 + (randomBuf[0] % 900000)}`;
-          setUsers(prev => [{ 
-            ...payload, 
-            id: `mock-${Date.now()}`, 
-            user_uid: newUid,
-            status: is_active ? "Active" : "Onboarded",
-            created_on: new Date().toISOString(),
-            created_at: new Date().toISOString() 
-          }, ...prev]);
-        }
-        setToastMsg(`✓ User "${name}" updated successfully.`);
-        setTimeout(() => setToastMsg(""), 3500);
+        const errData = await res.json().catch(() => ({}));
+        setErrorMsg(errData.detail || `Failed to save user "${name}".`);
+        setTimeout(() => setErrorMsg(""), 4000);
         setEditingUser(null);
       }
     } catch(e) { 
       console.error(e); 
+      setErrorMsg(`Error connecting to server while saving user "${name}".`);
+      setTimeout(() => setErrorMsg(""), 4000);
       setEditingUser(null);
     }
   };
@@ -578,25 +361,24 @@ export default function AdminUsers() {
       return;
     }
     if (!window.confirm(`Are you sure you want to deactivate and remove employee ${name} (${empId})?`)) return;
-    
-    // If it's a mock user, delete locally
-    if (String(id).startsWith("mock")) {
-      setUsers(prev => prev.filter(u => u.id !== id));
-      setToastMsg(`User ${name} removed.`);
-      setTimeout(() => setToastMsg(""), 3000);
-      if (selectedUser?.id === id) setSelectedUser(null);
-      return;
-    }
 
     try {
       const token = localStorage.getItem("authToken");
-      await fetch(`/api/users/${id}`, { method: 'DELETE', headers: token ? { "Authorization": `Bearer ${token}` } : {} });
-      setUsers(prev => prev.filter(u => u.id !== id));
-      setToastMsg(`User ${name} removed.`);
-      setTimeout(() => setToastMsg(""), 3000);
-      if (selectedUser?.id === id) setSelectedUser(null);
-    } catch { 
-      setUsers(prev => prev.filter(u => u.id !== id));
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: token ? { "Authorization": `Bearer ${token}` } : {} });
+      if (res.ok) {
+        setUsers(prev => prev.filter(u => u.id !== id));
+        setToastMsg(`User ${name} removed.`);
+        setTimeout(() => setToastMsg(""), 3000);
+        if (selectedUser?.id === id) setSelectedUser(null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setErrorMsg(err.detail || `Failed to remove user ${name}.`);
+        setTimeout(() => setErrorMsg(""), 3500);
+      }
+    } catch (err) { 
+      console.error("Failed to delete user:", err);
+      setErrorMsg(`Error removing user ${name}.`);
+      setTimeout(() => setErrorMsg(""), 3500);
     }
   };
 
@@ -617,13 +399,6 @@ export default function AdminUsers() {
         is_active: nextStatus,
         status: nextStatus ? 'Active' : 'Inactive'
       }));
-    }
-
-    // If mock user, stop here
-    if (String(user.id).startsWith("mock")) {
-      setToastMsg(`Status for ${user.name} set to ${nextStatus ? 'ACTIVE' : 'INACTIVE'}.`);
-      setTimeout(() => setToastMsg(""), 3000);
-      return;
     }
 
     try {
@@ -718,32 +493,24 @@ export default function AdminUsers() {
       setUserOverrides(updatedOverrides);
 
       // Save user group / role to user record
-      if (String(selectedUser.id).startsWith("mock")) {
-        setUsers(prev => prev.map(u => u.id === selectedUser.id ? { 
-          ...u, 
-          role: panelUserGroup,
-          status: u.is_active ? "Active" : "Inactive"
-        } : u));
-      } else {
-        const payload = {
-          employee_id: selectedUser.employee_id,
-          employee_name: selectedUser.name,
-          name: selectedUser.name,
-          email: selectedUser.email,
-          username: selectedUser.username,
-          role: panelUserGroup,
-          department: selectedUser.department,
-          division: selectedUser.division
-        };
+      const payload = {
+        employee_id: selectedUser.employee_id,
+        employee_name: selectedUser.name,
+        name: selectedUser.name,
+        email: selectedUser.email,
+        username: selectedUser.username,
+        role: panelUserGroup,
+        department: selectedUser.department,
+        division: selectedUser.division
+      };
 
-        await fetch(`/api/users/${selectedUser.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(payload)
-        });
+      await fetch(`/api/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
 
-        setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: panelUserGroup } : u));
-      }
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: panelUserGroup } : u));
 
       setToastMsg(`✓ Permissions for "${selectedUser.name}" saved successfully!`);
       setSelectedUser(null); // Close side panel

@@ -22,7 +22,8 @@ import {
   FileSpreadsheet,
   Upload,
   XCircle,
-  PauseCircle
+  PauseCircle,
+  Users
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatTimeOnly } from "../utils/formatters";
@@ -386,13 +387,38 @@ export default function DocumentDetails({
 
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
   const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
-  const isDocumentLocked = isTerminal || !isCurrentApprover || (lockInfo.isLocked && !lockInfo.isSelf);
+  const isDocumentLocked = isTerminal || !isCurrentApprover || Boolean(document?.completed_by_peer);
   const isAttachmentStatus = !isTerminal && (
     (document?.current_stage || 1) === 1 ||
     (document?.status || "").toLowerCase().includes("attachment") ||
     (document?.status || "").toLowerCase().includes("initiated")
   );
   const canReplacePdf = !isDocumentLocked && isAttachmentStatus;
+
+  // Periodic background stage poll: If another approver advances the stage, update immediately
+  useEffect(() => {
+    if (!document?.id || isTerminal) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/invoices/${document.id}`, {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+          }
+        });
+        if (res.ok) {
+          const fresh = await res.json();
+          if (
+            fresh.current_stage !== document.current_stage ||
+            fresh.status !== document.status ||
+            Boolean(fresh.completed_by_peer) !== Boolean(document.completed_by_peer)
+          ) {
+            onRefreshDocument();
+          }
+        }
+      } catch {}
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [document?.id, document?.current_stage, document?.status, document?.completed_by_peer, isTerminal, onRefreshDocument]);
 
   // Hierarchical FLAC resolution (Specific Scope -> Global Master -> Safe Baseline)
   const getFieldPerm = (fieldId: string): "hidden" | "view" | "edit" => {
@@ -675,6 +701,15 @@ export default function DocumentDetails({
   useEffect(() => {
     const fetchChecklist = async () => {
       if (!document || !document.id) return;
+      const isUnrouted = !document.workflow_profile_id || 
+                         document.workflow_profile_id === 'UNROUTED' || 
+                         (document.status || '').toLowerCase().includes('unrouted') ||
+                         (document.status || '').toLowerCase().includes('no rule matched');
+      if (isUnrouted) {
+        setChecklistItems([]);
+        setCheckedStates({});
+        return;
+      }
       try {
         const token = localStorage.getItem("token") || localStorage.getItem("authToken");
         const headers: Record<string, string> = {};
@@ -697,7 +732,7 @@ export default function DocumentDetails({
     };
 
     fetchChecklist();
-  }, [document?.id, document?.current_stage, activeApprovalLog?.current_stage_number]);
+  }, [document?.id, document?.current_stage, document?.workflow_profile_id, document?.status, activeApprovalLog?.current_stage_number]);
 
   // Auto-Restore Draft Verification Inputs & Comments
   useEffect(() => {
@@ -974,6 +1009,8 @@ export default function DocumentDetails({
         },
         body: JSON.stringify({
           invoiceId: document.id,
+          expected_stage: document.current_stage || 1,
+          expected_version: document.version,
           comments: commentsToSend,
           checklistVerified: true,
           verifiedItems: Object.keys(checkedStates).filter(k => checkedStates[k])
@@ -1001,6 +1038,11 @@ export default function DocumentDetails({
           }
         } catch {}
         setActionError(errDetail);
+        if (response.status === 409) {
+          // Collision: Another approver already completed this stage. Refresh immediately!
+          await fetchWorkflowData();
+          onRefreshDocument();
+        }
       }
     } catch (err: any) {
       setActionError(err.message || "Approval action failed");
@@ -1008,7 +1050,11 @@ export default function DocumentDetails({
     setActionLoading(false);
   };
 
-  const effectiveChecklist = checklistItems;
+  const isDocUnrouted = !document?.workflow_profile_id || 
+                        document?.workflow_profile_id === 'UNROUTED' || 
+                        (document?.status || '').toLowerCase().includes('unrouted') ||
+                        (document?.status || '').toLowerCase().includes('no rule matched');
+  const effectiveChecklist = isDocUnrouted ? [] : checklistItems;
 
   const getStatusBadge = () => {
     const status = document.status;
@@ -1403,8 +1449,31 @@ export default function DocumentDetails({
                   </div>
                 )}
               </div>
-
             </div>
+
+            {document?.completed_by_peer && (
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex items-center gap-2.5 shadow-2xs shrink-0">
+                <div className="h-6 w-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                  ✓
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-amber-900">
+                    Stage Completed by Peer Approver
+                  </div>
+                  <div className="text-[10px] text-amber-700">
+                    This approval stage has already been completed by another approver. Document is now read-only for you.
+                  </div>
+                </div>
+              </div>
+            )}
+            {lockInfo.isLocked && !lockInfo.isSelf && !document?.completed_by_peer && !isTerminal && (
+              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 flex items-center gap-2 shadow-2xs shrink-0">
+                <Users className="h-4 w-4 text-blue-600 shrink-0" />
+                <div className="text-[10.5px]">
+                  <span className="font-bold">{lockInfo.lockedBy}</span> is also reviewing this document. Either of you can approve this stage.
+                </div>
+              </div>
+            )}
 
             {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
             {(() => {
@@ -1628,9 +1697,13 @@ export default function DocumentDetails({
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                   <Shield className="h-3.5 w-3.5 text-[#003F28]" />
-                  <span>Compliance Checklist ({Object.values(checkedStates).filter(Boolean).length}/{effectiveChecklist.length})</span>
+                  <span>Compliance Checklist {isDocUnrouted ? "(Unrouted)" : `(${Object.values(checkedStates).filter(Boolean).length}/${effectiveChecklist.length})`}</span>
                 </span>
-                {isDocumentLocked ? (
+                {isDocUnrouted ? (
+                  <span className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                    Unrouted
+                  </span>
+                ) : isDocumentLocked ? (
                   <span className="text-[9px] uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-extrabold flex items-center gap-1">
                     <Lock className="h-2.5 w-2.5" /> Locked (Read-Only)
                   </span>
@@ -1647,7 +1720,11 @@ export default function DocumentDetails({
 
               {/* Checklist Items Matrix */}
               <div className="space-y-1.5">
-                {effectiveChecklist.length === 0 ? (
+                {isDocUnrouted ? (
+                  <div className="p-3 bg-amber-50/60 border border-amber-200/80 text-amber-900 rounded-xl text-center text-[10px] font-medium">
+                    Document is unrouted (no workflow matched). No checklist items apply.
+                  </div>
+                ) : effectiveChecklist.length === 0 ? (
                   <div className="p-3 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-xl text-center text-[10px] font-medium italic">
                     No checklist requirements for this workflow stage.
                   </div>

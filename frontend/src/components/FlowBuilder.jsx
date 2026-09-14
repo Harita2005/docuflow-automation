@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks } from 'lucide-react';
+import { Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks, GitMerge } from 'lucide-react';
 
 const STAGE_PRESET_OPTIONS = [
   "Attachment Status",
@@ -20,6 +20,7 @@ export default function FlowBuilder({ users = [] }) {
   const [loading, setLoading] = useState(true);
   const [internalUsers, setInternalUsers] = useState(users || []);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
+  const [savedWorkflowModal, setSavedWorkflowModal] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
   const [addedCategories, setAddedCategories] = useState(() => {
@@ -310,7 +311,14 @@ export default function FlowBuilder({ users = [] }) {
         await fetchWorkflows();
         setSelectedCategory(category);
         setSelectedSubCategory(docType);
+        const savedProfileName = payload.profile_name;
+        const savedDocType = payload.workflow_type;
         setEditingWorkflow(null);
+        setSavedWorkflowModal({
+          profile_name: savedProfileName,
+          document_type: savedDocType,
+          category: category
+        });
       } else {
         const errJson = await res.json().catch(() => ({ detail: "Unknown server error" }));
         alert(`Failed to save workflow: ${errJson.detail || JSON.stringify(errJson)}`);
@@ -632,6 +640,22 @@ export default function FlowBuilder({ users = [] }) {
                         <Network className="h-3 w-3 flex-shrink-0" /> {wf.steps?.length || 0} Steps
                       </div>
                       <div className="flex gap-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          title="Configure Routing Conditions in Condition Matrix"
+                          onClick={() => {
+                            localStorage.setItem("adminActiveTab", "matrix");
+                            localStorage.setItem("docuflow_target_condition_wf", wf.profile_name);
+                            localStorage.setItem("docuflow_target_condition_doctype", wf.workflow_type || '');
+                            window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
+                            window.dispatchEvent(new CustomEvent("open-condition-editor", {
+                              detail: { target_workflow_id: wf.profile_name, document_type: wf.workflow_type || '' }
+                            }));
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                        >
+                          <GitMerge className="h-3.5 w-3.5" />
+                        </button>
                         <button type="button" aria-label="Edit Workflow" onClick={() => openEditor(wf, selectedCategory, index)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
                         <button type="button" aria-label="Delete Workflow" onClick={() => handleDelete(wf.profile_name)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
@@ -1485,6 +1509,65 @@ export default function FlowBuilder({ users = [] }) {
           <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex justify-end">
             <button type="button" onClick={() => setConfiguringStepIndex(null)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-xs transition-colors">
               Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Option A: Post-Save Routing Condition Wizard Modal */}
+    {savedWorkflowModal && (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900 text-sm">
+                Workflow Saved Successfully!
+              </h3>
+              <p className="text-xs text-slate-600 mt-1">
+                <strong>"{savedWorkflowModal.profile_name}"</strong> has been saved with its approval stages.
+              </p>
+              <div className="mt-3 bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-3 text-xs text-emerald-950 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-xs text-emerald-900">
+                  <GitMerge className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Next Step: Connect Routing Condition</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-snug">
+                  Would you like to configure routing conditions now in the <strong>Condition Matrix</strong> so documents automatically route into this workflow?
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setSavedWorkflowModal(null)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+            >
+              Back to Flow
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const targetWf = savedWorkflowModal.profile_name;
+                const docType = savedWorkflowModal.document_type;
+                setSavedWorkflowModal(null);
+                localStorage.setItem("adminActiveTab", "matrix");
+                localStorage.setItem("docuflow_target_condition_wf", targetWf);
+                localStorage.setItem("docuflow_target_condition_doctype", docType || '');
+                window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
+                window.dispatchEvent(new CustomEvent("open-condition-editor", {
+                  detail: { target_workflow_id: targetWf, document_type: docType || '' }
+                }));
+              }}
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-[#003F28] hover:bg-[#002f1e] rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Create Condition & Save</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

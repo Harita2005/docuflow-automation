@@ -321,7 +321,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900">
                       <p className="font-bold">⚠️ No specific business rule matched this document.</p>
                       <p className="text-xs text-amber-700 mt-1">
-                        System will fallback to standard default workflow <code className="bg-amber-100 px-1 rounded">VCC_PURCHASE_SR10</code>.
+                        No matching routing rule found. Document will require explicit rule configuration or administrative assignment.
                       </p>
                     </div>
                   )}
@@ -444,27 +444,27 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
           <div key={rule.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col md:flex-row">
             
             {/* Left side: Rule Name & Number */}
-            <div className="bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-3 flex flex-col justify-center items-center w-full md:w-32 shrink-0">
-              <span className="text-[10px] font-black text-slate-400 mb-1">POLICY {index + 1}</span>
+            <div className="bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-2 flex flex-col justify-center items-center w-full md:w-28 shrink-0">
+              <span className="text-[9px] font-black text-slate-400 mb-0.5">POLICY {index + 1}</span>
               <input 
                 type="text" 
                 value={rule.rule_name}
                 onChange={(e) => updateRuleName(rule.id, e.target.value)}
-                className="w-full text-center text-xs font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 outline-none pb-1"
+                className="w-full text-center text-[11px] font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 outline-none pb-0.5"
                 placeholder="Rule Name"
               />
             </div>
 
             {/* Middle: Condition Matrix */}
-            <div className="p-3 flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="p-2.5 flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2">
               
               {/* Division / Company Slot */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Division (Company)</label>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500">Division (Company)</label>
                 <select 
                   value={getConditionValue(rule, 'Division') || getConditionValue(rule, 'division')}
                   onChange={(e) => updateRuleCondition(rule.id, 'Division', 'equals', e.target.value)}
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Division') || getConditionValue(rule, 'division')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                  className={`px-2 py-1 text-[11px] rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Division') || getConditionValue(rule, 'division')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
                 >
                   <option value="">Any Division</option>
                   <option value="VCC">VCC (V-Care / Retail Stores)</option>
@@ -478,39 +478,39 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
               </div>
 
               {/* Plant / Branch Slot */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Plant / Branch</label>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500">Plant / Branch</label>
                 <input 
                   type="text"
                   value={getConditionValue(rule, 'Plant') || getConditionValue(rule, 'plant') || getConditionValue(rule, 'branch')}
                   onChange={(e) => updateRuleCondition(rule.id, 'Plant', 'Contains Any of', e.target.value)}
                   placeholder="e.g. TN-SIVAKASI, Sulur, HQ"
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Plant') || getConditionValue(rule, 'plant') || getConditionValue(rule, 'branch')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                  className={`px-2 py-1 text-[11px] rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Plant') || getConditionValue(rule, 'plant') || getConditionValue(rule, 'branch')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
                 />
               </div>
 
               {/* Category / Cost Center Slot */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Cost Center / Category</label>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500">Cost Center / Category</label>
                 <input 
                   type="text"
                   value={getConditionValue(rule, 'Cost Center') || getConditionValue(rule, 'Category') || getConditionValue(rule, 'cost_center')}
                   onChange={(e) => updateRuleCondition(rule.id, 'Cost Center', 'Contains Any of', e.target.value)}
                   placeholder="e.g. IT-HARDWARE, BATTERY VEHICLE"
-                  className={`p-1.5 text-xs rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Cost Center') || getConditionValue(rule, 'Category') || getConditionValue(rule, 'cost_center')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                  className={`px-2 py-1 text-[11px] rounded border outline-none font-medium transition-colors ${(getConditionValue(rule, 'Cost Center') || getConditionValue(rule, 'Category') || getConditionValue(rule, 'cost_center')) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
                 />
               </div>
 
               {/* Amount / Doc Type Slot */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Document Type</label>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500">Document Type</label>
                 <select 
                   value={getConditionValue(rule, 'Document Type') || rule.document_type || 'AP INVOICE'}
                   onChange={(e) => {
                      updateRuleCondition(rule.id, 'Document Type', 'equals', e.target.value);
                      setRules(rules.map(r => r.id === rule.id ? { ...r, document_type: e.target.value } : r));
                   }}
-                  className="p-1.5 text-xs rounded border bg-slate-50 border-slate-200 text-slate-700 font-bold outline-none"
+                  className="px-2 py-1 text-[11px] rounded border bg-slate-50 border-slate-200 text-slate-700 font-bold outline-none"
                 >
                   <option value="AP INVOICE">📄 AP INVOICE</option>
                   <option value="AP DEBIT NOTE">📑 AP DEBIT NOTE</option>
@@ -523,8 +523,8 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
             </div>
 
             {/* Right side: Target Workflow */}
-            <div className="bg-slate-50 border-t md:border-t-0 md:border-l border-slate-200 p-3 flex flex-col justify-center gap-2 min-w-[200px]">
-              <label className="text-[9px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+            <div className="bg-slate-50 border-t md:border-t-0 md:border-l border-slate-200 p-2.5 flex flex-col justify-center gap-1.5 min-w-[190px]">
+              <label className="text-[8.5px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
                 <ArrowRight className="h-3 w-3" /> Target Flow
               </label>
               <div className="flex items-center gap-1">
@@ -541,7 +541,7 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
                     }
                     setHasChanges(true);
                   }}
-                  className={`w-full p-1.5 text-xs font-bold rounded border outline-none ${
+                  className={`w-full px-2 py-1 text-[11px] font-bold rounded border outline-none ${
                     rule.rule_action === 'AUTO_APPROVE' 
                       ? 'bg-emerald-600 text-white border-emerald-700' 
                       : rule.rule_action === 'AUTO_CANCEL' 
@@ -566,29 +566,28 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
                 </select>
                 <button 
                   onClick={() => setActiveTab('routing')}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded text-[10px] font-bold transition-colors shrink-0"
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-1.5 py-1 rounded text-[9.5px] font-bold transition-colors shrink-0"
                   title="Edit Flows"
                 >
                   Edit
                 </button>
               </div>
               
-              <div className="flex justify-between items-center mt-2">
+              <div className="flex justify-between items-center mt-1">
                 <button 
                   onClick={() => {
                     setRules(rules.filter(r => r.id !== rule.id));
                     setHasChanges(true);
                   }}
-                  className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                  className="text-[9.5px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
                 >
                   <Trash2 className="h-3 w-3" /> Delete
                 </button>
                 <button 
                   onClick={() => {
-                    // It auto-saves to local state via onChange, so this is just a visual confirm
                     setEditingId(null);
                   }}
-                  className="bg-slate-800 hover:bg-slate-900 text-white px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors"
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-2 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-1 transition-colors"
                 >
                   <Save className="h-3 w-3" /> Save condition
                 </button>

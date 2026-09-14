@@ -134,20 +134,11 @@ export default function WorkTrackerPage({
     currentUserRole === 'admin' ? 'all' : 'assigned'
   );
 
-  // Work Tracker strictly manages active/workflow documents; Approved documents are excluded
-  const workflowBaseDocs = useMemo(() => {
-    return documents.filter(doc => {
-      const s = (doc.status || "").toLowerCase().trim();
-      return !s.includes("approved") && !s.includes("settled") && !s.includes("paid") && !s.includes("ready for payment");
-    });
-  }, [documents]);
-
-  // Filter documents: non-admin users see strictly documents assigned to them (with fallback to all)
+  // Work Tracker strictly scopes documents: non-admins only see documents where they are the current approver, or which they have previously approved in this workflow.
   const visibleDocs = useMemo(() => {
-    if (trackerScope === "all" || currentUserRole === "admin") return workflowBaseDocs;
-    const filtered = workflowBaseDocs.filter(doc => isAssignedToUser(doc) || !!doc.is_current_approver || !!doc.has_approved);
-    return filtered.length > 0 ? filtered : workflowBaseDocs;
-  }, [workflowBaseDocs, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
+    if (trackerScope === "all" || currentUserRole === "admin") return documents;
+    return documents.filter(doc => isAssignedToUser(doc) || Boolean(doc.is_current_approver) || Boolean(doc.has_approved));
+  }, [documents, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
 
   // Derive dynamic document types (includes 'ALL' for cross-category views)
   const dynamicTypes = useMemo(() => {
@@ -227,22 +218,19 @@ export default function WorkTrackerPage({
         }
       }
 
-      // Status filter (strictly handles active workflow statuses: pending, hold, rejected, cancelled)
+      // Status filter (strictly handles: pending, in_progress, approved, hold, rejected, cancelled)
       if (statusFilter !== "all") {
         const st = (doc.status || "").toLowerCase();
+        const isCompleted = ["settled", "approved", "paid", "ready for payment"].some(s => st.includes(s));
+        const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !isCompleted;
+        const isInProgress = (Boolean(doc.has_approved) || st.includes("in progress")) && !isActionRequired && !isCompleted;
+
         if (statusFilter === "pending") {
-          if (
-            st.includes("reject") || 
-            st.includes("cancel") || 
-            st.includes("approve") || 
-            st.includes("paid") || 
-            st.includes("ready") || 
-            st.includes("settled") || 
-            st.includes("fail") || 
-            st.includes("hold") || 
-            st.includes("pause") || 
-            st.includes("wait")
-          ) return false;
+          if (!isActionRequired) return false;
+        } else if (statusFilter === "in_progress") {
+          if (!isInProgress) return false;
+        } else if (statusFilter === "approved") {
+          if (!isCompleted) return false;
         } else if (statusFilter === "hold") {
           if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
@@ -353,7 +341,9 @@ export default function WorkTrackerPage({
               className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
             >
               <option value="all">All Statuses</option>
-              <option value="pending">Pending</option>
+              <option value="pending">Pending (Action Required)</option>
+              <option value="in_progress">In Progress (Tracking)</option>
+              <option value="approved">Approved</option>
               <option value="hold">On Hold</option>
               <option value="rejected">Rejected</option>
               <option value="cancelled">Cancelled</option>
@@ -571,13 +561,13 @@ export default function WorkTrackerPage({
                 // Helper for Status Pill
                 const renderStatusBadge = () => {
                   const status = (doc.status || "Pending Approval").trim();
-                  const stageNum = doc.current_stage || doc.activeApprovalLog?.current_stage_number || 1;
+                  const isCompleted = ["Settled", "Approved", "Paid", "Ready for Payment"].includes(status);
 
-                  if (status === "Settled" || status === "Approved" || status === "Paid" || status === "Ready for Payment") {
+                  if (isCompleted) {
                     return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        <span>Completed</span>
+                        <span>Approved</span>
                       </span>
                     );
                   }
@@ -589,27 +579,40 @@ export default function WorkTrackerPage({
                       </span>
                     );
                   }
-                  if (status === "Rejected" || status === "Failed") {
+                  if (status === "Rejected" || status === "Failed" || status === "Cancelled") {
                     return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                        <span>Rejected</span>
+                        <span>{status === "Cancelled" ? "Cancelled" : "Rejected"}</span>
                       </span>
                     );
                   }
                   
-                  const isStage2 = stageNum === 2;
-                  const badgeClass = isStage2
-                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                    : "bg-amber-50 text-amber-700 border border-amber-200";
-                  
-                  const dotColor = isStage2 ? "bg-indigo-500" : "bg-amber-500 animate-pulse";
-                  const statusText = isStage2 ? "In Progress" : "Pending";
+                  const isActionRequired = Boolean(doc.is_current_approver) || isAssignedToUser(doc);
+                  const hasApprovedByUser = Boolean(doc.has_approved);
+
+                  if (isActionRequired) {
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span>Pending</span>
+                      </span>
+                    );
+                  }
+
+                  if (hasApprovedByUser) {
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                        <span>In Progress</span>
+                      </span>
+                    );
+                  }
 
                   return (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold ${badgeClass}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
-                      <span>{statusText}</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-slate-50 text-slate-700 border border-slate-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                      <span>In Progress</span>
                     </span>
                   );
                 };

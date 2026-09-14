@@ -1,38 +1,141 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Network, X, ArrowRight, CornerDownRight, Search, AlertTriangle, Folder, GitMerge } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, Edit2, Trash2, Network, X, ArrowRight, CornerDownRight, Search, 
+  AlertTriangle, Folder, GitMerge, CheckCircle2, ChevronDown, Check, Sparkles, 
+  Filter, HelpCircle, ArrowLeft, Layers, Sliders, ShieldCheck
+} from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
-export default function ConditionBuilder({ rules, setRules, setHasChanges, handleDeleteRuleLocal }) {
+// Standard synced document fields metadata with types
+const DEFAULT_CONDITION_FIELDS = [
+  { id: 'Division', label: 'Division / Company', type: 'select', optionsSource: 'divisions' },
+  { id: 'Category', label: 'Category / Expense Type', type: 'select', optionsSource: 'categories' },
+  { id: 'Cost Center', label: 'Cost Center / Dept', type: 'select', optionsSource: 'cost_centers' },
+  { id: 'Branch', label: 'Branch / Plant Location', type: 'select', optionsSource: 'branches' },
+  { id: 'Invoice Amount (Total)', label: 'Invoice Amount (Total)', type: 'number', isCurrency: true },
+  { id: 'Base Amount', label: 'Base Amount (Taxable / Net)', type: 'number', isCurrency: true },
+  { id: 'Document Type', label: 'Document Type', type: 'select', optionsSource: 'document_types' },
+  { id: 'Vendor Name', label: 'Vendor Name', type: 'text' },
+  { id: 'Tax Amount', label: 'Tax Amount', type: 'number', isCurrency: true },
+  { id: 'Payment Mode', label: 'Payment Mode', type: 'select', optionsSource: 'payment_modes' },
+  { id: 'GSTIN', label: 'Vendor GSTIN', type: 'text' },
+  { id: 'PO Number', label: 'PO / Order Number', type: 'text' },
+  { id: 'Invoice Date', label: 'Invoice Date', type: 'date' }
+];
+
+const STANDARD_DOC_TYPES = [
+  "AP Invoice",
+  "CAPEX / FIXED ASSET",
+  "PURCHASE INVOICE",
+  "SERVICE & MAINTENANCE",
+  "FREIGHT & LOGISTICS",
+  "UTILITY & RENT",
+  "STAFF & HR EXPENSE",
+  "GRN / GOODS RECEIPT",
+  "ADVANCE VOUCHER",
+  "CASH VOUCHER",
+  "E-VOUCHER",
+  "JOURNAL VOUCHER",
+  "ACCOUNTS PAYABLE (AP)",
+  "AP DEBIT NOTE",
+  "AR CREDITNOTE",
+  "PROJECT BUDGET",
+  "NON - RETURNABLE"
+];
+
+const STANDARD_PAYMENT_MODES = [
+  "NEFT",
+  "RTGS",
+  "Cheque",
+  "Cash",
+  "UPI",
+  "Bank Transfer",
+  "Demand Draft"
+];
+
+// Operators categorized by field type
+const OPERATORS_BY_TYPE = {
+  number: [
+    { value: 'equals', label: 'Equals (=)' },
+    { value: 'not equals', label: 'Not Equal (≠)' },
+    { value: 'greater than', label: 'Greater Than (>)' },
+    { value: 'greater than or equal', label: 'Greater Than or Equal (≥)' },
+    { value: 'less than', label: 'Less Than (<)' },
+    { value: 'less than or equal', label: 'Less Than or Equal (≤)' }
+  ],
+  text: [
+    { value: 'equals', label: 'Equals (=)' },
+    { value: 'not equals', label: 'Not Equal (≠)' },
+    { value: 'contains', label: 'Contains (⊇)' },
+    { value: 'does not contain', label: 'Does Not Contain (⊅)' },
+    { value: 'starts with', label: 'Starts With' },
+    { value: 'ends with', label: 'Ends With' }
+  ],
+  select: [
+    { value: 'equals', label: 'Equals (=)' },
+    { value: 'not equals', label: 'Not Equal (≠)' },
+    { value: 'is one of', label: 'Is One Of' },
+    { value: 'is not one of', label: 'Is Not One Of' }
+  ],
+  date: [
+    { value: 'equals', label: 'Equals (=)' },
+    { value: 'before', label: 'Before (<)' },
+    { value: 'after', label: 'After (>)' },
+    { value: 'on or before', label: 'On or Before (≤)' },
+    { value: 'on or after', label: 'On or After (≥)' }
+  ],
+  boolean: [
+    { value: 'equals', label: 'Equals (=)' }
+  ]
+};
+
+// Normalizes operator strings loaded from older rules/JSON
+const normalizeOperator = (op, fieldType = 'text') => {
+  const o = (op || '').toLowerCase().trim();
+  if (o === '=' || o === '==' || o === 'eq' || o === 'equals') return 'equals';
+  if (o === '!=' || o === '!==' || o === 'neq' || o === 'not equals' || o === 'not equal') return 'not equals';
+  if (o === 'gt' || o === '>') return 'greater than';
+  if (o === 'gte' || o === '>=') return 'greater than or equal';
+  if (o === 'lt' || o === '<') return 'less than';
+  if (o === 'lte' || o === '<=') return 'less than or equal';
+  if (o === 'contains any of' || o === 'in' || o === 'is one of') return fieldType === 'select' ? 'is one of' : 'contains';
+  if (o === 'not in' || o === 'is not one of') return 'is not one of';
+  if (o === 'does not contain' || o === 'not contains') return 'does not contain';
+  if (o === 'starts_with' || o === 'starts with') return 'starts with';
+  if (o === 'ends_with' || o === 'ends with') return 'ends with';
+  if (o === 'before') return 'before';
+  if (o === 'after') return 'after';
+  if (o === 'on or before') return 'on or before';
+  if (o === 'on or after') return 'on or after';
+
+  const defaultOp = OPERATORS_BY_TYPE[fieldType]?.[0]?.value || 'equals';
+  return defaultOp;
+};
+
+export default function ConditionBuilder({ rules = [], setRules, setHasChanges, handleDeleteRuleLocal }) {
+  // Navigation / Editor Mode state
   const [editingRule, setEditingRule] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
-  const [addedCategories, setAddedCategories] = useState([]);
   const [workflows, setWorkflows] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
-  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
-  const [valuePickerModal, setValuePickerModal] = useState(null);
-  const [pickerSearch, setPickerSearch] = useState('');
-  const [customValInput, setCustomValInput] = useState('');
-  const [showMasterOptions, setShowMasterOptions] = useState(false);
 
-  const DEFAULT_CONDITION_FIELDS = [
-    { id: 'Division', label: 'Division / Company' },
-    { id: 'Category', label: 'Category / Expense Type' },
-    { id: 'Cost Center', label: 'Cost Center / Dept' },
-    { id: 'Branch', label: 'Branch / Plant Location' },
-    { id: 'Invoice Amount (Total)', label: 'Invoice Amount (Total)' },
-    { id: 'Base Amount', label: 'Base Amount (Taxable / Net)' },
-    { id: 'Document Type', label: 'Document Type' },
-    { id: 'Vendor Name', label: 'Vendor Name' },
-    { id: 'Tax Amount', label: 'Tax Amount' },
-    { id: 'Payment Mode', label: 'Payment Mode' },
-    { id: 'GSTIN', label: 'Vendor GSTIN' },
-    { id: 'PO Number', label: 'PO / Order Number' }
-  ];
+  // Editor Form States
+  const [ruleName, setRuleName] = useState('');
+  const [docType, setDocType] = useState('AP Invoice');
+  const [description, setDescription] = useState('');
+  const [ruleCategory, setRuleCategory] = useState('Vendor Payment Workflows');
+  const [targetWorkflowId, setTargetWorkflowId] = useState('');
+  const [wfCategoryFilter, setWfCategoryFilter] = useState('ALL');
+  const [matchType, setMatchType] = useState('ALL'); // 'ALL' or 'ANY'
+  const [conditions, setConditions] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedConditionSuccessModal, setSavedConditionSuccessModal] = useState(null);
 
+  // Custom Fields System
   const [availableFields, setAvailableFields] = useState(() => {
     try {
       const saved = localStorage.getItem("docuflow_custom_condition_fields");
@@ -47,1243 +150,1629 @@ export default function ConditionBuilder({ rules, setRules, setHasChanges, handl
   });
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
   const [newFieldNameInput, setNewFieldNameInput] = useState('');
+  const [newFieldTypeInput, setNewFieldTypeInput] = useState('text');
   const [addFieldTargetIdx, setAddFieldTargetIdx] = useState(null);
 
-  const getFieldMasterOptions = (fieldName) => {
-    if (fieldName === 'Cost Center') return ['ALL', ...(matrixOptions?.cost_centers || [])];
-    if (fieldName === 'Category') return ['ALL', ...(matrixOptions?.categories || [])];
-    if (fieldName === 'Branch' || fieldName === 'Plant') return ['ALL', ...(matrixOptions?.branches || [])];
-    if (fieldName === 'Division') return ['ALL', ...(matrixOptions?.divisions || [])];
-    return [];
-  };
+  // Value multi-select / picker modal for dropdowns
+  const [activeMultiSelectIdx, setActiveMultiSelectIdx] = useState(null);
+  const [multiSelectSearch, setMultiSelectSearch] = useState('');
+  const [customTagInput, setCustomTagInput] = useState('');
 
-  const handleAddCategory = () => {
-    setShowAddModal(true);
-  };
-
+  // Fetch Workflow Profiles on Mount
   useEffect(() => {
-    const handleOpenAddCategory = () => handleAddCategory();
-    window.addEventListener('open-add-category', handleOpenAddCategory);
-    return () => window.removeEventListener('open-add-category', handleOpenAddCategory);
-  }, []);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('update-add-action', { detail: !selectedCategory }));
-  }, [selectedCategory]);
-
-  const confirmAddCategory = (e) => {
-    e.preventDefault();
-    if (newCategoryName && newCategoryName.trim()) {
-      const catName = newCategoryName.trim();
-      if (!addedCategories.includes(catName)) {
-        setAddedCategories([...addedCategories, catName]);
-      }
-      setSelectedCategory(catName);
-      setSelectedSubCategory(null);
-      setShowAddModal(false);
-      setNewCategoryName("");
-    }
-  };
-
-  useEffect(() => {
-    // Fetch Workflow Profiles for the target dropdown
     const fetchWf = async () => {
       try {
         const token = localStorage.getItem("authToken");
         const headers = token ? { "Authorization": `Bearer ${token}` } : {};
         const res = await fetch('/api/admin/workflows', { headers });
         if (res.ok) {
-          setWorkflows(await res.json());
+          const data = await res.json();
+          setWorkflows(Array.isArray(data) ? data : []);
         }
-      } catch {}
+      } catch (err) {
+        console.error("Failed to load workflows:", err);
+      }
     };
     fetchWf();
   }, []);
 
-  const [wfCategoryFilter, setWfCategoryFilter] = useState('ALL');
+  // Listen for open-condition-editor external events (e.g. from FlowBuilder)
+  useEffect(() => {
+    const handleOpenCondition = (e) => {
+      const targetWf = e?.detail?.target_workflow_id || localStorage.getItem("docuflow_target_condition_wf");
+      const dt = e?.detail?.document_type || localStorage.getItem("docuflow_target_condition_doctype");
+      if (targetWf) {
+        localStorage.removeItem("docuflow_target_condition_wf");
+        localStorage.removeItem("docuflow_target_condition_doctype");
+        openEditor(null, dt || 'AP Invoice', targetWf);
+      }
+    };
+    window.addEventListener('open-condition-editor', handleOpenCondition);
 
-  const openEditor = (r = null, defaultDocType = null) => {
-    let targetRule;
+    const savedTarget = localStorage.getItem("docuflow_target_condition_wf");
+    if (savedTarget) {
+      const savedDoc = localStorage.getItem("docuflow_target_condition_doctype");
+      localStorage.removeItem("docuflow_target_condition_wf");
+      localStorage.removeItem("docuflow_target_condition_doctype");
+      setTimeout(() => {
+        openEditor(null, savedDoc || 'AP Invoice', savedTarget);
+      }, 250);
+    }
+
+    return () => window.removeEventListener('open-condition-editor', handleOpenCondition);
+  }, [workflows]);
+
+  // Master options helper
+  const getFieldMasterOptions = (fieldName) => {
+    if (fieldName === 'Cost Center') return matrixOptions?.cost_centers || [];
+    if (fieldName === 'Category') return matrixOptions?.categories || [];
+    if (fieldName === 'Branch' || fieldName === 'Plant') return matrixOptions?.branches || [];
+    if (fieldName === 'Division') return matrixOptions?.divisions || [];
+    if (fieldName === 'Document Type') return STANDARD_DOC_TYPES;
+    if (fieldName === 'Payment Mode') return STANDARD_PAYMENT_MODES;
+    return [];
+  };
+
+  const getFieldMeta = (fieldId) => {
+    const found = availableFields.find(f => f.id === fieldId || f.id.toLowerCase() === (fieldId || '').toLowerCase());
+    if (found) return found;
+    if (fieldId?.toLowerCase().includes('amount')) return { id: fieldId, label: fieldId, type: 'number', isCurrency: true };
+    if (fieldId?.toLowerCase().includes('date')) return { id: fieldId, label: fieldId, type: 'date' };
+    return { id: fieldId, label: fieldId, type: 'text' };
+  };
+
+  // Derive workflow code from target workflow
+  const selectedWorkflowObj = useMemo(() => {
+    if (!targetWorkflowId) return null;
+    return workflows.find(w => w.profile_name === targetWorkflowId || w.workflow_code === targetWorkflowId || String(w.id) === String(targetWorkflowId));
+  }, [targetWorkflowId, workflows]);
+
+  const workflowCode = useMemo(() => {
+    if (selectedWorkflowObj) {
+      return selectedWorkflowObj.workflow_code || 'WF-' + (selectedWorkflowObj.id || '001');
+    }
+    return '';
+  }, [selectedWorkflowObj]);
+
+  // Open the One-Page Condition Builder for Create or Edit
+  const openEditor = (r = null, defaultDocType = null, defaultTargetWf = null) => {
+    setValidationErrors({});
     if (r) {
-      targetRule = JSON.parse(JSON.stringify(r));
-    } else {
-      targetRule = {
-        id: 'tmp-' + Date.now(),
-        rule_name: '',
-        description: '',
-        priority: (rules.length + 1) * 10,
-        conditions_json: JSON.stringify({
-          condition_type: 'Single Condition',
-          evaluate_on: 'Invoice Amount',
-          conditions: [{ field: 'Invoice Amount (Total)', operator: 'Greater Than', value: '', logicalOperator: 'AND' }],
-          settings: {
-            case_sensitive: false,
-            null_handling: 'Consider as False',
-            date_format: 'dd/mm/yyyy'
+      setEditingRule(r);
+      setRuleName(r.rule_name || '');
+      setDocType(r.document_type || 'AP Invoice');
+      setDescription(r.description || '');
+      setRuleCategory(r.rule_category || selectedCategory || 'Vendor Payment Workflows');
+      setTargetWorkflowId(r.target_workflow_id || '');
+
+      const matchedWf = workflows.find(w => w.profile_name === r.target_workflow_id || w.workflow_code === r.target_workflow_id);
+      setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
+
+      let parsedConds = [];
+      let detectedMatchType = 'ALL';
+      try {
+        const parsed = JSON.parse(r.conditions_json);
+        if (Array.isArray(parsed)) {
+          parsedConds = parsed;
+        } else if (parsed && typeof parsed === 'object') {
+          parsedConds = Array.isArray(parsed.conditions) ? parsed.conditions : [];
+          if (parsed.match_type) {
+            detectedMatchType = parsed.match_type.toUpperCase() === 'ANY' ? 'ANY' : 'ALL';
+          } else if (parsedConds.some(c => (c.logicalOperator || '').toUpperCase() === 'OR')) {
+            detectedMatchType = 'ANY';
           }
-        }),
-        target_workflow_id: workflows.length > 0 ? workflows[0].profile_name : '',
-        rule_category: selectedCategory || 'Vendor Payment Workflows',
-        document_type: defaultDocType || 'Invoice'
+        }
+      } catch {
+        parsedConds = [];
+      }
+
+      if (parsedConds.length === 0) {
+        parsedConds = [{ field: 'Invoice Amount (Total)', operator: 'greater than', value: '' }];
+      }
+
+      const formatted = parsedConds.map(c => {
+        const meta = getFieldMeta(c.field);
+        return {
+          field: c.field,
+          operator: normalizeOperator(c.operator, meta.type),
+          value: c.value !== undefined && c.value !== null ? String(c.value) : ''
+        };
+      });
+
+      setMatchType(detectedMatchType);
+      setConditions(formatted);
+    } else {
+      const initialTarget = defaultTargetWf || (workflows.length > 0 ? workflows[0].profile_name : '');
+      const matchedWf = workflows.find(w => w.profile_name === initialTarget || w.workflow_code === initialTarget);
+      const initialDocType = defaultDocType || selectedSubCategory || 'AP Invoice';
+
+      setEditingRule({
+        id: 'tmp-' + Date.now(),
+        is_new: true
+      });
+      setRuleName(matchedWf ? `${matchedWf.profile_name} Rule` : '');
+      setDocType(initialDocType);
+      setDescription('');
+      setRuleCategory(selectedCategory || 'Vendor Payment Workflows');
+      setTargetWorkflowId(initialTarget);
+      setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
+      setMatchType('ALL');
+      setConditions([
+        { field: 'Invoice Amount (Total)', operator: 'greater than', value: '100000' }
+      ]);
+    }
+  };
+
+  // Condition rows manipulation
+  const handleFieldChange = (index, newField) => {
+    if (newField === '__ADD_NEW_FIELD__') {
+      setAddFieldTargetIdx(index);
+      setNewFieldNameInput('');
+      setNewFieldTypeInput('text');
+      setShowAddFieldModal(true);
+      return;
+    }
+    const meta = getFieldMeta(newField);
+    const validOps = OPERATORS_BY_TYPE[meta.type] || OPERATORS_BY_TYPE.text;
+    const defaultOp = validOps[0].value;
+
+    let initialVal = '';
+    if (meta.type === 'number') initialVal = '50000';
+    else if (newField === 'Division') initialVal = 'VCC';
+    else if (newField === 'Category') initialVal = 'CAPEX / FIXED ASSET';
+    else if (newField === 'Branch') initialVal = 'TN-SIVAKASI';
+    else if (newField === 'Document Type') initialVal = docType || 'AP Invoice';
+    else if (newField === 'Payment Mode') initialVal = 'NEFT';
+
+    const updated = [...conditions];
+    updated[index] = {
+      field: newField,
+      operator: defaultOp,
+      value: initialVal
+    };
+    setConditions(updated);
+
+    if (validationErrors[`row_${index}`]) {
+      const errs = { ...validationErrors };
+      delete errs[`row_${index}`];
+      setValidationErrors(errs);
+    }
+  };
+
+  const handleOperatorChange = (index, newOp) => {
+    const updated = [...conditions];
+    const prevOp = updated[index].operator;
+    updated[index].operator = newOp;
+
+    const isNowMulti = newOp === 'is one of' || newOp === 'is not one of';
+    const wasMulti = prevOp === 'is one of' || prevOp === 'is not one of';
+    if (isNowMulti && !wasMulti && updated[index].value && !updated[index].value.includes(',')) {
+      // keep single value
+    } else if (!isNowMulti && wasMulti && updated[index].value.includes(',')) {
+      updated[index].value = updated[index].value.split(',')[0].trim();
+    }
+
+    setConditions(updated);
+  };
+
+  const handleValueChange = (index, newVal) => {
+    const updated = [...conditions];
+    updated[index].value = newVal;
+    setConditions(updated);
+
+    if (validationErrors[`row_${index}`]) {
+      const errs = { ...validationErrors };
+      delete errs[`row_${index}`];
+      setValidationErrors(errs);
+    }
+  };
+
+  const handleAddCondition = () => {
+    if (conditions.length >= 10) return;
+    const defaultField = 'Category';
+    setConditions([
+      ...conditions,
+      { field: defaultField, operator: 'equals', value: '' }
+    ]);
+  };
+
+  const handleDeleteCondition = (index) => {
+    if (conditions.length <= 1) {
+      setConditions([{ field: 'Invoice Amount (Total)', operator: 'greater than', value: '' }]);
+      return;
+    }
+    const updated = conditions.filter((_, i) => i !== index);
+    setConditions(updated);
+  };
+
+  const handleClearAll = () => {
+    if (conditions.length > 1) {
+      setShowClearConfirm(true);
+    } else {
+      setConditions([{ field: 'Invoice Amount (Total)', operator: 'greater than', value: '' }]);
+    }
+  };
+
+  const confirmClearAll = () => {
+    setConditions([{ field: 'Invoice Amount (Total)', operator: 'greater than', value: '' }]);
+    setShowClearConfirm(false);
+  };
+
+  // Dynamic Rule Preview Generator
+  const previewData = useMemo(() => {
+    const issues = [];
+    if (!ruleName.trim()) issues.push('Condition Name');
+    if (!docType.trim()) issues.push('Document Type');
+    if (!targetWorkflowId) issues.push('Target Workflow');
+
+    if (conditions.length === 0) {
+      issues.push('At least one condition');
+    } else {
+      conditions.forEach((c, idx) => {
+        if (!c.field) issues.push(`Row ${idx + 1} field`);
+        if (!c.operator) issues.push(`Row ${idx + 1} operator`);
+        if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+          issues.push(`Row ${idx + 1} value`);
+        }
+      });
+    }
+
+    const isComplete = issues.length === 0;
+
+    const formattedConditions = conditions.map((c) => {
+      const meta = getFieldMeta(c.field);
+      let opDisplay = c.operator;
+      const opObj = (OPERATORS_BY_TYPE[meta.type] || []).find(o => o.value === c.operator);
+      if (opObj) opDisplay = opObj.label.toLowerCase();
+
+      let valDisplay = c.value || '...';
+      if (meta.isCurrency && c.value && !isNaN(Number(c.value))) {
+        valDisplay = `₹${Number(c.value).toLocaleString('en-IN')}`;
+      } else if (c.operator === 'is one of' || c.operator === 'is not one of') {
+        valDisplay = `(${c.value})`;
+      }
+
+      return {
+        fieldLabel: meta.label || c.field,
+        operatorLabel: opDisplay,
+        valueLabel: valDisplay
       };
-    }
-    const matchedWf = workflows.find(w => w.profile_name === targetRule.target_workflow_id || w.workflow_code === targetRule.target_workflow_id);
-    if (matchedWf) {
-      targetRule.rule_name = matchedWf.profile_name;
-    }
-    setWfCategoryFilter(matchedWf?.workflow_category || 'ALL');
-    setEditingRule(targetRule);
-  };
+    });
 
-  const handleDelete = (id) => {
-    setDeleteConfirmTarget(id);
-  };
+    return {
+      isComplete,
+      issues,
+      formattedConditions,
+      targetWorkflowName: selectedWorkflowObj?.profile_name || targetWorkflowId || 'Selected Workflow',
+      workflowCode: workflowCode || 'WF-001'
+    };
+  }, [ruleName, docType, targetWorkflowId, conditions, selectedWorkflowObj, workflowCode]);
 
-  const confirmDelete = () => {
-    if (!deleteConfirmTarget) return;
-    if (handleDeleteRuleLocal) {
-      handleDeleteRuleLocal(deleteConfirmTarget);
+  // Validation
+  const validateForm = () => {
+    const errors = {};
+    if (!ruleName.trim()) errors.ruleName = 'Condition Name is required.';
+    if (!docType.trim()) errors.docType = 'Document Type is required.';
+    if (!targetWorkflowId) errors.targetWorkflowId = 'Target Workflow is required.';
+
+    if (conditions.length === 0) {
+      errors.conditions = 'At least one condition rule row is required.';
     } else {
-      setRules(rules.filter(r => r.id !== deleteConfirmTarget));
+      conditions.forEach((c, idx) => {
+        if (!c.field) errors[`row_${idx}`] = 'Field selection is required.';
+        else if (!c.operator) errors[`row_${idx}`] = 'Operator selection is required.';
+        else if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+          errors[`row_${idx}`] = 'Value cannot be empty.';
+        } else {
+          const meta = getFieldMeta(c.field);
+          if (meta.type === 'number') {
+            const cleanNum = String(c.value).replace(/,/g, '').trim();
+            if (isNaN(Number(cleanNum)) || cleanNum === '') {
+              errors[`row_${idx}`] = 'Value must be a valid number.';
+            }
+          }
+        }
+      });
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Save Condition Handler
+  const handleSaveCondition = async (e) => {
+    e?.preventDefault();
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const logicalOp = matchType === 'ANY' ? 'OR' : 'AND';
+      const formattedConditions = conditions.map((c) => ({
+        field: c.field,
+        operator: c.operator,
+        value: c.value,
+        logicalOperator: logicalOp
+      }));
+
+      const conditionsPayload = {
+        match_type: matchType,
+        condition_type: 'Combination Condition',
+        conditions: formattedConditions,
+        settings: {
+          case_sensitive: false,
+          null_handling: 'Consider as False'
+        }
+      };
+
+      const isNew = String(editingRule.id).startsWith('tmp-') || editingRule.is_new;
+      const rulePayload = {
+        id: isNew ? undefined : editingRule.id,
+        rule_name: ruleName.trim(),
+        rule_category: ruleCategory || 'Vendor Payment Workflows',
+        document_type: docType || 'AP Invoice',
+        priority: editingRule.priority || (rules.length + 1) * 10,
+        target_workflow_id: targetWorkflowId,
+        workflow_code: workflowCode,
+        description: description.trim(),
+        rule_action: editingRule.rule_action || 'WORKFLOW_ROUTE',
+        cancel_reason: editingRule.cancel_reason || null,
+        is_active: editingRule.is_active !== undefined ? editingRule.is_active : true,
+        conditions_json: JSON.stringify(conditionsPayload)
+      };
+
+      const token = localStorage.getItem("authToken");
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+
+      const res = await fetch('/api/admin/routing-rules', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(rulePayload)
+      });
+
+      if (res.ok) {
+        const savedData = await res.json();
+        if (isNew) {
+          setRules([...rules.filter(r => r.id !== editingRule.id), savedData]);
+        } else {
+          setRules(rules.map(r => r.id === editingRule.id ? savedData : r));
+        }
+      } else {
+        const fallbackObj = {
+          ...editingRule,
+          ...rulePayload,
+          id: editingRule.id || `tmp-${Date.now()}`
+        };
+        if (isNew) {
+          setRules([...rules.filter(r => r.id !== editingRule.id), fallbackObj]);
+        } else {
+          setRules(rules.map(r => r.id === editingRule.id ? fallbackObj : r));
+        }
+      }
+
       setHasChanges(true);
+      const savedName = ruleName.trim();
+      const savedTarget = targetWorkflowId;
+      setEditingRule(null);
+      setSavedConditionSuccessModal({
+        rule_name: savedName,
+        target_workflow_id: savedTarget
+      });
+    } catch (err) {
+      console.error("Save error:", err);
+      const fallbackObj = {
+        ...editingRule,
+        rule_name: ruleName.trim(),
+        rule_category: ruleCategory,
+        document_type: docType,
+        target_workflow_id: targetWorkflowId,
+        description: description.trim(),
+        conditions_json: JSON.stringify({
+          match_type: matchType,
+          conditions: conditions.map(c => ({ ...c, logicalOperator: matchType === 'ANY' ? 'OR' : 'AND' }))
+        })
+      };
+      setRules(rules.map(r => r.id === editingRule.id ? fallbackObj : r));
+      setHasChanges(true);
+      const savedName = ruleName.trim();
+      const savedTarget = targetWorkflowId;
+      setEditingRule(null);
+      setSavedConditionSuccessModal({
+        rule_name: savedName,
+        target_workflow_id: savedTarget
+      });
+    } finally {
+      setIsSaving(false);
     }
-    setDeleteConfirmTarget(null);
   };
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    if (String(editingRule.id).startsWith('tmp-')) {
-      setRules([...rules, editingRule]);
-    } else {
-      setRules(rules.map(r => r.id === editingRule.id ? editingRule : r));
-    }
-    setHasChanges(true);
+  const handleCancel = () => {
     setEditingRule(null);
   };
 
-  // Group rules by workflow_type (Category)
-  const DOC_TYPE_ORDER = [
-    "CAPEX / FIXED ASSET",
-    "PURCHASE INVOICE",
-    "SERVICE & MAINTENANCE",
-    "FREIGHT & LOGISTICS",
-    "UTILITY & RENT",
-    "STAFF & HR EXPENSE",
-    "GRN / GOODS RECEIPT",
-    "ADVANCE VOUCHER",
-    "CASH VOUCHER",
-    "E-VOUCHER",
-    "JOURNAL VOUCHER",
-    "ACCOUNTS PAYABLE (AP)",
-    "AP INVOICE",
-    "AP DEBIT NOTE",
-    "AR CREDITNOTE",
-    "PROJECT BUDGET",
-    "NON - RETURNABLE"
-  ];
+  const workflowCategories = useMemo(() => {
+    const set = new Set(workflows.map(w => w.workflow_category).filter(Boolean));
+    return Array.from(set).sort();
+  }, [workflows]);
 
-  const groupedRules = rules.reduce((acc, r) => {
-    const category = r.rule_category || 'Vendor Payment Workflows';
-    
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(r);
-    return acc;
-  }, {});
+  // =========================================================================
+  // VIEW 1: ONE-PAGE WORKFLOW CONDITION BUILDER (COMPACT TYPOGRAPHY & SIZING)
+  // =========================================================================
+  if (editingRule) {
+    return (
+      <div className="flex flex-col gap-3.5 max-w-4xl mx-auto w-full pb-10 animate-in fade-in duration-150">
+        
+        {/* 1. HEADER (Compact) */}
+        <div className="bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <div 
+                onClick={handleCancel}
+                className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#003F28] hover:text-emerald-900 cursor-pointer transition-colors mb-0.5 group"
+              >
+                <ArrowLeft className="h-2.5 w-2.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>POLICY MATRIX</span>
+                <span className="text-slate-300 font-normal">&gt;</span>
+                <span className="text-slate-500">CONFIGURE CONDITION</span>
+              </div>
+              <h1 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>Configure Condition</span>
+                {editingRule.is_new ? (
+                  <span className="text-[8.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                    New
+                  </span>
+                ) : (
+                  <span className="text-[8.5px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                    Editing
+                  </span>
+                )}
+              </h1>
+              <p className="text-[10px] text-slate-500 font-medium">
+                Define conditions to determine the workflow assigned to matching synced documents.
+              </p>
+            </div>
 
-  if (!editingRule) {
-    // LEVEL 1: Render Categories
-    if (!selectedCategory) {
-      return (
-        <div className="flex flex-col gap-4 mt-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...new Set([...Object.keys(groupedRules), ...addedCategories])].map(category => {
-              const ruleCount = groupedRules[category] ? groupedRules[category].length : 0;
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] rounded-md transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCondition}
+                disabled={isSaving}
+                className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="h-3 w-3" />
+                <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. CONDITION DETAILS (Compact) */}
+        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
+                1
+              </div>
+              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
+                Condition Details
+              </h2>
+            </div>
+            <span className="text-[9px] font-bold text-slate-400 uppercase">Core Information</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {/* Condition Name */}
+            <div>
+              <label htmlFor="condNameInput" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Condition Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="condNameInput"
+                type="text"
+                value={ruleName}
+                onChange={e => {
+                  setRuleName(e.target.value);
+                  if (validationErrors.ruleName) {
+                    const errs = { ...validationErrors };
+                    delete errs.ruleName;
+                    setValidationErrors(errs);
+                  }
+                }}
+                placeholder="e.g. High Value Machinery Purchase Approval"
+                className={`w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border rounded-md outline-none font-semibold text-slate-800 transition-colors ${
+                  validationErrors.ruleName 
+                    ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
+                    : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                }`}
+              />
+              {validationErrors.ruleName && (
+                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.ruleName}
+                </p>
+              )}
+            </div>
+
+            {/* Document Type */}
+            <div>
+              <label htmlFor="docTypeSelect" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Document Type <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="docTypeSelect"
+                  value={docType}
+                  onChange={e => {
+                    setDocType(e.target.value);
+                    if (validationErrors.docType) {
+                      const errs = { ...validationErrors };
+                      delete errs.docType;
+                      setValidationErrors(errs);
+                    }
+                  }}
+                  className={`w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border rounded-md outline-none font-semibold text-slate-800 appearance-none transition-colors cursor-pointer ${
+                    validationErrors.docType 
+                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
+                      : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                  }`}
+                >
+                  <option value="">-- Select Document Type --</option>
+                  {STANDARD_DOC_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              </div>
+              {validationErrors.docType && (
+                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.docType}
+                </p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="md:col-span-2">
+              <label htmlFor="condDescInput" className="block text-[9.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Description <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                id="condDescInput"
+                type="text"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Brief summary of when this condition triggers and business justification..."
+                className="w-full text-[11px] px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-md outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* 3. WORKFLOW ASSIGNMENT (Compact) */}
+        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
+                2
+              </div>
+              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
+                Workflow Assignment
+              </h2>
+            </div>
+            <span className="text-[9px] font-bold text-slate-400 uppercase">Routing Destination</span>
+          </div>
+
+          <p className="text-[10px] text-slate-500 font-medium">
+            This section determines which workflow receives a document when this condition matches.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-slate-50/60 border border-slate-200/70 p-2.5 rounded-lg">
+            {/* Document Category Filter */}
+            <div>
+              <label htmlFor="wfCategorySelect" className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Document Category
+              </label>
+              <div className="relative">
+                <select
+                  id="wfCategorySelect"
+                  value={wfCategoryFilter}
+                  onChange={e => setWfCategoryFilter(e.target.value)}
+                  className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
+                >
+                  <option value="ALL">All Categories ({workflows.length})</option>
+                  {workflowCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Target Workflow */}
+            <div>
+              <label htmlFor="targetWfSelect" className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Target Workflow <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="targetWfSelect"
+                  value={targetWorkflowId}
+                  onChange={e => {
+                    const newWf = e.target.value;
+                    setTargetWorkflowId(newWf);
+                    const matched = workflows.find(w => w.profile_name === newWf || w.workflow_code === newWf);
+                    if (matched && !ruleName.trim()) {
+                      setRuleName(matched.profile_name);
+                    }
+                    if (validationErrors.targetWorkflowId) {
+                      const errs = { ...validationErrors };
+                      delete errs.targetWorkflowId;
+                      setValidationErrors(errs);
+                    }
+                  }}
+                  className={`w-full text-[11px] px-2.5 py-1.5 bg-white border rounded-md outline-none font-bold appearance-none cursor-pointer shadow-2xs transition-colors ${
+                    validationErrors.targetWorkflowId
+                      ? 'border-rose-400 text-rose-900 focus:border-rose-500'
+                      : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
+                  }`}
+                >
+                  <option value="">-- Select Workflow --</option>
+                  {workflows
+                    .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
+                    .map(w => (
+                      <option key={w.profile_name} value={w.profile_name}>
+                        [{w.workflow_code || 'WF-001'}] {w.profile_name}
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              </div>
+              {validationErrors.targetWorkflowId && (
+                <p className="text-[9.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                  <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.targetWorkflowId}
+                </p>
+              )}
+            </div>
+
+            {/* Workflow Code (Read-only / Auto-populated) */}
+            <div>
+              <label className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider mb-1">
+                Workflow Code
+              </label>
+              <div className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md font-mono font-bold flex items-center justify-between shadow-2xs">
+                <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
+                  {workflowCode || 'Derived'}
+                </span>
+                {workflowCode && (
+                  <span className="text-[8.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                    <CheckCircle2 className="h-2 w-2" /> Linked
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. MATCH CONDITIONS (Compact) */}
+        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
+                3
+              </div>
+              <div>
+                <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
+                  Match Conditions
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Define the synced document data that must match before this workflow is assigned.
+                </p>
+              </div>
+            </div>
+
+            {/* Match Logic Selector: ALL vs ANY */}
+            <div className="flex items-center gap-2 bg-slate-100/80 p-0.5 rounded-md border border-slate-200 self-start sm:self-auto">
+              <span className="text-[9px] font-bold text-slate-500 uppercase px-1">Match:</span>
+              <label className={`flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                matchType === 'ALL' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}>
+                <input
+                  type="radio"
+                  name="matchType"
+                  checked={matchType === 'ALL'}
+                  onChange={() => setMatchType('ALL')}
+                  className="accent-[#003F28] h-3 w-3"
+                />
+                <span>ALL conditions</span>
+              </label>
+              <label className={`flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                matchType === 'ANY' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}>
+                <input
+                  type="radio"
+                  name="matchType"
+                  checked={matchType === 'ANY'}
+                  onChange={() => setMatchType('ANY')}
+                  className="accent-[#003F28] h-3 w-3"
+                />
+                <span>ANY condition</span>
+              </label>
+            </div>
+          </div>
+
+          {validationErrors.conditions && (
+            <div className="p-2 bg-rose-50 border border-rose-200 rounded-md text-[10.5px] font-bold text-rose-700 flex items-center gap-1.5">
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              <span>{validationErrors.conditions}</span>
+            </div>
+          )}
+
+          {/* Condition Rows List */}
+          <div className="space-y-2 pt-0.5">
+            {conditions.map((cond, idx) => {
+              const fieldMeta = getFieldMeta(cond.field);
+              const fieldType = fieldMeta.type || 'text';
+              const validOperators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.text;
+              const masterOptions = getFieldMasterOptions(cond.field);
+              const isMultiSelect = cond.operator === 'is one of' || cond.operator === 'is not one of';
+              const rowError = validationErrors[`row_${idx}`];
+
+              const selectedItems = cond.value 
+                ? cond.value.split(',').map(s => s.trim()).filter(Boolean) 
+                : [];
+
               return (
-                <div key={category} onClick={() => setSelectedCategory(category)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-700 group-hover:text-white transition-colors">
-                      <Network className="h-4 w-4" />
+                <div 
+                  key={idx} 
+                  className={`flex flex-col gap-1.5 p-2.5 rounded-lg border transition-all ${
+                    rowError 
+                      ? 'bg-rose-50/20 border-rose-300' 
+                      : 'bg-slate-50/70 border-slate-200/80 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  {/* Logical Operator Badge */}
+                  {idx > 0 && (
+                    <div className="self-start -mt-1 mb-0.5">
+                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded border tracking-wider ${
+                        matchType === 'ANY' 
+                          ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      }`}>
+                        {matchType === 'ANY' ? 'OR' : 'AND'}
+                      </span>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-xs tracking-wide group-hover:text-emerald-700 transition-colors">{category}</h3>
-                      <p className="text-[10px] font-bold text-slate-500 mt-0.5">{ruleCount} Conditions</p>
+                  )}
+
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
+                    {/* 1. Field Dropdown */}
+                    <div className="w-full md:w-52 shrink-0">
+                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
+                        Field
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={cond.field}
+                          onChange={e => handleFieldChange(idx, e.target.value)}
+                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
+                        >
+                          <optgroup label="SYNCED DOCUMENT FIELDS">
+                            {DEFAULT_CONDITION_FIELDS.map(f => (
+                              <option key={f.id} value={f.id}>{f.label}</option>
+                            ))}
+                          </optgroup>
+                          {availableFields.length > DEFAULT_CONDITION_FIELDS.length && (
+                            <optgroup label="CUSTOM FIELDS">
+                              {availableFields.slice(DEFAULT_CONDITION_FIELDS.length).map(f => (
+                                <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <optgroup label="ACTIONS">
+                            <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
+                          </optgroup>
+                        </select>
+                        <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* 2. Operator Dropdown */}
+                    <div className="w-full md:w-44 shrink-0">
+                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
+                        Operator
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={cond.operator}
+                          onChange={e => handleOperatorChange(idx, e.target.value)}
+                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
+                        >
+                          {validOperators.map(op => (
+                            <option key={op.value} value={op.value}>{op.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* 3. Value Control */}
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[8.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-0.5 md:hidden">
+                        Value / Target
+                      </label>
+                      
+                      {/* NUMBER INPUT */}
+                      {fieldType === 'number' && (
+                        <div className="relative">
+                          {fieldMeta.isCurrency && (
+                            <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-slate-400 pointer-events-none">
+                              ₹
+                            </span>
+                          )}
+                          <input
+                            type="number"
+                            step="any"
+                            value={cond.value}
+                            onChange={e => handleValueChange(idx, e.target.value)}
+                            placeholder={fieldMeta.isCurrency ? "100000" : "0"}
+                            className={`w-full text-[11px] py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs ${
+                              fieldMeta.isCurrency ? 'pl-6 pr-2.5' : 'px-2.5'
+                            }`}
+                          />
+                        </div>
+                      )}
+
+                      {/* DATE INPUT */}
+                      {fieldType === 'date' && (
+                        <input
+                          type="date"
+                          value={cond.value}
+                          onChange={e => handleValueChange(idx, e.target.value)}
+                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
+                        />
+                      )}
+
+                      {/* BOOLEAN SELECT */}
+                      {fieldType === 'boolean' && (
+                        <div className="relative">
+                          <select
+                            value={cond.value}
+                            onChange={e => handleValueChange(idx, e.target.value)}
+                            className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer shadow-2xs"
+                          >
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                          </select>
+                          <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                        </div>
+                      )}
+
+                      {/* SELECT DROPDOWN / MULTI-SELECT */}
+                      {fieldType === 'select' && (
+                        <div>
+                          {isMultiSelect ? (
+                            <div className="relative">
+                              <div
+                                onClick={() => {
+                                  setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx);
+                                  setMultiSelectSearch('');
+                                  setCustomTagInput('');
+                                }}
+                                className="w-full min-h-[32px] p-1 bg-white border border-slate-200 hover:border-[#003F28] rounded-md cursor-pointer flex items-center justify-between gap-1.5 shadow-2xs transition-colors"
+                              >
+                                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                                  {selectedItems.length > 0 ? (
+                                    selectedItems.map((item, itIdx) => (
+                                      <span
+                                        key={itIdx}
+                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold rounded"
+                                      >
+                                        <span>{item}</span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const updated = selectedItems.filter((_, i) => i !== itIdx);
+                                            handleValueChange(idx, updated.join(', '));
+                                          }}
+                                          className="text-emerald-500 hover:text-rose-600 font-black cursor-pointer ml-0.5"
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 font-medium px-1 italic">
+                                      Select {cond.field}...
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[9px] font-bold text-[#003F28] shrink-0 bg-emerald-50/70 px-1.5 py-0.2 rounded border border-emerald-100">
+                                  {selectedItems.length} ▼
+                                </span>
+                              </div>
+
+                              {activeMultiSelectIdx === idx && (
+                                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-2 space-y-2 animate-in fade-in duration-100 max-h-60 overflow-y-auto">
+                                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                                    <span className="text-[9px] font-extrabold uppercase text-slate-600">
+                                      Select {cond.field}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveMultiSelectIdx(null)}
+                                      className="text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+
+                                  <div className="relative">
+                                    <Search className="h-3 w-3 text-slate-400 absolute left-2 top-2" />
+                                    <input
+                                      type="text"
+                                      value={multiSelectSearch}
+                                      onChange={e => setMultiSelectSearch(e.target.value)}
+                                      placeholder={`Filter...`}
+                                      className="w-full text-[10.5px] pl-7 pr-2 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:bg-white focus:border-[#003F28]"
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-1">
+                                    <input
+                                      type="text"
+                                      value={customTagInput}
+                                      onChange={e => setCustomTagInput(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const val = customTagInput.trim();
+                                          if (val && !selectedItems.includes(val)) {
+                                            const updated = [...selectedItems, val];
+                                            handleValueChange(idx, updated.join(', '));
+                                            setCustomTagInput('');
+                                          }
+                                        }
+                                      }}
+                                      placeholder="Custom value..."
+                                      className="flex-1 text-[10.5px] px-2 py-1 border border-slate-200 rounded outline-none focus:border-[#003F28]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const val = customTagInput.trim();
+                                        if (val && !selectedItems.includes(val)) {
+                                          const updated = [...selectedItems, val];
+                                          handleValueChange(idx, updated.join(', '));
+                                          setCustomTagInput('');
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-[#003F28] text-white text-[9px] font-bold rounded hover:bg-[#003220]"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+
+                                  <div className="max-h-36 overflow-y-auto space-y-0.5 border border-slate-100 rounded p-1">
+                                    {masterOptions
+                                      .filter(opt => !multiSelectSearch || opt.toLowerCase().includes(multiSelectSearch.toLowerCase()))
+                                      .map(opt => {
+                                        const isChecked = selectedItems.includes(opt);
+                                        return (
+                                          <label
+                                            key={opt}
+                                            className={`flex items-center justify-between px-1.5 py-1 text-[10.5px] rounded cursor-pointer transition-colors ${
+                                              isChecked ? 'bg-emerald-50 text-emerald-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                            }`}
+                                          >
+                                            <span className="truncate mr-2">{opt}</span>
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={() => {
+                                                let updated;
+                                                if (isChecked) {
+                                                  updated = selectedItems.filter(x => x !== opt);
+                                                } else {
+                                                  updated = [...selectedItems, opt];
+                                                }
+                                                handleValueChange(idx, updated.join(', '));
+                                              }}
+                                              className="rounded text-[#003F28] focus:ring-[#003F28] h-3 w-3 cursor-pointer"
+                                            />
+                                          </label>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <input
+                                type="text"
+                                list={`list-${idx}-${cond.field}`}
+                                value={cond.value}
+                                onChange={e => handleValueChange(idx, e.target.value)}
+                                placeholder={`Select or type ${cond.field}...`}
+                                className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
+                              />
+                              <datalist id={`list-${idx}-${cond.field}`}>
+                                {masterOptions.map((opt, oIdx) => (
+                                  <option key={oIdx} value={opt} />
+                                ))}
+                              </datalist>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* GENERIC TEXT INPUT */}
+                      {fieldType === 'text' && (
+                        <input
+                          type="text"
+                          value={cond.value}
+                          onChange={e => handleValueChange(idx, e.target.value)}
+                          placeholder={`Enter ${cond.field}...`}
+                          className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] shadow-2xs"
+                        />
+                      )}
+                    </div>
+
+                    {/* 4. Delete Row Button */}
+                    <div className="shrink-0 self-end md:self-center">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCondition(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-md transition-colors cursor-pointer shadow-2xs"
+                        title="Delete this condition row"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget(category); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-60 group-hover:opacity-100" title="Delete Category">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                    <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                  </div>
+
+                  {rowError && (
+                    <p className="text-[9.5px] font-bold text-rose-600 pl-1 flex items-center gap-1">
+                      <AlertTriangle className="h-2.5 w-2.5" /> {rowError}
+                    </p>
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {/* ADD CATEGORY MODAL */}
-          {showAddModal && (
-            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                  <h3 className="font-black text-slate-800 text-sm tracking-wide">Add New Category</h3>
-                  <button aria-label="Close" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <form onSubmit={confirmAddCategory} className="p-6">
-                  <label htmlFor="categoryName" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Category Name</label>
-                  <input 
-                    id="categoryName"
-                    type="text"
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    placeholder="e.g. Payroll"
-                    autoFocus
-                    className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 outline-none mb-6"
-                  />
-                  <div className="flex justify-end gap-3">
-                    <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-md transition-colors">Cancel</button>
-                    <button type="submit" disabled={!newCategoryName.trim()} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md shadow-sm transition-colors disabled:opacity-50">Add Category</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-          
-          {/* DELETE CATEGORY MODAL */}
-          {deleteCategoryTarget && (
-            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-xs overflow-hidden scale-in">
-                <div className="p-5 flex flex-col items-center text-center">
-                  <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-3">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-black text-slate-900 text-base mb-1.5">Delete Category</h3>
-                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">Are you sure you want to delete <strong className="text-slate-800">{deleteCategoryTarget}</strong> and all its conditions? This action cannot be undone.</p>
-                  <div className="flex w-full gap-2.5">
-                    <button type="button" onClick={() => setDeleteCategoryTarget(null)} className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">Cancel</button>
-                    <button type="button" onClick={() => {
-                      const rulesToDelete = rules.filter(r => r.rule_category === deleteCategoryTarget);
-                      rulesToDelete.forEach(r => handleDeleteRuleLocal(r.id));
-                      
-                      setAddedCategories(addedCategories.filter(c => c !== deleteCategoryTarget));
-                      setHasChanges(true);
-                      setDeleteCategoryTarget(null);
-                    }} className="flex-1 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Delete</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="condition-builder-green-theme flex flex-col gap-4 mt-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
-          <div className="flex items-center gap-4">
-            <button aria-label="Back" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
-              <ArrowRight className="h-3 w-3 rotate-180" />
+          {/* Add Condition & Clear Actions */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleAddCondition}
+              disabled={conditions.length >= 10}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 text-[#003F28] font-bold text-[10.5px] rounded-md transition-colors shadow-2xs cursor-pointer"
+            >
+              <Plus className="h-3 w-3" />
+              <span>Add Condition ({conditions.length}/10)</span>
             </button>
-            <div>
-              <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-                {selectedCategory} {selectedSubCategory ? <><span className="text-slate-300">/</span> <span className="text-blue-600">{selectedSubCategory}</span></> : <><span className="text-slate-300">/</span> <span className="text-blue-600">Doc Types</span></>}
+
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 text-slate-600 font-bold text-[10.5px] rounded-md transition-colors shadow-2xs cursor-pointer"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>Clear All</span>
+            </button>
+          </div>
+        </section>
+
+        {/* 5. RULE PREVIEW (Compact) */}
+        <section className="bg-white border border-slate-200/80 rounded-lg p-3.5 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[10px]">
+                4
+              </div>
+              <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-800">
+                Rule Preview
               </h2>
-              <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                {selectedSubCategory ? `Manage routing logic for ${selectedSubCategory}` : `Select a document type folder to view its conditions.`}
-              </p>
             </div>
+            <span className="text-[9px] font-bold text-slate-400 uppercase">Live Evaluation</span>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search conditions..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full text-xs pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
-              />
-            </div>
-            <button onClick={() => openEditor(null, selectedSubCategory || 'Invoice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wide rounded-md transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0">
-              <Plus className="h-3 w-3" /> Create Condition
-            </button>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-8">
-          {!selectedSubCategory ? (
-            // LEVEL 2: Render SubCategories (Document Types)
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries((groupedRules[selectedCategory] || [])
-                .reduce((acc, r) => {
-                  const subCat = r.document_type || 'Other Conditions';
-                  if (!acc[subCat]) acc[subCat] = [];
-                  acc[subCat].push(r);
-                  return acc;
-                }, {}))
-                .sort(([subCatA], [subCatB]) => {
-                  let idxA = DOC_TYPE_ORDER.indexOf(subCatA.toUpperCase());
-                  let idxB = DOC_TYPE_ORDER.indexOf(subCatB.toUpperCase());
-                  if (idxA === -1) idxA = 999;
-                  if (idxB === -1) idxB = 999;
-                  if (idxA === idxB) return subCatA.localeCompare(subCatB);
-                  return idxA - idxB;
-                })
-                .filter(([subCategoryName]) => subCategoryName.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(([subCategoryName, subCategoryRules]) => (
-                  <button key={subCategoryName} onClick={() => { setSelectedSubCategory(subCategoryName); setSearchQuery(''); }} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded bg-blue-50/80 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        <Network className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-700 text-xs tracking-wide group-hover:text-blue-700 transition-colors">{subCategoryName}</h3>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">{subCategoryRules.length}</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                    </div>
-                  </button>
-                ))}
-
-            </div>
-          ) : (
-            // LEVEL 3: Render Conditions
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(groupedRules[selectedCategory] || [])
-                .filter(r => {
-                  const subCat = r.document_type || 'Other Conditions';
-                  return subCat === selectedSubCategory;
-                })
-                .filter(r => (r.rule_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-                .sort((a,b)=> {
-                   if (a.priority !== b.priority) return a.priority - b.priority;
-                   const wfA = workflows.find(w => w.id === a.target_workflow_id || w.profile_name === a.target_workflow_id);
-                   const wfB = workflows.find(w => w.id === b.target_workflow_id || w.profile_name === b.target_workflow_id);
-                   const targetA = wfA?.profile_name || a.target_workflow_id || '';
-                   const targetB = wfB?.profile_name || b.target_workflow_id || '';
-                   return targetA.localeCompare(targetB, undefined, { numeric: true });
-                }).map((r, index) => {
-                  let parsed = { conditions: [] };
-                  try { parsed = JSON.parse(r.conditions_json); } catch {}
-                  if (Array.isArray(parsed)) parsed = { conditions: parsed };
-
-                  const targetWf = workflows.find(w => w.id === r.target_workflow_id || w.profile_name === r.target_workflow_id);
-                  const targetName = targetWf ? targetWf.profile_name : (r.target_workflow_id || 'None');
-
-                  return (
-                    <div key={r.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col p-3 relative">
-                      <div className="absolute top-3 right-3">
-                        <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                          Priority {index + 1}
-                        </span>
-                      </div>
-
-                      <div className="pr-16 mb-1.5">
-                        <h3 className="font-bold text-slate-900 text-xs truncate" title={r.rule_name || 'Unnamed Rule'}>{r.rule_name || 'Unnamed Rule'}</h3>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 flex items-center gap-1.5 truncate">
-                          IF {parsed.conditions?.length || 0} CONDITION(S) <span className="text-slate-300">•</span> {r.document_type || 'Other'}
-                        </p>
-                      </div>
-                      
-                      <div className="mb-2 flex-1 flex flex-wrap gap-1">
-                        {(parsed.conditions || []).map((cond, ci) => {
-                          const opDisplay = (cond.operator || '').toLowerCase() === 'equals' ? '=' : 
-                                            (cond.operator || '').toLowerCase() === 'contains any of' ? '⊇ any' : 
-                                            (cond.operator || '').toLowerCase() === 'contains' ? '⊇' : 
-                                            (cond.operator || '').toLowerCase() === 'not equals' ? '≠' : cond.operator;
-                          return (
-                            <div key={ci} className="inline-flex items-center text-[8.5px] font-bold rounded-md overflow-hidden border border-slate-200 shadow-3xs bg-slate-50">
-                              <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 border-r border-slate-200 uppercase font-extrabold">{cond.field}</span>
-                              <span className="bg-slate-100 text-slate-500 px-1 py-0.5 border-r border-slate-200 font-mono text-[8px]">{opDisplay}</span>
-                              <span className="bg-white text-slate-700 px-1.5 py-0.5 truncate max-w-[130px]" title={cond.value}>{cond.value}</span>
-                            </div>
-                          );
-                        })}
-                        {r.description && (
-                          <p className="text-[9.5px] text-slate-400 mt-1 line-clamp-1 w-full italic">{r.description}</p>
-                        )}
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between mt-auto">
-                        <div className="flex items-center gap-1.5 text-slate-700 truncate pr-2">
-                          {r.rule_action === 'AUTO_APPROVE' ? (
-                            <span className="text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
-                              ⚡ STP AUTO-APPROVE
-                            </span>
-                          ) : r.rule_action === 'AUTO_CANCEL' ? (
-                            <span className="text-[9px] font-black bg-rose-600 text-white px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
-                              🚫 AUTO-CANCEL
-                            </span>
-                          ) : (
-                            <>
-                              <Network className="h-3 w-3 flex-shrink-0 text-blue-600" />
-                              <span className="text-[9.5px] font-mono font-black bg-blue-50 text-blue-700 border border-blue-200/80 px-1.5 py-0.2 rounded shrink-0">
-                                {targetWf?.workflow_code || 'WF-837'}
-                              </span>
-                              <span className="text-[10px] font-bold truncate" title={targetName}>
-                                {targetName}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
-                          <button type="button" aria-label="Edit Condition" onClick={() => openEditor(r)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="h-3.5 w-3.5" /></button>
-                          <button type="button" aria-label="Delete Condition" onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-
-            </div>
-          )}
-        </div>
-
-        {deleteConfirmTarget && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden scale-in">
-              <div className="p-6 flex flex-col items-center text-center">
-                <div className="h-12 w-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
-                  <AlertTriangle className="h-6 w-6" />
+          {previewData.isComplete ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 font-mono text-[10.5px]">
+              {/* IF BLOCK */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-[#003F28] text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
+                    IF
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 font-sans">
+                    Synced document matches ({matchType === 'ANY' ? 'any condition' : 'all conditions'}):
+                  </span>
                 </div>
-                <h3 className="font-black text-slate-900 text-lg mb-2">Delete Condition</h3>
-                <p className="text-sm text-slate-500 mb-6">Are you sure you want to delete this condition? This action cannot be undone.</p>
-                <div className="flex w-full gap-3">
-                  <button type="button" onClick={() => setDeleteConfirmTarget(null)} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">Cancel</button>
-                  <button type="button" onClick={confirmDelete} className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">Delete</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
-  // EDIT VIEW (The Mockup)
-  let parsedJson = { conditions: [], settings: {} };
-  try {
-    parsedJson = JSON.parse(editingRule.conditions_json);
-    if (Array.isArray(parsedJson)) {
-      parsedJson = { conditions: parsedJson, settings: {} };
-    }
-  } catch {}
-  
-  const updateJson = (updates) => {
-    const newJson = { ...parsedJson, ...updates };
-    setEditingRule({ ...editingRule, conditions_json: JSON.stringify(newJson) });
-  };
-
-  const getNormalizedOp = (op) => {
-    const o = (op || '').toLowerCase().trim();
-    if (o === 'equals' || o === '=') return 'equals';
-    if (o === 'contains any of' || o === 'in' || o === 'any') return 'contains any of';
-    if (o === 'contains') return 'contains';
-    if (o === 'not equals' || o === '!=') return 'not equals';
-    if (o === 'greater than' || o === 'gt' || o === '>') return 'gt';
-    if (o === 'less than' || o === 'lt' || o === '<') return 'lt';
-    return op || 'equals';
-  };
-
-  return (
-    <form onSubmit={handleSave} className="condition-builder-green-theme flex flex-col gap-1.5 bg-slate-50 h-full rounded-xl border border-slate-200/60 shadow-sm p-4 sm:p-5 overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-col shrink-0 z-10 bg-slate-50 pb-1 -mx-4 -mt-4 px-4 pt-1.5 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-2 border-b border-slate-200/60 shadow-sm mb-0">
-        <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors" onClick={() => setEditingRule(null)}>
-          Policy Matrix <span className="text-slate-300">&gt;</span> Configure Condition
-        </div>
-        <div className="flex justify-between items-center mt-0">
-          <div>
-            <h1 className="text-sm font-black text-slate-900 tracking-tight">Configure Condition</h1>
-            <p className="text-[8px] font-semibold text-slate-500 mt-0">Define conditions to determine workflow path based on {selectedSubCategory?.toLowerCase() || 'document'} data.</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setEditingRule(null)} className="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 font-bold text-[8px] uppercase tracking-wide rounded hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
-            <button type="submit" className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[8px] uppercase tracking-wide rounded transition-colors flex items-center gap-1.5 shadow-sm shadow-blue-500/20">
-              Save & Continue
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-4 items-start flex-1 min-h-0 overflow-hidden -mx-4 px-4 sm:-mx-5 sm:px-5">
-        {/* LEFT COLUMN: Main Form */}
-        <div className="flex-1 w-full flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-6">
-          
-          {/* SECTION 1 */}
-          <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)]">
-            <h3 className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">1. Condition Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="condName" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Condition Name <span className="text-rose-500">*</span></label>
-                <input id="condName" 
-                  value={editingRule.rule_name}
-                  onChange={e => setEditingRule({...editingRule, rule_name: e.target.value})}
-                  required
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="docType" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Document Type</label>
-                <input id="docType" 
-                  value={editingRule.document_type || ''}
-                  onChange={e => setEditingRule({...editingRule, document_type: e.target.value})}
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 outline-none bg-white"
-                  placeholder="e.g. AP INVOICE"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="condDesc" className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Description</label>
-                <input id="condDesc" 
-                  value={editingRule.description || ''}
-                  onChange={e => setEditingRule({...editingRule, description: e.target.value})}
-                  className="w-full text-xs p-2 border border-slate-200/70 rounded-md hover:border-slate-300 transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-600"
-                  placeholder="Rule for invoice approval based on condition..."
-                />
-              </div>
-
-              {/* TARGET WORKFLOW 3-WAY MAPPING BLOCK */}
-              {(() => {
-                const targetWfObj = workflows.find(w => w.profile_name === editingRule.target_workflow_id || w.workflow_code === editingRule.target_workflow_id);
-                const categories = Array.from(new Set(workflows.map(w => w.workflow_category).filter(Boolean)));
-                return (
-                  <div className="md:col-span-2 bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 mt-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <GitMerge className="h-3.5 w-3.5 text-blue-600" />
-                        <span className="text-[10px] font-black text-blue-950 uppercase tracking-wider">
-                          Target Workflow 3-Way Mapping (Category ➔ Workflow ➔ Code)
-                        </span>
-                      </div>
-                      {targetWfObj && (
-                        <span className="text-[9.5px] font-mono font-black bg-blue-600 text-white px-2 py-0.5 rounded shadow-2xs">
-                          Code: {targetWfObj.workflow_code || 'WF-837'}
+                <div className="pl-5 space-y-0.5">
+                  {previewData.formattedConditions.map((fc, i) => (
+                    <div key={i} className="flex flex-wrap items-center gap-1 text-slate-800">
+                      {i > 0 && (
+                        <span className={`text-[8.5px] font-black uppercase px-1 py-0.2 rounded ${
+                          matchType === 'ANY' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
+                        }`}>
+                          {matchType === 'ANY' ? 'OR' : 'AND'}
                         </span>
                       )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {/* 1. WORKFLOW CATEGORY */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          1. Target Workflow Category (Filter)
-                        </label>
-                        <select
-                          value={wfCategoryFilter}
-                          onChange={e => setWfCategoryFilter(e.target.value)}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-slate-800 focus:border-blue-500 outline-none shadow-2xs"
-                        >
-                          <option value="ALL">All Categories ({workflows.length})</option>
-                          {categories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 2. TARGET WORKFLOW PROFILE */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          2. Target Workflow Profile <span className="text-rose-500">*</span>
-                        </label>
-                        <select
-                          value={editingRule.target_workflow_id || ''}
-                          onChange={e => {
-                            const newTarget = e.target.value;
-                            const matchedWf = workflows.find(w => w.profile_name === newTarget || w.workflow_code === newTarget);
-                            const updatedName = matchedWf ? matchedWf.profile_name : newTarget;
-                            setEditingRule({ ...editingRule, target_workflow_id: newTarget, rule_name: updatedName });
-                          }}
-                          className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white font-bold text-blue-900 focus:border-blue-500 outline-none shadow-2xs"
-                        >
-                          <option value="">-- Select Target Workflow --</option>
-                          {workflows
-                            .filter(w => wfCategoryFilter === 'ALL' || w.workflow_category === wfCategoryFilter)
-                            .map(w => (
-                              <option key={w.profile_name} value={w.profile_name}>
-                                [{w.workflow_code || 'WF-837'}] {w.profile_name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-
-                      {/* 3. WORKFLOW CODE */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          3. Workflow Code (Mapped)
-                        </label>
-                        <div className="w-full text-xs p-2 border border-blue-200/80 rounded-lg bg-white font-mono font-black text-blue-700 flex items-center justify-between shadow-2xs">
-                          <span>{targetWfObj ? (targetWfObj.workflow_code || 'WF-837') : 'Unmapped'}</span>
-                          <span className="text-[8px] font-sans text-emerald-600 font-bold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">Linked</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="mt-3">
-              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Condition Type <span className="text-rose-500">*</span></label>
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700 cursor-pointer">
-                  <input type="radio" checked={parsedJson.condition_type !== 'Combination Condition'} onChange={() => updateJson({ condition_type: 'Single Condition' })} className="text-blue-600 h-3 w-3" />
-                  Single Condition
-                </label>
-                <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700 cursor-pointer">
-                  <input type="radio" checked={parsedJson.condition_type === 'Combination Condition'} onChange={() => updateJson({ condition_type: 'Combination Condition' })} className="text-blue-600 h-3 w-3" />
-                  Combination Condition
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 2 */}
-          <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)]">
-            <h3 className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">2. Set Condition</h3>
-            
-            <div className="flex flex-col gap-3">
-              {(parsedJson.conditions || []).map((c, idx) => (
-                <div key={idx} className="flex flex-col gap-2 relative border border-slate-100 p-3 rounded-lg bg-slate-50/50 group">
-                  {idx > 0 && (
-                    <div className="absolute -top-3 left-4 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs font-black uppercase flex items-center gap-1 shadow-sm">
-                      <select 
-                        value={c.logicalOperator || 'AND'}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].logicalOperator = e.target.value;
-                          updateJson({ conditions: newC });
-                        }}
-                        className="outline-none bg-transparent text-blue-600 cursor-pointer"
-                      >
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                      </select>
-                    </div>
-                  )}
-                  
-                  <div className="flex flex-col md:flex-row md:items-start gap-3 w-full">
-                    {/* Field Selector */}
-                    <div className="w-full md:w-52 shrink-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">Field <span className="text-rose-500">*</span></label>
-                        <button 
-                          type="button" 
-                          onClick={() => {
-                            setAddFieldTargetIdx(idx);
-                            setNewFieldNameInput('');
-                            setShowAddFieldModal(true);
-                          }}
-                          className="text-[9px] font-bold text-blue-600 hover:underline cursor-pointer"
-                          title="Add a custom field"
-                        >
-                          + New Field
-                        </button>
-                      </div>
-                      <select 
-                        value={c.field === 'Plant' ? 'Branch' : c.field}
-                        onChange={(e) => {
-                          if (e.target.value === '__ADD_NEW_FIELD__') {
-                            setAddFieldTargetIdx(idx);
-                            setNewFieldNameInput('');
-                            setShowAddFieldModal(true);
-                            return;
-                          }
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].field = e.target.value;
-                          if (e.target.value === 'Division') {
-                            newC[idx].operator = 'equals';
-                            newC[idx].value = 'VCC';
-                          } else if (e.target.value === 'Category') {
-                            newC[idx].operator = 'equals';
-                            newC[idx].value = 'ASSET WITH COST CENTER';
-                          } else if (e.target.value === 'Branch' || e.target.value === 'Plant') {
-                            newC[idx].operator = 'contains any of';
-                            newC[idx].value = 'TN-SIVAKASI';
-                          } else if (e.target.value === 'Cost Center') {
-                            newC[idx].operator = 'contains any of';
-                            newC[idx].value = 'BATTERY VEHICLE, CANTEEN MAINTENANCE';
-                          }
-                          updateJson({ conditions: newC });
-                        }}
-                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none bg-white font-semibold text-slate-800 focus:border-blue-500 shadow-2xs cursor-pointer"
-                      >
-                        <optgroup label="Available Fields">
-                          {availableFields.map(f => (
-                            <option key={f.id} value={f.id}>{f.label || f.id}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Custom Actions">
-                          <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
-                        </optgroup>
-                      </select>
-                    </div>
-
-                    {/* Operator Selector */}
-                    <div className="w-full md:w-44 shrink-0">
-                      <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">Operator <span className="text-rose-500">*</span></label>
-                      <select 
-                        value={getNormalizedOp(c.operator)}
-                        onChange={(e) => {
-                          const newC = [...parsedJson.conditions];
-                          newC[idx].operator = e.target.value;
-                          updateJson({ conditions: newC });
-                        }}
-                        className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none bg-white font-semibold text-slate-800 focus:border-blue-500 shadow-2xs"
-                      >
-                        <option value="equals">Equals (=)</option>
-                        <option value="contains any of">Contains Any of (OR)</option>
-                        <option value="contains">Contains (⊇)</option>
-                        <option value="not equals">Not Equals (≠)</option>
-                        <option value="gt">Greater Than (&gt;)</option>
-                        <option value="lt">Less Than (&lt;)</option>
-                      </select>
-                    </div>
-
-                    {/* Value Field with Popup Trigger */}
-                    <div className="flex-1 min-w-0 w-full">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider">
-                          Value / Target Match <span className="text-rose-500">*</span>
-                        </label>
-                        {['Cost Center', 'Category', 'Branch', 'Plant', 'Division'].includes(c.field) && (
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              const items = c.value ? c.value.split(',').map(s => s.trim()).filter(Boolean) : [];
-                              setValuePickerModal({
-                                conditionIndex: idx,
-                                field: c.field,
-                                selectedItems: items
-                              });
-                              setPickerSearch('');
-                              setCustomValInput('');
-                            }}
-                            className="inline-flex items-center gap-1 text-[10px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200 transition-colors cursor-pointer"
-                            title={`Open Selection Popup for ${c.field}`}
-                          >
-                            <Edit2 className="h-2.5 w-2.5" /> Select / Edit Popup
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        {['Cost Center', 'Category', 'Branch', 'Plant', 'Division'].includes(c.field) ? (
-                          <div 
-                            onClick={() => {
-                              const items = c.value ? c.value.split(',').map(s => s.trim()).filter(Boolean) : [];
-                              setValuePickerModal({
-                                conditionIndex: idx,
-                                field: c.field,
-                                selectedItems: items
-                              });
-                              setPickerSearch('');
-                              setCustomValInput('');
-                            }}
-                            className="w-full text-xs p-2.5 border border-slate-200 hover:border-blue-400 bg-slate-50/70 hover:bg-white rounded-lg cursor-pointer transition-all flex items-center justify-between gap-2 shadow-2xs group/box"
-                          >
-                            <div className="flex-1 truncate">
-                              {c.value ? (
-                                <span className="font-bold text-slate-900">
-                                  {c.value.includes(',') ? (
-                                    <span className="flex items-center gap-1.5">
-                                      <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded">
-                                        {c.value.split(',').length} Selected
-                                      </span>
-                                      <span className="truncate">{c.value}</span>
-                                    </span>
-                                  ) : (
-                                    c.value
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-medium italic">Click to select {c.field}...</span>
-                              )}
-                            </div>
-                            <span className="shrink-0 text-[10px] font-bold text-blue-600 group-hover/box:underline">
-                              Edit ➔
-                            </span>
-                          </div>
-                        ) : (
-                          <input 
-                            value={c.value}
-                            onChange={(e) => {
-                              const newC = [...parsedJson.conditions];
-                              newC[idx].value = e.target.value;
-                              updateJson({ conditions: newC });
-                            }}
-                            placeholder="Enter target value..."
-                            className="w-full text-xs p-2.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 bg-white focus:border-blue-500 shadow-2xs"
-                          />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Delete Condition Button */}
-                    <div className="shrink-0 self-end md:self-center pt-2">
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          const newC = parsedJson.conditions.filter((_, i) => i !== idx);
-                          updateJson({ conditions: newC });
-                        }}
-                        className="p-2.5 border border-rose-200 text-rose-500 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shadow-2xs"
-                        title="Delete this condition"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const currentConditions = parsedJson.conditions || [];
-                    if (currentConditions.length >= 10) {
-                      alert("Maximum limit of 10 conditions reached per rule.");
-                      return;
-                    }
-                    const newC = [...currentConditions, { field: 'Category', operator: 'Equals', value: '', logicalOperator: 'AND' }];
-                    updateJson({ conditions: newC, condition_type: 'Combination Condition' });
-                  }}
-                  disabled={(parsedJson.conditions || []).length >= 10}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-blue-200 text-blue-600 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  title={(parsedJson.conditions || []).length >= 10 ? "Maximum 10 conditions reached" : "Add Condition"}
-                >
-                  <Plus className="h-3 w-3" /> Add Condition ({(parsedJson.conditions || []).length}/10)
-                </button>
-              </div>
-
-              <button 
-                type="button" 
-                onClick={() => updateJson({ conditions: [] })}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-rose-200 text-rose-500 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors shadow-2xs hover:bg-rose-50 cursor-pointer"
-              >
-                <Trash2 className="h-3 w-3" /> Clear All
-              </button>
-            </div>
-          </div>
-
-
-        </div>
-
-        {/* RIGHT COLUMN: Summary & Preview */}
-        <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-6">
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Condition Summary</h3>
-          <div className="space-y-3 mb-4">
-            <div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Name</p>
-              <p className="text-xs font-bold text-slate-800">{editingRule.rule_name || '-'}</p>
-            </div>
-
-            <div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Condition Type</p>
-              <p className="text-xs font-bold text-slate-800">{parsedJson.condition_type || '-'}</p>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 pt-3">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Condition Preview</h3>
-            
-            <div className="flex flex-col items-center">
-              {/* Condition Box */}
-              <div className="w-full bg-white border border-slate-200/60 rounded-lg p-2 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.02)] relative z-10">
-                <div className="absolute -top-2 -left-2 h-4 w-4 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded text-[9px] font-black flex items-center justify-center">IF</div>
-                <div className="text-center">
-                  {(parsedJson.conditions || []).map((c, i) => (
-                    <div key={i}>
-                      {i > 0 && <div className="text-[9px] font-black text-blue-600 my-1">{c.logicalOperator}</div>}
-                      <p className="text-xs font-medium text-slate-500">{c.field}</p>
-                      <p className="text-xs font-bold text-slate-700">{c.operator} {c.value}</p>
+                      <span className="font-bold text-slate-900 font-sans">{fc.fieldLabel}</span>
+                      <span className="text-slate-500 font-sans italic">{fc.operatorLabel}</span>
+                      <span className="font-black text-[#003F28] font-mono bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
+                        {fc.valueLabel}
+                      </span>
                     </div>
                   ))}
-                  {(!parsedJson.conditions || parsedJson.conditions.length === 0) && (
-                    <p className="text-xs italic text-slate-400">No conditions defined</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="h-3 w-px bg-slate-300"></div>
-              <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
-              
-              {/* True Path */}
-              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 shadow-sm relative mt-1.5">
-                <span className="absolute -top-2.5 left-2 bg-emerald-100 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded">THEN (True)</span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <CornerDownRight className="h-3 w-3 text-emerald-500" />
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">{editingRule.target_workflow_id || 'Unassigned'}</p>
-                    <p className="text-[9px] font-medium text-slate-500">Trigger Workflow Profile</p>
-                  </div>
                 </div>
               </div>
 
-              <div className="h-3 w-px bg-slate-300"></div>
-              <ArrowRight className="h-3 w-3 text-slate-300 rotate-90 -mt-1.5" />
-              
-              {/* False Path */}
-              <div className="w-full bg-rose-50 border border-rose-200 rounded-lg p-2 shadow-sm relative mt-1.5">
-                <span className="absolute -top-2.5 left-2 bg-rose-100 text-rose-700 text-[9px] font-black px-1.5 py-0.5 rounded">ELSE (False)</span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <CornerDownRight className="h-3 w-3 text-rose-500" />
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">Next Priority Rule</p>
-                    <p className="text-[9px] font-medium text-slate-500">Continue evaluation</p>
+              {/* THEN BLOCK */}
+              <div className="pt-1.5 border-t border-slate-200/80 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider">
+                    THEN
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 font-sans">
+                    Workflow Routing Action:
+                  </span>
+                </div>
+
+                <div className="pl-5 space-y-0.5 font-sans">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium text-[10.5px]">Route to:</span>
+                    <span className="font-black text-slate-900 text-[11px] bg-white border border-slate-200 px-1.5 py-0.2 rounded shadow-2xs">
+                      {previewData.targetWorkflowName}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium text-[10.5px]">Workflow Code:</span>
+                    <span className="font-mono font-bold text-[#003F28] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[10.5px]">
+                      {previewData.workflowCode}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center">
+              <p className="text-[10.5px] font-bold text-slate-500">
+                Complete all conditions to preview this rule.
+              </p>
+              <p className="text-[9.5px] text-slate-400 mt-0.5 font-medium">
+                Missing required items: {previewData.issues.join(', ')}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* 6. SAVE / CANCEL (Compact) */}
+        <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-[11px] rounded-md transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
+              Changes route matching synced documents automatically.
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveCondition}
+              disabled={isSaving}
+              className="px-4 py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Check className="h-3 w-3" />
+              <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
+            </button>
           </div>
         </div>
-      </div>
 
-        {/* Datalists for Excel Matrix Auto-completion */}
-        <datalist id="divisions-list">
-          <option value="ALL">ALL (Global Enterprise)</option>
-          {matrixOptions?.divisions?.map((div, i) => (
-            <option key={i} value={div} />
-          ))}
-        </datalist>
-
-        <datalist id="categories-list">
-          <option value="ALL">ALL Categories</option>
-          {matrixOptions?.categories?.map((cat, i) => (
-            <option key={i} value={cat} />
-          ))}
-        </datalist>
-
-        <datalist id="cost-centers-list">
-          <option value="ALL">ALL Cost Centers</option>
-          {matrixOptions?.cost_centers?.map((cc, i) => (
-            <option key={i} value={cc} />
-          ))}
-        </datalist>
-
-        <datalist id="branches-list">
-          <option value="ALL">ALL Branches</option>
-          {matrixOptions?.branches?.map((br, i) => (
-            <option key={i} value={br} />
-          ))}
-        </datalist>
-
-        {/* MODAL POPUP FOR SELECTING / EDITING VALUES */}
-        {valuePickerModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-            <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
-              {/* Modal Header */}
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <div>
-                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                    <span>Select & Edit {valuePickerModal.field}</span>
-                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                      {valuePickerModal.selectedItems.length} Selected
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500">Check existing master options or type below to add custom values.</p>
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => setValuePickerModal(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+        {/* MODAL: CLEAR ALL CONFIRMATION */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-xs overflow-hidden p-4 text-center space-y-3">
+              <div className="h-9 w-9 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                <AlertTriangle className="h-5 w-5" />
               </div>
-
-              {/* Modal Body */}
-              <div className="p-4 overflow-y-auto space-y-3 flex-1">
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input 
-                    type="text"
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder={`Search ${valuePickerModal.field} master options...`}
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none bg-slate-50 focus:bg-white focus:border-blue-500 font-medium shadow-2xs"
-                  />
-                </div>
-
-                {/* Add Custom Value Input */}
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    value={customValInput}
-                    onChange={(e) => setCustomValInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const clean = customValInput.trim();
-                        if (clean && !valuePickerModal.selectedItems.includes(clean)) {
-                          setValuePickerModal({
-                            ...valuePickerModal,
-                            selectedItems: [...valuePickerModal.selectedItems, clean]
-                          });
-                          setCustomValInput('');
-                        }
-                      }
-                    }}
-                    placeholder={`Type custom ${valuePickerModal.field} name and click Add...`}
-                    className="flex-1 text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      const clean = customValInput.trim();
-                      if (clean && !valuePickerModal.selectedItems.includes(clean)) {
-                        setValuePickerModal({
-                          ...valuePickerModal,
-                          selectedItems: [...valuePickerModal.selectedItems, clean]
-                        });
-                        setCustomValInput('');
-                      }
-                    }}
-                    className="px-3.5 py-2 bg-blue-600 text-white font-bold text-xs rounded-lg hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
-                  >
-                    + Add
-                  </button>
-                </div>
-
-                {/* Currently Selected Badges */}
-                {valuePickerModal.selectedItems.length > 0 && (
-                  <div className="space-y-1.5 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-blue-900">
-                      <span>Selected Items ({valuePickerModal.selectedItems.length})</span>
-                      <button 
-                        type="button" 
-                        onClick={() => setValuePickerModal({ ...valuePickerModal, selectedItems: [] })}
-                        className="text-rose-500 hover:underline cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                      {valuePickerModal.selectedItems.map((item, itIdx) => (
-                        <span 
-                          key={itIdx}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-blue-200 text-blue-900 text-[11px] font-bold rounded-md shadow-2xs"
-                        >
-                          <span>{item}</span>
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              setValuePickerModal({
-                                ...valuePickerModal,
-                                selectedItems: valuePickerModal.selectedItems.filter((_, i) => i !== itIdx)
-                              });
-                            }}
-                            className="text-blue-400 hover:text-rose-600 font-black cursor-pointer"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Master Options Checklist (Collapsible & Hidden by Default) */}
-                {(() => {
-                  const masterList = getFieldMasterOptions(valuePickerModal.field);
-                  const filteredMaster = masterList.filter(opt => !pickerSearch || opt.toLowerCase().includes(pickerSearch.toLowerCase()));
-                  const isVisible = showMasterOptions || Boolean(pickerSearch.trim());
-
-                  return (
-                    <div className="space-y-2">
-                      <button 
-                        type="button" 
-                        onClick={() => setShowMasterOptions(!showMasterOptions)}
-                        className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Folder className="h-3.5 w-3.5 text-blue-600" />
-                          <span>{isVisible ? `Hide Master ${valuePickerModal.field} Options` : `Browse Master ${valuePickerModal.field} Options (${filteredMaster.length})`}</span>
-                        </div>
-                        <span className="text-[10px] text-blue-600 font-extrabold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                          {isVisible ? "▲ Hide Options" : "▼ Click to View / Check"}
-                        </span>
-                      </button>
-
-                      {isVisible && (
-                        <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-52 overflow-y-auto bg-white custom-scrollbar shadow-inner animate-in fade-in duration-150">
-                          {filteredMaster.length > 0 ? (
-                            filteredMaster.map((opt, oIdx) => {
-                              const isSelected = valuePickerModal.selectedItems.includes(opt);
-                              return (
-                                <label 
-                                  key={oIdx}
-                                  className={`flex items-center justify-between px-3 py-2 text-xs font-medium cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/80 text-blue-900 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
-                                >
-                                  <span className="truncate mr-2">{opt}</span>
-                                  <input 
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => {
-                                      if (isSelected) {
-                                        setValuePickerModal({
-                                          ...valuePickerModal,
-                                          selectedItems: valuePickerModal.selectedItems.filter(x => x !== opt)
-                                        });
-                                      } else {
-                                        setValuePickerModal({
-                                          ...valuePickerModal,
-                                          selectedItems: [...valuePickerModal.selectedItems, opt]
-                                        });
-                                      }
-                                    }}
-                                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
-                                  />
-                                </label>
-                              );
-                            })
-                          ) : (
-                            <div className="p-4 text-center text-xs text-slate-500">
-                              No master option matches "<strong>{pickerSearch}</strong>".
-                              <div className="mt-1 font-bold text-blue-600">
-                                Type above and click "+ Add" to add it!
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Clear All Conditions?</h3>
+                <p className="text-[10.5px] text-slate-500 mt-0.5 font-medium">
+                  This will reset configured conditions on this rule.
+                </p>
               </div>
-
-              {/* Modal Footer */}
-              <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => setValuePickerModal(null)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-md transition"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const newC = [...parsedJson.conditions];
-                    const selectedStr = valuePickerModal.selectedItems.join(', ');
-                    newC[valuePickerModal.conditionIndex].value = selectedStr;
-                    if (valuePickerModal.selectedItems.length > 1 && newC[valuePickerModal.conditionIndex].operator === 'equals') {
-                      newC[valuePickerModal.conditionIndex].operator = 'contains any of';
-                    }
-                    updateJson({ conditions: newC });
-                    setValuePickerModal(null);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
+                <button
+                  type="button"
+                  onClick={confirmClearAll}
+                  className="flex-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-md transition shadow-2xs"
                 >
-                  Apply ({valuePickerModal.selectedItems.length} Selected)
+                  Yes, Clear All
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ADD CUSTOM FIELD MODAL POPUP */}
+        {/* MODAL: ADD CUSTOM FIELD */}
         {showAddFieldModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-            <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden">
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="text-sm font-black text-slate-800">Add Custom Condition Field</h3>
-                <button 
-                  type="button" 
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <h3 className="text-xs font-black text-slate-900">Add Custom Condition Field</h3>
+                <button
+                  type="button"
                   onClick={() => setShowAddFieldModal(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 p-0.5"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="p-4 space-y-4">
+
+              <div className="space-y-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                    Field Name / Property <span className="text-rose-500">*</span>
+                  <label className="block text-[9.5px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                    Field Name <span className="text-rose-500">*</span>
                   </label>
-                  <input 
+                  <input
                     type="text"
                     autoFocus
                     value={newFieldNameInput}
                     onChange={e => setNewFieldNameInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const clean = newFieldNameInput.trim();
-                        if (!clean) return;
-                        const newFieldObj = { id: clean, label: clean };
-                        if (!availableFields.some(f => f.id.toLowerCase() === clean.toLowerCase())) {
-                          const updated = [...availableFields, newFieldObj];
-                          setAvailableFields(updated);
-                          try {
-                            localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
-                          } catch {}
-                        }
-                        if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
-                          const newC = [...parsedJson.conditions];
-                          newC[addFieldTargetIdx].field = clean;
-                          newC[addFieldTargetIdx].value = '';
-                          updateJson({ conditions: newC });
-                        }
-                        setShowAddFieldModal(false);
-                        setNewFieldNameInput('');
-                      }
-                    }}
-                    placeholder="e.g. Project Code, Sub-Category, GSTIN, Approval Level..."
-                    className="w-full text-xs px-3 py-2.5 border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-semibold text-slate-800"
+                    placeholder="e.g. Project Code, Region"
+                    className="w-full text-[11px] px-2.5 py-1.5 border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28]"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">This field will be available across all condition rules.</p>
                 </div>
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowAddFieldModal(false)}
-                    className="px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+
+                <div>
+                  <label className="block text-[9.5px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                    Field Data Type
+                  </label>
+                  <select
+                    value={newFieldTypeInput}
+                    onChange={e => setNewFieldTypeInput(e.target.value)}
+                    className="w-full text-[11px] px-2.5 py-1.5 border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28]"
                   >
-                    Cancel
-                  </button>
-                  <button 
-                    type="button"
-                    disabled={!newFieldNameInput.trim()}
-                    onClick={() => {
-                      const clean = newFieldNameInput.trim();
-                      if (!clean) return;
-                      const newFieldObj = { id: clean, label: clean };
-                      if (!availableFields.some(f => f.id.toLowerCase() === clean.toLowerCase())) {
-                        const updated = [...availableFields, newFieldObj];
-                        setAvailableFields(updated);
-                        try {
-                          localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
-                        } catch {}
-                      }
-                      if (addFieldTargetIdx !== null && parsedJson.conditions[addFieldTargetIdx]) {
-                        const newC = [...parsedJson.conditions];
-                        newC[addFieldTargetIdx].field = clean;
-                        newC[addFieldTargetIdx].value = '';
-                        updateJson({ conditions: newC });
-                      }
-                      setShowAddFieldModal(false);
-                      setNewFieldNameInput('');
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-sm transition cursor-pointer"
-                  >
-                    Add Field
-                  </button>
+                    <option value="text">Text / String</option>
+                    <option value="number">Number / Amount</option>
+                    <option value="select">Dropdown / Select</option>
+                    <option value="date">Date</option>
+                    <option value="boolean">Boolean (Yes/No)</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="flex justify-end gap-1.5 pt-1.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddFieldModal(false)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-md transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!newFieldNameInput.trim()}
+                  onClick={() => {
+                    const cleanName = newFieldNameInput.trim();
+                    if (!cleanName) return;
+                    const newFieldObj = {
+                      id: cleanName,
+                      label: cleanName,
+                      type: newFieldTypeInput
+                    };
+                    const updated = [...availableFields, newFieldObj];
+                    setAvailableFields(updated);
+                    try {
+                      localStorage.setItem("docuflow_custom_condition_fields", JSON.stringify(updated));
+                    } catch {}
+
+                    if (addFieldTargetIdx !== null && conditions[addFieldTargetIdx]) {
+                      const updatedConds = [...conditions];
+                      const validOps = OPERATORS_BY_TYPE[newFieldTypeInput] || OPERATORS_BY_TYPE.text;
+                      updatedConds[addFieldTargetIdx] = {
+                        field: cleanName,
+                        operator: validOps[0].value,
+                        value: ''
+                      };
+                      setConditions(updatedConds);
+                    }
+                    setShowAddFieldModal(false);
+                    setNewFieldNameInput('');
+                  }}
+                  className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[11px] rounded-md transition shadow-2xs"
+                >
+                  Add Field
+                </button>
               </div>
             </div>
           </div>
         )}
-      </form>
+
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: DIRECTORY / LIST VIEW (COMPACT)
+  // =========================================================================
+  return (
+    <div className="flex flex-col gap-3.5 max-w-5xl mx-auto w-full pb-10">
+      {/* Top Header Bar */}
+      <div className="bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
+          {selectedCategory && (
+            <button
+              onClick={() => {
+                if (selectedSubCategory) setSelectedSubCategory(null);
+                else setSelectedCategory(null);
+              }}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+              <span>Condition Policy Matrix</span>
+              <span className="text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                {rules.length} Rules Active
+              </span>
+            </h1>
+            <p className="text-[10px] text-slate-500 font-medium">
+              {selectedCategory 
+                ? `Showing rules under ${selectedCategory}`
+                : "Manage workflow routing condition policies for synced documents."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="h-3 w-3 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search condition rules..."
+              className="w-full text-[11px] pl-7 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md outline-none focus:bg-white focus:border-[#003F28] font-medium"
+            />
+          </div>
+
+          <button
+            onClick={() => openEditor(null)}
+            className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] text-white font-bold text-[11px] rounded-md transition shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
+          >
+            <Plus className="h-3 w-3" />
+            <span>Create Condition</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Rules Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {rules
+          .filter(r => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+              (r.rule_name || '').toLowerCase().includes(q) ||
+              (r.target_workflow_id || '').toLowerCase().includes(q) ||
+              (r.document_type || '').toLowerCase().includes(q)
+            );
+          })
+          .map((r, idx) => {
+            let parsed = { conditions: [] };
+            try { parsed = JSON.parse(r.conditions_json); } catch {}
+            const condList = Array.isArray(parsed) ? parsed : (parsed?.conditions || []);
+            const targetWf = workflows.find(w => w.profile_name === r.target_workflow_id || w.workflow_code === r.target_workflow_id);
+
+            return (
+              <div 
+                key={r.id} 
+                className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs hover:shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between group"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-[8px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded uppercase">
+                      Priority {idx + 1}
+                    </span>
+                    <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-100">
+                      {condList.length} Condition{condList.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="font-black text-slate-900 text-[11.5px] tracking-tight truncate" title={r.rule_name}>
+                      {r.rule_name || 'Unnamed Condition'}
+                    </h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                      {r.document_type || 'AP Invoice'}
+                    </p>
+                  </div>
+
+                  {/* Conditions snippet */}
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {condList.slice(0, 3).map((c, ci) => (
+                      <span key={ci} className="text-[8px] font-semibold bg-slate-50 border border-slate-200 text-slate-700 px-1 py-0.2 rounded">
+                        <strong className="text-slate-900">{c.field}</strong> {c.operator} {c.value}
+                      </span>
+                    ))}
+                    {condList.length > 3 && (
+                      <span className="text-[8px] font-bold text-slate-400 px-1 py-0.2">
+                        +{condList.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 mt-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-1 truncate mr-2">
+                    <GitMerge className="h-2.5 w-2.5 text-[#003F28] shrink-0" />
+                    <span className="text-[9.5px] font-bold text-slate-800 truncate" title={r.target_workflow_id}>
+                      {targetWf ? `[${targetWf.workflow_code || 'WF'}] ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEditor(r)}
+                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      title="Edit Condition"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmTarget(r.id)}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                      title="Delete Condition"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      {rules.length === 0 && (
+        <div className="bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center space-y-2.5">
+          <div className="h-9 w-9 rounded-full bg-emerald-50 text-[#003F28] flex items-center justify-center mx-auto">
+            <Sliders className="h-5 w-5" />
+          </div>
+          <h3 className="text-xs font-black text-slate-800">No Routing Conditions Configured</h3>
+          <p className="text-[10.5px] text-slate-500 max-w-xs mx-auto">
+            Create your first condition rule to route synced documents to their matching workflow approval processes.
+          </p>
+          <button
+            onClick={() => openEditor(null)}
+            className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] text-white font-bold text-[11px] rounded-md transition shadow-2xs inline-flex items-center gap-1"
+          >
+            <Plus className="h-3 w-3" />
+            <span>Create Condition</span>
+          </button>
+        </div>
+      )}
+
+      {/* Delete Rule Confirmation Modal */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xs overflow-hidden p-4 text-center space-y-3">
+            <div className="h-9 w-9 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Delete Condition Rule?</h3>
+              <p className="text-[10.5px] text-slate-500 mt-0.5 font-medium">
+                Are you sure you want to delete this routing condition? Synced documents matching this rule will no longer be routed to this workflow.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="flex-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-md transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (handleDeleteRuleLocal) {
+                    handleDeleteRuleLocal(deleteConfirmTarget);
+                  } else {
+                    setRules(rules.filter(r => r.id !== deleteConfirmTarget));
+                    setHasChanges(true);
+                  }
+                  setDeleteConfirmTarget(null);
+                }}
+                className="flex-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-md transition shadow-2xs"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Condition Saved Success Modal */}
+      {savedConditionSuccessModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Condition Rule Saved Successfully!
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Rule <strong>"{savedConditionSuccessModal.rule_name}"</strong> has been saved and linked to workflow <strong>"{savedConditionSuccessModal.target_workflow_id}"</strong>.
+                </p>
+                <div className="mt-3 bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-3 text-xs text-emerald-950 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-xs text-emerald-900">
+                    <GitMerge className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Routing Rule Active</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-snug">
+                    Documents matching this condition will now automatically route through this workflow. Would you like to return to Flow Builder?
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSavedConditionSuccessModal(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+              >
+                Stay in Condition Matrix
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSavedConditionSuccessModal(null);
+                  localStorage.setItem("adminActiveTab", "routing");
+                  window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
+                }}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#003F28] hover:bg-[#002f1e] rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Back to Flow Builder</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

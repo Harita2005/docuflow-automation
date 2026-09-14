@@ -19,6 +19,7 @@ from app.database.connection import SessionLocal, get_db
 from app.database.models import (
     AuditLog,
     ChecklistRule,
+    ChecklistTemplate,
     InAppNotification,
     Invoice,
     InvoiceChecklistState,
@@ -297,90 +298,110 @@ def get_approved_invoices(
 @router.get('/api/invoices', response_model=List[InvoiceResponse])
 def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     query = db.query(Invoice).filter(Invoice.is_deleted == False)
-    if status:
-        s_low = status.strip().lower()
-        if s_low == 'approved':
-            query = query.filter(
-                or_(
-                    Invoice.status.ilike('%approved%'),
-                    Invoice.status.ilike('%settled%'),
-                    Invoice.status.ilike('%paid%')
-                )
-            )
-        elif s_low in ['workflow', 'active', 'pending']:
-            query = query.filter(
-                ~or_(
-                    Invoice.status.ilike('%approved%'),
-                    Invoice.status.ilike('%settled%'),
-                    Invoice.status.ilike('%paid%')
-                )
-            )
     invoices = query.order_by(Invoice.created_at.desc()).all()
+    
     approved_invoice_ids = set()
     rejected_invoice_ids = set()
     if current_user:
-        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
         user_names = [name for name in user_names if name]
         or_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names if name]
         if or_filters:
             audit_query = db.query(AuditLog.invoice_id, AuditLog.action).filter(or_(*or_filters)).all()
             for row in audit_query:
-                doc_id_clean = row[0].replace('DOC-', '') if row[0] else ''
+                raw_id = str(row[0] or '')
+                doc_id_clean = raw_id.replace('DOC-', '')
                 act = (row[1] or '').lower()
                 if 'approve' in act:
-                    approved_invoice_ids.add(row[0])
+                    approved_invoice_ids.add(raw_id)
                     approved_invoice_ids.add(doc_id_clean)
                 if 'reject' in act or 'return' in act or 'cancel' in act:
-                    rejected_invoice_ids.add(row[0])
+                    rejected_invoice_ids.add(raw_id)
                     rejected_invoice_ids.add(doc_id_clean)
-    user_steps = db.query(WorkflowStepDefinition).all()
-    user_pool_stages = set()
-    if current_user:
-        for st in user_steps:
-            if st.approver_target and is_user_in_approver_pool(current_user, st.approver_target):
-                user_pool_stages.add((st.profile_name, st.stage_number))
+
+    user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     filtered_invoices = []
+    
     for inv in invoices:
+        # Dynamically set assigned_approver based on current stage
         if inv.workflow_profile_id:
-            step_def = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == (inv.current_stage or 1)).first()
+            step_def = db.query(WorkflowStepDefinition).filter(
+                WorkflowStepDefinition.profile_name == inv.workflow_profile_id, 
+                WorkflowStepDefinition.stage_number == (inv.current_stage or 1)
+            ).first()
             if step_def and step_def.approver_target:
                 targets = [step_def.approver_target.strip()]
                 if step_def.delegate_approver and step_def.delegate_approver.strip():
                     targets.append(step_def.delegate_approver.strip())
                 inv.assigned_approver = ', '.join(targets)
-        if current_user.role == 'admin':
+
+        if user_is_admin:
             filtered_invoices.append(inv)
             continue
+
         user_div = (current_user.division or '').strip().upper()
         doc_div = (inv.division or '').strip().upper()
-        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
+        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
             continue
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
+        doc_key_clean = str(inv.id).replace('DOC-', '')
+        has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
+        has_rejected_this_doc = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
+
         if is_terminal:
-            if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
+            if has_approved_this_doc or has_rejected_this_doc:
                 filtered_invoices.append(inv)
                 continue
             if authorize_document_access(current_user, inv):
                 filtered_invoices.append(inv)
                 continue
         else:
-            # Active workflow: STRICT ACCESS. Only the current assigned approver pool or users who already signed off can view.
+            # Active workflow: STRICT ACCESS.
+            # 1. User is in the CURRENT active stage approver pool (Pending)
             if inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver):
                 filtered_invoices.append(inv)
                 continue
-            if inv.id in approved_invoice_ids or inv.id in rejected_invoice_ids:
+            # 2. User already signed off/approved a prior stage (In Progress / Tracking)
+            if has_approved_this_doc:
                 filtered_invoices.append(inv)
                 continue
+            # Future-stage approvers and peer approvers who did not sign off are strictly excluded
+
     results = []
     for inv in filtered_invoices:
+        doc_key_clean = str(inv.id).replace('DOC-', '')
+        has_appr = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
+        has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
+        
+        is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_curr = False
-        if current_user and inv.assigned_approver:
-            is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
-            if is_active_flow:
-                is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
-        has_appr = inv.id in approved_invoice_ids
-        has_rej = inv.id in rejected_invoice_ids
+        if is_active_flow and inv.assigned_approver:
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
+
+        # Status filter query parameter enforcement
+        if status:
+            s_req = status.strip().lower()
+            if s_req == 'pending':
+                if not (is_curr and is_active_flow):
+                    continue
+            elif s_req in ['in_progress', 'tracking']:
+                if not (has_appr and is_active_flow):
+                    continue
+            elif s_req == 'approved':
+                if not (inv.status in ['Approved', 'Settled', 'Paid']):
+                    continue
+            elif s_req in ['workflow', 'active']:
+                if inv.status in ['Approved', 'Settled', 'Paid', 'Ready for Payment']:
+                    continue
+            elif s_req == 'hold':
+                if inv.status != 'On Hold':
+                    continue
+            elif s_req in ['rejected', 'returned', 'failed']:
+                st_low = (inv.status or '').lower()
+                if not any(k in st_low for k in ['reject', 'return', 'failed', 'cancelled']):
+                    continue
+
         inv_res = InvoiceResponse.from_orm(inv)
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_appr
@@ -460,34 +481,57 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                     has_appr = True
                 if 'reject' in act or 'return' in act or 'cancel' in act:
                     has_rej = True
-    is_prior_pool_member = False
-    if current_user and inv.workflow_profile_id and ((inv.current_stage or 1) > 1):
-        for prior_stg in range(1, inv.current_stage or 1):
-            st = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == prior_stg).first()
-            if st and st.approver_target and is_user_in_approver_pool(current_user, st.approver_target):
-                is_prior_pool_member = True
-                break
-    if current_user and current_user.role != 'admin':
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    completed_by_peer = False
+    curr_stg = inv.current_stage or 1
+    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
+
+    if not is_admin and inv.workflow_profile_id:
+        all_steps = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        user_stages = [
+            s.stage_number for s in all_steps 
+            if s.approver_target and is_user_in_approver_pool(current_user, s.approver_target)
+        ]
+        
+        # 1. Future stage restriction: If user only belongs to future stages, forbid access
+        if is_active_flow and user_stages and all(stg > curr_stg for stg in user_stages):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {curr_stg}. Future stage approvers cannot access or view this document until previous stages are completed."
+            )
+
+        # 2. Peer approver detection: User belonged to an earlier stage, or a completed/approved stage they didn't personally sign off on
+        if user_stages and not has_appr:
+            if any(stg < curr_stg for stg in user_stages):
+                completed_by_peer = True
+            elif not is_active_flow and any(stg <= curr_stg for stg in user_stages):
+                completed_by_peer = True
+
+    if not is_admin:
         user_div = (current_user.division or '').strip().upper()
         doc_div = (inv.division or '').strip().upper()
-        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
+        if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
             raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
-            if not has_appr and not has_rej and not is_prior_pool_member and not authorize_document_access(current_user, inv):
+            if not has_appr and not has_rej and not completed_by_peer and not authorize_document_access(current_user, inv):
                 raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
         else:
-            # Active document: strictly restricted to current stage approver pool or prior sign-off members
-            if not is_curr and not has_appr and not has_rej and not is_prior_pool_member:
+            # Active document: allowed if current approver, prior approver who approved, or peer from completed prior stage
+            if not is_curr and not has_appr and not has_rej and not completed_by_peer:
                 raise HTTPException(
                     status_code=403, 
                     detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
                 )
+
     inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
     inv_dict['has_rejected'] = has_rej
+    inv_dict['completed_by_peer'] = completed_by_peer
     inv_dict['workflow_step_definitions'] = steps_data
     inv_dict['active_approval_log'] = {'current_stage_number': inv.current_stage or 1, 'stage_name': current_step_name, 'status': 'Pending'}
     return inv_dict
@@ -839,26 +883,63 @@ def stream_document_file(
         headers={'Content-Disposition': f'inline; filename="{safe_path.name}"'}
     )
 
-def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True):
+def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None):
     if not user:
         raise HTTPException(status_code=401, detail='Authentication required: Please log in to approve or review documents.')
     if not user.is_active:
         raise HTTPException(status_code=403, detail='Account Inactive: Your user account is disabled.')
+    # Concurrency collision check: if the client expected a specific stage but the document has moved or already completed
+    if expected_stage is not None and ((inv.current_stage or 1) != expected_stage or inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment']):
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed']:
         raise HTTPException(status_code=400, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
-    if inv.assigned_approver and inv.assigned_approver.strip():
-        approvers = [s.strip().lower() for s in inv.assigned_approver.split(',') if s.strip()]
+
+    # Check if this user has already approved this invoice in an earlier action
+    if db and user:
+        user_id_str = str(user.id)
+        user_name_lower = (user.employee_name or user.name or user.username or '').strip().lower()
+        has_user_approved = db.query(AuditLog).filter(
+            AuditLog.invoice_id == str(inv.id),
+            AuditLog.action.ilike('%approved%'),
+            (AuditLog.user.ilike(f"%{user.username}%") | AuditLog.user.ilike(f"%{user_name_lower}%") | (AuditLog.user == user_id_str))
+        ).first()
+        if has_user_approved:
+            raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
+
+    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    if not is_admin:
+        approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
         user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
         user_handles = [h for h in user_handles if h]
-        is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
-        is_authorized = is_admin
+        
+        is_authorized = False
+        for handle in user_handles:
+            if handle in approvers or any((handle == app or handle in app or app in handle for app in approvers)):
+                is_authorized = True
+                break
+        
         if not is_authorized:
-            for handle in user_handles:
-                if handle in approvers or any((handle == app or handle in app or app in handle for app in approvers)):
-                    is_authorized = True
-                    break
-        if not is_authorized:
-            raise HTTPException(status_code=403, detail=f'Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document.')
+            # Check if user was assigned to an earlier stage (which is already completed) or future stage
+            if db and inv.workflow_profile_id:
+                steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).all()
+                user_stages = []
+                for st in steps:
+                    step_targets = [s.strip().lower() for s in (st.approver_target or '').split(',') if s.strip()]
+                    for handle in user_handles:
+                        if handle in step_targets or any((handle == t or handle in t or t in handle for t in step_targets)):
+                            user_stages.append(st.stage_number)
+                            break
+                if user_stages:
+                    max_user_stage = max(user_stages)
+                    min_user_stage = min(user_stages)
+                    if max_user_stage < (inv.current_stage or 1):
+                        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+                    elif min_user_stage > (inv.current_stage or 1):
+                        raise HTTPException(status_code=403, detail=f"Access Denied: You are assigned to Stage {min_user_stage}, but the document is currently at Stage {inv.current_stage or 1}. You cannot approve until preceding stages are completed.")
+
+            raise HTTPException(status_code=403, detail=f"Access Denied: Only the assigned approver ({inv.assigned_approver}) for Stage {inv.current_stage or 1} is authorized to approve this document.")
+
     if require_compliance and db:
         is_stage_1 = (inv.current_stage or 1) == 1
         current_step_name = 'Attachment Status' if is_stage_1 else f'Stage {inv.current_stage or 1}'
@@ -869,12 +950,24 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         is_attachment_stage = is_stage_1 or 'attachment' in current_step_name.lower() or 'attachment' in (inv.status or '').lower()
 
         has_attachment = False
-        if inv.file_url and inv.file_url.strip():
+        target_f = getattr(inv, 'file_path', None) or inv.file_url
+        if target_f and target_f.strip():
             try:
-                target_f = getattr(inv, 'file_path', None) or inv.file_url
-                file_disk_path = get_safe_file_path(target_f)
-                if file_disk_path.exists() and file_disk_path.stat().st_size > 0:
-                    has_attachment = True
+                try:
+                    file_disk_path = get_safe_file_path(target_f)
+                    if file_disk_path.exists() and file_disk_path.stat().st_size > 0:
+                        has_attachment = True
+                except Exception:
+                    pass
+                if not has_attachment and inv.id:
+                    for fname in [f"{inv.id}.pdf", f"{inv.id}"]:
+                        for d in [settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR]:
+                            p = d / fname
+                            if p.exists() and p.stat().st_size > 0:
+                                has_attachment = True
+                                break
+                        if has_attachment:
+                            break
             except Exception:
                 has_attachment = False
 
@@ -890,7 +983,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                 checklist_items.append(item)
             db.commit()
         if checklist_items:
-            unchecked_mandatory = [item for item in checklist_items if not item.is_checked]
+            unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
             if unchecked_mandatory:
                 missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])
                 raise HTTPException(status_code=400, detail=f"Compliance Checklist Incomplete: The following checklist items must be verified and checked before approving: {missing_items_str}")
@@ -902,7 +995,9 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
     inv = find_invoice_by_identifier(db, doc_id)
-    check_approval_authorization(inv, user, db=db, require_compliance=True)
+    expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
+    check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None)
+    
     approver_name = payload.get('approver') or payload.get('user') or payload.get('username')
     if not approver_name or approver_name.lower() in ['approver', 'reviewer', 'admin']:
         if user:
@@ -917,7 +1012,8 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     current_version = inv.version or 1
     expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
     if expected_ver is not None and expected_ver != current_version:
-        raise HTTPException(status_code=409, detail=f"Conflict: Version mismatch. Document '{inv.id}' version is {current_version}, expected {expected_ver}.")
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_stage_val = prev_stage_num
     next_assigned_val = inv.assigned_approver
@@ -946,7 +1042,7 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
             next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
         next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
-        next_status_val = 'Settled'
+        next_status_val = 'Approved'
         archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
@@ -964,7 +1060,7 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
 
     if rows_affected == 0:
         db.rollback()
-        raise HTTPException(status_code=409, detail=f"Conflict: Document '{inv.id}' was modified or approved concurrently by another process. Please reload.")
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
     inv.current_stage = next_stage_val
     inv.status = next_status_val
@@ -972,10 +1068,18 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     inv.version = current_version + 1
     inv.checklist_state = next_checklist_val
 
-    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
+    # Release review lock
+    try:
+        from app.services.lock_service import lock_manager
+        lock_manager.release_lock(doc_id=str(inv.id))
+    except Exception:
+        pass
+
+    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
     db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}'))
     db.commit()
     db.refresh(inv)
+    safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
     safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, 'approved_by': approver_name}
 
@@ -991,7 +1095,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
     if action and action.expected_version is not None and action.expected_version != current_version:
-        raise HTTPException(status_code=409, detail=f"Conflict: Version mismatch. Document '{inv.id}' version is {current_version}, expected {action.expected_version}.")
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_stage_val = prev_stage_num
     next_assigned_val = inv.assigned_approver
@@ -1023,7 +1127,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
             next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
         next_status_val = f'In Progress (Stage {next_stage_val})'
     else:
-        next_status_val = 'Settled'
+        next_status_val = 'Approved'
         archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
@@ -1041,7 +1145,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
 
     if rows_affected == 0:
         db.rollback()
-        raise HTTPException(status_code=409, detail=f"Conflict: Document '{inv.id}' was modified or approved concurrently by another process. Please reload.")
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
     inv.current_stage = next_stage_val
     inv.status = next_status_val
@@ -1049,10 +1153,18 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     inv.version = current_version + 1
     inv.checklist_state = next_checklist_val
 
-    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
+    try:
+        from app.services.lock_service import lock_manager
+        lock_manager.release_lock(doc_id=str(inv.id))
+    except Exception:
+        pass
+
+    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}'))
     db.commit()
     db.refresh(inv)
+    safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': username})
+    safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv}
 
 @router.post('/api/records/{invoice_id}/step-action')
@@ -1063,45 +1175,81 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
     action_type = str(payload.get('action') or 'Approve').strip()
     act_lower = action_type.lower()
     is_approving = 'approve' in act_lower or 'pass' in act_lower
-    check_approval_authorization(inv, user, db=db, require_compliance=is_approving)
+    expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
+    check_approval_authorization(inv, user, db=db, require_compliance=is_approving, expected_stage=int(expected_stage) if expected_stage is not None else None)
     comments = str(payload.get('comments') or payload.get('comment') or 'Action processed by desk operator.').strip()
     approver_name = payload.get('approver') or (user.employee_name or user.name if user else 'Desk Operator')
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
+    current_version = inv.version or 1
     if 'approve' in act_lower or 'pass' in act_lower:
         next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
+        next_stage_val = prev_stage_num
+        next_assigned_val = inv.assigned_approver
+        next_checklist_val = inv.checklist_state
         if (inv.current_stage or 1) < (inv.total_stages or 1):
-            inv.current_stage = (inv.current_stage or 1) + 1
-            next_step_name = f'Stage {inv.current_stage}'
+            next_stage_val = (inv.current_stage or 1) + 1
+            next_step_name = f'Stage {next_stage_val}'
             if inv.workflow_profile_id:
-                next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == inv.current_stage).first()
+                next_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == next_stage_val).first()
                 if next_step:
-                    inv.assigned_approver = next_step.approver_target
+                    next_assigned_val = next_step.approver_target
                     next_step_name = next_step.step_name
-                    next_assigned_info = f'Advanced to Stage {inv.current_stage} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
+                    next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_step.approver_target}.'
                 else:
-                    inv.assigned_approver = 'Unassigned'
-                    next_assigned_info = f'Advanced to Stage {inv.current_stage}.'
+                    next_assigned_val = 'Unassigned'
+                    next_assigned_info = f'Advanced to Stage {next_stage_val}.'
             existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
             if not existing_next_items:
                 checklist_items = resolve_checklist_items(db, inv, next_step_name)
                 for item_text in checklist_items:
                     db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False))
-                inv.checklist_state = json.dumps({item_text: False for item_text in checklist_items})
+                next_checklist_val = json.dumps({item_text: False for item_text in checklist_items})
             else:
                 for item in existing_next_items:
                     item.is_checked = False
                     item.checked_by = None
                     item.checked_at = None
-                inv.checklist_state = json.dumps({item.item_text: False for item in existing_next_items})
-            inv.status = f'In Progress (Stage {inv.current_stage})'
+                next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
+            next_status_val = f'In Progress (Stage {next_stage_val})'
         else:
-            inv.status = 'Settled'
+            next_status_val = 'Approved'
             archive_approved_pdf(inv)
-        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Settled')
+
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == current_version,
+            Invoice.current_stage == prev_stage_num
+        ).update({
+            Invoice.current_stage: next_stage_val,
+            Invoice.status: next_status_val,
+            Invoice.assigned_approver: next_assigned_val,
+            Invoice.version: current_version + 1,
+            Invoice.checklist_state: next_checklist_val,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
+
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+
+        inv.current_stage = next_stage_val
+        inv.status = next_status_val
+        inv.assigned_approver = next_assigned_val
+        inv.version = current_version + 1
+        inv.checklist_state = next_checklist_val
+
+        try:
+            from app.services.lock_service import lock_manager
+            lock_manager.release_lock(doc_id=str(inv.id))
+        except Exception:
+            pass
+
+        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{comments} ➔ {next_assigned_info}'))
         db.commit()
         db.refresh(inv)
+        safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, 'approved_by': approver_name}
     elif 'reject' in act_lower or 'send back' in act_lower or 'return' in act_lower:
@@ -1864,89 +2012,133 @@ def get_erp_po_details(po_number: str, db: Session=Depends(get_db)):
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
     """
-    Resolves compliance checklist items for an invoice at a given workflow stage:
-    1. Check WorkflowStepDefinition.checklist_json for matching workflow_profile_id and stage
-    2. Check ChecklistTemplate table for matching workflow_profile and stage_name
-    3. Check ChecklistRule table matching division, category, workflow_profile, and stage_name
-    4. Fallback: If Stage 1 / Attachment Status and no items configured, provide standard physical compliance items.
+    Dynamically calculates the final checklist for an invoice at a given workflow stage:
+    1. If the document is unrouted or has no matched workflow profile, return [] (no checklist).
+    2. Query Matching Checklist Matrix items based on the document's applicable synced data:
+       (division, category, branch/plant, cost_center, workflow_profile, stage_name).
+    3. Query Flow Builder extra checklist items configured for THIS EXACT workflow + stage (step.checklist_json).
+    4. Merge in deterministic order: (1) Checklist Matrix items first, then (2) Flow Builder extras.
+    5. Deduplicate preserving order (case-insensitive).
+    DO NOT hardcode checklist items.
     """
-    items: List[str] = []
+    # 1. No workflow / unrouted -> no checklist
+    if not inv or not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']:
+        return []
+    status_lower = (inv.status or '').strip().lower()
+    if 'unrouted' in status_lower or 'no rule matched' in status_lower:
+        return []
+
     clean_stage = (stage_name or '').strip()
 
-    # 1. Check WorkflowStepDefinition
+    # Step A: Matching Checklist Matrix Items
+    matrix_items: List[str] = []
+
+    # 1. ChecklistRule (Checklist Matrix table)
+    query = db.query(ChecklistRule).filter(
+        ChecklistRule.is_active == True,
+        (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
+    )
     if inv.workflow_profile_id:
-        step = db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-            WorkflowStepDefinition.step_name.ilike(clean_stage)
-        ).first()
-        if not step and clean_stage.lower().startswith('stage '):
-            try:
-                stg_num = int(clean_stage.split()[1])
-                step = db.query(WorkflowStepDefinition).filter(
-                    WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-                    WorkflowStepDefinition.stage_number == stg_num
-                ).first()
-            except (ValueError, IndexError) as exc:
-                logger.debug("Failed parsing stage number from stage_name: %s", exc)
-        if not step and (clean_stage.lower() == 'attachment status' or clean_stage.lower() == 'stage 1'):
+        query = query.filter((ChecklistRule.workflow_profile == inv.workflow_profile_id) | (ChecklistRule.workflow_profile == 'ALL') | (ChecklistRule.workflow_profile.is_(None)))
+    if inv.division:
+        query = query.filter((ChecklistRule.division == inv.division) | (ChecklistRule.division == 'ALL') | (ChecklistRule.division.is_(None)))
+    if inv.category:
+        query = query.filter((ChecklistRule.category == inv.category) | (ChecklistRule.category == 'ALL') | (ChecklistRule.category.is_(None)))
+    if hasattr(inv, 'cost_center') and inv.cost_center:
+        query = query.filter((ChecklistRule.cost_center == inv.cost_center) | (ChecklistRule.cost_center == 'ALL') | (ChecklistRule.cost_center.is_(None)))
+    if hasattr(inv, 'plant') and inv.plant:
+        query = query.filter((ChecklistRule.branch == inv.plant) | (ChecklistRule.branch == 'ALL') | (ChecklistRule.branch.is_(None)))
+
+    rules = query.order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.id.asc()).all()
+    for r in rules:
+        txt = (r.item_text or '').strip()
+        if txt and txt not in matrix_items:
+            matrix_items.append(txt)
+
+    # 2. ChecklistTemplate (Workflow-specific templates if configured)
+    tpls = db.query(ChecklistTemplate).filter(
+        ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
+        (ChecklistTemplate.stage_name.ilike(clean_stage)) | (ChecklistTemplate.stage_name == 'ALL'),
+        ChecklistTemplate.is_active == True
+    ).order_by(ChecklistTemplate.sequence_order.asc(), ChecklistTemplate.id.asc()).all()
+    for t in tpls:
+        splits = [s.strip() for s in t.item_text.split(',') if s.strip()] if ',' in t.item_text else [t.item_text.strip()]
+        for s in splits:
+            if s and s not in matrix_items:
+                matrix_items.append(s)
+
+    # Step B: Flow Builder extra checklist items for THIS EXACT workflow + stage
+    flow_builder_extras: List[str] = []
+    step = db.query(WorkflowStepDefinition).filter(
+        WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+        WorkflowStepDefinition.step_name.ilike(clean_stage)
+    ).first()
+    if not step and clean_stage.lower().startswith('stage '):
+        try:
+            stg_num = int(clean_stage.split()[1])
             step = db.query(WorkflowStepDefinition).filter(
                 WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-                WorkflowStepDefinition.stage_number == 1
+                WorkflowStepDefinition.stage_number == stg_num
             ).first()
+        except (ValueError, IndexError) as exc:
+            logger.debug("Failed parsing stage number from stage_name: %s", exc)
+    if not step and (clean_stage.lower() == 'attachment status' or clean_stage.lower() == 'stage 1'):
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == 1
+        ).first()
 
-        if step and step.checklist_json:
-            try:
-                parsed = json.loads(step.checklist_json)
-                if isinstance(parsed, list):
-                    for itm in parsed:
-                        txt = str(itm).strip()
-                        if txt and txt not in items:
-                            items.append(txt)
-            except Exception as e:
-                logger.debug("Failed parsing step.checklist_json: %s", e)
+    if step and step.checklist_json:
+        try:
+            parsed = json.loads(step.checklist_json)
+            if isinstance(parsed, list):
+                for itm in parsed:
+                    txt = str(itm).strip()
+                    if txt and txt not in flow_builder_extras:
+                        flow_builder_extras.append(txt)
+        except Exception as e:
+            logger.debug("Failed parsing step.checklist_json: %s", e)
 
-    # 2. Check ChecklistTemplate
-    if not items and inv.workflow_profile_id:
-        tpls = db.query(ChecklistTemplate).filter(
-            ChecklistTemplate.workflow_profile == inv.workflow_profile_id,
-            ChecklistTemplate.stage_name.ilike(clean_stage),
-            ChecklistTemplate.is_active == True
-        ).order_by(ChecklistTemplate.sequence_order.asc()).all()
-        for t in tpls:
-            splits = [s.strip() for s in t.item_text.split(',') if s.strip()] if ',' in t.item_text else [t.item_text.strip()]
-            for s in splits:
-                if s and s not in items:
-                    items.append(s)
+    # Step C: Merge in deterministic order & Deduplicate
+    # Preferred order: (1) Matching Checklist Matrix items, (2) Flow Builder extra checklist items
+    final_checklist: List[str] = []
+    seen_normalized = set()
 
-    # 3. Check ChecklistRule
-    if not items:
-        query = db.query(ChecklistRule).filter(
-            ChecklistRule.is_active == True,
-            (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
-        )
-        if inv.workflow_profile_id:
-            query = query.filter((ChecklistRule.workflow_profile == inv.workflow_profile_id) | (ChecklistRule.workflow_profile == 'ALL'))
-        if inv.division:
-            query = query.filter((ChecklistRule.division == inv.division) | (ChecklistRule.division == 'ALL'))
-        if inv.category:
-            query = query.filter((ChecklistRule.category == inv.category) | (ChecklistRule.category == 'ALL'))
-        rules = query.order_by(ChecklistRule.sequence_order.asc()).all()
-        for r in rules:
-            txt = (r.item_text or '').strip()
-            if txt and txt not in items:
-                items.append(txt)
+    for item in matrix_items:
+        norm = item.strip().lower()
+        if norm and norm not in seen_normalized:
+            seen_normalized.add(norm)
+            final_checklist.append(item.strip())
 
-    # 4. Standard fallback for Attachment Status if empty
-    if not items and ('attachment' in clean_stage.lower() or clean_stage in ['Stage 1', 'Attachment Status']):
-        items = ["Attachment", "Total amount", "vendor name"]
+    for item in flow_builder_extras:
+        norm = item.strip().lower()
+        if norm and norm not in seen_normalized:
+            seen_normalized.add(norm)
+            final_checklist.append(item.strip())
 
-    return items
+    return final_checklist
 
 @router.get('/api/invoices/{invoice_id}/checklist')
 def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail='Invoice not found')
+    
+    # Check if document is unrouted or has no matched workflow profile
+    is_unrouted = (
+        not inv.workflow_profile_id
+        or str(inv.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']
+        or 'unrouted' in (inv.status or '').lower()
+        or 'no rule matched' in (inv.status or '').lower()
+    )
+    if is_unrouted:
+        # Purge any previously stored default/hardcoded checklist items for this unrouted document
+        deleted = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id).delete()
+        if deleted > 0 or (inv.checklist_state and inv.checklist_state != '{}'):
+            inv.checklist_state = json.dumps({})
+            db.commit()
+        return []
+
     target_stage = stage_num or inv.current_stage or 1
     current_step_name = 'Attachment Status' if target_stage == 1 else f'Stage {target_stage}'
     if stage_name:
@@ -1962,7 +2154,8 @@ def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_
             item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False)
             db.add(item)
             items.append(item)
-        db.commit()
+        if default_items:
+            db.commit()
     return [{'id': item.id, 'stage_name': item.stage_name, 'item_text': item.item_text, 'is_checked': item.is_checked, 'checked_by': item.checked_by, 'checked_at': item.checked_at} for item in items]
 
 @router.post('/api/invoices/{invoice_id}/checklist')
@@ -1970,6 +2163,16 @@ def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail='Invoice not found')
+    
+    is_unrouted = (
+        not inv.workflow_profile_id
+        or str(inv.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']
+        or 'unrouted' in (inv.status or '').lower()
+        or 'no rule matched' in (inv.status or '').lower()
+    )
+    if is_unrouted:
+        return {'success': True, 'checklist': []}
+
     checked_items = payload.get('checked_items', [])
     req_stage_num = payload.get('stage_num') or inv.current_stage or 1
     current_step_name = 'Attachment Status' if req_stage_num == 1 else f'Stage {req_stage_num}'

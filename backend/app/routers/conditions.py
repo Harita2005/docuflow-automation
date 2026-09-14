@@ -15,9 +15,9 @@ def get_business_rules(db: Session=Depends(get_db)):
     rules = db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
     return rules
 
-@router.post('/api/admin/conditions')
-@router.post('/api/admin/conditions/save')
-@router.post('/api/admin/routing-rules')
+@router.post('/api/admin/conditions', response_model=BusinessRuleSchema)
+@router.post('/api/admin/conditions/save', response_model=BusinessRuleSchema)
+@router.post('/api/admin/routing-rules', response_model=BusinessRuleSchema)
 def save_business_rule(payload: BusinessRuleSchema, db: Session=Depends(get_db)):
     try:
         rule_id = None
