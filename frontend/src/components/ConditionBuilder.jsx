@@ -1518,32 +1518,45 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   }
 
   // =========================================================================
-  // VIEW 2: DIRECTORY / LIST VIEW (COMPACT)
+  // VIEW 2: DIRECTORY / LIST VIEW (FULL-WIDTH RESPONSIVE ENTERPRISE GRID)
   // =========================================================================
+  const filteredRules = rules.filter(r => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (r.rule_name || '').toLowerCase().includes(q) ||
+      (r.target_workflow_id || '').toLowerCase().includes(q) ||
+      (r.document_type || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="flex flex-col gap-3.5 max-w-5xl mx-auto w-full pb-10">
+    <div className="flex flex-col gap-4 w-full pb-10">
       {/* Top Header Bar */}
-      <div className="bg-white border border-slate-200/80 rounded-lg p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2">
+      <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
           {selectedCategory && (
             <button
               onClick={() => {
                 if (selectedSubCategory) setSelectedSubCategory(null);
                 else setSelectedCategory(null);
               }}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Back"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
+              <ArrowLeft className="h-4 w-4" />
             </button>
           )}
           <div>
-            <h1 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-              <span>Condition Policy Matrix</span>
-              <span className="text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight">
+                Condition Policy Matrix
+              </h1>
+              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                 {rules.length} Rules Active
               </span>
-            </h1>
-            <p className="text-[10px] text-slate-500 font-medium">
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
               {selectedCategory 
                 ? `Showing rules under ${selectedCategory}`
                 : "Manage workflow routing condition policies for synced documents."}
@@ -1551,119 +1564,162 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative w-full sm:w-56">
-            <Search className="h-3 w-3 text-slate-400 absolute left-2.5 top-2.5" />
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-full sm:w-64">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search condition rules..."
-              className="w-full text-[11px] pl-7 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md outline-none focus:bg-white focus:border-[#003F28] font-medium"
+              className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] font-medium transition"
             />
           </div>
 
           <button
             onClick={() => openEditor(null)}
-            className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] text-white font-bold text-[11px] rounded-md transition shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
+            className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3.5 w-3.5" />
             <span>Create Condition</span>
           </button>
         </div>
       </div>
 
-      {/* Rules Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {rules
-          .filter(r => {
-            if (!searchQuery) return true;
-            const q = searchQuery.toLowerCase();
-            return (
-              (r.rule_name || '').toLowerCase().includes(q) ||
-              (r.target_workflow_id || '').toLowerCase().includes(q) ||
-              (r.document_type || '').toLowerCase().includes(q)
-            );
-          })
-          .map((r, idx) => {
-            let parsed = { conditions: [] };
-            try { parsed = JSON.parse(r.conditions_json); } catch {}
-            const condList = Array.isArray(parsed) ? parsed : (parsed?.conditions || []);
-            const targetWf = workflows.find(w => w.profile_name === r.target_workflow_id || w.workflow_code === r.target_workflow_id);
+      {/* Rules Grid (Responsive: 3 cols desktop, 2 cols tablet, 1 col mobile) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full items-stretch">
+        {filteredRules.map((r, idx) => {
+          let parsed = { conditions: [] };
+          try { parsed = JSON.parse(r.conditions_json); } catch {}
+          const condList = Array.isArray(parsed) ? parsed : (parsed?.conditions || []);
+          const targetWf = workflows.find(w => w.profile_name === r.target_workflow_id || w.workflow_code === r.target_workflow_id);
 
-            return (
-              <div 
-                key={r.id} 
-                className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs hover:shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between group"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="text-[8px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded uppercase">
-                      Priority {idx + 1}
-                    </span>
-                    <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-100">
-                      {condList.length} Condition{condList.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
+          return (
+            <div 
+              key={r.id} 
+              className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs hover:shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between h-full group"
+            >
+              {/* Card Top / Header */}
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded uppercase tracking-wider border border-slate-200/60">
+                    Priority {idx + 1}
+                  </span>
+                  <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 uppercase tracking-wider">
+                    {condList.length} Condition{condList.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
 
-                  <div>
-                    <h3 className="font-black text-slate-900 text-[11.5px] tracking-tight truncate" title={r.rule_name}>
-                      {r.rule_name || 'Unnamed Condition'}
-                    </h3>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                      {r.document_type || 'AP Invoice'}
-                    </p>
-                  </div>
+                {/* Rule Title & Doc Type */}
+                <div className="mt-2.5">
+                  <h3 className="font-bold text-slate-900 text-sm tracking-tight leading-snug line-clamp-1" title={r.rule_name}>
+                    {r.rule_name || 'Unnamed Condition'}
+                  </h3>
+                  <span className="inline-block text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">
+                    {r.document_type || 'AP Invoice'}
+                  </span>
+                </div>
 
-                  {/* Conditions snippet */}
-                  <div className="flex flex-wrap gap-1 pt-0.5">
-                    {condList.slice(0, 3).map((c, ci) => (
-                      <span key={ci} className="text-[8px] font-semibold bg-slate-50 border border-slate-200 text-slate-700 px-1 py-0.2 rounded">
-                        <strong className="text-slate-900">{c.field}</strong> {c.operator} {c.value}
-                      </span>
+                {/* Compact Condition Rows/Chips */}
+                <div className="space-y-1.5 mt-3">
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Conditions
+                  </span>
+                  <div className="space-y-1.5">
+                    {condList.slice(0, 4).map((c, ci) => (
+                      <div 
+                        key={ci} 
+                        className="flex items-center justify-between text-xs bg-slate-50/90 border border-slate-200/80 rounded-lg px-2.5 py-1.5 gap-2"
+                      >
+                        <span className="font-semibold text-slate-800 truncate max-w-[45%]" title={c.field}>
+                          {c.field}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 px-1.5 py-0.5 rounded bg-white border border-slate-200 shrink-0">
+                          {c.operator === 'greater_than_or_equal' || c.operator === '>=' ? '≥' :
+                           c.operator === 'less_than_or_equal' || c.operator === '<=' ? '≤' :
+                           c.operator === 'equals' || c.operator === '==' ? '=' :
+                           c.operator === 'not_equals' || c.operator === '!=' ? '≠' :
+                           c.operator === 'greater_than' || c.operator === '>' ? '>' :
+                           c.operator === 'less_than' || c.operator === '<' ? '<' :
+                           c.operator}
+                        </span>
+                        <span className="font-bold text-slate-900 truncate max-w-[40%] text-right font-mono" title={String(c.value)}>
+                          {String(c.value)}
+                        </span>
+                      </div>
                     ))}
-                    {condList.length > 3 && (
-                      <span className="text-[8px] font-bold text-slate-400 px-1 py-0.2">
-                        +{condList.length - 3} more
-                      </span>
+                    {condList.length > 4 && (
+                      <div className="text-[10px] font-bold text-slate-400 text-center py-0.5">
+                        +{condList.length - 4} more condition{condList.length - 4 !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {condList.length === 0 && (
+                      <div className="text-[11px] text-slate-400 italic py-1">
+                        No specific conditions configured (Matches all {r.document_type || 'documents'})
+                      </div>
                     )}
                   </div>
                 </div>
+              </div>
 
-                <div className="pt-2 border-t border-slate-100 mt-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-1 truncate mr-2">
-                    <GitMerge className="h-2.5 w-2.5 text-[#003F28] shrink-0" />
-                    <span className="text-[9.5px] font-bold text-slate-800 truncate" title={r.target_workflow_id}>
-                      {targetWf ? `[${targetWf.workflow_code || 'WF'}] ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}
-                    </span>
-                  </div>
+              {/* Card Footer: Target Workflow & Actions */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 truncate min-w-0 flex-1" title={targetWf ? `${targetWf.workflow_code || 'WF'} - ${targetWf.profile_name}` : (r.target_workflow_id || 'Unassigned')}>
+                  <GitMerge className="h-3.5 w-3.5 text-[#003F28] shrink-0" />
+                  <span className="text-xs font-semibold text-slate-700 truncate">
+                    {targetWf ? (
+                      <>
+                        <span className="font-bold text-slate-900">{targetWf.workflow_code || 'WF'}</span>
+                        <span className="text-slate-400 mx-1">&bull;</span>
+                        <span>{targetWf.profile_name}</span>
+                      </>
+                    ) : (
+                      <span className="font-bold text-slate-800">{r.target_workflow_id || 'Unassigned Flow'}</span>
+                    )}
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEditor(r)}
-                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                      title="Edit Condition"
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmTarget(r.id)}
-                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                      title="Delete Condition"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEditor(r)}
+                    className="p-1.5 text-slate-400 hover:text-emerald-800 hover:bg-emerald-50 rounded-md transition cursor-pointer"
+                    title="Edit Condition Policy"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmTarget(r.id)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                    title="Delete Condition Policy"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
       </div>
 
+      {/* Empty Search State */}
+      {filteredRules.length === 0 && rules.length > 0 && (
+        <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center space-y-2">
+          <p className="text-xs font-bold text-slate-700">No condition policies matched "{searchQuery}"</p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
+          >
+            Clear Search
+          </button>
+        </div>
+      )}
+
+      {/* Global Empty State */}
       {rules.length === 0 && (
-        <div className="bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center space-y-2.5">
+        <div className="bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center space-y-2.5 w-full">
           <div className="h-9 w-9 rounded-full bg-emerald-50 text-[#003F28] flex items-center justify-center mx-auto">
             <Sliders className="h-5 w-5" />
           </div>
@@ -1673,9 +1729,9 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
           </p>
           <button
             onClick={() => openEditor(null)}
-            className="px-3 py-1.5 bg-[#003F28] hover:bg-[#003220] text-white font-bold text-[11px] rounded-md transition shadow-2xs inline-flex items-center gap-1"
+            className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-xs rounded-lg transition shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3.5 w-3.5" />
             <span>Create Condition</span>
           </button>
         </div>
