@@ -284,7 +284,7 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception('Error in MFA setup TOTP')
+        logger.exception('Error in MFA setup TOTP: %s', exc)
         raise HTTPException(status_code=500, detail='Internal server error during MFA setup')
 
 @router.post('/mfa/verify', response_model=TokenResponse)

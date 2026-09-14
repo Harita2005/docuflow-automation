@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, and_, func, extract
+from sqlalchemy import or_, func, extract
 from sqlalchemy.orm import Session
 from app.config.settings import settings
 from app.database.connection import SessionLocal, get_db
@@ -172,8 +172,8 @@ def get_approved_invoices(
                     extract('year', Invoice.created_at) == y_int
                 )
             )
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("Failed parsing year filter as integer: %s", exc)
 
     # 4. Filter: MONTH
     MONTH_MAP = {

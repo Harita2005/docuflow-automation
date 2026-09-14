@@ -1,8 +1,6 @@
-﻿import io
-import pytest
-from app.database.models import Invoice, User, WorkflowStepDefinition
+import io
+from app.database.models import Invoice
 from app.auth import create_access_token
-from app.config.settings import settings
 
 def test_replace_pdf_in_attachment_status_and_forbidden_in_other_stages(client, db_session, seed_test_data):
     admin_token = create_access_token(data={'sub': 'admin', 'role': 'admin'})
