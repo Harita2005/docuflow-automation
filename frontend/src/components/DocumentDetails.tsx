@@ -1928,9 +1928,9 @@ export default function DocumentDetails({
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
             
             {/* Modal Top Bar */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 flex items-center justify-center shadow-inner">
+                <div className="h-8 w-8 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 flex items-center justify-center shadow-inner">
                   <Database className="h-4 w-4" />
                 </div>
                 <div>
@@ -1942,7 +1942,7 @@ export default function DocumentDetails({
                       Connected
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-300">
+                  <p className="text-[10px] text-emerald-100/80">
                     Live SAP & MS SQL Sync
                   </p>
                 </div>
@@ -1951,7 +1951,7 @@ export default function DocumentDetails({
               <button
                 type="button"
                 onClick={() => setShowErpSyncModal(false)}
-                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1986,7 +1986,7 @@ export default function DocumentDetails({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/70">
                     <span className="text-[8px] font-extrabold text-slate-400 uppercase block">ERP DocKey</span>
-                    <span className="text-[11px] font-mono font-black text-indigo-700">
+                    <span className="text-[11px] font-mono font-black text-[#003F28]">
                       {document.doc_key || 8803}
                     </span>
                   </div>
@@ -2048,10 +2048,10 @@ export default function DocumentDetails({
                 <button
                   type="button"
                   onClick={() => setShowRawPayload(!showRawPayload)}
-                  className="flex items-center justify-between w-full text-slate-700 hover:text-indigo-600 font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                  className="flex items-center justify-between w-full text-slate-700 hover:text-[#003F28] font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-colors"
                 >
                   <span className="flex items-center gap-1.5">
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-indigo-600" />
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-[#003F28]" />
                     <span>Raw ERP Sync Payload JSON ({showRawPayload ? "Collapse" : "Expand"})</span>
                   </span>
                   {showRawPayload ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -2071,7 +2071,7 @@ export default function DocumentDetails({
               <button
                 type="button"
                 onClick={() => setShowErpSyncModal(false)}
-                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
               </button>
