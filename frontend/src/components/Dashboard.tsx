@@ -749,6 +749,10 @@ export default function Dashboard({
 
                       {/* Status Badge */}
                       {renderStatusBadge(doc.status, doc.status_badge_type)}
+                      {/* Assigned Approver */}
+                      {doc.assigned_approver && (
+                        <span className="ml-1 text-[9px] text-slate-600">⎈ {doc.assigned_approver}</span>
+                      )}
                     </div>
                   </div>
                 </div>

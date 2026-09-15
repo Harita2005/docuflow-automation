@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { 
   Search, 
   CheckCircle2, 
-  FileText,
-  Calendar,
-  X
+  FileText, 
+  Calendar, 
+  X,
+  Eye
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
 import { formatDocNumber } from "../utils/formatters";
@@ -30,12 +31,42 @@ export default function WorkTrackerPage({
   const [activeTab, setActiveTab] = useState("ALL");
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
-    return initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
+    const saved = initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
+    return saved === "approved" || saved === "cancelled" ? "all" : saved;
   });
   const [sortBy, _setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [trackerDocs, setTrackerDocs] = useState<DbInvoice[]>([]);
+  const [hasLoadedApi, setHasLoadedApi] = useState(false);
+
+  // Server-side fetching from dedicated /api/documents/work-tracker endpoint
+  const fetchTrackerDocs = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/documents/work-tracker", {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTrackerDocs(data);
+        setHasLoadedApi(true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch work-tracker docs:", err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchTrackerDocs();
+  }, [fetchTrackerDocs, documents]);
+
+  React.useEffect(() => {
+    const handleFocus = () => fetchTrackerDocs();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [fetchTrackerDocs]);
 
   // Robust date extraction and filter matching
   const getDocumentDates = (d: DbInvoice): string[] => {
@@ -121,25 +152,68 @@ export default function WorkTrackerPage({
 
   const isAssignedToUser = (doc: DbInvoice): boolean => {
     if (doc.is_current_approver) return true;
-    if (!currentUserUsername && !currentUserEmail) return false;
+    if (!currentUserUsername && !currentUserEmail && !currentUserRole) return false;
     const uHandle = (currentUserUsername || '').toLowerCase().trim();
     const eHandle = (currentUserEmail || '').toLowerCase().trim();
+    const rHandle = (currentUserRole || '').toLowerCase().trim();
     const approverStr = (doc.assigned_approver || '').toLowerCase();
     const pool = approverStr.split(',').map(s => s.trim());
+
+    // Role mapping for common designations
+    const roleAliases: Record<string, string[]> = {
+      admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
+      manager: ["manager", "operations manager", "operations_manager"],
+      gm: ["gm", "general manager", "general_manager"],
+      jmd: ["jmd", "joint managing director", "joint_managing_director"],
+      md: ["md", "managing director", "managing_director"],
+      finance_auditor: ["finance auditor", "auditor", "internal auditor", "finance & internal auditor", "finance and internal auditor"],
+      employee: ["employee", "standard employee", "standard_employee"]
+    };
+    const activeAliases = roleAliases[rHandle] || [rHandle];
+
     if (uHandle && (pool.includes(uHandle) || pool.some(p => p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (eHandle && (pool.includes(eHandle) || pool.some(p => p.includes(eHandle)))) return true;
+    if (rHandle && pool.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
     return false;
   };
 
-  const [trackerScope, _setTrackerScope] = useState<'assigned' | 'all'>(() => 
-    currentUserRole === 'admin' ? 'all' : 'assigned'
-  );
+  // Terminal / Approved check: Work Tracker must NEVER display approved or terminal documents
+  const isTerminalOrApproved = (doc: DbInvoice) => {
+    const st = (doc.status || "").toLowerCase().trim();
+    const cs = (String(doc.current_stage || "")).toLowerCase().trim();
+    return (
+      st === "approved" ||
+      st.includes("approved") ||
+      st.includes("settled") ||
+      st.includes("paid") ||
+      st.includes("ready for payment") ||
+      st.includes("cancelled") ||
+      st.includes("failed") ||
+      cs.includes("approved")
+    );
+  };
 
-  // Work Tracker strictly scopes documents: non-admins only see documents where they are the current approver, or which they have previously approved in this workflow.
+  const isActionableForUser = (doc: DbInvoice): boolean => {
+    // If user has already approved their stage, it is no longer an active actionable item for them
+    if (doc.has_approved) return false;
+    // When loaded from authoritative backend API, server has already filtered to actionable documents
+    if (hasLoadedApi) return true;
+    return Boolean(doc.is_current_approver) || isAssignedToUser(doc);
+  };
+
+  const sourceDocs = hasLoadedApi ? trackerDocs : documents;
+
+  // Work Tracker strictly scopes documents: only active, in-progress documents awaiting approval
   const visibleDocs = useMemo(() => {
-    if (trackerScope === "all" || currentUserRole === "admin") return documents;
-    return documents.filter(doc => isAssignedToUser(doc) || Boolean(doc.is_current_approver) || Boolean(doc.has_approved));
-  }, [documents, currentUserRole, trackerScope, currentUserUsername, currentUserEmail]);
+    const activeDocs = sourceDocs.filter(doc => !isTerminalOrApproved(doc));
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "system_admin" || currentUserRole === "superadmin";
+    return activeDocs.filter(doc => {
+      // If user has already signed off/approved on this document, it is no longer an active actionable item for them
+      if (doc.has_approved) return false;
+      if (isAdmin) return true;
+      return isActionableForUser(doc);
+    });
+  }, [sourceDocs, currentUserRole, currentUserUsername, currentUserEmail, hasLoadedApi]);
 
   // Derive dynamic document types (includes 'ALL' for cross-category views)
   const dynamicTypes = useMemo(() => {
@@ -219,25 +293,20 @@ export default function WorkTrackerPage({
         }
       }
 
-      // Status filter (strictly handles: pending, in_progress, approved, hold, rejected, cancelled)
-      if (statusFilter !== "all") {
+      // Status filter (strictly handles: pending, in_progress, hold, rejected)
+      if (statusFilter !== "all" && statusFilter !== "approved" && statusFilter !== "cancelled") {
         const st = (doc.status || "").toLowerCase();
-        const isCompleted = ["settled", "approved", "paid", "ready for payment"].some(s => st.includes(s));
-        const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !isCompleted;
-        const isInProgress = (Boolean(doc.has_approved) || st.includes("in progress")) && !isActionRequired && !isCompleted;
+        const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !doc.has_approved;
+        const isInProgress = st.includes("in progress") || !isActionRequired;
 
         if (statusFilter === "pending") {
           if (!isActionRequired) return false;
         } else if (statusFilter === "in_progress") {
           if (!isInProgress) return false;
-        } else if (statusFilter === "approved") {
-          if (!isCompleted) return false;
         } else if (statusFilter === "hold") {
           if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
-          if (!st.includes("reject") && !st.includes("fail") && !st.includes("cancel") && !st.includes("void") && !st.includes("returned")) return false;
-        } else if (statusFilter === "cancelled") {
-          if (!st.includes("cancel")) return false;
+          if (!st.includes("reject") && !st.includes("fail") && !st.includes("void") && !st.includes("returned")) return false;
         }
       }
 
@@ -341,13 +410,11 @@ export default function WorkTrackerPage({
               }}
               className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
             >
-              <option value="all">All Statuses</option>
+              <option value="all">All Active / In Progress</option>
               <option value="pending">Pending (Action Required)</option>
-              <option value="in_progress">In Progress (Tracking)</option>
-              <option value="approved">Approved</option>
+              <option value="in_progress">In Progress</option>
               <option value="hold">On Hold</option>
               <option value="rejected">Rejected</option>
-              <option value="cancelled">Cancelled</option>
             </select>
 
             {statusFilter !== "all" && (
@@ -426,36 +493,22 @@ export default function WorkTrackerPage({
           <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             
             {/* Enterprise Compact Table Header (8 Columns) */}
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
-              <tr>
-                <th className="py-2 px-3 w-10 text-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer h-3.5 w-3.5"
-                    checked={filteredAndSortedDocs.length > 0 && selectedDocIds.length === filteredAndSortedDocs.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedDocIds(filteredAndSortedDocs.map(d => d.id));
-                      } else {
-                        setSelectedDocIds([]);
-                      }
-                    }}
-                    title="Select All"
-                  />
-                </th>
-                <th className="py-2 px-3 w-[15%]">Document ID</th>
-                <th className="py-2 px-3 w-[26%]">Supplier / Vendor</th>
-                <th className="py-2 px-3 w-[14%]">Document Type</th>
-                <th className="py-2 px-3 w-[15%] text-right">Amount (₹)</th>
-                <th className="py-2 px-3 w-[11%] text-center">Current Stage</th>
-                <th className="py-2 px-3 w-[10%] text-center">Status</th>
-                <th className="py-2 px-3 w-[9%] text-center">Action</th>
-              </tr>
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
+               <tr>
+                 <th className="py-1.5 px-2.5 w-10 text-center">#</th>
+                 <th className="py-1.5 px-2.5 w-[15%]">Document ID</th>
+                 <th className="py-1.5 px-2.5 w-[26%]">Supplier / Vendor</th>
+                 <th className="py-1.5 px-2.5 w-[14%]">Document Type</th>
+                 <th className="py-1.5 px-2.5 w-[15%] text-right">Amount (₹)</th>
+                 <th className="py-1.5 px-2.5 w-[11%] text-center">Current Stage</th>
+                 <th className="py-1.5 px-2.5 w-[10%] text-center">Status</th>
+                 <th className="py-1.5 px-2.5 w-[9%] text-center">Action</th>
+               </tr>
             </thead>
 
             {/* Enterprise Compact Table Body */}
             <tbody className="divide-y divide-slate-100 text-slate-800">
-              {filteredAndSortedDocs.map((doc) => {
+              {filteredAndSortedDocs.map((doc, idx) => {
                 const vendorName = doc.vendor_name || "Enterprise Supplier";
                 const grossAmount = Number(doc.amount || 0);
                 const displayId = formatDocNumber(doc.id, doc.document_type, (doc as any).category);
@@ -508,7 +561,7 @@ export default function WorkTrackerPage({
 
                   if (isCompleted) {
                     return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         <span>Approved</span>
                       </span>
@@ -516,7 +569,7 @@ export default function WorkTrackerPage({
                   }
                   if (status === "On Hold") {
                     return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
                         <span>On Hold</span>
                       </span>
@@ -524,7 +577,7 @@ export default function WorkTrackerPage({
                   }
                   if (status === "Rejected" || status === "Failed" || status === "Cancelled") {
                     return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                         <span>{status === "Cancelled" ? "Cancelled" : "Rejected"}</span>
                       </span>
@@ -536,7 +589,7 @@ export default function WorkTrackerPage({
 
                   if (isActionRequired) {
                     return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                         <span>Pending</span>
                       </span>
@@ -545,7 +598,7 @@ export default function WorkTrackerPage({
 
                   if (hasApprovedByUser) {
                     return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                         <span>In Progress</span>
                       </span>
@@ -553,14 +606,14 @@ export default function WorkTrackerPage({
                   }
 
                   return (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-slate-50 text-slate-700 border border-slate-200">
                       <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                       <span>In Progress</span>
                     </span>
                   );
                 };
 
-                // Helper for Review Button
+                // Helper for Review / Action Eye Button (~17-18px icon)
                 const renderActionButton = () => (
                   <button
                     type="button"
@@ -568,10 +621,10 @@ export default function WorkTrackerPage({
                       e.stopPropagation();
                       onViewDocument(doc.id);
                     }}
-                    className="px-2.5 py-1 border border-[#003F28]/20 bg-[#003F28]/10 hover:bg-[#003F28] hover:text-white font-medium text-[11px] rounded transition-all cursor-pointer inline-flex items-center justify-center gap-1 mx-auto text-[#003F28]"
+                    className="p-1 rounded text-slate-400 hover:text-[#003F28] hover:bg-emerald-50/60 transition cursor-pointer inline-flex items-center justify-center mx-auto"
+                    title="View Document Details"
                   >
-                    <span>Review</span>
-                    <span>→</span>
+                    <Eye className="h-[17.5px] w-[17.5px]" />
                   </button>
                 );
 
@@ -583,33 +636,16 @@ export default function WorkTrackerPage({
                     onClick={() => onViewDocument(doc.id)}
                     className={`hover:bg-slate-50/70 transition-colors group cursor-pointer ${isSelected ? 'bg-indigo-50/40' : ''}`}
                   >
-                    {/* 1. Checkbox */}
-                    <td 
-                      className="py-2 px-3 align-middle text-center w-10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer h-3.5 w-3.5"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedDocIds(prev => [...prev, doc.id]);
-                          } else {
-                            setSelectedDocIds(prev => prev.filter(id => id !== doc.id));
-                          }
-                        }}
-                      />
-                    </td>
+                    <td className="py-1.5 px-2.5 align-middle text-center w-10 text-[12px] text-slate-500">{idx + 1}</td>
 
                     {/* 2. Document ID */}
-                    <td className="py-2 px-3 align-middle w-[15%] min-w-0">
+                    <td className="py-1.5 px-2.5 align-middle w-[15%] min-w-0">
                       <div className="flex flex-col min-w-0 leading-tight">
                         <span className="text-[12px] font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate" title={displayId}>
                           {displayId}
                         </span>
                         {docDate && (
-                          <span className="text-[10.5px] text-slate-400 truncate mt-0.5">
+                          <span className="text-[11px] text-slate-400 truncate mt-0.5">
                             {docDate}
                           </span>
                         )}
@@ -617,38 +653,38 @@ export default function WorkTrackerPage({
                     </td>
 
                     {/* 3. Supplier / Vendor */}
-                    <td className="py-2 px-3 align-middle w-[26%] min-w-0">
+                    <td className="py-1.5 px-2.5 align-middle w-[26%] min-w-0">
                       <span className="text-[12px] font-semibold text-slate-900 truncate block" title={vendorName}>
                         {vendorName}
                       </span>
                     </td>
 
                     {/* 4. Document Type */}
-                    <td className="py-2 px-3 align-middle w-[14%] min-w-0">
-                      <span className="text-[11.5px] text-slate-600 truncate block">
+                    <td className="py-1.5 px-2.5 align-middle w-[14%] min-w-0">
+                      <span className="text-[11px] text-slate-600 truncate block">
                         {docTypeLabel}
                       </span>
                     </td>
 
                     {/* 5. Amount (₹) */}
-                    <td className="py-2 px-3 align-middle text-right w-[15%] whitespace-nowrap">
+                    <td className="py-1.5 px-2.5 align-middle text-right w-[15%] whitespace-nowrap">
                       <span className="text-[12px] font-semibold text-slate-900">
                         ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
 
                     {/* 6. Current Stage */}
-                    <td className="py-2 px-3 align-middle text-center w-[11%]">
+                    <td className="py-1.5 px-2.5 align-middle text-center w-[11%]">
                       {renderStageBadge()}
                     </td>
 
                     {/* 7. Status */}
-                    <td className="py-2 px-3 align-middle text-center w-[10%]">
+                    <td className="py-1.5 px-2.5 align-middle text-center w-[10%]">
                       {renderStatusBadge()}
                     </td>
 
                     {/* 8. Action */}
-                    <td className="py-2 px-3 align-middle text-center w-[9%]">
+                    <td className="py-1.5 px-2.5 align-middle text-center w-[9%]">
                       {renderActionButton()}
                     </td>
                   </tr>
@@ -680,11 +716,17 @@ export default function WorkTrackerPage({
         </div>
 
         {/* Table Footer Summary Bar */}
-        <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[10px] text-slate-500 font-bold">
+        <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-medium">
           <span>
-            Showing <strong className="text-slate-900">{filteredAndSortedDocs.length}</strong> of <strong className="text-slate-900">{documents.length}</strong> total records
+            {filteredAndSortedDocs.length === 0 ? (
+              "No actionable documents"
+            ) : filteredAndSortedDocs.length === 1 ? (
+              <>Showing <strong className="text-slate-900 font-semibold">1</strong> of <strong className="text-slate-900 font-semibold">1</strong> actionable record</>
+            ) : (
+              <>Showing <strong className="text-slate-900 font-semibold">{filteredAndSortedDocs.length}</strong> actionable records</>
+            )}
           </span>
-          <div className="flex items-center gap-1.5 text-slate-500">
+          <div className="flex items-center gap-1.5 text-slate-500 text-[10.5px]">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <span>DocuFlow Active</span>
           </div>

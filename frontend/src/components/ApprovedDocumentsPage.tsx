@@ -26,21 +26,7 @@ interface ApprovedDocumentsPageProps {
   onRefreshDocs?: () => void;
 }
 
-const MONTH_NAMES = [
-  { value: "all", label: "All Months" },
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
+
 
 export default function ApprovedDocumentsPage({
   documents,
@@ -77,6 +63,69 @@ export default function ApprovedDocumentsPage({
   const [draftToDate, setDraftToDate] = useState<string>("");
   const [draftDocType, setDraftDocType] = useState<string>("all");
 
+  // 4b. Dynamic Database Filter Options (No hardcoding)
+  const [dbDocTypes, setDbDocTypes] = useState<string[]>([]);
+  const [dbYears, setDbYears] = useState<string[]>([]);
+  const [dbMonths, setDbMonths] = useState<{ value: string; label: string }[]>([]);
+  const [dbDates, setDbDates] = useState<string[]>([]);
+
+  // Function to load dynamic cascading filter options from the database
+  const loadFilterOptions = useCallback(async (type?: string, year?: string, month?: string) => {
+    try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+      const params = new URLSearchParams();
+      if (type && type !== "all") params.set("document_type", type);
+      if (year && year !== "all") params.set("year", year);
+      if (month && month !== "all") params.set("month", month);
+
+      const res = await fetch(`/api/documents/approved/filter-options?${params.toString()}`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.document_types) && data.document_types.length > 0) {
+          setDbDocTypes(data.document_types);
+        }
+        setDbYears(Array.isArray(data.years) ? data.years : []);
+        setDbMonths(Array.isArray(data.months) ? data.months : []);
+        setDbDates(Array.isArray(data.dates) ? data.dates : []);
+      }
+    } catch (err) {
+      console.warn("Failed to load filter options from database:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFilterOptions();
+  }, [loadFilterOptions]);
+
+  // Cascading Filter Change Handlers:
+  // 1. Changing Document Type resets Year, Month, Date and reloads available options
+  const handleDraftDocTypeChange = (newType: string) => {
+    setDraftDocType(newType);
+    setDraftYear("all");
+    setDraftMonth("all");
+    setDraftDate("");
+    setDraftFromDate("");
+    setDraftToDate("");
+    loadFilterOptions(newType, "all", "all");
+  };
+
+  // 2. Changing Year resets Month and Date and reloads available options
+  const handleDraftYearChange = (newYear: string) => {
+    setDraftYear(newYear);
+    setDraftMonth("all");
+    setDraftDate("");
+    loadFilterOptions(draftDocType, newYear, "all");
+  };
+
+  // 3. Changing Month resets Date and reloads available dates
+  const handleDraftMonthChange = (newMonth: string) => {
+    setDraftMonth(newMonth);
+    setDraftDate("");
+    loadFilterOptions(draftDocType, draftYear, newMonth);
+  };
+
   // 5. Server Data & Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -96,13 +145,14 @@ export default function ApprovedDocumentsPage({
   // Sync draft filters when popup opens
   const handleOpenFilter = () => {
     if (!isFilterOpen) {
+      setDraftDocType(appliedDocType);
       setDraftYear(appliedYear);
       setDraftMonth(appliedMonth);
       setDraftDateMode(appliedDateMode);
       setDraftDate(appliedDate);
       setDraftFromDate(appliedFromDate);
       setDraftToDate(appliedToDate);
-      setDraftDocType(appliedDocType);
+      loadFilterOptions(appliedDocType, appliedYear, appliedMonth);
     }
     setIsFilterOpen(!isFilterOpen);
   };
@@ -168,40 +218,59 @@ export default function ApprovedDocumentsPage({
     setDraftToDate(formatDateForInput(now));
   };
 
-  // Base list helper for in-memory fallback
+  // Base list helper for in-memory fallback (strictly completely approved documents)
   const isApproved = (doc: DbInvoice): boolean => {
     const s = (doc.status || "").toLowerCase().trim();
-    return s.includes("approved") || s.includes("settled") || s.includes("paid") || s.includes("ready for payment");
+    if (!s) return false;
+    if (s.includes("in progress") || s.includes("pending") || s.includes("rejected") || s.includes("cancelled") || s.includes("hold") || s.includes("stage")) {
+      return false;
+    }
+    return s === "approved";
   };
 
   const localApprovedDocs = useMemo(() => {
     return documents.filter(isApproved);
   }, [documents]);
 
-  // Available Years dynamically extracted
+  // Available Years dynamically extracted from database, fallback to local
   const availableYears = useMemo(() => {
+    if (dbYears.length > 0) return dbYears;
     const years = new Set<string>();
-    const currentYear = new Date().getFullYear();
-    for (let y = currentYear; y >= currentYear - 4; y--) {
-      years.add(String(y));
-    }
     localApprovedDocs.forEach(d => {
       const dt = getDocDate(d);
       if (dt) years.add(String(dt.getFullYear()));
     });
     return Array.from(years).sort().reverse();
-  }, [localApprovedDocs]);
+  }, [dbYears, localApprovedDocs]);
 
-  // Available Document Types dynamically extracted
+  // Available Document Types dynamically extracted from database, fallback to local
   const availableDocTypes = useMemo(() => {
-    const standardTypes = ["AP INVOICE", "PURCHASE ORDER", "SERVICE & MAINTENANCE", "AGREEMENT", "CONTRACT", "OTHER"];
-    const set = new Set<string>(standardTypes);
+    if (dbDocTypes.length > 0) return dbDocTypes;
+    const set = new Set<string>();
     localApprovedDocs.forEach(d => {
       const t = (d.document_type || "").toUpperCase().trim();
       if (t) set.add(t);
     });
     return Array.from(set).sort();
-  }, [localApprovedDocs]);
+  }, [dbDocTypes, localApprovedDocs]);
+
+  // Available Months dynamically extracted from database, fallback to local
+  const availableMonths = useMemo(() => {
+    if (dbMonths.length > 0) return dbMonths;
+    const MONTH_LABELS: Record<string, string> = {
+      "1": "January", "2": "February", "3": "March", "4": "April",
+      "5": "May", "6": "June", "7": "July", "8": "August",
+      "9": "September", "10": "October", "11": "November", "12": "December"
+    };
+    const months = new Set<string>();
+    localApprovedDocs.forEach(d => {
+      const dt = getDocDate(d);
+      if (dt) months.add(String(dt.getMonth() + 1));
+    });
+    return Array.from(months)
+      .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+      .map(m => ({ value: m, label: MONTH_LABELS[m] || `Month ${m}` }));
+  }, [dbMonths, localApprovedDocs]);
 
   // 6. Server-side API fetching
   const fetchApprovedDocuments = useCallback(async () => {
@@ -518,7 +587,7 @@ export default function ApprovedDocumentsPage({
     document.body.removeChild(link);
   };
 
-  const selectedMonthLabel = MONTH_NAMES.find(m => m.value === appliedMonth)?.label || "Month";
+  const selectedMonthLabel = availableMonths.find(m => m.value === appliedMonth)?.label || (appliedMonth !== "all" ? `Month ${appliedMonth}` : "Month");
 
   return (
     <div className="space-y-3 pb-8">
@@ -533,8 +602,12 @@ export default function ApprovedDocumentsPage({
               <h1 className="text-sm font-bold text-slate-900 tracking-tight font-display">
                 Approved Documents
               </h1>
-              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
-                {totalRecordsCount} Settled
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                totalRecordsCount > 0 
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+              }`}>
+                {totalRecordsCount} Approved
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
@@ -635,14 +708,31 @@ export default function ApprovedDocumentsPage({
                   </div>
 
                   <div className="space-y-3">
-                    {/* 1. YEAR FILTER */}
+                    {/* 1. DOCUMENT TYPE FILTER (Parent Filter) */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Document Type
+                      </label>
+                      <select
+                        value={draftDocType}
+                        onChange={(e) => handleDraftDocTypeChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Document Types</option>
+                        {availableDocTypes.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. YEAR FILTER */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                         Year
                       </label>
                       <select
                         value={draftYear}
-                        onChange={(e) => setDraftYear(e.target.value)}
+                        onChange={(e) => handleDraftYearChange(e.target.value)}
                         className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                       >
                         <option value="all">All Years</option>
@@ -652,23 +742,24 @@ export default function ApprovedDocumentsPage({
                       </select>
                     </div>
 
-                    {/* 2. MONTH FILTER */}
+                    {/* 3. MONTH FILTER */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                         Month
                       </label>
                       <select
                         value={draftMonth}
-                        onChange={(e) => setDraftMonth(e.target.value)}
+                        onChange={(e) => handleDraftMonthChange(e.target.value)}
                         className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                       >
-                        {MONTH_NAMES.map(m => (
+                        <option value="all">All Months</option>
+                        {availableMonths.map(m => (
                           <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                       </select>
                     </div>
 
-                    {/* 3. DATE FILTER (Supports Specific Date or Date Range) */}
+                    {/* 4. DATE FILTER (Supports Specific Date or Date Range) */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
@@ -701,12 +792,25 @@ export default function ApprovedDocumentsPage({
                       </div>
 
                       {draftDateMode === "specific" ? (
-                        <input
-                          type="date"
-                          value={draftDate}
-                          onChange={(e) => setDraftDate(e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
-                        />
+                        dbDates.length > 0 ? (
+                          <select
+                            value={draftDate}
+                            onChange={(e) => setDraftDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                          >
+                            <option value="">All Dates</option>
+                            {dbDates.map(d => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="date"
+                            value={draftDate}
+                            onChange={(e) => setDraftDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                          />
+                        )
                       ) : (
                         <div className="space-y-1.5">
                           <div className="grid grid-cols-2 gap-2">
@@ -756,23 +860,6 @@ export default function ApprovedDocumentsPage({
                         </div>
                       )}
                     </div>
-
-                    {/* 4. DOCUMENT TYPE FILTER */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                        Document Type
-                      </label>
-                      <select
-                        value={draftDocType}
-                        onChange={(e) => setDraftDocType(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
-                      >
-                        <option value="all">All Document Types</option>
-                        {availableDocTypes.map(type => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
 
                   {/* POPUP ACTION BUTTONS: [ Clear All ] and [ Apply Filters ] */}
@@ -797,7 +884,7 @@ export default function ApprovedDocumentsPage({
             </div>
 
             {/* Sort Control */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5">
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1">
               <ArrowUpDown className="h-3 w-3 text-slate-500 shrink-0" />
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sort:</span>
               <select
@@ -910,27 +997,7 @@ export default function ApprovedDocumentsPage({
           </div>
         )}
 
-        {/* Filter Summary Status */}
-        <div className="flex items-center justify-between pt-1 text-[10.5px] text-slate-500">
-          <div className="flex items-center gap-2">
-            <span>
-              Showing <strong className="text-slate-800 font-bold">{displayedDocs.length}</strong> of {totalRecordsCount} records
-            </span>
-            {hasAnyFilterOrSearch && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-semibold">
-                <Filter className="h-2.5 w-2.5" /> Filtered View
-              </span>
-            )}
-            {isLoading && (
-              <span className="inline-flex items-center gap-1 text-[9.5px] text-slate-400">
-                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading...
-              </span>
-            )}
-          </div>
-          <div className="text-[10px] text-slate-400 hidden sm:block">
-            Click any row to view complete document details
-          </div>
-        </div>
+        
       </div>
 
       {/* 4. COMPACT APPROVED DOCUMENTS TABLE */}
@@ -945,17 +1012,17 @@ export default function ApprovedDocumentsPage({
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-[10.5px]">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold tracking-wider uppercase text-[9.5px]">
-                <th className="py-2 px-2.5 w-8 text-center"><input type="checkbox" className="form-checkbox h-3 w-3" /></th>
-                <th className="py-2 px-2.5">Doc ID</th>
-                <th className="py-2 px-2.5">Supplier / Vendor</th>
-                <th className="py-2 px-2.5">Doc Type</th>
-                <th className="py-2 px-2.5 text-right">Amount</th>
-                <th className="py-2 px-2.5">Current Stage</th>
-                <th className="py-2 px-2.5 text-center">Status</th>
-                <th className="py-2 px-2.5 text-center w-14">Action</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-medium tracking-wide text-[11px]">
+                <th className="py-1.5 px-2.5 w-10 text-center">#</th>
+                <th className="py-1.5 px-2.5 w-[16%]">DOCUMENT ID</th>
+                <th className="py-1.5 px-2.5 w-[25%]">SUPPLIER / VENDOR</th>
+                <th className="py-1.5 px-2.5 w-[14%]">DOCUMENT TYPE</th>
+                <th className="py-1.5 px-2.5 text-right w-[14%]">AMOUNT</th>
+                <th className="py-1.5 px-2.5 text-center w-[11%]">CURRENT STAGE</th>
+                <th className="py-1.5 px-2.5 text-center w-[11%]">STATUS</th>
+                <th className="py-1.5 px-2.5 text-center w-[9%]">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -975,57 +1042,70 @@ export default function ApprovedDocumentsPage({
                       onClick={() => onViewDocument(doc.id)}
                       className="hover:bg-slate-50/80 cursor-pointer transition group"
                     >
-                      {/* Row index */}
-                      <td className="py-1.5 px-2.5 text-center"><input type="checkbox" className="form-checkbox h-3 w-3" /></td>
+                      {/* 1. Serial number */}
+                      <td className="py-1.5 px-2.5 w-10 text-center text-[12px] text-slate-500">
+                        {globalIdx}
+                      </td>
 
-                      {/* Document ID */}
-                      <td className="py-1.5 px-2.5 font-mono font-bold text-slate-800 text-[9.5px]">
-                        <span className="text-[#003F28] group-hover:underline">
-                          {doc.id}
+                      {/* 2. Document ID & Date */}
+                      <td className="py-1.5 px-2.5 w-[16%] min-w-0">
+                        <div className="flex flex-col min-w-0 leading-tight">
+                          <span className="text-[12px] font-semibold text-slate-900 group-hover:text-[#003F28] transition-colors truncate" title={doc.id}>
+                            {doc.id}
+                          </span>
+                          {formattedDate && formattedDate !== "-" && (
+                            <span className="text-[11px] text-slate-400 truncate mt-0.5">
+                              {formattedDate}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 3. Supplier / Vendor */}
+                      <td className="py-1.5 px-2.5 w-[25%] min-w-0">
+                        <span className="text-[12px] font-semibold text-slate-900 truncate block" title={doc.vendor_name || "-"}>
+                          {doc.vendor_name || "-"}
                         </span>
                       </td>
 
-
-
-                      {/* Vendor / Party */}
-                      <td className="py-1.5 px-2.5 text-slate-700 max-w-[160px] truncate text-[10px]" title={doc.vendor_name}>
-                        {doc.vendor_name || "-"}
-                      </td>
-
-                      {/* Document Type */}
-                      <td className="py-1.5 px-2.5">
-                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                      {/* 4. Document Type */}
+                      <td className="py-1.5 px-2.5 w-[14%] min-w-0">
+                        <span className="text-[11px] text-slate-600 truncate block">
                           {doc.document_type || "AP INVOICE"}
                         </span>
                       </td>
 
-                      <td className="py-1.5 px-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap text-[10px]">
-                        {formatCurrency(doc.amount)}
+                      {/* 5. Amount */}
+                      <td className="py-1.5 px-2.5 text-right w-[14%] whitespace-nowrap">
+                        <span className="text-[12px] font-semibold text-slate-900 font-mono">
+                          {formatCurrency(doc.amount)}
+                        </span>
                       </td>
 
-
-
-                      {/* Current Stage */}
-                      <td className="py-1.5 px-2.5 text-slate-600 whitespace-nowrap text-[10px]">
-                        {formattedDate}
+                      {/* 6. Current Stage */}
+                      <td className="py-1.5 px-2.5 text-center w-[11%]">
+                        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          <span>Approved</span>
+                        </span>
                       </td>
 
-                      {/* Status */}
-                      <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
+                      {/* 7. Status badge */}
+                      <td className="py-1.5 px-2.5 text-center w-[11%] whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold uppercase bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
                           {doc.status || "APPROVED"}
                         </span>
                       </td>
 
-                      {/* Action */}
-                      <td className="py-2 px-2.5 text-center" onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}>
+                      {/* 8. Action */}
+                      <td className="py-1.5 px-2.5 text-center w-[9%]" onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}>
                         <button
                           type="button"
-                          className="p-1 rounded text-slate-500 hover:text-[#003F28] hover:bg-slate-100 transition"
+                          className="p-1 rounded text-slate-400 hover:text-[#003F28] hover:bg-emerald-50/60 transition cursor-pointer inline-flex items-center justify-center mx-auto"
                           title="View Document Details"
                         >
-                          <Eye className="h-3.5 w-3.5" />
+                          <Eye className="h-[17.5px] w-[17.5px]" />
                         </button>
                       </td>
                     </tr>
@@ -1033,18 +1113,18 @@ export default function ApprovedDocumentsPage({
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center">
+                  <td colSpan={8} className="py-8 text-center bg-white">
                     <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                      <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
-                        <FileText className="h-5 w-5" />
+                      <div className="h-9 w-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
+                        <FileText className="h-4.5 w-4.5 text-slate-500" />
                       </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        No approved documents found
+                      <p className="text-[12.5px] font-semibold text-slate-800">
+                        No approved documents
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         {hasAnyFilterOrSearch 
-                          ? "No documents match the selected Year, Month, Date, Doc Type, or Search term."
-                          : "There are currently no approved documents in the repository."}
+                          ? "No approved documents match the selected filter criteria or search query."
+                          : "Completed approval documents will appear here."}
                       </p>
                       {hasAnyFilterOrSearch && (
                         <button
@@ -1063,9 +1143,35 @@ export default function ApprovedDocumentsPage({
           </table>
         </div>
 
-        {/* 5. COMPACT PAGINATION FOOTER */}
-        {totalRecordsCount > 0 && (
-          <div className="bg-slate-50/70 border-t border-slate-200 px-3 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10.5px] text-slate-600">
+        {/* 5. COMPACT PAGINATION / SUMMARY FOOTER */}
+        <div className="bg-slate-50/70 border-t border-slate-200 px-3 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-600">
+          {totalRecordsCount === 0 ? (
+            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+              <span>No approved documents</span>
+            </div>
+          ) : totalRecordsCount === 1 ? (
+            <div className="flex items-center gap-1.5">
+              <span>Showing</span>
+              <span className="font-bold text-slate-900">1</span>
+              <span>of</span>
+              <span className="font-bold text-slate-900">1</span>
+              <span>record</span>
+
+              <span className="text-slate-300 mx-1">|</span>
+
+              <span className="text-slate-500 text-[10.5px]">Rows:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          ) : (
             <div className="flex items-center gap-1.5">
               <span>Showing</span>
               <span className="font-bold text-slate-900">
@@ -1083,7 +1189,7 @@ export default function ApprovedDocumentsPage({
 
               <span className="text-slate-300 mx-1">|</span>
 
-              <span className="text-slate-500">Rows:</span>
+              <span className="text-slate-500 text-[10.5px]">Rows:</span>
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value))}
@@ -1095,7 +1201,9 @@ export default function ApprovedDocumentsPage({
                 <option value={100}>100</option>
               </select>
             </div>
+          )}
 
+          {totalRecordsCount > pageSize && (
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1140,8 +1248,8 @@ export default function ApprovedDocumentsPage({
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

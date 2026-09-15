@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   CheckSquare, Plus, Edit2, Trash2, Search, X, AlertTriangle, CheckCircle2, RefreshCw, ChevronLeft, 
-  ChevronRight, Copy
+  ChevronRight, Copy, Filter
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -68,6 +68,8 @@ export default function ChecklistConditionBuilder() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const [previewRule, setPreviewRule] = useState(null);
+const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter, selectedWorkflowFilter].filter(v => v !== 'ALL').length;
 
   // Modal item input state
   const [newChecklistText, setNewChecklistText] = useState('');
@@ -443,115 +445,111 @@ export default function ChecklistConditionBuilder() {
             >
               <Plus className="h-3 w-3" /> New Rule
             </button>
-          </div>
-        </div>
 
-        {/* Row 2: Stage Filter Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar border-t border-slate-100 pt-2">
-          <button
-            type="button"
-            onClick={() => setSelectedStageFilter('ALL')}
-            className={`px-2 py-0.5 rounded text-[10px] font-semibold transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-              selectedStageFilter === 'ALL'
-                ? "bg-slate-800 text-white shadow-3xs"
-                : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60"
-            }`}
-          >
-            <span>All Stages</span>
-            <span className={`px-1 py-0.2 rounded text-[8.5px] font-bold ${
-              selectedStageFilter === 'ALL' ? "bg-slate-700 text-white" : "bg-slate-200 text-slate-700"
-            }`}>
-              {stageCounts.ALL || 0}
-            </span>
-          </button>
-          {STAGES_LIST.map(stg => {
-            const active = selectedStageFilter === stg;
-            return (
+            {/* Filter Button with Popover */}
+            <div className="relative">
               <button
-                key={stg}
                 type="button"
-                onClick={() => setSelectedStageFilter(stg)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-                  active
-                    ? "bg-blue-600 text-white font-semibold shadow-3xs"
-                    : "bg-white border border-slate-200/80 text-slate-600 hover:bg-slate-50"
-                }`}
+                onClick={() => setFilterPopoverOpen(!filterPopoverOpen)}
+                className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-medium rounded-md"
               >
-                <span>{stg}</span>
-                <span className={`px-1 py-0.2 rounded text-[8.5px] font-bold ${
-                  active ? "bg-blue-700 text-white" : "bg-blue-50 text-blue-700 border border-blue-100"
-                }`}>
-                  {stageCounts[stg] || 0}
-                </span>
+                <Filter className="h-3 w-3" />
+                Filter{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </button>
-            );
-          })}
-        </div>
-
-        {/* Row 3: Compact Dropdown Filters */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-1.5 border-t border-slate-100 text-[10px]">
-          <div>
-            <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-              Stage
-            </label>
-            <select 
-              value={selectedStageFilter}
-              onChange={e => setSelectedStageFilter(e.target.value)}
-              className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition"
-            >
-              <option value="ALL">All Stages ({rules.length})</option>
-              {STAGES_LIST.map(stg => (
-                <option key={stg} value={stg}>{stg} ({stageCounts[stg] || 0})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-              Category / Doc Type
-            </label>
-            <select 
-              value={selectedCategoryFilter}
-              onChange={e => setSelectedCategoryFilter(e.target.value)}
-              className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition truncate"
-            >
-              <option value="ALL">All Categories ({distinctCategories.length})</option>
-              {distinctCategories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-              Branch / Plant
-            </label>
-            <select 
-              value={selectedBranchFilter}
-              onChange={e => setSelectedBranchFilter(e.target.value)}
-              className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition truncate"
-            >
-              <option value="ALL">All Branches ({distinctBranches.length})</option>
-              {distinctBranches.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-              Company / Division
-            </label>
-            <select 
-              value={selectedDivisionFilter}
-              onChange={e => setSelectedDivisionFilter(e.target.value)}
-              className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white transition"
-            >
-              <option value="ALL">All Divisions ({distinctDivisions.length})</option>
-              {distinctDivisions.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+              {filterPopoverOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-md shadow-lg p-4 z-10">
+                  {/* Stage Dropdown */}
+                  <div className="mb-2">
+                    <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Stage
+                    </label>
+                    <select
+                      value={selectedStageFilter}
+                      onChange={e => setSelectedStageFilter(e.target.value)}
+                      className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:border-emerald-500 focus:bg-white transition"
+                    >
+                      <option value="ALL">All Stages ({rules.length})</option>
+                      {STAGES_LIST.map(stg => (
+                        <option key={stg} value={stg}>
+                          {stg} ({stageCounts[stg] || 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Category / Doc Type */}
+                  <div className="mb-2">
+                    <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Category / Doc Type
+                    </label>
+                    <select
+                      value={selectedCategoryFilter}
+                      onChange={e => setSelectedCategoryFilter(e.target.value)}
+                      className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:border-emerald-500 focus:bg-white transition truncate"
+                    >
+                      <option value="ALL">All Categories ({distinctCategories.length})</option>
+                      {distinctCategories.map(c => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Branch / Plant */}
+                  <div className="mb-2">
+                    <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Branch / Plant
+                    </label>
+                    <select
+                      value={selectedBranchFilter}
+                      onChange={e => setSelectedBranchFilter(e.target.value)}
+                      className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:border-emerald-500 focus:bg-white transition truncate"
+                    >
+                      <option value="ALL">All Branches ({distinctBranches.length})</option>
+                      {distinctBranches.map(b => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Company / Division */}
+                  <div className="mb-2">
+                    <label className="block text-[8.5px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Company / Division
+                    </label>
+                    <select
+                      value={selectedDivisionFilter}
+                      onChange={e => setSelectedDivisionFilter(e.target.value)}
+                      className="w-full text-[10.5px] py-1 px-1.5 h-7 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:border-emerald-500 focus:bg-white transition"
+                    >
+                      <option value="ALL">All Divisions ({distinctDivisions.length})</option>
+                      {distinctDivisions.map(d => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="px-2.5 py-1 text-[10.5px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
+                    >
+                      Clear Filters
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterPopoverOpen(false)}
+                      className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002F1E] text-white text-[11px] font-semibold rounded-md transition shadow-2xs cursor-pointer"
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

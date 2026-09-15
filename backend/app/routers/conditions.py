@@ -125,6 +125,45 @@ def save_business_rule(
         else:
             conds = str(raw_conds)
 
+        # Backend validation for condition structure and values
+        parsed_conds = None
+        if isinstance(raw_conds, str):
+            try:
+                import json
+                parsed_conds = json.loads(raw_conds)
+            except Exception:
+                parsed_conds = None
+        else:
+            parsed_conds = raw_conds
+
+        cond_list_to_validate = []
+        if isinstance(parsed_conds, dict):
+            cond_list_to_validate = parsed_conds.get('conditions', [])
+        elif isinstance(parsed_conds, list):
+            cond_list_to_validate = parsed_conds
+
+        for idx, c in enumerate(cond_list_to_validate):
+            if not isinstance(c, dict):
+                continue
+            field = str(c.get('field', '')).strip()
+            op = str(c.get('operator', '')).strip().lower()
+            val = c.get('value')
+            if not field:
+                raise HTTPException(status_code=400, detail=f"Condition #{idx + 1}: Field is required.")
+            if not op:
+                raise HTTPException(status_code=400, detail=f"Condition #{idx + 1}: Operator is required.")
+            if op in ['is empty', 'is not empty', 'empty', 'not empty']:
+                pass  # No value required
+            elif op in ['contains', 'does not contain', 'is one of', 'is not one of']:
+                if val is None or (isinstance(val, list) and len(val) == 0) or (isinstance(val, str) and not val.strip()):
+                    raise HTTPException(status_code=400, detail=f"Condition #{idx + 1} ({field}): At least one value is required for '{op}'.")
+            elif op == 'between':
+                if val is None or (isinstance(val, list) and len(val) < 2) or (isinstance(val, str) and not val.strip()):
+                    raise HTTPException(status_code=400, detail=f"Condition #{idx + 1} ({field}): Both start/minimum and end/maximum values are required for 'Between'.")
+            else:
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    raise HTTPException(status_code=400, detail=f"Condition #{idx + 1} ({field}): Value is required.")
+
         if rule:
             rule.rule_name = payload.rule_name
             rule.rule_category = payload.rule_category or 'Vendor Payment Workflows'

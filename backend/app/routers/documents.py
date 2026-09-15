@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, func, extract
+from sqlalchemy import or_, and_, func, extract
 from sqlalchemy.orm import Session
 from app.config.settings import settings
 from app.database.connection import SessionLocal, get_db
@@ -25,6 +25,7 @@ from app.database.models import (
     InvoiceChecklistState,
     NotificationProviderConfig,
     NotificationRaciMatrix,
+    Role,
     User,
     WorkflowStepDefinition,
 )
@@ -34,7 +35,7 @@ from app.auth import get_current_user, get_current_user_optional, get_current_ac
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
-from app.services.rbac_service import authorize_document_access
+from app.services.rbac_service import authorize_document_access, check_permission
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,22 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
     return inv
 
-def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> bool:
+def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: Optional[Session] = None) -> bool:
     if not user or not pool_str:
         return False
     pool = [s.strip().lower() for s in pool_str.split(',') if s.strip()]
+
+    # Standard role mapping between role codes and display names
+    ROLE_ALIASES = {
+        'admin': ['system administrator', 'admin', 'administrator', 'superadmin', 'system_admin'],
+        'manager': ['operations manager', 'manager', 'operations_manager'],
+        'gm': ['general manager', 'gm', 'general_manager'],
+        'jmd': ['joint managing director', 'jmd', 'joint_managing_director'],
+        'md': ['managing director', 'md', 'managing_director'],
+        'finance_auditor': ['finance & internal auditor', 'finance and internal auditor', 'finance_auditor', 'finance auditor', 'auditor', 'internal auditor'],
+        'employee': ['standard employee', 'employee', 'standard_employee']
+    }
+
     raw_handles = [
         (user.username or '').strip().lower(),
         (user.employee_id or '').strip().lower(),
@@ -91,17 +104,56 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str]) -> b
         (user.email or '').strip().lower(),
         (user.role or '').strip().lower()
     ]
-    user_handles = [h for h in raw_handles if h]
+
+    # Add role aliases
+    u_role = (user.role or '').strip().lower()
+    if u_role in ROLE_ALIASES:
+        raw_handles.extend(ROLE_ALIASES[u_role])
+    for code, aliases in ROLE_ALIASES.items():
+        if any(h in aliases for h in raw_handles if h):
+            raw_handles.append(code)
+            raw_handles.extend(aliases)
+
+    # Check User.role_rel if populated
+    if getattr(user, 'role_rel', None):
+        if getattr(user.role_rel, 'name', None):
+            raw_handles.append(user.role_rel.name.strip().lower())
+        if getattr(user.role_rel, 'code', None):
+            raw_handles.append(user.role_rel.code.strip().lower())
+
+    # Check Role table if db session provided
+    if db and getattr(user, 'role_id', None):
+        try:
+            r = db.query(Role).filter(Role.id == user.role_id).first()
+            if r:
+                if r.name: raw_handles.append(r.name.strip().lower())
+                if r.code: raw_handles.append(r.code.strip().lower())
+        except Exception:
+            pass
+
+    user_handles = [h for h in set(raw_handles) if h]
+
+    def tokenize(s: str) -> List[str]:
+        return [t for t in re.split(r'[^a-zA-Z0-9]+', s.lower()) if len(t) >= 3]
+
+    user_tokens = set()
     for h in user_handles:
-        if h in pool:
+        for t in tokenize(h):
+            user_tokens.add(t)
+
+    for target in pool:
+        t_clean = target.strip().lower()
+        if not t_clean:
+            continue
+        if t_clean in user_handles:
             return True
-        for target in pool:
-            target_tokens = [t.lower() for t in target.replace('-', '_').split('_') if len(t) >= 3]
-            h_tokens = [t.lower() for t in h.replace('-', '_').split('_') if len(t) >= 3]
-            if h in target_tokens or target in h_tokens:
+        for h in user_handles:
+            if h == t_clean or (len(h) >= 4 and h in t_clean) or (len(t_clean) >= 4 and t_clean in h):
                 return True
-            if h == target.replace('-', '_') or target == h.replace('-', '_'):
-                return True
+        target_tokens = tokenize(t_clean)
+        if any(t in user_tokens for t in target_tokens if t not in ['and', 'the', 'for']):
+            return True
+
     return False
 
 def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
@@ -207,67 +259,75 @@ def get_approved_invoices(
     current_user: User = Depends(get_current_active_user),
     response: Response = None
 ):
-    # 1. Base approved filter (Strictly approved / settled / paid)
-    approved_filter = or_(
-        Invoice.status.ilike('%approved%'),
-        Invoice.status.ilike('%settled%'),
-        Invoice.status.ilike('%paid%'),
-        Invoice.status.ilike('%ready for payment%')
+    # 1. Base approved filter (Strictly completely approved records)
+    # Exclude intermediate stages, in-progress, pending, rejected, cancelled, or on-hold records
+    approved_filter = and_(
+        Invoice.status.ilike('approved'),
+        ~Invoice.status.ilike('%stage%'),
+        ~Invoice.status.ilike('%in progress%'),
+        ~Invoice.status.ilike('%pending%'),
+        ~Invoice.status.ilike('%awaiting%'),
+        ~Invoice.status.ilike('%rejected%'),
+        ~Invoice.status.ilike('%cancelled%'),
+        ~Invoice.status.ilike('%hold%')
     )
     query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
 
     # 2. Strict Access Control Enforcement:
     # Admin: Can view all approved documents
-    # Flow Members & Sign-offs: Can view approved documents where they are a flow member, approver, or signed off
+    # Non-admin: Users with role-based doc:read permission can view approved documents scoped to their division (or cross-division if HQ/GLOBAL).
     is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     if not is_admin:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
         user_names = [name.strip() for name in user_names if name and name.strip()]
-        if not user_names:
-            if response:
-                response.headers["X-Total-Count"] = "0"
-            return []
 
-        or_user_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names]
-        user_approval_logs = db.query(AuditLog.invoice_id).filter(
-            AuditLog.action.ilike('%approve%'),
-            or_(*or_user_filters)
-        ).all()
+        can_read_docs = check_permission(current_user, "doc:read", db)
+        user_div = (current_user.division or '').strip().upper()
 
-        user_approved_doc_ids = set()
-        for r in user_approval_logs:
-            if r[0]:
-                val = str(r[0]).strip()
-                user_approved_doc_ids.add(val)
-                if val.startswith('DOC-'):
-                    user_approved_doc_ids.add(val[4:])
-                else:
-                    user_approved_doc_ids.add(f'DOC-{val}')
+        if can_read_docs:
+            if user_div and user_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+                query = query.filter(Invoice.division.ilike(user_div))
+        else:
+            access_or = []
+            if user_names:
+                or_user_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names]
+                user_approval_logs = db.query(AuditLog.invoice_id).filter(
+                    AuditLog.action.ilike('%approve%'),
+                    or_(*or_user_filters)
+                ).all()
 
-        # Also find all workflow profiles where user is a stage member in the flow
-        wf_step_or = []
-        for name in user_names:
-            wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
-            wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
-        user_wf_profiles = [row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0]]
+                user_approved_doc_ids = set()
+                for r in user_approval_logs:
+                    if r[0]:
+                        val = str(r[0]).strip()
+                        user_approved_doc_ids.add(val)
+                        if val.startswith('DOC-'):
+                            user_approved_doc_ids.add(val[4:])
+                        else:
+                            user_approved_doc_ids.add(f'DOC-{val}')
 
-        access_or = []
-        if user_approved_doc_ids:
-            access_or.append(Invoice.id.in_(user_approved_doc_ids))
-        if user_wf_profiles:
-            access_or.append(Invoice.workflow_profile_id.in_(user_wf_profiles))
-        for name in user_names:
-            access_or.append(Invoice.assigned_approver.ilike(f'%{name}%'))
+                wf_step_or = []
+                for name in user_names:
+                    wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
+                    wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
+                user_wf_profiles = [row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0]]
 
-        if not access_or:
-            if response:
-                response.headers["X-Total-Count"] = "0"
-            return []
+                if user_approved_doc_ids:
+                    access_or.append(Invoice.id.in_(user_approved_doc_ids))
+                if user_wf_profiles:
+                    access_or.append(Invoice.workflow_profile_id.in_(user_wf_profiles))
+                for name in user_names:
+                    access_or.append(Invoice.assigned_approver.ilike(f'%{name}%'))
 
-        query = query.filter(or_(*access_or))
+            if not access_or:
+                if response:
+                    response.headers["X-Total-Count"] = "0"
+                return []
+
+            query = query.filter(or_(*access_or))
 
     # 3. Filter: YEAR
-    if year and year.strip().lower() != 'all':
+    if year and isinstance(year, str) and year.strip().lower() != 'all':
         y_str = year.strip()
         try:
             y_int = int(y_str)
@@ -288,7 +348,7 @@ def get_approved_invoices(
         'may': 5, 'june': 6, 'july': 7, 'august': 8,
         'september': 9, 'october': 10, 'november': 11, 'december': 12
     }
-    if month and month.strip().lower() != 'all':
+    if month and isinstance(month, str) and month.strip().lower() != 'all':
         m_raw = month.strip().lower()
         m_val = None
         if m_raw.isdigit():
@@ -312,7 +372,7 @@ def get_approved_invoices(
             )
 
     # 5. Filter: DATE (Specific Date and Date Range)
-    if date and date.strip():
+    if date and isinstance(date, str) and date.strip():
         d_str = date.strip()
         query = query.filter(
             or_(
@@ -320,7 +380,7 @@ def get_approved_invoices(
                 func.date(Invoice.created_at) == d_str
             )
         )
-    if from_date and from_date.strip():
+    if from_date and isinstance(from_date, str) and from_date.strip():
         fd_str = from_date.strip()
         query = query.filter(
             or_(
@@ -328,7 +388,7 @@ def get_approved_invoices(
                 func.date(Invoice.created_at) >= fd_str
             )
         )
-    if to_date and to_date.strip():
+    if to_date and isinstance(to_date, str) and to_date.strip():
         td_str = to_date.strip()
         query = query.filter(
             or_(
@@ -338,7 +398,7 @@ def get_approved_invoices(
         )
 
     # 6. Filter: DOCUMENT TYPE
-    if doc_type and doc_type.strip().lower() != 'all':
+    if doc_type and isinstance(doc_type, str) and doc_type.strip().lower() != 'all':
         dt_str = doc_type.strip()
         query = query.filter(
             or_(
@@ -348,7 +408,7 @@ def get_approved_invoices(
         )
 
     # 7. Filter: Search keyword
-    if search and search.strip():
+    if search and isinstance(search, str) and search.strip():
         s_term = f'%{search.strip()}%'
         query = query.filter(
             or_(
@@ -376,14 +436,14 @@ def get_approved_invoices(
     else:
         query = query.order_by(Invoice.created_at.desc())
 
-    # 9. Count total matching records
+    # 9. Pagination total count header
     total_count = query.count()
     if response:
         response.headers["X-Total-Count"] = str(total_count)
         response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
     # 10. Server-side Pagination
-    if page and page_size and page >= 1 and page_size >= 1:
+    if page and page_size and isinstance(page, int) and isinstance(page_size, int) and page >= 1 and page_size >= 1:
         offset = (page - 1) * page_size
         invoices = query.offset(offset).limit(page_size).all()
     else:
@@ -398,6 +458,192 @@ def get_approved_invoices(
         results.append(inv_res)
 
     return results
+
+@router.get('/api/documents/approved/filter-options')
+@router.get('/api/records/approved/filter-options')
+@router.get('/api/documents/filter-options')
+def get_filter_options(
+    document_type: Optional[str] = Query(None, description='Document type to filter'),
+    year: Optional[str] = Query(None, description='Year (YYYY)'),
+    month: Optional[str] = Query(None, description='Month (MM)'),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Return dynamic cascading filter options strictly based on actual approved records in the database.
+    Order of hierarchy:
+    1. Document Type (from DB approved records)
+    2. Year (existing in DB for selected Document Type)
+    3. Month (existing in DB for selected Document Type + Year)
+    4. Date (existing in DB for selected Document Type + Year + Month)
+    """
+    approved_filter = and_(
+        Invoice.status.ilike('approved'),
+        ~Invoice.status.ilike('%stage%'),
+        ~Invoice.status.ilike('%in progress%'),
+        ~Invoice.status.ilike('%pending%'),
+        ~Invoice.status.ilike('%awaiting%'),
+        ~Invoice.status.ilike('%rejected%'),
+        ~Invoice.status.ilike('%cancelled%'),
+        ~Invoice.status.ilike('%hold%')
+    )
+    query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
+
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    if not is_admin:
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
+        user_names = [name.strip() for name in user_names if name and name.strip()]
+
+        can_read_docs = check_permission(current_user, "doc:read", db)
+        user_div = (current_user.division or '').strip().upper()
+
+        if can_read_docs:
+            if user_div and user_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+                query = query.filter(Invoice.division.ilike(user_div))
+        else:
+            access_or = []
+            if user_names:
+                or_user_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names]
+                user_approval_logs = db.query(AuditLog.invoice_id).filter(
+                    AuditLog.action.ilike('%approve%'),
+                    or_(*or_user_filters)
+                ).all()
+
+                user_approved_doc_ids = set()
+                for r in user_approval_logs:
+                    if r[0]:
+                        val = str(r[0]).strip()
+                        user_approved_doc_ids.add(val)
+                        if val.startswith('DOC-'):
+                            user_approved_doc_ids.add(val[4:])
+                        else:
+                            user_approved_doc_ids.add(f'DOC-{val}')
+
+                wf_step_or = []
+                for name in user_names:
+                    wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
+                    wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
+                user_wf_profiles = [row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0]]
+
+                if user_approved_doc_ids:
+                    access_or.append(Invoice.id.in_(user_approved_doc_ids))
+                if user_wf_profiles:
+                    access_or.append(Invoice.workflow_profile_id.in_(user_wf_profiles))
+                for name in user_names:
+                    access_or.append(Invoice.assigned_approver.ilike(f'%{name}%'))
+
+            if access_or:
+                query = query.filter(or_(*access_or))
+            else:
+                return {"document_types": [], "years": [], "months": [], "dates": []}
+                return {"document_types": [], "years": [], "months": [], "dates": []}
+
+    all_approved = query.all()
+
+    # Dynamic Document Types from actual approved records in DB
+    doc_types_set = set()
+    for inv in all_approved:
+        dt = (inv.document_type or inv.category or '').strip()
+        if dt:
+            doc_types_set.add(dt.upper())
+    available_doc_types = sorted(list(doc_types_set))
+
+    dt_clean = document_type.strip() if (document_type and isinstance(document_type, str) and document_type.strip().lower() not in ['all', '']) else ''
+    y_clean = year.strip() if (year and isinstance(year, str) and year.strip().lower() not in ['all', '']) else ''
+    m_clean = month.strip() if (month and isinstance(month, str) and month.strip().lower() not in ['all', '']) else ''
+
+    # Filter records by selected document_type
+    filtered_by_type = all_approved
+    if dt_clean:
+        dt_target = dt_clean.lower()
+        filtered_by_type = [
+            inv for inv in all_approved
+            if (inv.document_type and inv.document_type.strip().lower() == dt_target) or
+               (inv.category and inv.category.strip().lower() == dt_target) or
+               (dt_target in (inv.document_type or '').strip().lower()) or
+               ((inv.document_type or '').strip().lower() in dt_target)
+        ]
+
+    # Helper function to extract (year, month, full_date_str) from an Invoice
+    def extract_doc_date_parts(inv: Invoice):
+        dates = []
+        if inv.invoice_date and isinstance(inv.invoice_date, str):
+            s = inv.invoice_date.strip()
+            m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})', s)
+            if m:
+                dates.append((m.group(1), str(int(m.group(2))), f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"))
+            else:
+                m2 = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})', s)
+                if m2:
+                    dates.append((m2.group(3), str(int(m2.group(2))), f"{m2.group(3)}-{int(m2.group(2)):02d}-{int(m2.group(1)):02d}"))
+        if inv.created_at:
+            y = str(inv.created_at.year)
+            m = str(inv.created_at.month)
+            d_str = inv.created_at.strftime('%Y-%m-%d')
+            dates.append((y, m, d_str))
+        return dates
+
+    # Dynamic Years for the selected Document Type
+    years_set = set()
+    for inv in filtered_by_type:
+        parts = extract_doc_date_parts(inv)
+        for y, m, d_str in parts:
+            years_set.add(y)
+    available_years = sorted(list(years_set), reverse=True)
+
+    # Dynamic Months for the selected Document Type + Year
+    filtered_by_year = filtered_by_type
+    if y_clean:
+        filtered_by_year = [
+            inv for inv in filtered_by_type
+            if any(y == y_clean for y, m, d_str in extract_doc_date_parts(inv))
+        ]
+
+    MONTH_LABELS = {
+        "1": "January", "2": "February", "3": "March", "4": "April",
+        "5": "May", "6": "June", "7": "July", "8": "August",
+        "9": "September", "10": "October", "11": "November", "12": "December"
+    }
+    months_set = set()
+    for inv in filtered_by_year:
+        parts = extract_doc_date_parts(inv)
+        for y, m, d_str in parts:
+            if not y_clean or y == y_clean:
+                months_set.add(m)
+    available_months = [
+        {"value": str(m_num), "label": MONTH_LABELS.get(str(m_num), f"Month {m_num}")}
+        for m_num in sorted([int(m) for m in months_set])
+    ]
+
+    # Dynamic Dates for the selected Document Type + Year + Month
+    filtered_by_month = filtered_by_year
+    if m_clean:
+        m_target = str(int(m_clean))
+        filtered_by_month = [
+            inv for inv in filtered_by_year
+            if any(
+                (not y_clean or y == y_clean) and m == m_target
+                for y, m, d_str in extract_doc_date_parts(inv)
+            )
+        ]
+
+    dates_set = set()
+    for inv in filtered_by_month:
+        parts = extract_doc_date_parts(inv)
+        for y, m, d_str in parts:
+            match_y = not y_clean or y == y_clean
+            match_m = not m_clean or m == str(int(m_clean))
+            if match_y and match_m:
+                dates_set.add(d_str)
+    available_dates = sorted(list(dates_set), reverse=True)
+
+    return {
+        "document_types": available_doc_types,
+        "years": available_years,
+        "months": available_months,
+        "dates": available_dates
+    }
+
 
 @router.get('/api/records', response_model=List[InvoiceResponse])
 @router.get('/api/documents', response_model=List[InvoiceResponse])
@@ -518,6 +764,117 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         inv_res.has_rejected = has_rej
         results.append(inv_res)
     return results
+
+@router.get('/api/documents/work-tracker', response_model=List[InvoiceResponse])
+@router.get('/api/records/work-tracker', response_model=List[InvoiceResponse])
+@router.get('/api/invoices/work-tracker', response_model=List[InvoiceResponse])
+def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    """
+    Work Tracker endpoint: Returns strictly IN-PROGRESS, non-terminal documents.
+    Completed documents (Approved, Settled, Paid, Ready for Payment, Cancelled, Failed)
+    are strictly excluded.
+    """
+    TERMINAL_STATUSES = {'approved', 'settled', 'paid', 'ready for payment', 'cancelled', 'failed'}
+
+    # Exclude terminal statuses directly from the database query
+    query = db.query(Invoice).filter(
+        Invoice.is_deleted == False,
+        ~Invoice.status.in_(['Approved', 'Settled', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed'])
+    )
+    invoices = query.order_by(Invoice.created_at.desc()).all()
+
+    user_approved_stages = set()
+    user_approved_doc_ids = set()
+    rejected_invoice_ids = set()
+    if current_user:
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
+        user_names = [name for name in user_names if name]
+        or_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names if name]
+        if or_filters:
+            audit_query = db.query(AuditLog.invoice_id, AuditLog.action, AuditLog.stage).filter(or_(*or_filters)).all()
+            for row in audit_query:
+                raw_id = str(row[0] or '')
+                doc_id_clean = raw_id.replace('DOC-', '')
+                act = (row[1] or '').lower()
+                stg = (row[2] or '').lower()
+                if 'approve' in act:
+                    user_approved_doc_ids.add(raw_id)
+                    user_approved_doc_ids.add(doc_id_clean)
+                    m = re.search(r'stage\s*(\d+)', act) or re.search(r'stage\s*(\d+)', stg)
+                    if m:
+                        stg_num = int(m.group(1))
+                        user_approved_stages.add((raw_id, stg_num))
+                        user_approved_stages.add((doc_id_clean, stg_num))
+                    else:
+                        user_approved_stages.add((raw_id, 'all'))
+                        user_approved_stages.add((doc_id_clean, 'all'))
+                if 'reject' in act or 'return' in act or 'cancel' in act:
+                    rejected_invoice_ids.add(raw_id)
+                    rejected_invoice_ids.add(doc_id_clean)
+
+    user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    results = []
+
+    for inv in invoices:
+        # Dynamically synchronize assigned_approver from workflow definition
+        sync_document_approver_from_workflow(db, inv)
+
+        st_low = (inv.status or '').strip().lower()
+        cs_low = (str(inv.current_stage or '')).strip().lower()
+
+        # Strict terminal exclusion
+        if any(term in st_low for term in TERMINAL_STATUSES) or 'approved' in cs_low:
+            continue
+
+        doc_key_clean = str(inv.id).replace('DOC-', '')
+        curr_stg = inv.current_stage or 1
+        has_approved_curr_stage = (
+            (str(inv.id), curr_stg) in user_approved_stages
+            or (doc_key_clean, curr_stg) in user_approved_stages
+            or (str(inv.id), 'all') in user_approved_stages
+            or (doc_key_clean, 'all') in user_approved_stages
+        )
+        has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
+
+        is_curr = False
+        if inv.assigned_approver and not has_approved_curr_stage:
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db)
+
+        # Division check:
+        # If user is the explicitly assigned approver for this stage (is_curr), they are authorized.
+        # Otherwise, respect division boundaries.
+        if not is_curr:
+            user_div = (current_user.division or '').strip().upper()
+            doc_div = (inv.division or '').strip().upper()
+            if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
+                continue
+
+        if not user_is_admin:
+            # Non-admin approver must be the active assigned approver and must NOT have approved the current stage
+            if not (is_curr and not has_approved_curr_stage):
+                continue
+
+        # Status filter query parameter enforcement
+        if status:
+            s_req = status.strip().lower()
+            if s_req == 'pending':
+                if not is_curr:
+                    continue
+            elif s_req == 'hold':
+                if inv.status != 'On Hold':
+                    continue
+            elif s_req in ['in_progress', 'active']:
+                if inv.status == 'On Hold':
+                    continue
+
+        inv_res = InvoiceResponse.from_orm(inv)
+        inv_res.is_current_approver = is_curr
+        inv_res.has_approved = has_approved_curr_stage
+        inv_res.has_rejected = has_rej
+        results.append(inv_res)
+
+    return results
+
 
 @router.get('/api/documents/synced-pending', response_model=List[InvoiceResponse])
 @router.get('/api/records/synced-pending', response_model=List[InvoiceResponse])

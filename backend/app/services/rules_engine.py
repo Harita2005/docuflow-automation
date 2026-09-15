@@ -103,24 +103,92 @@ def sanitize_text(val: Any) -> str:
     return s
 
 def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bool:
+    op_str = (operator or '').strip().lower()
+
+    # 1. Is Empty / Is Not Empty
+    if op_str in ['is empty', 'is_empty', 'empty']:
+        return doc_val is None or str(doc_val).strip() in ['', 'None', 'null', 'nan'] or doc_val == []
+    if op_str in ['is not empty', 'is_not_empty', 'not empty', 'not_empty']:
+        return doc_val is not None and str(doc_val).strip() not in ['', 'None', 'null', 'nan'] and doc_val != []
+
     if is_wildcard(rule_val):
         return True
-    try:
-        raw_r = str(rule_val or '').strip()
-        raw_d = str(doc_val or '0').replace(',', '').strip()
-        op_str = (operator or '').strip().lower()
-        is_num_rule = isinstance(rule_val, (int, float)) or any((c.isdigit() for c in raw_r))
-        is_num_doc = isinstance(doc_val, (int, float)) or any((c.isdigit() for c in raw_d))
-        if is_num_doc and is_num_rule and (not isinstance(rule_val, bool)):
-            clean_r_str = re.sub('[^0-9\\.\\-]', '', raw_r)
-            clean_d_str = re.sub('[^0-9\\.\\-]', '', raw_d)
+
+    raw_r = str(rule_val if rule_val is not None else '').strip()
+    raw_d = str(doc_val if doc_val is not None else '').strip()
+
+    # 2. Date Comparison
+    date_ops = ['before', 'after', 'on or before', 'on or after']
+    d_doc = parse_date_str(doc_val)
+    if op_str == 'between' and d_doc is not None:
+        d_start, d_end = None, None
+        if isinstance(rule_val, (list, tuple)) and len(rule_val) >= 2:
+            d_start, d_end = parse_date_str(rule_val[0]), parse_date_str(rule_val[1])
+        elif isinstance(rule_val, dict):
+            d_start = parse_date_str(rule_val.get('start') or rule_val.get('from') or rule_val.get('min'))
+            d_end = parse_date_str(rule_val.get('end') or rule_val.get('to') or rule_val.get('max'))
+        else:
+            sep = ' - ' if ' - ' in raw_r else (',' if ',' in raw_r else ' to ')
+            parts = [p.strip() for p in raw_r.split(sep) if p.strip()]
+            if len(parts) >= 2:
+                d_start, d_end = parse_date_str(parts[0]), parse_date_str(parts[1])
+        if d_start and d_end:
+            return min(d_start, d_end) <= d_doc <= max(d_start, d_end)
+        return False
+
+    if (op_str in date_ops or (d_doc and op_str in ['equals', '==', '=', 'not equals', '!=', '!=='])):
+        d_rule = parse_date_str(rule_val)
+        if d_doc and d_rule:
+            if op_str == 'before':
+                return d_doc < d_rule
+            elif op_str == 'after':
+                return d_doc > d_rule
+            elif op_str == 'on or before':
+                return d_doc <= d_rule
+            elif op_str == 'on or after':
+                return d_doc >= d_rule
+            elif op_str in ['equals', '==', '=']:
+                return d_doc == d_rule
+            elif op_str in ['not equals', '!=', '!==']:
+                return d_doc != d_rule
+        if op_str in date_ops:
+            return False
+
+    # 3. Numeric Comparison
+    clean_r_str = re.sub(r'[^0-9\.\-]', '', raw_r) if not isinstance(rule_val, (int, float)) else str(rule_val)
+    clean_d_str = re.sub(r'[^0-9\.\-]', '', raw_d.replace(',', '')) if not isinstance(doc_val, (int, float)) else str(doc_val)
+    is_num_op = op_str in ['greater than', 'greater than or equal', 'less than', 'less than or equal', 'between', '>', '>=', '<', '<=', 'gt', 'gte', 'lt', 'lte']
+
+    if op_str == 'between':
+        try:
+            num_doc = float(clean_d_str)
+            min_val, max_val = None, None
+            if isinstance(rule_val, (list, tuple)) and len(rule_val) >= 2:
+                min_val, max_val = float(rule_val[0]), float(rule_val[1])
+            elif isinstance(rule_val, dict):
+                min_val = float(rule_val.get('min', rule_val.get('start', 0)))
+                max_val = float(rule_val.get('max', rule_val.get('end', 0)))
+            else:
+                sep = ' - ' if ' - ' in raw_r else (',' if ',' in raw_r else ' to ')
+                parts = [p.strip() for p in raw_r.split(sep) if p.strip()]
+                if len(parts) >= 2:
+                    min_val = float(re.sub(r'[^0-9\.\-]', '', parts[0]))
+                    max_val = float(re.sub(r'[^0-9\.\-]', '', parts[1]))
+            if min_val is not None and max_val is not None:
+                return min(min_val, max_val) <= num_doc <= max(min_val, max_val)
+        except Exception as exc:
+            logger.debug('Number between parse exception: %s', exc)
+        return False
+
+    if is_num_op or (isinstance(doc_val, (int, float)) and op_str in ['equals', '==', '=', 'not equals', '!=', '!==']):
+        try:
             if clean_r_str and clean_d_str:
                 num_doc = float(clean_d_str)
                 num_rule = float(clean_r_str)
-                is_greater_or_equal = '>=' in op_str or '>=' in raw_r or 'greater than or equal' in op_str or ('greater_or_equal' in op_str) or op_str in ['gte', '>=']
-                is_greater = ('>' in op_str or '>' in raw_r or 'greater' in op_str or op_str in ['gt', '>']) and (not is_greater_or_equal)
-                is_less_or_equal = '<=' in op_str or '<=' in raw_r or 'less than or equal' in op_str or ('less_or_equal' in op_str) or op_str in ['lte', '<=']
-                is_less = ('<' in op_str or '<' in raw_r or 'less' in op_str or op_str in ['lt', '<']) and (not is_less_or_equal)
+                is_greater_or_equal = op_str in ['greater than or equal', '>=', 'gte'] or '>=' in raw_r
+                is_greater = (op_str in ['greater than', '>', 'gt'] or '>' in raw_r) and not is_greater_or_equal
+                is_less_or_equal = op_str in ['less than or equal', '<=', 'lte'] or '<=' in raw_r
+                is_less = (op_str in ['less than', '<', 'lt'] or '<' in raw_r) and not is_less_or_equal
                 if is_greater_or_equal:
                     return num_doc >= num_rule
                 if is_greater:
@@ -129,54 +197,68 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
                     return num_doc <= num_rule
                 if is_less:
                     return num_doc < num_rule
-                if op_str in ['equals', '==', '=', '', 'eq']:
-                    if '>=' in raw_r:
-                        return num_doc >= num_rule
-                    elif '>' in raw_r or 'greater' in raw_r:
-                        return num_doc > num_rule
-                    elif '<=' in raw_r:
-                        return num_doc <= num_rule
-                    elif '<' in raw_r or 'less' in raw_r:
-                        return num_doc < num_rule
-                    return abs(num_doc - num_rule) < 0.01
-    except Exception as exc:
-        logger.debug('Handled exception: %s', exc)
-    str_doc = str(doc_val or '').strip().lower()
-    str_rule = str(rule_val or '').strip().lower()
-    rule_items = [s.strip().lower() for s in str_rule.split(',') if s.strip()] if ',' in str_rule else [str_rule]
-    if 'all' in rule_items or '*' in rule_items:
+                if op_str in ['equals', '==', '=', 'eq']:
+                    return abs(num_doc - num_rule) < 0.001
+                if op_str in ['not equals', '!=', '!==', 'neq']:
+                    return abs(num_doc - num_rule) >= 0.001
+        except Exception as exc:
+            logger.debug('Numeric comparison exception: %s', exc)
+
+    # 4. Categorical / Text Comparison (Multi-value OR semantics)
+    if isinstance(rule_val, (list, tuple, set)):
+        rule_items = [str(x).strip() for x in rule_val if str(x).strip()]
+    elif isinstance(rule_val, str):
+        if '\n' in rule_val:
+            rule_items = [s.strip() for s in rule_val.split('\n') if s.strip()]
+        elif ',' in rule_val:
+            rule_items = [s.strip() for s in rule_val.split(',') if s.strip()]
+        elif '\t' in rule_val:
+            rule_items = [s.strip() for s in rule_val.split('\t') if s.strip()]
+        elif ';' in rule_val:
+            rule_items = [s.strip() for s in rule_val.split(';') if s.strip()]
+        else:
+            rule_items = [rule_val.strip()] if rule_val.strip() else []
+    else:
+        rule_items = [str(rule_val).strip()] if str(rule_val).strip() else []
+
+    if not rule_items:
+        return False
+    if any(is_wildcard(it) for it in rule_items):
         return True
+
+    str_doc = str(doc_val or '').strip().lower()
     clean_doc = sanitize_text(doc_val)
     clean_rule_items = [sanitize_text(it) for it in rule_items]
-    op = operator.strip().lower()
-    if op in ['before', 'after', 'on or before', 'on or after']:
-        d_doc = parse_date_str(doc_val)
-        d_rule = parse_date_str(rule_val)
-        if d_doc and d_rule:
-            if op == 'before':
-                return d_doc < d_rule
-            elif op == 'after':
-                return d_doc > d_rule
-            elif op == 'on or before':
-                return d_doc <= d_rule
-            elif op == 'on or after':
-                return d_doc >= d_rule
-        return False
-    if op in ['equals', '==', '=', 'eq']:
-        return str_doc in rule_items or clean_doc in clean_rule_items or any((clean_doc == cit for cit in clean_rule_items))
-    if op in ['not equals', '!=', '!==', 'neq', 'not equal']:
-        return str_doc not in rule_items and clean_doc not in clean_rule_items
-    if op in ['contains any of', 'contains any of (or)', 'contains', 'is one of', 'in', 'in (comma-separated)']:
-        return any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
-    if op in ['does not contain', 'not contains']:
-        return not any((it in str_doc or str_doc in it or (cit and cit in clean_doc) or (clean_doc and clean_doc in cit) for it, cit in zip(rule_items, clean_rule_items)))
-    if op in ['starts with', 'starts_with']:
-        return any(str_doc.startswith(it) for it in rule_items)
-    if op in ['ends with', 'ends_with']:
-        return any(str_doc.endswith(it) for it in rule_items)
-    if op in ['not in', 'is not one of']:
-        return str_doc not in rule_items and clean_doc not in clean_rule_items
-    # Invalid or unrecognized operator MUST return False, never silently True
+    rule_items_lower = [it.lower() for it in rule_items]
+
+    if op_str in ['equals', '==', '=', 'eq']:
+        return str_doc in rule_items_lower or clean_doc in clean_rule_items or any(clean_doc == cit for cit in clean_rule_items if cit)
+
+    if op_str in ['not equals', '!=', '!==', 'neq', 'not equal']:
+        return str_doc not in rule_items_lower and clean_doc not in clean_rule_items and not any(clean_doc == cit for cit in clean_rule_items if cit)
+
+    if op_str in ['contains', 'contains any of', 'contains any of (or)', 'is one of', 'in', 'in (comma-separated)']:
+        # Multiple values belonging to ONE field are OR/membership values:
+        # Category Contains [A, B, C] -> Category=A OR Category=B OR Category=C
+        return any(
+            (it and (it in str_doc or str_doc in it)) or
+            (cit and (cit in clean_doc or clean_doc in cit))
+            for it, cit in zip(rule_items_lower, clean_rule_items)
+        )
+
+    if op_str in ['does not contain', 'not contains', 'is not one of', 'not in']:
+        # True only if NONE of the items match
+        return not any(
+            (it and (it in str_doc or str_doc in it)) or
+            (cit and (cit in clean_doc or clean_doc in cit))
+            for it, cit in zip(rule_items_lower, clean_rule_items)
+        )
+
+    if op_str in ['starts with', 'starts_with']:
+        return any(str_doc.startswith(it) for it in rule_items_lower if it)
+    if op_str in ['ends with', 'ends_with']:
+        return any(str_doc.endswith(it) for it in rule_items_lower if it)
+
     return False
 
 def match_condition(rule: Any, document: Any) -> bool:
@@ -203,7 +285,7 @@ def match_condition(rule: Any, document: Any) -> bool:
         elif clean_field_key in ['costcenter', 'cost_center', 'cc', 'cost_centre', 'costcentre']:
             field_val = get_val(document, 'cost_center') or ''
         elif clean_field_key in ['plant', 'branch', 'location', 'plantcode']:
-            field_val = get_val(document, 'plant') or ''
+            field_val = get_val(document, 'branch') or get_val(document, 'plant') or ''
         elif clean_field_key in ['category', 'cat', 'dept', 'department']:
             field_val = cat_val or inferred_doc_type
         elif clean_field_key in ['vendorname', 'vendor', 'vendor_name']:
@@ -213,7 +295,7 @@ def match_condition(rule: Any, document: Any) -> bool:
         elif clean_field_key in ['baseamount', 'base_amount', 'taxableamount', 'subtotal', 'netamount']:
             field_val = float(get_val(document, 'base_amount') or 0.0)
         elif clean_field_key in ['invoiceamounttotal', 'amount', 'invoiceamount', 'totalamount', 'grossamount']:
-            gross_val = float(get_val(document, 'amount') or 0.0)
+            gross_val = float(get_val(document, 'amount') or get_val(document, 'total_amount') or 0.0)
             base_val = float(get_val(document, 'base_amount') or 0.0)
             op_clean = operator.strip().lower()
             if op_clean in ['equals', '==', '=', '', 'eq']:
@@ -226,6 +308,14 @@ def match_condition(rule: Any, document: Any) -> bool:
             field_val = gross_val
         elif clean_field_key in ['taxamount', 'tax', 'gstamount']:
             field_val = float(get_val(document, 'tax_amount') or 0.0)
+        elif clean_field_key in ['invoicedate', 'invoice_date', 'date', 'documentdate', 'docdate']:
+            field_val = get_val(document, 'invoice_date') or get_val(document, 'created_at') or ''
+        elif clean_field_key in ['paymentmode', 'paymode', 'payment_mode', 'pay_mode']:
+            field_val = get_val(document, 'payment_mode') or get_val(document, 'payment_terms') or ''
+        elif clean_field_key in ['gstin', 'vendorgstin', 'vendor_gstin']:
+            field_val = get_val(document, 'vendor_gstin') or ''
+        elif clean_field_key in ['ponumber', 'po_number', 'po']:
+            field_val = get_val(document, 'po_number') or ''
         else:
             field_mapping = {
                 'Division': get_val(document, 'division') or '',
@@ -240,7 +330,11 @@ def match_condition(rule: Any, document: Any) -> bool:
                 'Invoice Amount (Total)': float(get_val(document, 'amount') or 0.0),
                 'Base Amount': float(get_val(document, 'base_amount') or 0.0),
                 'Amount': float(get_val(document, 'amount') or 0.0),
-                'Tax Amount': float(get_val(document, 'tax_amount') or 0.0)
+                'Tax Amount': float(get_val(document, 'tax_amount') or 0.0),
+                'Invoice Date': get_val(document, 'invoice_date') or get_val(document, 'created_at') or '',
+                'Payment Mode': get_val(document, 'payment_mode') or get_val(document, 'payment_terms') or '',
+                'GSTIN': get_val(document, 'vendor_gstin') or '',
+                'PO Number': get_val(document, 'po_number') or ''
             }
             field_val = field_mapping.get(field)
         if field_val is None:
@@ -362,24 +456,40 @@ def evaluate_single_condition(cond: Dict[str, Any], invoice: Any) -> bool:
         return False
     return match_condition(cond, invoice)
 
-def evaluate_rule_conditions(conditions: List[Dict[str, Any]], invoice: Invoice) -> bool:
+def evaluate_rule_conditions(conditions: Any, invoice: Any) -> bool:
     if not conditions:
         return False
-    if isinstance(conditions, dict) and 'conditions' in conditions:
-        conditions = conditions['conditions']
-    if not isinstance(conditions, list) or len(conditions) == 0:
+    if hasattr(conditions, 'conditions_json'):
+        conditions = getattr(conditions, 'conditions_json')
+    if isinstance(conditions, str):
+        try:
+            conditions = json.loads(conditions)
+        except Exception:
+            return False
+    match_mode = 'ALL'
+    cond_list = conditions
+    if isinstance(conditions, dict):
+        match_mode = str(conditions.get('match_type') or conditions.get('matchType') or conditions.get('match') or 'ALL').upper().strip()
+        cond_list = conditions.get('conditions', [])
+    if not isinstance(cond_list, list) or len(cond_list) == 0:
         return False
-    is_match = True
-    for idx, cond in enumerate(conditions):
-        matched = evaluate_single_condition(cond, invoice)
-        logical_op = cond.get('logicalOperator', 'AND').upper() if isinstance(cond, dict) else 'AND'
-        if idx == 0:
-            is_match = matched
-        elif logical_op == 'OR':
-            is_match = is_match or matched
-        else:
-            is_match = is_match and matched
-    return is_match
+
+    if match_mode == 'ANY':
+        return any(evaluate_single_condition(cond, invoice) for cond in cond_list)
+    elif match_mode == 'ALL':
+        return all(evaluate_single_condition(cond, invoice) for cond in cond_list)
+    else:
+        is_match = True
+        for idx, cond in enumerate(cond_list):
+            matched = evaluate_single_condition(cond, invoice)
+            logical_op = cond.get('logicalOperator', 'AND').upper() if isinstance(cond, dict) else 'AND'
+            if idx == 0:
+                is_match = matched
+            elif logical_op == 'OR':
+                is_match = is_match or matched
+            else:
+                is_match = is_match and matched
+        return is_match
 
 def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
     """
@@ -460,8 +570,6 @@ def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict
             continue
         try:
             conds = json.loads(rule.conditions_json)
-            if isinstance(conds, dict) and 'conditions' in conds:
-                conds = conds['conditions']
             if evaluate_rule_conditions(conds, invoice):
                 if rule.target_workflow_id:
                     profile = db.query(WorkflowProfile).filter(
@@ -509,24 +617,33 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
             continue
         try:
             conds = json.loads(cond_str)
-            if isinstance(conds, dict) and 'conditions' in conds:
-                conds = conds['conditions']
+            match_mode = 'ALL'
+            cond_list = conds
+            if isinstance(conds, dict):
+                match_mode = str(conds.get('match_type') or conds.get('matchType') or conds.get('match') or 'ALL').upper().strip()
+                cond_list = conds.get('conditions', [])
             cond_eval_details = []
-            is_match = True
-            if isinstance(conds, list) and conds:
-                for cIdx, cond in enumerate(conds):
+            is_match = False
+            if isinstance(cond_list, list) and cond_list:
+                for cIdx, cond in enumerate(cond_list):
                     field = cond.get('field', '')
                     op = cond.get('operator', 'equals')
                     exp_val = cond.get('value', '')
-                    log_op = cond.get('logicalOperator', 'AND').upper()
+                    log_op = cond.get('logicalOperator', 'OR' if match_mode == 'ANY' else 'AND').upper()
                     matched_cond = evaluate_single_condition(cond, mock_invoice)
                     cond_eval_details.append({'field': field, 'operator': op, 'expected': exp_val, 'passed': matched_cond, 'logicalOperator': log_op})
-                    if cIdx == 0:
-                        is_match = matched_cond
-                    elif log_op == 'OR':
-                        is_match = is_match or matched_cond
-                    else:
-                        is_match = is_match and matched_cond
+                if match_mode == 'ANY':
+                    is_match = any(c['passed'] for c in cond_eval_details)
+                elif match_mode == 'ALL':
+                    is_match = all(c['passed'] for c in cond_eval_details)
+                else:
+                    for cIdx, c in enumerate(cond_eval_details):
+                        if cIdx == 0:
+                            is_match = c['passed']
+                        elif c['logicalOperator'] == 'OR':
+                            is_match = is_match or c['passed']
+                        else:
+                            is_match = is_match and c['passed']
             trace.append({'rule_name': rule_info.get('rule_name'), 'priority': rule_info.get('priority'), 'target_workflow_id': rule_info.get('target_workflow_id'), 'is_draft': rule_info.get('is_draft', False), 'matched': is_match, 'conditions_detail': cond_eval_details})
             if is_match and (not matched_rule):
                 matched_rule = rule_info

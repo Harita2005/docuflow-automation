@@ -61,28 +61,33 @@ const OPERATORS_BY_TYPE = {
     { value: 'greater than', label: 'Greater Than (>)' },
     { value: 'greater than or equal', label: 'Greater Than or Equal (≥)' },
     { value: 'less than', label: 'Less Than (<)' },
-    { value: 'less than or equal', label: 'Less Than or Equal (≤)' }
+    { value: 'less than or equal', label: 'Less Than or Equal (≤)' },
+    { value: 'between', label: 'Between' }
   ],
   text: [
     { value: 'equals', label: 'Equals (=)' },
     { value: 'not equals', label: 'Not Equal (≠)' },
-    { value: 'contains', label: 'Contains (⊇)' },
-    { value: 'does not contain', label: 'Does Not Contain (⊅)' },
-    { value: 'starts with', label: 'Starts With' },
-    { value: 'ends with', label: 'Ends With' }
+    { value: 'contains', label: 'Contains' },
+    { value: 'does not contain', label: 'Does Not Contain' },
+    { value: 'is empty', label: 'Is Empty' },
+    { value: 'is not empty', label: 'Is Not Empty' }
   ],
   select: [
     { value: 'equals', label: 'Equals (=)' },
     { value: 'not equals', label: 'Not Equal (≠)' },
-    { value: 'is one of', label: 'Is One Of' },
-    { value: 'is not one of', label: 'Is Not One Of' }
+    { value: 'contains', label: 'Contains' },
+    { value: 'does not contain', label: 'Does Not Contain' },
+    { value: 'is empty', label: 'Is Empty' },
+    { value: 'is not empty', label: 'Is Not Empty' }
   ],
   date: [
     { value: 'equals', label: 'Equals (=)' },
-    { value: 'before', label: 'Before (<)' },
-    { value: 'after', label: 'After (>)' },
-    { value: 'on or before', label: 'On or Before (≤)' },
-    { value: 'on or after', label: 'On or After (≥)' }
+    { value: 'not equals', label: 'Not Equal (≠)' },
+    { value: 'before', label: 'Before' },
+    { value: 'on or before', label: 'On or Before' },
+    { value: 'after', label: 'After' },
+    { value: 'on or after', label: 'On or After' },
+    { value: 'between', label: 'Between' }
   ],
   boolean: [
     { value: 'equals', label: 'Equals (=)' }
@@ -98,11 +103,13 @@ const normalizeOperator = (op, fieldType = 'text') => {
   if (o === 'gte' || o === '>=') return 'greater than or equal';
   if (o === 'lt' || o === '<') return 'less than';
   if (o === 'lte' || o === '<=') return 'less than or equal';
-  if (o === 'contains any of' || o === 'in' || o === 'is one of') return fieldType === 'select' ? 'is one of' : 'contains';
-  if (o === 'not in' || o === 'is not one of') return 'is not one of';
-  if (o === 'does not contain' || o === 'not contains') return 'does not contain';
-  if (o === 'starts_with' || o === 'starts with') return 'starts with';
-  if (o === 'ends_with' || o === 'ends with') return 'ends with';
+  if (o === 'between') return 'between';
+  if (o === 'is empty' || o === 'empty' || o === 'is_empty' || o === 'null') return 'is empty';
+  if (o === 'is not empty' || o === 'not empty' || o === 'is_not_empty' || o === 'not null') return 'is not empty';
+  if (o === 'contains any of' || o === 'in' || o === 'is one of' || o === 'contains') return 'contains';
+  if (o === 'not in' || o === 'is not one of' || o === 'does not contain' || o === 'not contains') return 'does not contain';
+  if (o === 'starts_with' || o === 'starts with') return 'contains';
+  if (o === 'ends_with' || o === 'ends with') return 'contains';
   if (o === 'before') return 'before';
   if (o === 'after') return 'after';
   if (o === 'on or before') return 'on or before';
@@ -159,6 +166,9 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [activeMultiSelectIdx, setActiveMultiSelectIdx] = useState(null);
   const [multiSelectSearch, setMultiSelectSearch] = useState('');
   const [customTagInput, setCustomTagInput] = useState('');
+  const [valueListModalIdx, setValueListModalIdx] = useState(null);
+  const [valueListSearch, setValueListSearch] = useState('');
+  const [valueListBulkInput, setValueListBulkInput] = useState('');
 
   // Fetch Workflow Profiles on Mount
   useEffect(() => {
@@ -432,18 +442,31 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
   const handleOperatorChange = (index, newOp) => {
     const updated = [...conditions];
-    const prevOp = updated[index].operator;
     updated[index].operator = newOp;
 
-    const isNowMulti = newOp === 'is one of' || newOp === 'is not one of';
-    const wasMulti = prevOp === 'is one of' || prevOp === 'is not one of';
-    if (isNowMulti && !wasMulti && updated[index].value && !updated[index].value.includes(',')) {
-      // keep single value
-    } else if (!isNowMulti && wasMulti && updated[index].value.includes(',')) {
-      updated[index].value = updated[index].value.split(',')[0].trim();
+    if (newOp === 'is empty' || newOp === 'is not empty') {
+      updated[index].value = '';
+    } else if (newOp === 'between') {
+      const meta = getFieldMeta(updated[index].field);
+      const curVal = String(updated[index].value || '');
+      if (!curVal.includes(' - ')) {
+        if (meta.type === 'number') {
+          const v = curVal && !isNaN(Number(curVal)) ? curVal : '10000';
+          updated[index].value = `${v} - ${Number(v) * 2 || 50000}`;
+        } else if (meta.type === 'date') {
+          const today = new Date().toISOString().split('T')[0];
+          updated[index].value = `${today} - ${today}`;
+        }
+      }
     }
 
     setConditions(updated);
+
+    if (validationErrors[`row_${index}`]) {
+      const errs = { ...validationErrors };
+      delete errs[`row_${index}`];
+      setValidationErrors(errs);
+    }
   };
 
   const handleValueChange = (index, newVal) => {
@@ -476,6 +499,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
     setConditions(updated);
   };
 
+  const handleRemoveCondition = handleDeleteCondition;
+
   const handleClearAll = () => {
     if (conditions.length > 1) {
       setShowClearConfirm(true);
@@ -502,8 +527,10 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       conditions.forEach((c, idx) => {
         if (!c.field) issues.push(`Row ${idx + 1} field`);
         if (!c.operator) issues.push(`Row ${idx + 1} operator`);
-        if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
-          issues.push(`Row ${idx + 1} value`);
+        if (c.operator !== 'is empty' && c.operator !== 'is not empty') {
+          if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+            issues.push(`Row ${idx + 1} value`);
+          }
         }
       });
     }
@@ -517,10 +544,26 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       if (opObj) opDisplay = opObj.label.toLowerCase();
 
       let valDisplay = c.value || '...';
-      if (meta.isCurrency && c.value && !isNaN(Number(c.value))) {
+      if (c.operator === 'is empty') {
+        valDisplay = '(is empty)';
+      } else if (c.operator === 'is not empty') {
+        valDisplay = '(is not empty)';
+      } else if (c.operator === 'between') {
+        const parts = String(c.value || '').split(' - ');
+        if (meta.type === 'number') {
+          valDisplay = `${parts[0] ? (meta.isCurrency ? '₹' + Number(parts[0]).toLocaleString('en-IN') : parts[0]) : '0'} to ${parts[1] ? (meta.isCurrency ? '₹' + Number(parts[1]).toLocaleString('en-IN') : parts[1]) : '∞'}`;
+        } else {
+          valDisplay = `${parts[0] || 'Start'} to ${parts[1] || 'End'}`;
+        }
+      } else if (meta.isCurrency && c.value && !isNaN(Number(c.value))) {
         valDisplay = `₹${Number(c.value).toLocaleString('en-IN')}`;
-      } else if (c.operator === 'is one of' || c.operator === 'is not one of') {
-        valDisplay = `(${c.value})`;
+      } else if (c.value && c.value.includes(',')) {
+        const items = c.value.split(',').map(s => s.trim()).filter(Boolean);
+        if (items.length > 3) {
+          valDisplay = `${items.slice(0, 3).join(', ')} (+${items.length - 3} more)`;
+        } else {
+          valDisplay = items.join(', ');
+        }
       }
 
       return {
@@ -550,17 +593,54 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
       errors.conditions = 'At least one condition rule row is required.';
     } else {
       conditions.forEach((c, idx) => {
-        if (!c.field) errors[`row_${idx}`] = 'Field selection is required.';
-        else if (!c.operator) errors[`row_${idx}`] = 'Operator selection is required.';
-        else if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+        if (!c.field) {
+          errors[`row_${idx}`] = 'Field selection is required.';
+          return;
+        }
+        if (!c.operator) {
+          errors[`row_${idx}`] = 'Operator selection is required.';
+          return;
+        }
+
+        const meta = getFieldMeta(c.field);
+
+        // 'is empty' / 'is not empty' do not require a value
+        if (c.operator === 'is empty' || c.operator === 'is not empty') {
+          return;
+        }
+
+        if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
           errors[`row_${idx}`] = 'Value cannot be empty.';
-        } else {
-          const meta = getFieldMeta(c.field);
+          return;
+        }
+
+        if (c.operator === 'between') {
+          const parts = String(c.value).split(' - ');
+          if (parts.length < 2 || !parts[0].trim() || !parts[1].trim()) {
+            errors[`row_${idx}`] = 'Both range values (minimum and maximum) are required.';
+            return;
+          }
           if (meta.type === 'number') {
-            const cleanNum = String(c.value).replace(/,/g, '').trim();
-            if (isNaN(Number(cleanNum)) || cleanNum === '') {
-              errors[`row_${idx}`] = 'Value must be a valid number.';
+            const minNum = Number(parts[0].replace(/,/g, '').trim());
+            const maxNum = Number(parts[1].replace(/,/g, '').trim());
+            if (isNaN(minNum) || isNaN(maxNum)) {
+              errors[`row_${idx}`] = 'Both range values must be valid numbers.';
+            } else if (minNum > maxNum) {
+              errors[`row_${idx}`] = 'Minimum value cannot be greater than maximum value.';
             }
+          } else if (meta.type === 'date') {
+            const d1 = new Date(parts[0].trim());
+            const d2 = new Date(parts[1].trim());
+            if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+              errors[`row_${idx}`] = 'Both range values must be valid dates.';
+            } else if (d1 > d2) {
+              errors[`row_${idx}`] = 'Start date cannot be after end date.';
+            }
+          }
+        } else if (meta.type === 'number') {
+          const cleanNum = String(c.value).replace(/,/g, '').trim();
+          if (isNaN(Number(cleanNum)) || cleanNum === '') {
+            errors[`row_${idx}`] = 'Value must be a valid number.';
           }
         }
       });
@@ -1174,8 +1254,81 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
                         {/* 3. Value Control */}
                         <div className="flex-1 min-w-0">
-                          {/* NUMBER INPUT */}
-                          {fieldType === 'number' && (
+                          {/* IS EMPTY / IS NOT EMPTY - NO VALUE REQUIRED */}
+                          {(cond.operator === 'is empty' || cond.operator === 'is not empty') && (
+                            <div className="w-full text-[10px] py-1 px-2.5 bg-slate-100/80 border border-dashed border-slate-300 rounded text-slate-400 font-semibold italic flex items-center justify-between select-none">
+                              <span>No value required (Matches {cond.operator === 'is empty' ? 'empty / blank' : 'non-empty'} fields)</span>
+                            </div>
+                          )}
+
+                          {/* NUMBER: BETWEEN (MIN & MAX) */}
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'number' && cond.operator === 'between' && (() => {
+                            const parts = String(cond.value || '').split(' - ');
+                            const minVal = parts[0] !== undefined ? parts[0].trim() : '';
+                            const maxVal = parts[1] !== undefined ? parts[1].trim() : '';
+                            return (
+                              <div className="flex items-center gap-1.5 w-full">
+                                <div className="relative flex-1">
+                                  {fieldMeta.isCurrency && (
+                                    <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
+                                  )}
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={minVal}
+                                    onChange={e => handleValueChange(idx, `${e.target.value} - ${maxVal}`)}
+                                    placeholder="Min"
+                                    className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
+                                      fieldMeta.isCurrency ? 'pl-5 pr-1.5' : 'px-2'
+                                    }`}
+                                  />
+                                </div>
+                                <span className="text-[9px] font-extrabold text-slate-400 shrink-0 uppercase">to</span>
+                                <div className="relative flex-1">
+                                  {fieldMeta.isCurrency && (
+                                    <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
+                                  )}
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={maxVal}
+                                    onChange={e => handleValueChange(idx, `${minVal} - ${e.target.value}`)}
+                                    placeholder="Max"
+                                    className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
+                                      fieldMeta.isCurrency ? 'pl-5 pr-1.5' : 'px-2'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* DATE: BETWEEN (FROM & TO) */}
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'date' && cond.operator === 'between' && (() => {
+                            const parts = String(cond.value || '').split(' - ');
+                            const minDate = parts[0] !== undefined ? parts[0].trim() : '';
+                            const maxDate = parts[1] !== undefined ? parts[1].trim() : '';
+                            return (
+                              <div className="flex items-center gap-1.5 w-full">
+                                <input
+                                  type="date"
+                                  value={minDate}
+                                  onChange={e => handleValueChange(idx, `${e.target.value} - ${maxDate}`)}
+                                  className="w-full text-[10px] px-1.5 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
+                                />
+                                <span className="text-[9px] font-extrabold text-slate-400 shrink-0 uppercase">to</span>
+                                <input
+                                  type="date"
+                                  value={maxDate}
+                                  onChange={e => handleValueChange(idx, `${minDate} - ${e.target.value}`)}
+                                  className="w-full text-[10px] px-1.5 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
+                                />
+                              </div>
+                            );
+                          })()}
+
+                          {/* NUMBER: STANDARD OPERATORS */}
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'number' && cond.operator !== 'between' && (
                             <div className="relative">
                               {fieldMeta.isCurrency && (
                                 <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">
@@ -1195,8 +1348,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                             </div>
                           )}
 
-                          {/* DATE INPUT */}
-                          {fieldType === 'date' && (
+                          {/* DATE: STANDARD OPERATORS */}
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'date' && cond.operator !== 'between' && (
                             <input
                               type="date"
                               value={cond.value}
@@ -1206,7 +1359,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                           )}
 
                           {/* BOOLEAN SELECT */}
-                          {fieldType === 'boolean' && (
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'boolean' && (
                             <select
                               value={cond.value}
                               onChange={e => handleValueChange(idx, e.target.value)}
@@ -1217,82 +1370,215 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                             </select>
                           )}
 
-                          {/* MULTI SELECT */}
-                          {isMultiSelect && (
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={() => setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx)}
-                                className="w-full text-left text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 flex items-center justify-between"
-                              >
-                                <span className="truncate">
-                                  {selectedItems.length > 0
-                                    ? `${selectedItems.length} selected: ${selectedItems.slice(0, 2).join(', ')}${selectedItems.length > 2 ? '...' : ''}`
-                                    : '-- Select Values --'}
-                                </span>
-                                <ChevronDown className="h-2.5 w-2.5 text-slate-400 shrink-0 ml-1" />
-                              </button>
+                          {/* CATEGORICAL & TEXT: ENTERPRISE MULTI-VALUE INPUT */}
+                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && (fieldType === 'select' || fieldType === 'text') && (() => {
+                            const selectedItems = cond.value 
+                              ? cond.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) 
+                              : [];
 
-                              {activeMultiSelectIdx === idx && (
-                                <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded shadow-lg p-1.5 max-h-48 overflow-y-auto">
-                                  <div className="space-y-0.5">
-                                    {masterOptions.map(opt => {
-                                      const checked = selectedItems.includes(opt);
-                                      return (
-                                        <label
-                                          key={opt}
-                                          className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer text-[10px] font-medium"
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={() => {
-                                              const newSet = checked 
-                                                ? selectedItems.filter(s => s !== opt) 
-                                                : [...selectedItems, opt];
-                                              handleValueChange(idx, newSet.join(', '));
-                                            }}
-                                            className="h-3 w-3 accent-[#003F28] rounded"
-                                          />
-                                          <span className={checked ? 'font-bold text-slate-900' : 'text-slate-700'}>
-                                            {opt}
-                                          </span>
-                                        </label>
-                                      );
-                                    })}
+                            const handlePaste = (e) => {
+                              const pasteData = e.clipboardData?.getData('text');
+                              if (pasteData) {
+                                const parsed = pasteData.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean);
+                                if (parsed.length > 0) {
+                                  e.preventDefault();
+                                  const combined = Array.from(new Set([...selectedItems, ...parsed]));
+                                  handleValueChange(idx, combined.join(', '));
+                                  e.currentTarget.value = '';
+                                }
+                              }
+                            };
+
+                            const handleKeyDown = (e) => {
+                              if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault();
+                                const val = e.currentTarget.value.trim();
+                                if (val) {
+                                  const combined = Array.from(new Set([...selectedItems, val]));
+                                  handleValueChange(idx, combined.join(', '));
+                                  e.currentTarget.value = '';
+                                }
+                              } else if (e.key === 'Backspace' && !e.currentTarget.value && selectedItems.length > 0) {
+                                const next = selectedItems.slice(0, -1);
+                                handleValueChange(idx, next.join(', '));
+                              }
+                            };
+
+                            const removeItem = (itemToRemove) => {
+                              const next = selectedItems.filter(item => item !== itemToRemove);
+                              handleValueChange(idx, next.join(', '));
+                            };
+
+                            const filteredMaster = masterOptions.filter(opt => 
+                              opt.toLowerCase().includes(multiSelectSearch.toLowerCase())
+                            );
+
+                            return (
+                              <div className="relative">
+                                <div 
+                                  className="w-full min-h-[30px] px-1.5 py-1 bg-white border border-slate-200 rounded flex flex-wrap items-center gap-1 focus-within:border-[#003F28] cursor-text transition-colors"
+                                  onClick={(e) => {
+                                    const inputEl = e.currentTarget.querySelector('input');
+                                    if (inputEl) inputEl.focus();
+                                  }}
+                                >
+                                  {/* Chips for first 3 items */}
+                                  {selectedItems.slice(0, 3).map((item, itemIdx) => (
+                                    <span 
+                                      key={itemIdx} 
+                                      className="inline-flex items-center gap-1 bg-emerald-50 text-[#003F28] border border-emerald-200 rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 max-w-[150px]"
+                                    >
+                                      <span className="truncate" title={item}>{item}</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeItem(item);
+                                        }}
+                                        className="text-emerald-700 hover:text-rose-600 ml-0.5 cursor-pointer"
+                                        title="Remove"
+                                      >
+                                        <X className="h-2.5 w-2.5" />
+                                      </button>
+                                    </span>
+                                  ))}
+
+                                  {/* [+N more] button if > 3 */}
+                                  {selectedItems.length > 3 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setValueListModalIdx(idx);
+                                        setValueListSearch('');
+                                        setValueListBulkInput('');
+                                      }}
+                                      className="inline-flex items-center gap-0.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-900 text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[8.5px] font-black shrink-0 transition cursor-pointer"
+                                      title={`Click to view and manage all ${selectedItems.length} selected values`}
+                                    >
+                                      <span>+{selectedItems.length - 3} more</span>
+                                    </button>
+                                  )}
+
+                                  {/* Inline Type + Enter and Paste Input */}
+                                  <input
+                                    type="text"
+                                    onKeyDown={handleKeyDown}
+                                    onPaste={handlePaste}
+                                    placeholder={selectedItems.length === 0 ? (masterOptions.length > 0 ? "Select or paste values..." : "Type value + Enter...") : "Add..."}
+                                    className="flex-1 min-w-[70px] bg-transparent outline-none text-[10px] font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal py-0.5"
+                                  />
+
+                                  {/* Actions inside container */}
+                                  <div className="flex items-center gap-1 shrink-0 ml-auto pl-1">
+                                    {selectedItems.length > 0 && (
+                                      <span className="text-[8px] font-extrabold text-slate-400 select-none">
+                                        ({selectedItems.length})
+                                      </span>
+                                    )}
+
+                                    {/* Master options dropdown toggle */}
+                                    {masterOptions.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx);
+                                          setMultiSelectSearch('');
+                                        }}
+                                        className="p-0.5 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
+                                        title="Open options dropdown"
+                                      >
+                                        <ChevronDown className="h-3 w-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-                              )}
-                            </div>
-                          )}
 
-                          {/* STANDARD DROPDOWN */}
-                          {!isMultiSelect && fieldType === 'select' && (
-                            <div className="relative">
-                              <select
-                                value={cond.value}
-                                onChange={e => handleValueChange(idx, e.target.value)}
-                                className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
-                              >
-                                <option value="">-- Select Value --</option>
-                                {masterOptions.map(opt => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                              <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
-                            </div>
-                          )}
+                                {/* Master Options Dropdown Popover */}
+                                {activeMultiSelectIdx === idx && masterOptions.length > 0 && (
+                                  <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                                    <div className="flex items-center justify-between gap-1 pb-1 border-b border-slate-100">
+                                      <div className="relative flex-1">
+                                        <Search className="h-3 w-3 text-slate-400 absolute left-2 top-1.5 pointer-events-none" />
+                                        <input
+                                          type="text"
+                                          value={multiSelectSearch}
+                                          onChange={e => setMultiSelectSearch(e.target.value)}
+                                          placeholder="Search options..."
+                                          className="w-full pl-6 pr-2 py-0.5 text-[9.5px] bg-slate-50 border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
+                                          autoFocus
+                                        />
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveMultiSelectIdx(null)}
+                                        className="p-1 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
 
-                          {/* TEXT INPUT */}
-                          {!isMultiSelect && fieldType === 'text' && (
-                            <input
-                              type="text"
-                              value={cond.value}
-                              onChange={e => handleValueChange(idx, e.target.value)}
-                              placeholder={`Enter ${cond.field.toLowerCase()}...`}
-                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
-                            />
-                          )}
+                                    <div className="flex items-center justify-between text-[9px] font-bold px-1 text-slate-500">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const combined = Array.from(new Set([...selectedItems, ...filteredMaster]));
+                                          handleValueChange(idx, combined.join(', '));
+                                        }}
+                                        className="text-[#003F28] hover:underline cursor-pointer"
+                                      >
+                                        Select All ({filteredMaster.length})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const remaining = selectedItems.filter(s => !filteredMaster.includes(s));
+                                          handleValueChange(idx, remaining.join(', '));
+                                        }}
+                                        className="text-rose-600 hover:underline cursor-pointer"
+                                      >
+                                        Clear Filtered
+                                      </button>
+                                    </div>
+
+                                    <div className="max-h-48 overflow-y-auto space-y-0.5 pt-0.5 border-t border-slate-100">
+                                      {filteredMaster.length === 0 ? (
+                                        <p className="text-[9.5px] text-slate-400 italic py-2 text-center">
+                                          No options matched "{multiSelectSearch}"
+                                        </p>
+                                      ) : (
+                                        filteredMaster.map(opt => {
+                                          const checked = selectedItems.includes(opt);
+                                          return (
+                                            <label
+                                              key={opt}
+                                              className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-[10px] transition-colors ${
+                                                checked ? 'bg-emerald-50 text-emerald-950 font-bold' : 'hover:bg-slate-50 text-slate-700 font-medium'
+                                              }`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => {
+                                                  const newSet = checked 
+                                                    ? selectedItems.filter(s => s !== opt) 
+                                                    : [...selectedItems, opt];
+                                                  handleValueChange(idx, newSet.join(', '));
+                                                }}
+                                                className="h-3 w-3 accent-[#003F28] rounded cursor-pointer"
+                                              />
+                                              <span className="truncate">{opt}</span>
+                                            </label>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* 4. Delete Row Button */}
@@ -1579,6 +1865,160 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
             </div>
           </div>
         )}
+
+        {/* MODAL: LARGE VALUE LIST MANAGER */}
+        {valueListModalIdx !== null && conditions[valueListModalIdx] && (() => {
+          const cond = conditions[valueListModalIdx];
+          const allItems = cond.value 
+            ? cond.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) 
+            : [];
+          const filtered = valueListSearch 
+            ? allItems.filter(item => item.toLowerCase().includes(valueListSearch.toLowerCase()))
+            : allItems;
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">
+              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+                {/* Modal Header */}
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-md bg-emerald-100 text-[#003F28] flex items-center justify-center font-bold text-xs">
+                      <Layers className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-black text-slate-900">
+                        Manage Values — {cond.field}
+                      </h3>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {allItems.length} {allItems.length === 1 ? 'value' : 'values'} configured for rule matching
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setValueListModalIdx(null)}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-4 space-y-3 overflow-y-auto flex-1">
+                  {/* Search and Filter */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={valueListSearch}
+                        onChange={e => setValueListSearch(e.target.value)}
+                        placeholder="Filter configured values..."
+                        className="w-full pl-8 pr-2.5 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-md outline-none font-bold text-slate-800 focus:border-[#003F28] focus:bg-white"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleValueChange(valueListModalIdx, '');
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition cursor-pointer shrink-0"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+
+                  {/* Bulk Paste / Quick Add Box */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                      Bulk Paste or Add Values
+                    </span>
+                    <div className="flex gap-1.5">
+                      <textarea
+                        rows={2}
+                        value={valueListBulkInput}
+                        onChange={e => setValueListBulkInput(e.target.value)}
+                        placeholder="Paste from Excel, CSV, or type values separated by commas, tabs, or newlines..."
+                        className="flex-1 text-[10px] p-1.5 bg-white border border-slate-200 rounded outline-none font-mono text-slate-800 focus:border-[#003F28] resize-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!valueListBulkInput.trim()) return;
+                          const pasted = valueListBulkInput.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean);
+                          const combined = Array.from(new Set([...allItems, ...pasted]));
+                          handleValueChange(valueListModalIdx, combined.join(', '));
+                          setValueListBulkInput('');
+                        }}
+                        className="px-3 py-1 bg-[#003F28] hover:bg-[#002f1e] text-white text-[10.5px] font-bold rounded transition cursor-pointer self-stretch flex items-center justify-center shrink-0"
+                      >
+                        Add Values
+                      </button>
+                    </div>
+                    <p className="text-[8.5px] text-slate-400 font-medium">
+                      Automatically splits by newlines, commas, semicolons, tabs, and trims &amp; deduplicates values.
+                    </p>
+                  </div>
+
+                  {/* Chips Grid */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                        Configured Values ({filtered.length} shown)
+                      </span>
+                    </div>
+
+                    {allItems.length === 0 ? (
+                      <div className="py-6 text-center text-slate-400 text-xs italic bg-slate-50 rounded border border-dashed border-slate-200">
+                        No values configured yet. Paste or add values above.
+                      </div>
+                    ) : filtered.length === 0 ? (
+                      <div className="py-4 text-center text-slate-400 text-[10px] italic">
+                        No values match "{valueListSearch}".
+                      </div>
+                    ) : (
+                      <div className="max-h-56 overflow-y-auto p-1 border border-slate-200 rounded-lg bg-slate-50/50 flex flex-wrap gap-1 content-start">
+                        {filtered.map((val, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1 bg-white text-slate-800 border border-slate-200/90 rounded px-2 py-0.5 text-[10px] font-bold shadow-2xs group"
+                          >
+                            <span className="truncate max-w-[200px]" title={val}>{val}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const remaining = allItems.filter(item => item !== val);
+                                handleValueChange(valueListModalIdx, remaining.join(', '));
+                              }}
+                              className="text-slate-400 hover:text-rose-600 ml-0.5 transition cursor-pointer"
+                              title={`Remove ${val}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    {allItems.length} total items in this condition
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setValueListModalIdx(null)}
+                    className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-[11px] rounded-lg transition shadow-2xs cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     );

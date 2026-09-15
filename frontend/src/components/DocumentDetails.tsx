@@ -1330,10 +1330,10 @@ export default function DocumentDetails({
                   ? "bg-[#006747] border-[#005333] text-white shadow-sm" 
                   : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300"
               }`}
-              title="Click to view/hide extra financial, tax, and ERP metadata fields"
+              title="Toggle additional information"
             >
-              <span>{showMoreMetadata ? "Hide Extra Data" : "Extra Data ▾"}</span>
-              {showMoreMetadata ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+              <span>{showMoreMetadata ? "Less Info" : "More Info ▾"}</span>
+              {showMoreMetadata ? <span className="text-[9px]">▴</span> : <span className="text-[9px] text-slate-500">▾</span>}
             </button>
           </div>
 

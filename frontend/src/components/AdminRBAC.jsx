@@ -1390,7 +1390,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </button>
               )}
               
-              {(activeTab === "roles" || activeTab === "users") && (
+              {activeTab === "roles" && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1447,7 +1447,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[500px]">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[9.5px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[11px] font-bold text-slate-500 uppercase tracking-wider select-none">
                     <th className="px-3.5 py-2.5 w-[35%]">Role Group</th>
                     <th className="px-3.5 py-2.5 w-[20%]">Status</th>
                     <th className="px-3.5 py-2.5 w-[25%]">Assigned Employees</th>
@@ -1466,7 +1466,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                         className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
                       >
                         {/* Name + Shield Icon */}
-                        <td className="px-4 py-3 w-[35%] align-middle font-bold text-slate-800">
+                        <td className="px-3 py-2 w-[35%] align-middle font-bold text-slate-800">
                           <div className="flex items-center gap-2.5">
                             <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border ${
                               r.id === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
@@ -1477,19 +1477,19 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             }`}>
                               <Shield className="h-4 w-4" />
                             </div>
-                            <span className="font-semibold text-slate-900 text-xs">{r.name}</span>
+                            <span className="font-semibold text-slate-900 text-[13px]">{r.name}</span>
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td className="px-4 py-3 w-[20%] align-middle">
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
+                        <td className="px-3 py-2 w-[20%] align-middle">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
                             Active
                           </span>
                         </td>
 
                         {/* Assigned Employees */}
-                        <td className="px-4 py-3 w-[25%] align-middle text-slate-600 font-medium text-xs">
+                        <td className="px-3 py-2 w-[25%] align-middle text-slate-600 font-medium text-xs">
                           <div className="flex items-center gap-1.5">
                             <Users className="h-3.5 w-3.5 text-slate-400" />
                             <span>{userCount} employee{userCount !== 1 ? 's' : ''}</span>
@@ -1497,22 +1497,23 @@ export default function AdminRBAC({ onRefreshSignal }) {
                         </td>
 
                         {/* Role Code / Badge */}
-                        <td className="px-4 py-3 w-[20%] align-middle">
-                          <span className="text-[8px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
+                        <td className="px-3 py-2 w-[20%] align-middle">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
                             {r.badge}
                           </span>
                         </td>
 
                         {/* Action Link */}
-                        <td className="px-4 py-3 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
+                        <td className="px-3 py-2 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
                           <button 
                             type="button" 
                             onClick={() => setSelectedRoleId(r.id)}
-                            className="text-[11px] font-semibold text-slate-400 group-hover:text-blue-600 transition cursor-pointer inline-flex items-center justify-end gap-0.5"
+                            className="text-[11px] font-semibold text-slate-400 hover:text-blue-600 transition cursor-pointer inline-flex items-center gap-0.5 mr-1"
                           >
-                            <span>View clearances</span>
-                            <ExternalLink className="h-3 w-3 ml-0.5" />
+                            <Edit2 className="h-3 w-3" />
+                            <span>Edit</span>
                           </button>
+                          <MoreVertical className="h-3 w-3" />
                         </td>
                       </tr>
                     );
@@ -1762,11 +1763,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
             <div className="overflow-visible min-w-full">
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[9.5px] font-bold text-slate-500 uppercase tracking-wider select-none">
-                    <th className="px-4 py-2.5 w-[35%]">Name</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[11px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                    <th className="px-4 py-2.5 w-[30%]">Name</th>
+                    <th className="px-3.5 py-2.5 w-[20%]">Role</th>
                     <th className="px-3.5 py-2.5 w-[14%]">Status</th>
-                    <th className="px-3.5 py-2.5 w-[18%]">Permissions</th>
-                    <th className="px-3.5 py-2.5 w-[15%]">Date Added</th>
+                    <th className="px-3.5 py-2.5 w-[18%]">Date Added</th>
                     <th className="px-3.5 py-2.5 w-[18%] text-right pr-6"></th>
                   </tr>
                 </thead>
@@ -1779,16 +1780,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     </tr>
                   ) : (
                     filteredUsers.map(u => {
-                      const hasOverrides = userOverrides[u.username || u.email] && Object.keys(userOverrides[u.username || u.email]).length > 0;
-                      
                       return (
                         <tr 
                           key={u.id}
-                          onClick={() => setSelectedUser(u)}
-                          className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
+                          className="hover:bg-slate-50/80 transition-colors select-none"
                         >
                           {/* Name + Email + Avatar */}
-                          <td className="px-4 py-2.5 w-[35%] align-middle">
+                          <td className="px-4 py-2.5 w-[30%] align-middle">
                             <div className="flex items-center gap-2.5">
                               <div className={`h-7.5 w-7.5 rounded-full flex items-center justify-center font-bold text-[9px] tracking-wide shrink-0 shadow-3xs ${getAvatarColor(u.name)}`}>
                                 {u.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
@@ -1801,15 +1799,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                       New
                                     </span>
                                   )}
-                                  {hasOverrides && (
-                                    <span className="px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-600 text-[8px] font-bold border border-amber-100" title="User has specific overrides">
-                                      Custom
-                                    </span>
-                                  )}
                                 </div>
                                 <span className="text-[9px] text-slate-400 truncate leading-tight mt-0.5">{u.email}</span>
                               </div>
                             </div>
+                          </td>
+
+                          {/* Role */}
+                          <td className="px-3.5 py-2.5 w-[20%] align-middle">
+                            <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 uppercase">
+                              {getRoleDisplayName(u.role)}
+                            </span>
                           </td>
 
                           {/* Status badge */}
@@ -1833,18 +1833,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
                             )}
                           </td>
 
-                          {/* Permissions */}
-                          <td className="px-3.5 py-2.5 w-[18%] text-slate-650 font-medium align-middle">
-                            {getRoleDisplayName(u.role)}
-                          </td>
-
                           {/* Date Added */}
-                          <td className="px-3.5 py-2.5 w-[14%] text-slate-400 font-medium align-middle">
+                          <td className="px-3.5 py-2.5 w-[18%] text-slate-400 font-medium align-middle">
                             {u.created_on ? new Date(u.created_on).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : "24 Jan 2022"}
                           </td>
 
                           {/* Actions */}
-                          <td className="px-3.5 py-2.5 w-[20%] text-right pr-4 align-middle relative" onClick={e => e.stopPropagation()}>
+                          <td className="px-3.5 py-2.5 w-[18%] text-right pr-4 align-middle relative" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5 relative">
                               <button 
                                 type="button" 
@@ -1869,14 +1864,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                               >
                                 <Edit2 className="h-2.5 w-2.5" />
                                 <span>Edit</span>
-                              </button>
-                              <button 
-                                type="button" 
-                                onClick={() => setSelectedUser(u)}
-                                className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 mr-1 transition cursor-pointer inline-flex items-center gap-0.5"
-                              >
-                                <span>Permissions</span>
-                                <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
                               </button>
                               <button
                                 type="button"
@@ -1912,33 +1899,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 >
                                   <Edit2 className="h-3.5 w-3.5 text-blue-600" />
                                   <span>Edit Profile & ID</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedUser(u);
-                                    setMenuOpenUserId(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 hover:bg-slate-50 text-[10.5px] font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
-                                >
-                                  <Shield className="h-3.5 w-3.5 text-slate-400" />
-                                  <span>Setup permissions</span>
-                                </button>
-                                
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedUser(u);
-                                    setMenuOpenUserId(null);
-                                    setTimeout(() => {
-                                      document.getElementById("user-group-dropdown")?.focus();
-                                    }, 150);
-                                  }}
-                                  className="w-full px-3 py-1.5 hover:bg-slate-50 text-[10.5px] font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
-                                >
-                                  <Sliders className="h-3.5 w-3.5 text-slate-400" />
-                                  <span>Move to other group</span>
                                 </button>
                                 
                                 <button
@@ -1978,147 +1938,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </table>
             </div>
           </div>
-
-          {/* DIALOG: User Permissions Modal */}
-          {selectedUser && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
-              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-[480px] w-full max-h-[80vh] flex flex-col overflow-hidden animate-scaleIn">
-                
-                {/* Panel header */}
-                <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider">
-                    <Shield className="h-4 w-4 text-blue-600" />
-                    <span className="text-slate-900 font-black">USER PERMISSIONS</span>
-                  </div>
-                  <button 
-                    type="button" 
-                    onClick={() => setSelectedUser(null)}
-                    className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Profile details card */}
-                <div className="p-4 bg-white border-b border-slate-100 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full flex items-center justify-center font-bold text-xs tracking-wider bg-sky-100 text-sky-700 border border-sky-200">
-                        {selectedUser.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-slate-900 text-sm tracking-tight">{selectedUser.name}</span>
-                        <span className="text-xs text-slate-400 truncate mt-0.5 font-medium">{selectedUser.email}</span>
-                      </div>
-                    </div>
-                    <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                      ID: {selectedUser.employee_id || selectedUser.id}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Info alert banner */}
-                <div className="px-4 py-2.5 bg-blue-50/70 border-b border-blue-100/70 text-blue-700 text-xs font-semibold flex items-center gap-2 shrink-0 select-none">
-                  <Info className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span>Permissions align with User Group. Custom switches define exceptions.</span>
-                </div>
-
-                {/* Group selection dropdown */}
-                <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between gap-4 shrink-0">
-                  <span className="font-bold text-slate-800 text-xs">User Group</span>
-                  <div className="relative w-48">
-                    <select
-                      id="user-group-dropdown"
-                      value={panelUserGroup}
-                      onChange={e => handlePanelGroupChange(e.target.value)}
-                      className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 pr-7 outline-none appearance-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-3xs"
-                    >
-                      <option value="admin">Administrator</option>
-                      <option value="manager">Manager</option>
-                      <option value="ap_specialist">Consultant</option>
-                      <option value="auditor">Internal Auditor</option>
-                      <option value="employee">Employee</option>
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-3 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Scrollable list of permissions toggles */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar bg-slate-50/30">
-                  {flatPermissions.map(perm => {
-                    const isEnabled = !!panelPermissions[perm.id];
-                    const IconComponent = perm.icon || ShieldCheck;
-                    
-                    return (
-                      <div 
-                        key={perm.id} 
-                        className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between gap-3 hover:border-slate-300 hover:shadow-2xs transition-all select-none"
-                      >
-                        <div className="flex items-center gap-3 min-w-0 pr-2">
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
-                            <IconComponent className="h-4 w-4" />
-                          </div>
-                          <div className="flex flex-col text-left min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-slate-900 leading-tight truncate">{perm.label}</span>
-                              {perm.isCustom && (
-                                <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-bold">
-                                  Custom
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-slate-400 font-medium leading-relaxed truncate max-w-xs mt-0.5">{perm.desc}</span>
-                          </div>
-                        </div>
-
-                        {/* iOS-Style Toggle Switch */}
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePermission(perm.id)}
-                          disabled={!isAdmin}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-blue-500/25 ${
-                            isEnabled ? 'bg-blue-600' : 'bg-slate-200'
-                          } ${!isAdmin ? 'opacity-65 cursor-not-allowed' : ''}`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                              isEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Save changes footer */}
-                <div className="p-4 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedUser(null)}
-                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSavePermissionChanges}
-                    disabled={saving || !isAdmin}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer disabled:opacity-60 text-center flex items-center justify-center gap-1.5"
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <span>Save Changes</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
