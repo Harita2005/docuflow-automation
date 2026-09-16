@@ -178,6 +178,7 @@ class InvoiceResponse(InvoiceBase):
     has_approved: Optional[bool] = None
     has_rejected: Optional[bool] = None
     completed_by_peer: Optional[bool] = None
+    current_stage_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -259,6 +260,7 @@ class AuditLogResponse(BaseModel):
     stage: Optional[str] = None
     notes: Optional[str] = Field(None, validation_alias='notes')
     details: Optional[str] = Field(None, validation_alias='notes')
+    ip_address: Optional[str] = None
     timestamp: datetime.datetime
 
     class Config:

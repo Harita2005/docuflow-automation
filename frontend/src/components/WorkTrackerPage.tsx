@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Search, 
-  CheckCircle2, 
   FileText, 
   Calendar, 
-  X,
-  Eye
+  X, 
+  Eye 
 } from "lucide-react";
 import { DbInvoice } from "../types.ts";
 import { formatDocNumber } from "../utils/formatters";
@@ -29,7 +28,7 @@ export default function WorkTrackerPage({
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [selectedDocIds, _setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
     return saved === "approved" || saved === "cancelled" ? "all" : saved;
@@ -137,17 +136,6 @@ export default function WorkTrackerPage({
     }
 
     return true;
-  };
-
-  const getApproverRole = (approverStr: string) => {
-    if (!approverStr) return "";
-    const mainApprover = approverStr.split(",")[0].trim();
-    const lower = mainApprover.toLowerCase();
-    if (lower.includes("prabhu")) return "finance_auditor";
-    if (lower.includes("harish")) return "auditor";
-    if (lower.includes("karthik")) return "auditor";
-    if (lower.includes("abinaya")) return "finance_auditor";
-    return "auditor";
   };
 
   const isAssignedToUser = (doc: DbInvoice): boolean => {
@@ -341,17 +329,6 @@ export default function WorkTrackerPage({
       return db.localeCompare(da);
     });
   }, [visibleDocs, activeTab, statusFilter, searchTerm, sortBy, timeFilter, customStartDate, customEndDate]);
-
-  const getNormalizedTabCategory = (tab: string) => {
-    const norm = tab.toUpperCase().trim();
-    if (norm.includes("AP INVOICE") || norm === "INVOICE") return "AP INVOICE";
-    if (norm.includes("GENERAL") || norm.includes("VCC") || norm.includes("EXPENSE")) return "GENERAL RECORDS";
-    if (norm.includes("PURCHASE ORDER") || norm === "PO") return "PURCHASE ORDER";
-    if (norm.includes("GOODS RECEIPT") || norm === "GRN") return "GOODS RECEIPT";
-    return "ALL";
-  };
-
-  const activeTabCategory = getNormalizedTabCategory(activeTab);
 
   return (
     <div className="space-y-2 animate-fadeIn pb-8 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0 text-slate-800">

@@ -3,10 +3,10 @@ import datetime
 import json
 import re
 import urllib.parse
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.auth import get_current_active_user, get_current_user_optional
+from app.auth import get_current_active_user
 from app.database.connection import get_db
 from app.database.models import AuditLog, BusinessRule, ChecklistTemplate, Invoice, SystemLog, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import WorkflowProfileSchema

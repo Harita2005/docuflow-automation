@@ -81,7 +81,10 @@ export default function Dashboard({
         })() as any,
         amount: d.amount || 45000,
         assigned_approver: d.assigned_approver,
-        is_current_approver: d.is_current_approver
+        is_current_approver: d.is_current_approver,
+        has_approved: d.has_approved,
+        has_rejected: d.has_rejected,
+        current_stage_name: d.current_stage_name
       }))
     : [];
 
@@ -101,10 +104,6 @@ export default function Dashboard({
     if (doc.status === "Data Verification Pending" && (currentUserRole === "ap_executive" || currentUserRole === "executive")) return true;
     return false;
   };
-
-  const userAssignedDocs = currentUserRole === "admin"
-    ? displayDocs
-    : displayDocs.filter(d => isAssignedToUser(d));
 
   // Dynamic KPI Count Computations
   const isHoldStatus = (st: string) => {
@@ -134,32 +133,34 @@ export default function Dashboard({
     return s.includes("progress") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("stage") || s.includes("approv");
   };
 
-  const allAvailableDocs = (currentUserRole !== "admin" && documents && documents.length > 0)
-    ? userAssignedDocs
-    : displayDocs;
-
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
-  const baseDocs = allAvailableDocs.filter(d => !isApprovedStatus(d.status));
+  const baseDocs = displayDocs.filter(d => !isApprovedStatus(d.status));
 
-  const pendingCount = baseDocs.filter(d => isPendingStatus(d.status)).length;
-  const holdCount = baseDocs.filter(d => isHoldStatus(d.status)).length;
-  const rejectedCount = baseDocs.filter(d => isRejectedStatus(d.status)).length;
-  const progressCount = baseDocs.filter(d => isProgressStatus(d.status) || isPendingStatus(d.status)).length;
-  const approvedCount = allAvailableDocs.filter(d => isApprovedStatus(d.status)).length;
+  const pendingCount = baseDocs.filter(d => isAssignedToUser(d) && isPendingStatus(d.status)).length;
+  const holdCount = baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status)).length;
+  const rejectedCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
+  const progressCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
+  const approvedCount = _stats?.approvedDocuments !== undefined
+    ? Number(_stats.approvedDocuments)
+    : (currentUserRole === "admin"
+        ? displayDocs.filter(d => isApprovedStatus(d.status)).length
+        : displayDocs.filter(d => isApprovedStatus(d.status) && d.has_approved).length);
 
   const activeTotal = pendingCount + holdCount + rejectedCount;
   const pendingPercent = activeTotal > 0 ? Math.round((pendingCount / activeTotal) * 100) : 0;
   const holdPercent = activeTotal > 0 ? Math.round((holdCount / activeTotal) * 100) : 0;
   const rejectedPercent = activeTotal > 0 ? Math.round((rejectedCount / activeTotal) * 100) : 0;
   const progressPercent = activeTotal > 0 ? Math.round((progressCount / activeTotal) * 100) : 0;
-  const approvedPercent = allAvailableDocs.length > 0 ? Math.round((approvedCount / allAvailableDocs.length) * 100) : 0;
+  const approvedPercent = (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount)) > 0 
+    ? Math.round((approvedCount / (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount))) * 100) 
+    : 0;
 
   // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected)
   const currentStatusDocs = kpiFilter === 'hold'
-    ? baseDocs.filter(d => isHoldStatus(d.status))
+    ? baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
-      ? baseDocs.filter(d => isRejectedStatus(d.status))
-      : baseDocs.filter(d => isPendingStatus(d.status));
+      ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status))
+      : baseDocs.filter(d => isAssignedToUser(d) && isPendingStatus(d.status));
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {
@@ -748,7 +749,12 @@ export default function Dashboard({
                       <span className="text-slate-400">•</span>
 
                       {/* Status Badge */}
-                      {renderStatusBadge(doc.status, doc.status_badge_type)}
+                      {renderStatusBadge(
+                        (doc.current_stage_name && (doc.status?.toLowerCase().includes("progress") || doc.status?.toLowerCase().includes("pending") || doc.status?.toLowerCase().includes("stage")))
+                          ? doc.current_stage_name
+                          : doc.status,
+                        doc.status_badge_type
+                      )}
                       {/* Assigned Approver */}
                       {doc.assigned_approver && (
                         <span className="ml-1 text-[9px] text-slate-600">⎈ {doc.assigned_approver}</span>

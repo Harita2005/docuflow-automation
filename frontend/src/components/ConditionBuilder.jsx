@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Plus, Edit2, Trash2, Network, X, ArrowRight, CornerDownRight, Search, 
-  AlertTriangle, Folder, GitMerge, CheckCircle2, ChevronDown, Check, Sparkles, 
-  Filter, HelpCircle, ArrowLeft, Layers, Sliders, ShieldCheck
+  Plus, Edit2, Trash2, X, ArrowRight, Search, 
+  AlertTriangle, GitMerge, CheckCircle2, ChevronDown, Check, 
+  ArrowLeft, Layers, Sliders
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -165,7 +165,6 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   // Value multi-select / picker modal for dropdowns
   const [activeMultiSelectIdx, setActiveMultiSelectIdx] = useState(null);
   const [multiSelectSearch, setMultiSelectSearch] = useState('');
-  const [customTagInput, setCustomTagInput] = useState('');
   const [valueListModalIdx, setValueListModalIdx] = useState(null);
   const [valueListSearch, setValueListSearch] = useState('');
   const [valueListBulkInput, setValueListBulkInput] = useState('');
@@ -1178,12 +1177,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                   const fieldType = fieldMeta.type || 'text';
                   const validOperators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.text;
                   const masterOptions = getFieldMasterOptions(cond.field);
-                  const isMultiSelect = cond.operator === 'is one of' || cond.operator === 'is not one of';
                   const rowError = validationErrors[`row_${idx}`];
-
-                  const selectedItems = cond.value 
-                    ? cond.value.split(',').map(s => s.trim()).filter(Boolean) 
-                    : [];
 
                   return (
                     <div 

@@ -8,7 +8,6 @@ import {
   ChevronLeft, 
   ChevronRight, 
   FileText, 
-  UserCheck, 
   X,
   Filter,
   ArrowUpDown,
@@ -225,12 +224,18 @@ export default function ApprovedDocumentsPage({
     if (s.includes("in progress") || s.includes("pending") || s.includes("rejected") || s.includes("cancelled") || s.includes("hold") || s.includes("stage")) {
       return false;
     }
-    return s === "approved";
+    if (s !== "approved") return false;
+    const role = (_currentUserRole || "").toLowerCase();
+    const isAdmin = ["admin", "administrator", "system_admin", "superadmin"].includes(role);
+    if (!isAdmin && !doc.has_approved) {
+      return false;
+    }
+    return true;
   };
 
   const localApprovedDocs = useMemo(() => {
     return documents.filter(isApproved);
-  }, [documents]);
+  }, [documents, _currentUserRole]);
 
   // Available Years dynamically extracted from database, fallback to local
   const availableYears = useMemo(() => {

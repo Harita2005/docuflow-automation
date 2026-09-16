@@ -1120,6 +1120,7 @@ export default function Admin() {
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">User / Agent</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Action</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Stage</th>
+                <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">IP Address</th>
                 <th className="px-4 py-2.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Details</th>
               </tr>
             </thead>
@@ -1130,8 +1131,9 @@ export default function Admin() {
                   const stg = (log.stage || "").toLowerCase();
                   const usr = (log.user || "").toLowerCase();
                   const det = (log.details || log.notes || "").toLowerCase();
+                  const ip = (log.ip_address || "").toLowerCase();
                   const q = logSearchQuery.toLowerCase();
-                  const matchesSearch = q === "" || act.includes(q) || det.includes(q) || usr.includes(q) || stg.includes(q);
+                  const matchesSearch = q === "" || act.includes(q) || det.includes(q) || usr.includes(q) || stg.includes(q) || ip.includes(q);
 
                   if (!matchesSearch) return false;
 
@@ -1148,7 +1150,7 @@ export default function Admin() {
                 if (filtered.length === 0) {
                   return (
                     <tr>
-                      <td colSpan="5" className="p-8 text-center text-slate-400 font-medium italic">
+                      <td colSpan="6" className="p-8 text-center text-slate-400 font-medium italic">
                         No audit logs found matching your filter or search.
                       </td>
                     </tr>
@@ -1187,6 +1189,15 @@ export default function Admin() {
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 font-medium text-[9px]">
                         {log.stage || "-"}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[9px]">
+                        {log.ip_address ? (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-medium">
+                            {log.ip_address}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-slate-600 font-medium leading-relaxed max-w-xl">
                         {log.details || log.notes}

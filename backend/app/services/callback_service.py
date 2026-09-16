@@ -444,13 +444,7 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
         logger.debug('Handled exception: %s', he)
     except Exception as ex:
         logger.debug('Handled exception: %s', ex)
-    max_attempts = event.max_attempts or 3
-    if rule.retry_config_json:
-        try:
-            rc = json.loads(rule.retry_config_json)
-            max_attempts = int(rc.get('max_attempts', max_attempts))
-        except Exception as exc:
-            logger.debug('Handled exception: %s', exc)
+
     event.max_attempts = max_attempts
     if attempt_num < max_attempts:
         event.status = 'RETRYING'

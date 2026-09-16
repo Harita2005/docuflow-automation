@@ -47,6 +47,7 @@ export interface DbInvoice {
   workflow_profile_id?: string;
   workflow_profile?: string;
   current_stage?: number;
+  current_stage_name?: string;
   total_stages?: number;
   assigned_approver?: string;
   vendor_gstin?: string;

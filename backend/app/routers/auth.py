@@ -4,13 +4,25 @@ from app.routers.events import broadcast_event
 import uuid
 import time
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, load_only
 from app.auth import create_access_token, get_current_user, verify_password
 from app.config.settings import settings
 from app.database.connection import get_db
-from app.database.models import AuditLog, NotificationProviderConfig, User
+from app.database.models import AuditLog, NotificationProviderConfig, User, UserAccessLog
+
+def extract_client_ip(req: Request) -> str:
+    """Extracts client IP address correctly handling proxies and load balancers."""
+    fwd = req.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    real_ip = req.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    if req.client and req.client.host:
+        return req.client.host.strip()
+    return "127.0.0.1"
 from app.schemas.schemas import (
     LoginRequest,
     MFASendOTPRequest,
@@ -53,7 +65,8 @@ def login_get_info():
 
 @router.post('/login', response_model=TokenResponse, response_model_exclude_none=True)
 @router.post('/token', response_model=TokenResponse, response_model_exclude_none=True)
-def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=Depends(get_db)):
+def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request, db: Session=Depends(get_db)):
+    client_ip = extract_client_ip(req)
     ident = request.username or request.identifier or request.email
     if not ident:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
@@ -105,12 +118,56 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=
     if not user and ident_str.isdigit():
         user = db.query(User).filter(User.id == int(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     if not user:
+        try:
+            db.add(UserAccessLog(
+                username=ident_str[:150],
+                event_type="LOGIN_FAILED",
+                status="FAILED",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason=f"User '{ident_str}' not found in system",
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=ident_str[:150],
+                action='Login Failed',
+                stage='Authentication',
+                notes=f"Failed login attempt from {client_ip}. User '{ident_str}' not found.",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging failed login: %s", e)
+        logger.warning(f"Login failed: User '{ident_str}' not found from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"User '{ident_str}' not found in system.")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated. Access denied.")
     if request.password:
         is_valid = verify_password(request.password, user.password_hash or '')
         if not is_valid:
+            try:
+                db.add(UserAccessLog(
+                    username=user.username,
+                    event_type="LOGIN_FAILED",
+                    status="FAILED",
+                    ip_address=client_ip,
+                    user_agent=req.headers.get("user-agent", "")[:255],
+                    failure_reason="Invalid credentials",
+                    timestamp=datetime.datetime.utcnow()
+                ))
+                db.add(AuditLog(
+                    invoice_id=None,
+                    user=user.employee_name or user.name or user.username,
+                    action='Login Failed',
+                    stage='Authentication',
+                    notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials.",
+                    ip_address=client_ip
+                ))
+                db.commit()
+            except Exception as e:
+                logger.debug("Error logging failed login: %s", e)
+            logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
         new_session_id = str(uuid.uuid4())
         device_label = request.device_info or 'Web Browser'
@@ -123,11 +180,31 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session=
         if had_prior_session:
             try:
                 broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
-                db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.'))
+                db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.', ip_address=client_ip))
             except Exception as e:
                 logger.debug('Handled exception: %s', e)
+        try:
+            db.add(UserAccessLog(
+                username=user.username,
+                event_type="LOGIN",
+                status="SUCCESS",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='User Logged In',
+                stage='Authentication',
+                notes=f'User {user.employee_name or user.username} logged in successfully from {client_ip}. Device: {device_label}',
+                ip_address=client_ip
+            ))
+        except Exception as e:
+            logger.debug('Handled exception: %s', e)
         db.commit()
         db.refresh(user)
+        logger.info(f"Login successful: User '{user.username}' ({user.employee_name or user.name}) logged in from IP: {client_ip} [Device: {device_label}]")
         expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
         access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
         return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
@@ -288,7 +365,7 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
         raise HTTPException(status_code=500, detail='Internal server error during MFA setup')
 
 @router.post('/mfa/verify', response_model=TokenResponse)
-def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
+def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_db)):
     ticket_data = get_mfa_ticket(request.ticket)
     if not ticket_data:
         raise HTTPException(status_code=400, detail='MFA session expired or invalid. Please restart login.')
@@ -378,6 +455,7 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
         raise HTTPException(status_code=400, detail='Invalid verification code. Please check and try again.')
     if user.active_session_id and (not request.force_login):
         return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 0, 'user': None, 'mfa_required': False, 'active_session_conflict': True, 'active_device_info': user.active_device_info or 'Another Browser / Device', 'session_created_at': user.session_created_at.isoformat() + 'Z' if user.session_created_at else None, 'message': f"User '{user.employee_name or user.username}' is currently logged in on another device/browser."}
+    client_ip = extract_client_ip(req)
     import uuid
     new_session_id = str(uuid.uuid4())
     device_label = request.device_info or 'Web Browser'
@@ -391,27 +469,46 @@ def verify_mfa(request: MFAVerifyRequest, db: Session=Depends(get_db)):
         try:
             from app.routers.events import broadcast_event
             broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
-            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.'))
+            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.', ip_address=client_ip))
         except Exception as e:
             logger.debug('Handled exception: %s', e)
     expires_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
     access_token = create_access_token(data={'sub': user.username, 'id': user.id, 'role': user.role, 'division': user.division, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
     try:
-        db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='MFA Verified', stage='Authentication', notes=f'User {user.employee_name} ({user.employee_id}) completed 2FA challenge via [{method_upper}].'))
+        db.add(UserAccessLog(
+            username=user.username,
+            event_type="MFA_LOGIN",
+            status="SUCCESS",
+            ip_address=client_ip,
+            user_agent=req.headers.get("user-agent", "")[:255],
+            timestamp=datetime.datetime.utcnow()
+        ))
+        db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='MFA Verified', stage='Authentication', notes=f'User {user.employee_name} ({user.employee_id}) completed 2FA challenge via [{method_upper}]. IP: {client_ip}', ip_address=client_ip))
         db.commit()
+        logger.info(f"MFA Login successful: User '{user.username}' ({user.employee_name or user.name}) verified [{method_upper}] from IP: {client_ip}")
     except Exception as e:
         logger.debug('Handled exception: %s', e)
     delete_mfa_ticket(request.ticket)
     return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
 @router.post('/logout')
-def logout(db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
+def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
     if current_user:
+        client_ip = extract_client_ip(req)
         current_user.active_session_id = None
         current_user.active_device_info = None
         try:
-            db.add(AuditLog(invoice_id=None, user=current_user.employee_name or current_user.name or current_user.username, action='User Logged Out', stage='Authentication', notes=f'User {current_user.employee_name} ({current_user.employee_id}) session ended.'))
+            db.add(UserAccessLog(
+                username=current_user.username,
+                event_type="LOGOUT",
+                status="SUCCESS",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(invoice_id=None, user=current_user.employee_name or current_user.name or current_user.username, action='User Logged Out', stage='Authentication', notes=f'User {current_user.employee_name} ({current_user.employee_id}) session ended. IP: {client_ip}', ip_address=client_ip))
             db.commit()
+            logger.info(f"User '{current_user.username}' logged out from IP: {client_ip}")
         except Exception as exc:
             logger.debug('Handled exception: %s', exc)
     return {'success': True, 'message': 'Logged out successfully'}

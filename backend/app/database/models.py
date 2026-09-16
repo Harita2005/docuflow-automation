@@ -315,6 +315,47 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+    approval_assignments = relationship(
+        "ApprovalAssignment",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def DAASDocKey(self):
+        return self.doc_key
+
+    @property
+    def ProcessingStatus(self):
+        return self.status
+
+    @property
+    def ApprovalStatus(self):
+        return self.status
+
+    @property
+    def WorkflowProfileID(self):
+        return self.workflow_profile_id
+
+    @property
+    def CurrentStageID(self):
+        return self.current_stage
+
+    @property
+    def CurrentApproverUserID(self):
+        if self.approval_assignments:
+            pending = [a for a in self.approval_assignments if a.status == "PENDING"]
+            if pending:
+                return pending[0].approver_user_id
+        return None
+
+    @property
+    def current_stage_name(self):
+        return getattr(self, "_current_stage_name", None)
+
+    @current_stage_name.setter
+    def current_stage_name(self, val):
+        self._current_stage_name = val
 
     __table_args__ = (
         Index(
@@ -617,6 +658,14 @@ class DocumentApprovalLog(Base):
     stage = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
     ip_address = Column(String(50), nullable=True)
+
+    # Enhanced Audit Fields (Additive)
+    approver_user_id = Column(Integer, nullable=True)
+    stage_id = Column(Integer, nullable=True)
+    previous_status = Column(String(50), nullable=True)
+    new_status = Column(String(50), nullable=True)
+    remarks = Column(Text, nullable=True)
+
     timestamp = Column(
         DateTime,
         default=datetime.datetime.utcnow,
@@ -630,6 +679,51 @@ class DocumentApprovalLog(Base):
 
 
 AuditLog = DocumentApprovalLog
+ApprovalAudit = DocumentApprovalLog
+
+
+# ---------------------------------------------------------------------------
+# Approval Assignment / Instance
+# ---------------------------------------------------------------------------
+
+class ApprovalAssignment(Base):
+    __tablename__ = "approval_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(
+        String(100),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    workflow_profile_id = Column(String(200), nullable=True, index=True)
+    stage_number = Column(Integer, nullable=False)
+    stage_name = Column(String(200), nullable=True)
+    approver_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approver_handle = Column(String(200), nullable=False)
+    status = Column(String(50), default="PENDING", index=True, nullable=False)
+    sequence_order = Column(Integer, default=1, nullable=False)
+    assigned_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    remarks = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+    document = relationship("Document", back_populates="approval_assignments")
+    approver_user = relationship("User")
+
+
+ApprovalInstance = ApprovalAssignment
 
 
 class SystemEngineLog(Base):

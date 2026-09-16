@@ -83,7 +83,7 @@ def validate_uploaded_file(file: UploadFile, content: bytes) -> Tuple[str, str]:
     return unique_filename, detected_type
 
 def get_safe_file_path(relative_or_abs_path: str) -> Path:
-    raw_path_str = str(relative_or_abs_path).replace('\x00', '').strip()
+    raw_path_str = str(relative_or_abs_path).replace('\x00', '').strip().split('?')[0]
     if not raw_path_str:
         raise HTTPException(status_code=400, detail='Invalid file path.')
 
@@ -92,33 +92,31 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
 
     base_upload = settings.UPLOAD_DIR.resolve()
     base_pdf = settings.PDF_STORAGE_DIR.resolve()
+    base_approved = settings.APPROVED_PDF_DIR.resolve()
+    base_rejected = (base_pdf / 'rejected').resolve()
+    allowed_roots = [base_upload, base_pdf, base_approved, base_rejected]
 
-    # If it's an absolute path, root path, or has a drive, ensure it's within safe directories
-    p = Path(raw_path_str)
-    if p.is_absolute() or raw_path_str.startswith('/') or raw_path_str.startswith('\\') or p.drive:
-        resolved_p = p.resolve()
-        try:
-            if resolved_p.is_relative_to(base_upload) or resolved_p.is_relative_to(base_pdf):
-                return resolved_p
-        except AttributeError:
-            if str(resolved_p).startswith(str(base_upload)) or str(resolved_p).startswith(str(base_pdf)):
-                return resolved_p
-        raise HTTPException(status_code=403, detail='Access Denied: Path outside allowed directories.')
-
-    # Try resolving relative to current working directory (e.g., 'backend\\uploads\\...')
-    try:
-        resolved_cwd = (Path.cwd() / p).resolve()
-        if resolved_cwd.is_file():
+    def _is_safe(path: Path) -> bool:
+        resolved = path.resolve()
+        for root in allowed_roots:
             try:
-                if resolved_cwd.is_relative_to(base_upload) or resolved_cwd.is_relative_to(base_pdf):
-                    return resolved_cwd
+                if resolved.is_relative_to(root):
+                    return True
             except AttributeError:
-                if str(resolved_cwd).startswith(str(base_upload)) or str(resolved_cwd).startswith(str(base_pdf)):
-                    return resolved_cwd
-    except Exception as exc:
-        logger.debug("Failed resolving relative to cwd: %s", exc)
+                if str(resolved).startswith(str(root)):
+                    return True
+        return False
 
-    # Normalize backslashes for cross-platform matching
+    # 1. Check if it's already an absolute file path that exists on disk
+    p = Path(raw_path_str)
+    if p.is_absolute():
+        try:
+            if p.is_file() and _is_safe(p):
+                return p.resolve()
+        except Exception as exc:
+            logger.debug('Absolute path verification failed: %s', exc)
+
+    # 2. Extract base filename and relative segments
     norm_path = raw_path_str.replace('\\', '/')
     clean_path = norm_path
     if '/uploads/' in clean_path:
@@ -137,29 +135,29 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
         clean_path = f'{doc_id}.pdf'
 
     clean_rel = clean_path.lstrip('/\\')
-    target_path = (base_upload / clean_rel).resolve()
-    target_pdf_path = (base_pdf / clean_rel).resolve()
-
-    # Also check base file name in case folder prefix remained
     base_file_name = Path(clean_rel).name
-    target_upload_base = (base_upload / base_file_name).resolve()
-    target_pdf_base = (base_pdf / base_file_name).resolve()
 
-    for cand in [target_path, target_upload_base, target_pdf_path, target_pdf_base]:
+    # 3. Check candidate paths across all valid storage directories
+    candidates = [
+        (base_upload / clean_rel).resolve(),
+        (base_upload / base_file_name).resolve(),
+        (base_approved / clean_rel).resolve(),
+        (base_approved / base_file_name).resolve(),
+        (base_pdf / clean_rel).resolve(),
+        (base_pdf / base_file_name).resolve(),
+        (base_rejected / base_file_name).resolve(),
+    ]
+
+    for cand in candidates:
         try:
-            if cand.is_file():
-                if cand.is_relative_to(base_upload) or cand.is_relative_to(base_pdf):
-                    return cand
-        except AttributeError:
-            if cand.is_file() and (str(cand).startswith(str(base_upload)) or str(cand).startswith(str(base_pdf))):
+            if cand.is_file() and _is_safe(cand):
                 return cand
+        except Exception:
+            continue
 
-    # Default fallback to target_path if it is safely within base_upload
-    try:
-        if target_path.is_relative_to(base_upload):
-            return target_path
-    except AttributeError:
-        if str(target_path).startswith(str(base_upload)):
-            return target_path
+    # 4. Fallback safe path inside base_upload (exists() will be False if file is missing)
+    safe_fallback = (base_upload / base_file_name).resolve()
+    if _is_safe(safe_fallback):
+        return safe_fallback
 
     raise HTTPException(status_code=403, detail='Access Denied: Path traversal detected or unauthorized file location.')

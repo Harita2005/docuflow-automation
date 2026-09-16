@@ -1,6 +1,7 @@
 from pathlib import Path
 from urllib.parse import quote_plus
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -81,12 +82,57 @@ class Settings(BaseSettings):
     TWILIO_FROM_NUMBER: str = ""
     FAST2SMS_API_KEY: str = ""
 
+    # LLM & AI Extraction Configuration
+    GEMINI_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def canonicalize_storage_paths(self):
+        """
+        Guarantees that UPLOAD_DIR, PDF_STORAGE_DIR, and APPROVED_PDF_DIR
+        always resolve to canonical, absolute system paths regardless of the
+        current working directory or relative path strings in .env.
+        """
+        if isinstance(self.UPLOAD_DIR, (str, Path)):
+            raw_upload = str(self.UPLOAD_DIR).replace('\\', '/').strip('./')
+            if raw_upload.endswith('uploads'):
+                self.UPLOAD_DIR = (BASE_DIR / 'uploads').resolve()
+            elif not Path(self.UPLOAD_DIR).is_absolute():
+                self.UPLOAD_DIR = (ROOT_DIR / self.UPLOAD_DIR).resolve()
+            else:
+                self.UPLOAD_DIR = Path(self.UPLOAD_DIR).resolve()
+        else:
+            self.UPLOAD_DIR = (BASE_DIR / 'uploads').resolve()
+
+        if isinstance(self.PDF_STORAGE_DIR, (str, Path)):
+            p = Path(self.PDF_STORAGE_DIR)
+            if not p.is_absolute():
+                self.PDF_STORAGE_DIR = (ROOT_DIR / p).resolve()
+            else:
+                self.PDF_STORAGE_DIR = p.resolve()
+        else:
+            self.PDF_STORAGE_DIR = (ROOT_DIR / 'stored_pdfs').resolve()
+
+        if isinstance(self.APPROVED_PDF_DIR, (str, Path)):
+            p = Path(self.APPROVED_PDF_DIR)
+            if not p.is_absolute():
+                self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / 'approved').resolve()
+            else:
+                self.APPROVED_PDF_DIR = p.resolve()
+        else:
+            self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / 'approved').resolve()
+
+        self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
+        return self
 
     # -----------------------------------------------------------------------
     # Database URL

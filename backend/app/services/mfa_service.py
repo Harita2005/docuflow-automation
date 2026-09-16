@@ -301,8 +301,6 @@ def send_email_otp(
         )
         return False, "Email service is not configured properly on the server."
 
-    masked_email = mask_email(email)
-
     message = MIMEMultipart("alternative")
     message["Subject"] = "DocuFlow OTP – Your verification code"
     message["From"] = f"{sender_name} <{sender_email}>"

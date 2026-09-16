@@ -13,20 +13,22 @@ import {
   Plus,
   Calendar,
   Pause,
-  ArrowUpRight,
   ChevronDown,
   ChevronUp,
   Clock,
   CheckCheck,
   Lock,
   FileSpreadsheet,
-  Upload,
   XCircle,
   PauseCircle,
-  Users
+  Users,
+  ZoomIn,
+  ZoomOut,
+  Download,
+  Printer
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
-import { formatDocNumber, formatTimeOnly } from "../utils/formatters";
+import { formatDocNumber, formatDate, formatTimeOnly } from "../utils/formatters";
 
 interface DocumentDetailsProps {
   document: DbInvoice | null;
@@ -157,6 +159,7 @@ export default function DocumentDetails({
   const [showNextActionModal, setShowNextActionModal] = useState(false);
   const [pendingNextId, setPendingNextId] = useState<string | null>(null);
   const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold'>('approve');
+  const [approvedNextStageInfo, setApprovedNextStageInfo] = useState<{ nextApprover?: string | null; nextStageName?: string | null; isCompleted?: boolean } | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'amber' } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' | 'amber' = 'success') => {
@@ -533,6 +536,61 @@ export default function DocumentDetails({
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
   const [iframeSrc, setIframeSrc] = useState<string>("");
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Reset zoom to 100% when changing documents
+  useEffect(() => {
+    setZoomLevel(100);
+  }, [document?.id]);
+
+  const cleanPdfSrc = useMemo(() => {
+    if (!iframeSrc) return "";
+    return iframeSrc.split("#")[0];
+  }, [iframeSrc]);
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 10, 500));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 10, 50));
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(100);
+  };
+
+  const handleDownloadPdf = () => {
+    if (!iframeSrc) return;
+    const cleanUrl = iframeSrc.split("#")[0];
+    const link = window.document.createElement("a");
+    link.href = cleanUrl;
+    link.download = document?.file_name || `${document?.id || "document"}.pdf`;
+    link.target = "_blank";
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+  };
+
+  const handlePrintPdf = () => {
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.focus();
+        iframeRef.current.contentWindow.print();
+        return;
+      } catch {
+        // Fall back to opening in a new tab for printing
+      }
+    }
+    if (iframeSrc) {
+      const cleanUrl = iframeSrc.split("#")[0];
+      const printWindow = window.open(cleanUrl, "_blank");
+      if (printWindow) {
+        printWindow.focus();
+      }
+    }
+  };
   const [_workflowInstance, setWorkflowInstance] =
     useState<DbWorkflowInstance | null>(null);
   const [_workflowSteps, setWorkflowSteps] = useState<any[]>([]);
@@ -1017,9 +1075,18 @@ export default function DocumentDetails({
         }),
       });
       if (response.ok) {
+        let approveData: any = {};
+        try {
+          approveData = await response.json();
+        } catch {}
         clearDraft();
         setApprovalComment("");
         showToast("✓ Document Approved & Forwarded Successfully!", "success");
+        setApprovedNextStageInfo({
+          nextApprover: approveData.next_approver,
+          nextStageName: approveData.next_stage_name,
+          isCompleted: approveData.status === 'Approved' || approveData.invoice?.status === 'Approved'
+        });
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
@@ -1806,52 +1873,83 @@ export default function DocumentDetails({
               <div className="flex items-center gap-2 truncate">
                 <FileText className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
                 <span className="text-white font-bold text-[11px] truncate">
-                  {document.file_url || document.file_path ? `Original Document (${document.file_name || `${document.id}.pdf`})` : "Stage 1: Attachment Status (Pending Upload)"}
+                  {iframeSrc ? (document.file_name || `${document.id}.pdf`) : "No document uploaded"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {canReplacePdf && (
-                  <label className="cursor-pointer px-2.5 py-1 rounded-md bg-[#005333] hover:bg-[#00663F] text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95">
-                    <Upload className="h-3 w-3" />
-                    <span>{isUploadingVersion ? "Attaching..." : document.file_url ? "Replace PDF" : "Attach PDF"}</span>
-                    <input 
-                      type="file" 
-                      accept=".pdf,application/pdf" 
-                      disabled={isUploadingVersion}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleUploadVersion(e.target.files[0]);
-                        }
-                      }}
-                      className="hidden" 
-                    />
-                  </label>
-                )}
+              {iframeSrc && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Zoom Controls */}
+                  <div className="flex items-center bg-white/10 rounded-md p-0.5 border border-white/15">
+                    <button
+                      type="button"
+                      onClick={handleZoomOut}
+                      disabled={zoomLevel <= 50}
+                      className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                      title="Zoom Out (-10%)"
+                    >
+                      <ZoomOut className="h-3 w-3" />
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={handleResetZoom}
+                      className="px-2 py-0.5 text-[10px] font-mono font-bold text-white hover:bg-white/20 rounded transition"
+                      title="Click to reset zoom to 100%"
+                    >
+                      {zoomLevel}%
+                    </button>
 
-                {iframeSrc && (
-                  <a
-                    href={iframeSrc}
-                    target="_blank"
-                    rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={handleZoomIn}
+                      disabled={zoomLevel >= 500}
+                      className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                      title="Zoom In (+10%)"
+                    >
+                      <ZoomIn className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  <div className="h-4 w-[1px] bg-emerald-700/60 mx-0.5" />
+
+                  {/* Download */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdf}
                     className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
-                    title="Open Fullscreen Document in New Tab"
+                    title="Download Original Document"
                   >
-                    <ArrowUpRight className="h-3 w-3" />
-                    <span>Full Screen</span>
-                  </a>
-                )}
-              </div>
+                    <Download className="h-3 w-3" />
+                    <span>Download</span>
+                  </button>
+
+                  {/* Print */}
+                  <button
+                    type="button"
+                    onClick={handlePrintPdf}
+                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
+                    title="Print Document"
+                  >
+                    <Printer className="h-3 w-3" />
+                    <span>Print</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* LIVE ORIGINAL PDF VIEWER OR STAGE 1 ATTACHMENT DROPZONE */}
+            {/* LIVE ORIGINAL PDF VIEWER OR EMPTY STATE */}
             <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
               {iframeSrc ? (
-                <iframe
-                  src={iframeSrc}
-                  title={document.file_name || `${document.id}.pdf`}
-                  className="w-full h-full border-0 rounded-lg bg-white shadow-inner"
-                />
+                <div className="w-full h-full overflow-auto rounded-lg bg-white shadow-inner flex items-start justify-center">
+                  <iframe
+                    ref={iframeRef}
+                    key={`${cleanPdfSrc}-${zoomLevel}`}
+                    src={`${cleanPdfSrc}#toolbar=0&navpanes=0&zoom=${zoomLevel}`}
+                    title={document.file_name || `${document.id}.pdf`}
+                    className="w-full h-full border-0 rounded-lg bg-white"
+                  />
+                </div>
               ) : (
                 <div 
                   onDragOver={(e) => e.preventDefault()}
@@ -1861,16 +1959,16 @@ export default function DocumentDetails({
                       handleUploadVersion(e.dataTransfer.files[0]);
                     }
                   }}
-                  className="w-full h-full bg-slate-50 border-2 border-dashed border-emerald-300/80 hover:border-[#003F28] hover:bg-[#003F28]/5 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
+                  className="w-full h-full bg-slate-50 border-2 border-dashed border-slate-300/80 hover:border-[#003F28] hover:bg-[#003F28]/5 rounded-xl flex flex-col items-center justify-center p-6 text-center shadow-inner transition-all"
                 >
-                  <div className="h-14 w-14 rounded-2xl bg-[#003F28]/10 border border-[#003F28]/20 text-[#003F28] flex items-center justify-center mb-3.5 shadow-sm">
-                    <Upload className="h-7 w-7 text-[#003F28]" />
+                  <div className="h-14 w-14 rounded-2xl bg-slate-200/60 border border-slate-300/70 text-slate-500 flex items-center justify-center mb-3.5 shadow-sm">
+                    <FileText className="h-7 w-7 text-slate-400" />
                   </div>
-                  <h3 className="text-sm font-black text-slate-800 tracking-tight">Physical Invoice Attachment Pending</h3>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">No document uploaded</h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
                     {!canReplacePdf 
-                      ? "This document is locked in read-only mode or has advanced past Attachment Status. Physical invoice attachment is restricted."
-                      : "This document metadata is loaded from ERP. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record."
+                      ? "No document or PDF has been attached to this record."
+                      : "No document is currently attached. Please upload or drag & drop the scanned invoice PDF to attach it to this record."
                     }
                   </p>
                   
@@ -2267,9 +2365,11 @@ export default function DocumentDetails({
                                 </span>
                               </div>
                               {terminalCancelLog?.created_at && (
-                                <span className="text-[9px] font-mono text-slate-400">
-                                  {formatTimeOnly(terminalCancelLog.created_at)}
-                                </span>
+                                <div className="text-[9px] font-mono text-slate-500 text-right">
+                                  <span>Date: {formatDate(terminalCancelLog.created_at)}</span>
+                                  <span className="mx-1">•</span>
+                                  <span>Time: {formatTimeOnly(terminalCancelLog.created_at)}</span>
+                                </div>
                               )}
                             </div>
                           ) : isPassed ? (
@@ -2281,9 +2381,11 @@ export default function DocumentDetails({
                                 </span>
                               </div>
                               {matchingApprovalLog?.created_at && (
-                                <span className="text-[9px] font-mono text-emerald-700">
-                                  {formatTimeOnly(matchingApprovalLog.created_at)}
-                                </span>
+                                <div className="text-[9px] font-mono text-emerald-700 text-right">
+                                  <span>Date: {formatDate(matchingApprovalLog.created_at)}</span>
+                                  <span className="mx-1">•</span>
+                                  <span>Time: {formatTimeOnly(matchingApprovalLog.created_at)}</span>
+                                </div>
                               )}
                             </div>
                           ) : returnLog && !isDocSettled ? (
@@ -2294,10 +2396,12 @@ export default function DocumentDetails({
                                   <strong>Returned By:</strong> {returnLog.author || returnLog.user_name || returnLog.user || "Reviewer"}
                                 </span>
                               </div>
-                              {returnLog.created_at && (
-                                <span className="text-[9px] font-mono text-amber-600">
-                                  {formatTimeOnly(returnLog.created_at)}
-                                </span>
+                              {returnLog?.created_at && (
+                                <div className="text-[9px] font-mono text-amber-700 text-right">
+                                  <span>Date: {formatDate(returnLog.created_at)}</span>
+                                  <span className="mx-1">•</span>
+                                  <span>Time: {formatTimeOnly(returnLog.created_at)}</span>
+                                </div>
                               )}
                             </div>
                           ) : null}
@@ -2358,9 +2462,16 @@ export default function DocumentDetails({
                               </span>
                               <span className="text-slate-900 text-xs">{authorName}</span>
                             </div>
-                            <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-bold uppercase tracking-wider">
-                              {actionLabel}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {comm.ip_address && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[8px] font-mono font-medium">
+                                  IP: {comm.ip_address}
+                                </span>
+                              )}
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-bold uppercase tracking-wider">
+                                {actionLabel}
+                              </span>
+                            </div>
                           </div>
                           <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
                             {comm.text || comm.comment || "Signed off without remarks."}
@@ -2414,8 +2525,35 @@ export default function DocumentDetails({
                 {actionModalType === 'approve' ? 'Document Approved Successfully!' : actionModalType === 'reject' ? 'Document Rejection Saved' : 'Document Placed On Hold'}
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Stage sign-off recorded for <span className="font-bold text-slate-800">{document?.invoice_number || document?.id}</span>. What would you like to do next?
+                Stage sign-off recorded for <span className="font-bold text-slate-800">{document?.invoice_number || document?.id}</span>.
               </p>
+
+              {actionModalType === 'approve' && (
+                approvedNextStageInfo?.nextApprover ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 text-left space-y-1 my-2">
+                    <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                      <span>Passed to {approvedNextStageInfo.nextApprover}</span>
+                      {approvedNextStageInfo.nextStageName && (
+                        <span>— {approvedNextStageInfo.nextStageName}</span>
+                      )}
+                    </div>
+                    <div className="text-[10.5px] text-emerald-800 flex flex-wrap justify-between gap-1 pt-0.5">
+                      <span>Next Approver: <strong className="font-bold">{approvedNextStageInfo.nextApprover}</strong></span>
+                      {approvedNextStageInfo.nextStageName && (
+                        <span>Next Stage: <strong className="font-bold">{approvedNextStageInfo.nextStageName}</strong></span>
+                      )}
+                    </div>
+                  </div>
+                ) : approvedNextStageInfo?.isCompleted || document?.status === 'Approved' ? (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 text-center font-bold my-2">
+                    Final Approval Completed. Ready for disbursement.
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 text-center font-medium my-2">
+                    Document approved and forwarded to the next workflow stage.
+                  </div>
+                )
+              )}
             </div>
 
             <div className="flex flex-col gap-2.5 pt-2">
@@ -2449,7 +2587,7 @@ export default function DocumentDetails({
                 }}
                 className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
-                <span>Back to Dashboard 🏠</span>
+                <span>Back / Return ➔</span>
               </button>
             </div>
 

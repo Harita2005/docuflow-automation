@@ -18,7 +18,7 @@ def parse_date_str(val: Any) -> Optional[datetime.date]:
         try:
             return datetime.datetime.strptime(s, fmt).date()
         except ValueError:
-            pass
+            continue
     return None
 
 def infer_document_type(category: str='', trans_type: str='', wf_name: str='', doc_type: str='') -> str:

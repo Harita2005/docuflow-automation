@@ -59,8 +59,6 @@ export default function ChecklistConditionBuilder() {
   const [selectedDivisionFilter, setSelectedDivisionFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
-  const [chkWfCategoryFilter, setChkWfCategoryFilter] = useState('ALL');
-  const [selectedWorkflowFilter, setSelectedWorkflowFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -68,8 +66,8 @@ export default function ChecklistConditionBuilder() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const [previewRule, setPreviewRule] = useState(null);
-const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
-const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter, selectedWorkflowFilter].filter(v => v !== 'ALL').length;
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter].filter(v => v !== 'ALL').length;
 
   // Modal item input state
   const [newChecklistText, setNewChecklistText] = useState('');
@@ -140,45 +138,11 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
     setLoading(false);
   };
 
-  const [workflows, setWorkflows] = useState([]);
-
   useEffect(() => {
     fetchChecklistRules();
-    const fetchWf = async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        const res = await fetch('/api/admin/workflows', { headers });
-        if (res.ok) {
-          setWorkflows(await res.json());
-        }
-      } catch {}
-    };
-    fetchWf();
-
-    const handleOpenChecklistWf = (e) => {
-      const wfProfile = e?.detail?.workflow_profile || localStorage.getItem("docuflow_target_checklist_wf");
-      if (wfProfile) {
-        localStorage.removeItem("docuflow_target_checklist_wf");
-        setSelectedWorkflowFilter(wfProfile);
-      }
-    };
-    window.addEventListener('open-checklist-for-workflow', handleOpenChecklistWf);
-
-    const savedWf = localStorage.getItem("docuflow_target_checklist_wf");
-    if (savedWf) {
-      localStorage.removeItem("docuflow_target_checklist_wf");
-      setSelectedWorkflowFilter(savedWf);
-    }
-
-    return () => window.removeEventListener('open-checklist-for-workflow', handleOpenChecklistWf);
   }, []);
 
   const openEditor = (r = null, isDuplicate = false) => {
-    const targetProfile = r ? (r.workflow_profile || 'ALL') : (selectedWorkflowFilter !== 'ALL' ? selectedWorkflowFilter : 'ALL');
-    const targetWfObj = workflows.find(w => w.profile_name === targetProfile || w.workflow_code === targetProfile);
-    setChkWfCategoryFilter(targetWfObj?.workflow_category || 'ALL');
-
     if (r) {
       let parsedItems;
       const txt = (r.item_text || '').trim();
@@ -191,21 +155,21 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
       } else {
         parsedItems = txt ? [txt] : [];
       }
-      const updatedRuleName = targetWfObj ? targetWfObj.profile_name : (r.workflow_profile && r.workflow_profile !== 'ALL' ? r.workflow_profile : r.rule_name);
       setEditingRule({
         ...r,
         id: isDuplicate ? `tmp-${Date.now()}` : r.id,
-        rule_name: isDuplicate ? `${updatedRuleName} (Copy)` : updatedRuleName,
+        rule_name: isDuplicate ? `${r.rule_name} (Copy)` : r.rule_name,
+        workflow_profile: 'ALL',
         itemsList: parsedItems.length > 0 ? parsedItems : ['Documents Attached']
       });
     } else {
       setEditingRule({
         id: `tmp-${Date.now()}`,
-        rule_name: targetWfObj ? `${targetWfObj.profile_name} Checklist` : '',
+        rule_name: '',
         division: 'ALL',
-        category: targetWfObj?.workflow_type || 'ALL',
+        category: 'ALL',
         branch: 'ALL',
-        workflow_profile: targetProfile,
+        workflow_profile: 'ALL',
         stage_name: 'Attachment Status',
         itemsList: ['Documents Attached', 'Bill Name Verified', 'Bill Date Verified'],
         is_mandatory: true,
@@ -228,22 +192,19 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       };
 
-      // Build payload for checklist rule. Global rules include only division, category, stage, and items.
-      const basePayload = {
+      const payload = {
         id: String(editingRule.id).startsWith('tmp-') ? null : editingRule.id,
-        rule_name: editingRule.rule_name || `CHK_${editingRule.division}_${(editingRule.category || '').slice(0, 15)}`,
+        rule_name: editingRule.rule_name || `CHK_${editingRule.division}_${(editingRule.category || '').slice(0, 15)}_${editingRule.stage_name}`,
         division: editingRule.division || 'ALL',
         category: editingRule.category || 'ALL',
+        branch: editingRule.branch || 'ALL',
+        workflow_profile: 'ALL',
         stage_name: editingRule.stage_name || 'Attachment Status',
         item_text: (editingRule.itemsList || []).join(' || '),
         is_mandatory: editingRule.is_mandatory ?? true,
         is_active: editingRule.is_active ?? true,
         sequence_order: editingRule.sequence_order || 1
       };
-      // Attach flow‑specific fields only when this is a flow‑specific rule.
-      const payload = editingRule.workflow_profile && editingRule.workflow_profile !== 'ALL'
-        ? { ...basePayload, branch: editingRule.branch || 'ALL', workflow_profile: editingRule.workflow_profile }
-        : basePayload;
 
       const res = await fetch('/api/admin/checklist-rules', {
         method: 'POST',
@@ -333,19 +294,17 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
         (r.category || '').toLowerCase().includes(q) ||
         (r.branch || '').toLowerCase().includes(q) ||
         (r.division || '').toLowerCase().includes(q) ||
-        (r.workflow_profile || '').toLowerCase().includes(q) ||
         (r.item_text || '').toLowerCase().includes(q)
       );
       const matchesStage = (selectedStageFilter === 'ALL' || r.stage_name === selectedStageFilter);
       const matchesDivision = (selectedDivisionFilter === 'ALL' || r.division === selectedDivisionFilter);
       const matchesCategory = (selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter);
       const matchesBranch = (selectedBranchFilter === 'ALL' || r.branch === selectedBranchFilter);
-      const matchesWorkflow = (selectedWorkflowFilter === 'ALL' || r.workflow_profile === selectedWorkflowFilter || r.workflow_profile === 'ALL' || (r.rule_name && r.rule_name.includes(selectedWorkflowFilter)));
-      return matchesSearch && matchesStage && matchesDivision && matchesCategory && matchesBranch && matchesWorkflow;
+      return matchesSearch && matchesStage && matchesDivision && matchesCategory && matchesBranch;
     });
-  }, [rules, searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter, selectedWorkflowFilter]);
+  }, [rules, searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter]);
 
-  const hasActiveFilters = searchQuery !== '' || selectedStageFilter !== 'ALL' || selectedDivisionFilter !== 'ALL' || selectedCategoryFilter !== 'ALL' || selectedBranchFilter !== 'ALL' || selectedWorkflowFilter !== 'ALL';
+  const hasActiveFilters = searchQuery !== '' || selectedStageFilter !== 'ALL' || selectedDivisionFilter !== 'ALL' || selectedCategoryFilter !== 'ALL' || selectedBranchFilter !== 'ALL';
 
   const resetAllFilters = () => {
     setSearchQuery('');
@@ -353,12 +312,11 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
     setSelectedDivisionFilter('ALL');
     setSelectedCategoryFilter('ALL');
     setSelectedBranchFilter('ALL');
-    setSelectedWorkflowFilter('ALL');
   };
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter, selectedWorkflowFilter]);
+  }, [searchQuery, selectedStageFilter, selectedDivisionFilter, selectedCategoryFilter, selectedBranchFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRules.length / itemsPerPage));
   const paginatedRules = useMemo(() => {
@@ -394,17 +352,9 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
                 <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 text-[9px] font-semibold rounded border border-emerald-200/60 leading-none">
                   {filteredRules.length} of {rules.length} Rules
                 </span>
-                {selectedWorkflowFilter !== 'ALL' && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[9px] font-bold">
-                    <span>Workflow: {selectedWorkflowFilter}</span>
-                    <button type="button" onClick={() => setSelectedWorkflowFilter('ALL')} className="hover:text-rose-600 cursor-pointer">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                )}
               </div>
               <p className="text-[9.5px] text-slate-400 font-normal mt-0.5 leading-none">
-                Stage verification requirements based on Division, Category, and Branch parameters.
+                Universal stage-wise & document-wise verification rules (Division, Category, Stage, Branch).
               </p>
             </div>
           </div>
@@ -973,42 +923,20 @@ const activeFilterCount = [selectedStageFilter, selectedDivisionFilter, selected
                     </select>
                   </div>
 
-                  {editingRule.workflow_profile && editingRule.workflow_profile !== 'ALL' && (
-                    <>
-                      <div className="flex flex-col">
-                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          Branch / Plant Location
-                        </label>
-                        <select 
-                          value={editingRule.branch || 'ALL'}
-                          onChange={e => setEditingRule({ ...editingRule, branch: e.target.value })}
-                          className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
-                        >
-                          {availableBranches.map(br => (
-                            <option key={br} value={br}>{br === 'ALL' ? 'ALL Locations' : br}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          Associated Workflow Profile
-                        </label>
-                        <select 
-                          value={editingRule.workflow_profile || 'ALL'}
-                          onChange={e => setEditingRule({ ...editingRule, workflow_profile: e.target.value })}
-                          className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
-                        >
-                          <option value="ALL">ALL Workflows (Global Rule)</option>
-                          {workflows.map(w => (
-                            <option key={w.profile_name} value={w.profile_name}>
-                              {w.workflow_code ? `${w.workflow_code} • ` : ''}{w.profile_name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  <div className="flex flex-col">
+                    <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Branch / Plant Location
+                    </label>
+                    <select 
+                      value={editingRule.branch || 'ALL'}
+                      onChange={e => setEditingRule({ ...editingRule, branch: e.target.value })}
+                      className="w-full text-[11px] py-1.5 px-2.5 border border-slate-200 rounded-lg bg-white font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                    >
+                      {availableBranches.map(br => (
+                        <option key={br} value={br}>{br === 'ALL' ? 'ALL Locations' : br}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 

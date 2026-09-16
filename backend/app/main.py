@@ -52,6 +52,23 @@ async def lifespan(app: FastAPI):
                 # is_mandatory on document_checklist_states
                 conn.execute(text("IF COL_LENGTH('document_checklist_states', 'is_mandatory') IS NULL ALTER TABLE document_checklist_states ADD is_mandatory BIT NULL DEFAULT 0;"))
 
+                # Filtered unique index on doc_key
+                conn.execute(text("""
+                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'uq_documents_doc_key' AND object_id = OBJECT_ID('documents'))
+                    BEGIN
+                        CREATE UNIQUE NONCLUSTERED INDEX uq_documents_doc_key
+                        ON documents (doc_key)
+                        WHERE doc_key IS NOT NULL;
+                    END
+                """))
+
+                # Enhanced Audit Fields on document_approval_logs
+                conn.execute(text("IF COL_LENGTH('document_approval_logs', 'approver_user_id') IS NULL ALTER TABLE document_approval_logs ADD approver_user_id INT NULL;"))
+                conn.execute(text("IF COL_LENGTH('document_approval_logs', 'stage_id') IS NULL ALTER TABLE document_approval_logs ADD stage_id INT NULL;"))
+                conn.execute(text("IF COL_LENGTH('document_approval_logs', 'previous_status') IS NULL ALTER TABLE document_approval_logs ADD previous_status VARCHAR(50) NULL;"))
+                conn.execute(text("IF COL_LENGTH('document_approval_logs', 'new_status') IS NULL ALTER TABLE document_approval_logs ADD new_status VARCHAR(50) NULL;"))
+                conn.execute(text("IF COL_LENGTH('document_approval_logs', 'remarks') IS NULL ALTER TABLE document_approval_logs ADD remarks NVARCHAR(MAX) NULL;"))
+
             # Automatic retention pruning for audit logs on startup
             try:
                 with SessionLocal() as db_session:

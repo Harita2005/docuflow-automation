@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, 
   ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks, 
-  GitMerge, ChevronLeft, ChevronRight, CheckSquare, RefreshCw
+  GitMerge, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const STAGE_PRESET_OPTIONS = [

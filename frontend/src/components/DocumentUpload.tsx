@@ -3,7 +3,6 @@ import {
   Home,
   FileText,
   Shield,
-  Info,
   Users,
   BarChart2,
   Check,
@@ -13,7 +12,13 @@ import {
   FileCheck,
   CheckCircle2,
   AlertCircle,
-  Layers
+  Layers,
+  Sparkles,
+  ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  Download,
+  Printer
 } from "lucide-react";
 
 interface DocumentUploadProps {
@@ -30,14 +35,6 @@ const reassuranceSteps = [
   "Generating immutable audit trail record...",
   "Dispatching document to active approval queue..."
 ];
-
-interface StageItem {
-  name: string;
-  subtitle: string;
-  approver: string;
-  stageNum: number;
-  isFinal?: boolean;
-}
 
 interface CustomDocType {
   name: string;
@@ -57,6 +54,37 @@ export default function DocumentUpload({
   const [uploadedDoc, setUploadedDoc] = useState<any>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Path A: Staged preview & verification state
+  const [extracting, setExtracting] = useState(false);
+  const [stagedDoc, setStagedDoc] = useState<{
+    tempFileId: string;
+    fileName: string;
+    fileSize: number;
+    previewUrl: string;
+    extractedData: any;
+  } | null>(null);
+
+  const [verifyForm, setVerifyForm] = useState({
+    vendor_name: "",
+    invoice_number: "",
+    invoice_date: "",
+    amount: "",
+    base_amount: "",
+    tax_amount: "",
+    cgst: "",
+    sgst: "",
+    igst: "",
+    vendor_gstin: "",
+    po_number: "",
+    division: "VCC",
+    plant: "MAIN",
+    document_type: "AP INVOICE",
+    workflow_profile: "auto"
+  });
+
+  // PDF Viewer Zoom state for staged preview (Default: 100%, View-only)
+  const [previewZoomLevel, setPreviewZoomLevel] = useState(100);
 
   // Document Type & Workflow Selection
   const [selectedDocType, setSelectedDocType] = useState<string>("AP Invoice");
@@ -107,18 +135,6 @@ export default function DocumentUpload({
     localStorage.setItem("adminActiveTab", "routing");
     window.dispatchEvent(new CustomEvent("set-workflow-tab", { detail: "routing" }));
     window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
-    setCurrentView("workflow-rules");
-  };
-
-  // Direct navigation to Condition Matrix in Workflow & Rules Studio
-  const handleGoToConditionBuilder = (targetWf?: string) => {
-    localStorage.setItem("workflowActiveTab", "matrix");
-    localStorage.setItem("adminActiveTab", "matrix");
-    if (targetWf) {
-      localStorage.setItem("docuflow_target_condition_wf", targetWf);
-    }
-    window.dispatchEvent(new CustomEvent("set-workflow-tab", { detail: "matrix" }));
-    window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "matrix" }));
     setCurrentView("workflow-rules");
   };
 
@@ -285,11 +301,117 @@ export default function DocumentUpload({
     fileInputRef.current?.click();
   };
 
-  const executeUpload = async () => {
-    if (!pendingFile) {
+  const handleAmountChange = (val: string) => {
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+      const base = (num / 1.18).toFixed(2);
+      const tax = (num - parseFloat(base)).toFixed(2);
+      setVerifyForm((prev) => ({
+        ...prev,
+        amount: val,
+        base_amount: base,
+        tax_amount: tax
+      }));
+    } else {
+      setVerifyForm((prev) => ({ ...prev, amount: val }));
+    }
+  };
+
+  const handleZoomIn = () => {
+    setPreviewZoomLevel((prev) => Math.min(500, prev + 10));
+  };
+
+  const handleZoomOut = () => {
+    setPreviewZoomLevel((prev) => Math.max(50, prev - 10));
+  };
+
+  const handleResetZoom = () => {
+    setPreviewZoomLevel(100);
+  };
+
+  const handleDownloadStagedPdf = () => {
+    if (!stagedDoc) return;
+    const link = document.createElement("a");
+    link.href = stagedDoc.previewUrl;
+    link.download = stagedDoc.fileName || "uploaded_document.pdf";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintStagedPdf = () => {
+    if (!stagedDoc) return;
+    const printWindow = window.open(stagedDoc.previewUrl, "_blank");
+    if (printWindow) {
+      printWindow.focus();
+    }
+  };
+
+  const handleExtractPreview = async (fileToProcess?: File) => {
+    const file = fileToProcess || pendingFile;
+    if (!file) {
       triggerFileInput();
       return;
     }
+
+    setExtracting(true);
+    setErrorMsg(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const response = await fetch("/api/documents/extract-preview", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const ext = data.extracted_data || {};
+        setPreviewZoomLevel(100);
+        setStagedDoc({
+          tempFileId: data.temp_file_id,
+          fileName: data.file_name || file.name,
+          fileSize: data.file_size || file.size,
+          previewUrl: data.preview_url,
+          extractedData: ext
+        });
+
+        // Initialize verification form with extracted fields
+        setVerifyForm({
+          vendor_name: ext.vendor_name || "",
+          invoice_number: ext.invoice_number || "",
+          invoice_date: ext.invoice_date || new Date().toISOString().split("T")[0],
+          amount: ext.amount != null && ext.amount > 0 ? String(ext.amount) : "",
+          base_amount: ext.base_amount != null && ext.base_amount > 0 ? String(ext.base_amount) : "",
+          tax_amount: ext.tax_amount != null && ext.tax_amount > 0 ? String(ext.tax_amount) : "",
+          cgst: ext.cgst != null && ext.cgst > 0 ? String(ext.cgst) : "",
+          sgst: ext.sgst != null && ext.sgst > 0 ? String(ext.sgst) : "",
+          igst: ext.igst != null && ext.igst > 0 ? String(ext.igst) : "",
+          vendor_gstin: ext.gstin || "",
+          po_number: ext.po_number || "",
+          division: ext.division || "VCC",
+          plant: "MAIN",
+          document_type: ext.document_type || selectedDocType || "AP INVOICE",
+          workflow_profile: selectedWorkflowProfile || "auto"
+        });
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setErrorMsg(err.detail || "Document extraction failed. Please try again.");
+      }
+    } catch (err: any) {
+      console.error("Extraction failed:", err);
+      setErrorMsg(err.message || "Failed to connect to extraction service.");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleConfirmIngest = async () => {
+    if (!stagedDoc) return;
 
     setLoading(true);
     setErrorMsg(null);
@@ -297,16 +419,27 @@ export default function DocumentUpload({
 
     try {
       const formData = new FormData();
-      formData.append("file", pendingFile);
-      formData.append("document_type", selectedDocType);
-      if (selectedWorkflowProfile && selectedWorkflowProfile !== "auto") {
-        formData.append("workflow_profile", selectedWorkflowProfile);
+      formData.append("temp_file_id", stagedDoc.tempFileId);
+      formData.append("vendor_name", verifyForm.vendor_name);
+      formData.append("invoice_number", verifyForm.invoice_number);
+      formData.append("invoice_date", verifyForm.invoice_date);
+      formData.append("amount", verifyForm.amount || "0");
+      if (verifyForm.base_amount) formData.append("base_amount", verifyForm.base_amount);
+      if (verifyForm.tax_amount) formData.append("tax_amount", verifyForm.tax_amount);
+      if (verifyForm.cgst) formData.append("cgst", verifyForm.cgst);
+      if (verifyForm.sgst) formData.append("sgst", verifyForm.sgst);
+      if (verifyForm.igst) formData.append("igst", verifyForm.igst);
+      if (verifyForm.vendor_gstin) formData.append("vendor_gstin", verifyForm.vendor_gstin);
+      if (verifyForm.po_number) formData.append("po_number", verifyForm.po_number);
+      formData.append("division", verifyForm.division);
+      formData.append("plant", verifyForm.plant);
+      formData.append("document_type", verifyForm.document_type);
+      if (verifyForm.workflow_profile && verifyForm.workflow_profile !== "auto") {
+        formData.append("workflow_profile", verifyForm.workflow_profile);
       }
 
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const fetchUrl = "/api/documents/upload";
-
-      const response = await fetch(fetchUrl, {
+      const response = await fetch("/api/documents/confirm-ingest", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData
@@ -319,14 +452,16 @@ export default function DocumentUpload({
         const newDoc = doc.invoice || doc;
         onUploadSuccess(newDoc);
         setUploadedDoc(newDoc);
+        setStagedDoc(null);
+        setPendingFile(null);
       } else {
         const err = await response.json().catch(() => ({}));
-        setErrorMsg(err.detail || "Upload failed. Please check file format and try again.");
+        setErrorMsg(err.detail || "Document confirmation failed. Please check fields and try again.");
       }
     } catch (err: any) {
       clearInterval(interval);
-      console.error("Upload failed:", err);
-      setErrorMsg(err.message || "Upload failed. Please check network connection.");
+      console.error("Confirmation failed:", err);
+      setErrorMsg(err.message || "Failed to confirm document. Check network connection.");
     } finally {
       setLoading(false);
     }
@@ -382,6 +517,26 @@ export default function DocumentUpload({
             </div>
             <div className="bg-slate-900 px-3 py-1.5 rounded-md border border-slate-800 w-full max-w-md font-mono text-[11px] text-emerald-400 animate-pulse text-center">
               &gt;&gt; {reassuranceSteps[progressMsgIndex]}
+            </div>
+          </div>
+        ) : extracting ? (
+          /* OCR & AI Extraction In Progress Screen */
+          <div className="py-12 text-center flex flex-col items-center justify-center space-y-4 animate-fadeIn">
+            <div className="w-12 h-12 border-3 border-emerald-200 border-t-[#003F28] rounded-full animate-spin" />
+            <div className="space-y-1 max-w-md">
+              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full w-fit mx-auto border border-emerald-200 shadow-2xs">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Document AI &amp; OCR Engine Active</span>
+              </div>
+              <h3 className="font-bold text-slate-800 text-sm">
+                Extracting Document Metadata
+              </h3>
+              <p className="text-slate-500 text-xs">
+                Running text recognition and LLM parsing for vendor, invoice #, amounts, and tax breakdown.
+              </p>
+            </div>
+            <div className="bg-slate-900 px-4 py-2 rounded-lg border border-slate-800 w-full max-w-md font-mono text-[11px] text-emerald-400 animate-pulse text-center">
+              &gt;&gt; Parsing structured data for Human-in-the-Loop verification...
             </div>
           </div>
         ) : uploadedDoc ? (
@@ -447,6 +602,7 @@ export default function DocumentUpload({
                 onClick={() => {
                   setUploadedDoc(null);
                   setPendingFile(null);
+                  setStagedDoc(null);
                 }}
                 className="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 font-medium text-xs rounded-lg hover:bg-slate-50 transition cursor-pointer"
               >
@@ -454,7 +610,436 @@ export default function DocumentUpload({
               </button>
             </div>
           </div>
+        ) : stagedDoc ? (
+          /* Human Verification Screen (Path A HITL) */
+          <div className="space-y-4 animate-fadeIn">
+            {/* Header Banner */}
+            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#003F28] text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Sparkles className="w-4 h-4 text-emerald-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">
+                      Verify Extracted Document Data
+                    </h2>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-white border border-emerald-200 px-2 py-0.5 rounded-full shadow-2xs">
+                      <Shield className="w-2.5 h-2.5 text-[#003F28]" />
+                      Human-in-the-Loop Verification
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Review and edit extracted values against the uploaded PDF. The Condition Engine routes upon confirmation.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto text-[10.5px]">
+                <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-[#003F28] border border-emerald-300 font-mono font-bold flex items-center gap-1.5 shadow-2xs">
+                  <Sparkles className="w-3 h-3 text-emerald-700" />
+                  <span>Local AI: PaddleOCR + Ollama (Qwen3:8b)</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Split Screen Grid: PDF Preview on Left, Editable Form on Right */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              {/* Left Column: Read-Only PDF Viewer with Custom Toolbar */}
+              <div className="lg:col-span-6 bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-2">
+                {/* PDF Viewer Compact Header Toolbar */}
+                <div className="bg-[#003F28] text-white px-3 py-1.5 rounded-lg flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
+                    <span className="text-[11px] font-bold text-white truncate max-w-[180px]" title={stagedDoc.fileName}>
+                      {stagedDoc.fileName}
+                    </span>
+                    <span className="text-[9.5px] text-emerald-200/80 font-mono shrink-0">
+                      ({(stagedDoc.fileSize / (1024 * 1024)).toFixed(2)} MB)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Zoom Controls (Default: 100%) */}
+                    <div className="flex items-center bg-black/20 rounded-md p-0.5 border border-white/10">
+                      <button
+                        type="button"
+                        onClick={handleZoomOut}
+                        disabled={previewZoomLevel <= 50}
+                        className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 cursor-pointer"
+                        title="Zoom Out (-10%)"
+                      >
+                        <ZoomOut className="h-3 w-3" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetZoom}
+                        className="px-1.5 py-0.5 text-[10px] font-mono font-bold text-white hover:bg-white/20 rounded transition cursor-pointer"
+                        title="Click to reset zoom to 100%"
+                      >
+                        {previewZoomLevel}%
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleZoomIn}
+                        disabled={previewZoomLevel >= 500}
+                        className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 cursor-pointer"
+                        title="Zoom In (+10%)"
+                      >
+                        <ZoomIn className="h-3 w-3" />
+                      </button>
+                    </div>
+
+                    <div className="h-3.5 w-[1px] bg-emerald-700/60 mx-0.5" />
+
+                    {/* Download Original PDF */}
+                    <button
+                      type="button"
+                      onClick={handleDownloadStagedPdf}
+                      className="px-2 py-1 rounded bg-white/15 hover:bg-white/25 text-white transition text-[10px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="Download uploaded PDF"
+                    >
+                      <Download className="h-3 w-3" />
+                      <span>Download</span>
+                    </button>
+
+                    {/* Print Original PDF */}
+                    <button
+                      type="button"
+                      onClick={handlePrintStagedPdf}
+                      className="px-2 py-1 rounded bg-white/15 hover:bg-white/25 text-white transition text-[10px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                      title="Print uploaded PDF"
+                    >
+                      <Printer className="h-3 w-3" />
+                      <span>Print</span>
+                    </button>
+
+                    {/* Open in new tab */}
+                    <a
+                      href={stagedDoc.previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition"
+                      title="Open full view in new tab"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Read-Only Embedded PDF Viewer (View-Only, No Edit/Annotation) */}
+                <div className="w-full h-[540px] bg-white rounded-lg overflow-hidden border border-slate-300 relative shadow-inner">
+                  <iframe
+                    key={`${stagedDoc.tempFileId}-${previewZoomLevel}`}
+                    src={`${stagedDoc.previewUrl}#toolbar=0&navpanes=0&zoom=${previewZoomLevel}`}
+                    className="w-full h-full border-0 bg-white"
+                    title="Read-Only Document Preview"
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400 px-1">
+                  <span>View-only mode &bull; Default zoom: 100%</span>
+                  <span>Use zoom controls or open in new tab for expanded view</span>
+                </div>
+              </div>
+
+
+              {/* Right Column: Editable Verification Form */}
+              <div className="lg:col-span-6 space-y-3">
+                {/* Card 1: Invoice & Reference Identifiers */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                      1. Document &amp; Reference Info
+                    </span>
+                    <span className="text-[10px] text-slate-400">Required for routing</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Document / Invoice Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={verifyForm.invoice_number}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, invoice_number: e.target.value })}
+                        placeholder="e.g. INV-2026-001"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Invoice Date
+                      </label>
+                      <input
+                        type="date"
+                        value={verifyForm.invoice_date}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, invoice_date: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        PO / Reference Number
+                      </label>
+                      <input
+                        type="text"
+                        value={verifyForm.po_number}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, po_number: e.target.value })}
+                        placeholder="Optional PO number"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Document Type / Category <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={verifyForm.document_type}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, document_type: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      >
+                        <option value="AP INVOICE">AP INVOICE</option>
+                        <option value="PURCHASE INVOICE">PURCHASE INVOICE</option>
+                        <option value="CAPEX / FIXED ASSET">CAPEX / FIXED ASSET</option>
+                        <option value="UTILITY & RENT">UTILITY & RENT</option>
+                        <option value="STAFF & HR EXPENSE">STAFF & HR EXPENSE</option>
+                        <option value="E-VOUCHER">E-VOUCHER</option>
+                        <option value="CASH VOUCHER">CASH VOUCHER</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Vendor & Tax Identifiers */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                      2. Supplier / Party Details
+                    </span>
+                    <span className="text-[10px] text-slate-400">Entity Details</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Vendor / Supplier Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={verifyForm.vendor_name}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, vendor_name: e.target.value })}
+                        placeholder="Supplier Name"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Supplier GSTIN
+                      </label>
+                      <input
+                        type="text"
+                        value={verifyForm.vendor_gstin}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, vendor_gstin: e.target.value.toUpperCase() })}
+                        placeholder="15-digit GSTIN"
+                        maxLength={15}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: Financials & Tax Breakdown */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                      3. Financials &amp; Taxes
+                    </span>
+                    <span className="text-[10px] text-emerald-700 font-semibold">Auto-calculated or custom</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Total Amount (₹) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.amount}
+                        onChange={(e) => handleAmountChange(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-emerald-50/50 border border-emerald-300 rounded-md px-2.5 py-1.5 text-xs font-bold text-emerald-950 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Base Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.base_amount}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, base_amount: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Tax Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.tax_amount}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, tax_amount: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CGST / SGST / IGST breakdown */}
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">CGST (₹)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.cgst}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, cgst: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">SGST (₹)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.sgst}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, sgst: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">IGST (₹)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={verifyForm.igst}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, igst: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 4: Routing & Business Rule Scope */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                      4. Scope &amp; Routing Engine
+                    </span>
+                    <span className="text-[10px] text-emerald-800 font-semibold">Condition Engine convergence</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Division <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={verifyForm.division}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, division: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      >
+                        <option value="VCC">VCC - Spinning &amp; Textiles</option>
+                        <option value="VCT">VCT - Garments &amp; Processing</option>
+                        <option value="SPINNING">SPINNING</option>
+                        <option value="PROCESSING">PROCESSING</option>
+                        <option value="FABRIC">FABRIC</option>
+                        <option value="GARMENTS">GARMENTS</option>
+                        <option value="RETAIL">RETAIL</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                        Plant / Unit
+                      </label>
+                      <input
+                        type="text"
+                        value={verifyForm.plant}
+                        onChange={(e) => setVerifyForm({ ...verifyForm, plant: e.target.value })}
+                        placeholder="e.g. MAIN or PLANT-01"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                      Workflow Profile
+                    </label>
+                    <select
+                      value={verifyForm.workflow_profile}
+                      onChange={(e) => setVerifyForm({ ...verifyForm, workflow_profile: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#003F28]"
+                    >
+                      <option value="auto">Auto-Match (Condition Engine Decision)</option>
+                      {availableWorkflows.map((wf) => (
+                        <option key={wf.id || wf.profile_name} value={wf.profile_name}>
+                          {wf.profile_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Error Banner */}
+                {errorMsg && (
+                  <div className="bg-red-50 border border-red-200 p-2 rounded-lg flex items-start gap-1.5 text-red-800 text-[11px]">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+
+                {/* Confirm & Ingest Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStagedDoc(null);
+                      setPendingFile(null);
+                      setErrorMsg(null);
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Discard &amp; Change PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmIngest}
+                    className="px-6 py-2 text-xs font-bold text-white bg-[#003F28] hover:bg-[#002f1e] rounded-lg shadow-sm hover:shadow transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>Confirm &amp; Ingest Document</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
+
           <>
             {/* Row 1: Document Type & Workflow Selection */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
@@ -770,10 +1355,12 @@ export default function DocumentUpload({
 
               <button
                 type="button"
-                onClick={executeUpload}
-                className="px-6 py-2 text-xs font-semibold text-white bg-[#003F28] hover:bg-[#002f1e] active:bg-[#002416] rounded-lg shadow-sm hover:shadow transition-all duration-150 flex items-center gap-2 group cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#003F28]/30 focus:ring-offset-1"
+                onClick={() => handleExtractPreview()}
+                disabled={!pendingFile || extracting}
+                className="px-6 py-2 text-xs font-semibold text-white bg-[#003F28] hover:bg-[#002f1e] active:bg-[#002416] rounded-lg shadow-sm hover:shadow transition-all duration-150 flex items-center gap-2 group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#003F28]/30 focus:ring-offset-1"
               >
-                <span>Upload &amp; Initiate Workflow</span>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Analyze &amp; Verify Document</span>
                 <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
               </button>
             </div>

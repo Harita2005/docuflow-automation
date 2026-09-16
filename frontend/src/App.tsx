@@ -34,6 +34,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("isLoggedIn") === "true");
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(initialRoute.docId);
+  const [previousView, setPreviousView] = useState<string>("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workTrackerInitialFilter, setWorkTrackerInitialFilter] = useState<string>(() => {
     return localStorage.getItem("workTrackerStatusFilter") || "all";
@@ -454,6 +455,9 @@ export default function App() {
 
   // Handles switching directly to inspect a document details panel
   const handleViewDocument = (docId: string | number) => {
+    if (currentView !== "details") {
+      setPreviousView(currentView);
+    }
     setSelectedDocId(String(docId));
     setCurrentView("details");
     fetchDocuments(true);
@@ -699,7 +703,7 @@ export default function App() {
                   currentUserUsername={currentUserUsername}
                   onRefreshDocument={handleFullRefresh}
                   onGoBack={() => {
-                    setCurrentView("dashboard");
+                    setCurrentView(previousView || "dashboard");
                     setSelectedDocId(null);
                   }}
                   onSelectDocument={(docId) => setSelectedDocId(docId)}
