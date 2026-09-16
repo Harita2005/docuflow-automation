@@ -25,7 +25,8 @@ import {
   ZoomIn,
   ZoomOut,
   Download,
-  Printer
+  Printer,
+  Upload
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly } from "../utils/formatters";
@@ -1877,65 +1878,91 @@ export default function DocumentDetails({
                 </span>
               </div>
 
-              {iframeSrc && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Zoom Controls */}
-                  <div className="flex items-center bg-white/10 rounded-md p-0.5 border border-white/15">
-                    <button
-                      type="button"
-                      onClick={handleZoomOut}
-                      disabled={zoomLevel <= 50}
-                      className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
-                      title="Zoom Out (-10%)"
-                    >
-                      <ZoomOut className="h-3 w-3" />
-                    </button>
-                    
-                    <button
-                      type="button"
-                      onClick={handleResetZoom}
-                      className="px-2 py-0.5 text-[10px] font-mono font-bold text-white hover:bg-white/20 rounded transition"
-                      title="Click to reset zoom to 100%"
-                    >
-                      {zoomLevel}%
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleZoomIn}
-                      disabled={zoomLevel >= 500}
-                      className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
-                      title="Zoom In (+10%)"
-                    >
-                      <ZoomIn className="h-3 w-3" />
-                    </button>
-                  </div>
-
-                  <div className="h-4 w-[1px] bg-emerald-700/60 mx-0.5" />
-
-                  {/* Download */}
-                  <button
-                    type="button"
-                    onClick={handleDownloadPdf}
-                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
-                    title="Download Original Document"
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Replace / Attach Document during Attachment Status (Stage 1) */}
+                {canReplacePdf && (
+                  <label 
+                    className="cursor-pointer px-2.5 py-1 rounded-md bg-[#005333] hover:bg-[#00663F] text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95" 
+                    title={iframeSrc ? "Replace Document (Attachment Status)" : "Attach Document"}
                   >
-                    <Download className="h-3 w-3" />
-                    <span>Download</span>
-                  </button>
+                    <Upload className="h-3 w-3" />
+                    <span>{isUploadingVersion ? "Attaching..." : iframeSrc ? "Replace Document" : "Attach Document"}</span>
+                    <input 
+                      type="file" 
+                      accept=".pdf,application/pdf" 
+                      disabled={isUploadingVersion}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadVersion(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                )}
 
-                  {/* Print */}
-                  <button
-                    type="button"
-                    onClick={handlePrintPdf}
-                    className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
-                    title="Print Document"
-                  >
-                    <Printer className="h-3 w-3" />
-                    <span>Print</span>
-                  </button>
-                </div>
-              )}
+                {canReplacePdf && iframeSrc && <div className="h-4 w-[1px] bg-emerald-700/60 mx-0.5" />}
+
+                {iframeSrc && (
+                  <>
+                    {/* Zoom Controls */}
+                    <div className="flex items-center bg-white/10 rounded-md p-0.5 border border-white/15">
+                      <button
+                        type="button"
+                        onClick={handleZoomOut}
+                        disabled={zoomLevel <= 50}
+                        className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Zoom Out (-10%)"
+                      >
+                        <ZoomOut className="h-3 w-3" />
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={handleResetZoom}
+                        className="px-2 py-0.5 text-[10px] font-mono font-bold text-white hover:bg-white/20 rounded transition"
+                        title="Click to reset zoom to 100%"
+                      >
+                        {zoomLevel}%
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleZoomIn}
+                        disabled={zoomLevel >= 500}
+                        className="p-1 rounded hover:bg-white/20 text-emerald-100 hover:text-white transition disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Zoom In (+10%)"
+                      >
+                        <ZoomIn className="h-3 w-3" />
+                      </button>
+                    </div>
+
+                    <div className="h-4 w-[1px] bg-emerald-700/60 mx-0.5" />
+
+                    {/* Download */}
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
+                      title="Download Original Document"
+                    >
+                      <Download className="h-3 w-3" />
+                      <span>Download</span>
+                    </button>
+
+                    {/* Print */}
+                    <button
+                      type="button"
+                      onClick={handlePrintPdf}
+                      className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition text-[9.5px] font-bold flex items-center gap-1 shadow-2xs"
+                      title="Print Document"
+                    >
+                      <Printer className="h-3 w-3" />
+                      <span>Print</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* LIVE ORIGINAL PDF VIEWER OR EMPTY STATE */}
@@ -1964,19 +1991,21 @@ export default function DocumentDetails({
                   <div className="h-14 w-14 rounded-2xl bg-slate-200/60 border border-slate-300/70 text-slate-500 flex items-center justify-center mb-3.5 shadow-sm">
                     <FileText className="h-7 w-7 text-slate-400" />
                   </div>
-                  <h3 className="text-sm font-black text-slate-800 tracking-tight">No document uploaded</h3>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">
+                    {!canReplacePdf ? "No document uploaded" : "Physical Invoice Attachment Pending"}
+                  </h3>
                   <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
                     {!canReplacePdf 
                       ? "No document or PDF has been attached to this record."
-                      : "No document is currently attached. Please upload or drag & drop the scanned invoice PDF to attach it to this record."
+                      : "This document is in Attachment Status. Please upload or drag & drop the scanned physical invoice PDF to attach it to this record."
                     }
                   </p>
                   
                   {canReplacePdf && (
                     <>
                       <label className="cursor-pointer px-4 py-2.5 bg-[#003F28] hover:bg-[#005333] text-white rounded-xl text-xs font-bold transition shadow-md flex items-center gap-2 active:scale-95">
-                        <Plus className="h-4 w-4" />
-                        <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload Scanned Invoice PDF"}</span>
+                        <Upload className="h-4 w-4" />
+                        <span>{isUploadingVersion ? "Uploading & Attaching..." : "Upload / Replace Document"}</span>
                         <input 
                           type="file" 
                           accept=".pdf,application/pdf" 
