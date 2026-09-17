@@ -50,49 +50,6 @@ export const INITIAL_ROLES = [
   { id: "employee", name: "General Employee", badge: "Employee", color: "bg-slate-100 text-slate-700 border-slate-200" }
 ];
 
-
-
-const ICON_MAP = {
-  Shield,
-  Users,
-  Save,
-  RotateCcw,
-  CheckCircle2,
-  AlertTriangle,
-  Search,
-  Plus,
-  Trash2,
-  Check,
-  X,
-  Loader2,
-  User,
-  Folder,
-  FolderOpen,
-  ChevronDown,
-  ChevronRight,
-  Filter,
-  CheckSquare,
-  Eye,
-  Sliders,
-  Lock,
-  Sparkles,
-  Layers,
-  Copy,
-  CheckCheck,
-  FileSpreadsheet,
-  Globe,
-  Tag,
-  MoreVertical,
-  ExternalLink,
-  Info,
-  ShieldCheck,
-  DollarSign,
-  FileText,
-  BarChart3,
-  UserX,
-  UserCheck
-};
-
 // Clean functional permission list categorized into Folders
 const INITIAL_PERMISSIONS = [
   {

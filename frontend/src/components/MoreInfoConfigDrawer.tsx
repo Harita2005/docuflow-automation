@@ -14,7 +14,6 @@ import {
   Layers,
   Save,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 
 export interface ConfigFieldItem {

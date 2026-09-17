@@ -1,4 +1,3 @@
-import json
 import pytest
 import datetime
 from fastapi.testclient import TestClient
@@ -10,7 +9,6 @@ from app.database.models import (
     User,
     WorkflowProfile,
     WorkflowStepDefinition,
-    AuditLog,
 )
 from app.auth import create_access_token
 

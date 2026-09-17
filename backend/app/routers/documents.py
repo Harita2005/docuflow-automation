@@ -1613,7 +1613,6 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
-    next_stage_val = prev_stage_num
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 
@@ -1724,7 +1723,6 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     if action and action.expected_version is not None and action.expected_version != current_version:
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
-    next_stage_val = prev_stage_num
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
 

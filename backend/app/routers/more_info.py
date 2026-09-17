@@ -10,7 +10,6 @@ from app.auth import get_current_active_user, get_current_user_optional
 from app.database.connection import get_db
 from app.database.models import (
     AuditLog,
-    Document,
     DocumentTypeFieldConfiguration,
     Invoice,
     SystemEngineLog,
