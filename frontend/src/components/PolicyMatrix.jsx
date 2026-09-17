@@ -81,43 +81,59 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
   };
 
   const updateRuleCondition = (ruleId, field, operator, value) => {
-    setRules(rules.map(r => {
+    setRules(prevRules => prevRules.map(r => {
       if (r.id !== ruleId) return r;
       
       let conditions = [];
-      try { conditions = JSON.parse(r.conditions_json); } catch {}
+      let isObjectFormat = false;
+      let parsedObj = null;
+      try {
+        parsedObj = JSON.parse(r.conditions_json);
+        if (Array.isArray(parsedObj)) {
+          conditions = parsedObj;
+        } else if (parsedObj && typeof parsedObj === 'object' && Array.isArray(parsedObj.conditions)) {
+          conditions = parsedObj.conditions;
+          isObjectFormat = true;
+        }
+      } catch {}
       
       // Update or add condition
-      const existingIdx = conditions.findIndex(c => c.field === field);
+      const existingIdx = Array.isArray(conditions) ? conditions.findIndex(c => c.field === field) : -1;
+      let updatedConditions = Array.isArray(conditions) ? [...conditions] : [];
       if (value) {
         if (existingIdx >= 0) {
-          conditions[existingIdx] = { ...conditions[existingIdx], operator, value };
+          updatedConditions[existingIdx] = { ...updatedConditions[existingIdx], operator, value };
         } else {
-          conditions.push({ field, operator, value, logicalOperator: 'AND' });
+          updatedConditions.push({ field, operator, value, logicalOperator: 'AND' });
         }
       } else {
         // Remove condition if value is cleared
-        if (existingIdx >= 0) conditions.splice(existingIdx, 1);
+        if (existingIdx >= 0) updatedConditions.splice(existingIdx, 1);
       }
       
-      return { ...r, conditions_json: JSON.stringify(conditions) };
+      const newConditionsJson = isObjectFormat && parsedObj
+        ? JSON.stringify({ ...parsedObj, conditions: updatedConditions })
+        : JSON.stringify(updatedConditions);
+
+      return { ...r, conditions_json: newConditionsJson };
     }));
     setHasChanges(true);
   };
 
   const updateRuleName = (ruleId, name) => {
-    setRules(rules.map(r => r.id === ruleId ? { ...r, rule_name: name } : r));
+    setRules(prevRules => prevRules.map(r => r.id === ruleId ? { ...r, rule_name: name } : r));
     setHasChanges(true);
   };
 
   const _updateRuleFlow = (ruleId, flowName) => {
-    setRules(rules.map(r => r.id === ruleId ? { ...r, target_workflow_id: flowName } : r));
+    setRules(prevRules => prevRules.map(r => r.id === ruleId ? { ...r, target_workflow_id: flowName } : r));
     setHasChanges(true);
   };
   
   const getConditionValue = (rule, field) => {
     try {
-      const conditions = JSON.parse(rule.conditions_json);
+      const parsed = JSON.parse(rule.conditions_json);
+      const conditions = Array.isArray(parsed) ? parsed : (parsed?.conditions || []);
       const cond = conditions.find(c => c.field === field);
       return cond ? cond.value : '';
     } catch { return ''; }

@@ -424,59 +424,61 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
     else if (newField === 'Document Type') initialVal = docType || 'AP Invoice';
     else if (newField === 'Payment Mode') initialVal = 'NEFT';
 
-    const updated = [...conditions];
-    updated[index] = {
+    setConditions(prev => prev.map((c, i) => i === index ? {
       field: newField,
       operator: defaultOp,
       value: initialVal
-    };
-    setConditions(updated);
+    } : c));
 
     if (validationErrors[`row_${index}`]) {
-      const errs = { ...validationErrors };
-      delete errs[`row_${index}`];
-      setValidationErrors(errs);
+      setValidationErrors(prev => {
+        const errs = { ...prev };
+        delete errs[`row_${index}`];
+        return errs;
+      });
     }
   };
 
   const handleOperatorChange = (index, newOp) => {
-    const updated = [...conditions];
-    updated[index].operator = newOp;
-
-    if (newOp === 'is empty' || newOp === 'is not empty') {
-      updated[index].value = '';
-    } else if (newOp === 'between') {
-      const meta = getFieldMeta(updated[index].field);
-      const curVal = String(updated[index].value || '');
-      if (!curVal.includes(' - ')) {
-        if (meta.type === 'number') {
-          const v = curVal && !isNaN(Number(curVal)) ? curVal : '10000';
-          updated[index].value = `${v} - ${Number(v) * 2 || 50000}`;
-        } else if (meta.type === 'date') {
-          const today = new Date().toISOString().split('T')[0];
-          updated[index].value = `${today} - ${today}`;
+    setConditions(prev => prev.map((c, i) => {
+      if (i !== index) return c;
+      let val = c.value;
+      if (newOp === 'is empty' || newOp === 'is not empty') {
+        val = '';
+      } else if (newOp === 'between') {
+        const meta = getFieldMeta(c.field);
+        const curVal = String(c.value || '');
+        if (!curVal.includes(' - ')) {
+          if (meta.type === 'number') {
+            const v = curVal && !isNaN(Number(curVal)) ? curVal : '10000';
+            val = `${v} - ${Number(v) * 2 || 50000}`;
+          } else if (meta.type === 'date') {
+            const today = new Date().toISOString().split('T')[0];
+            val = `${today} - ${today}`;
+          }
         }
       }
-    }
-
-    setConditions(updated);
+      return { ...c, operator: newOp, value: val };
+    }));
 
     if (validationErrors[`row_${index}`]) {
-      const errs = { ...validationErrors };
-      delete errs[`row_${index}`];
-      setValidationErrors(errs);
+      setValidationErrors(prev => {
+        const errs = { ...prev };
+        delete errs[`row_${index}`];
+        return errs;
+      });
     }
   };
 
   const handleValueChange = (index, newVal) => {
-    const updated = [...conditions];
-    updated[index].value = newVal;
-    setConditions(updated);
+    setConditions(prev => prev.map((c, i) => i === index ? { ...c, value: newVal } : c));
 
     if (validationErrors[`row_${index}`]) {
-      const errs = { ...validationErrors };
-      delete errs[`row_${index}`];
-      setValidationErrors(errs);
+      setValidationErrors(prev => {
+        const errs = { ...prev };
+        delete errs[`row_${index}`];
+        return errs;
+      });
     }
   };
 
@@ -1513,61 +1515,74 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                       </button>
                                     </div>
 
-                                    <div className="flex items-center justify-between text-[9px] font-bold px-1 text-slate-500">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const combined = Array.from(new Set([...selectedItems, ...filteredMaster]));
-                                          handleValueChange(idx, combined.join(', '));
-                                        }}
-                                        className="text-[#003F28] hover:underline cursor-pointer"
-                                      >
-                                        Select All ({filteredMaster.length})
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const remaining = selectedItems.filter(s => !filteredMaster.includes(s));
-                                          handleValueChange(idx, remaining.join(', '));
-                                        }}
-                                        className="text-rose-600 hover:underline cursor-pointer"
-                                      >
-                                        Clear Filtered
-                                      </button>
-                                    </div>
+                                     <div className="flex items-center justify-between text-[9px] font-bold px-1 text-slate-500">
+                                       <button
+                                         type="button"
+                                         onClick={() => {
+                                           setConditions(prev => prev.map((c, i) => {
+                                             if (i !== idx) return c;
+                                             const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
+                                             const combined = Array.from(new Set([...cur, ...filteredMaster]));
+                                             return { ...c, value: combined.join(', ') };
+                                           }));
+                                         }}
+                                         className="text-[#003F28] hover:underline cursor-pointer"
+                                       >
+                                         Select All ({filteredMaster.length})
+                                       </button>
+                                       <button
+                                         type="button"
+                                         onClick={() => {
+                                           setConditions(prev => prev.map((c, i) => {
+                                             if (i !== idx) return c;
+                                             const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
+                                             const remaining = cur.filter(s => !filteredMaster.includes(s));
+                                             return { ...c, value: remaining.join(', ') };
+                                           }));
+                                         }}
+                                         className="text-rose-600 hover:underline cursor-pointer"
+                                       >
+                                         Clear Filtered
+                                       </button>
+                                     </div>
 
-                                    <div className="max-h-48 overflow-y-auto space-y-0.5 pt-0.5 border-t border-slate-100">
-                                      {filteredMaster.length === 0 ? (
-                                        <p className="text-[9.5px] text-slate-400 italic py-2 text-center">
-                                          No options matched "{multiSelectSearch}"
-                                        </p>
-                                      ) : (
-                                        filteredMaster.map(opt => {
-                                          const checked = selectedItems.includes(opt);
-                                          return (
-                                            <label
-                                              key={opt}
-                                              className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-[10px] transition-colors ${
-                                                checked ? 'bg-emerald-50 text-emerald-950 font-bold' : 'hover:bg-slate-50 text-slate-700 font-medium'
-                                              }`}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                checked={checked}
-                                                onChange={() => {
-                                                  const newSet = checked 
-                                                    ? selectedItems.filter(s => s !== opt) 
-                                                    : [...selectedItems, opt];
-                                                  handleValueChange(idx, newSet.join(', '));
-                                                }}
-                                                className="h-3 w-3 accent-[#003F28] rounded cursor-pointer"
-                                              />
-                                              <span className="truncate">{opt}</span>
-                                            </label>
-                                          );
-                                        })
-                                      )}
-                                    </div>
+                                     <div className="max-h-48 overflow-y-auto space-y-0.5 pt-0.5 border-t border-slate-100">
+                                       {filteredMaster.length === 0 ? (
+                                         <p className="text-[9.5px] text-slate-400 italic py-2 text-center">
+                                           No options matched "{multiSelectSearch}"
+                                         </p>
+                                       ) : (
+                                         filteredMaster.map(opt => {
+                                           const checked = selectedItems.includes(opt);
+                                           return (
+                                             <label
+                                               key={opt}
+                                               className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-[10px] transition-colors ${
+                                                 checked ? 'bg-emerald-50 text-emerald-950 font-bold' : 'hover:bg-slate-50 text-slate-700 font-medium'
+                                               }`}
+                                             >
+                                               <input
+                                                 type="checkbox"
+                                                 checked={checked}
+                                                 onChange={() => {
+                                                   setConditions(prev => prev.map((c, i) => {
+                                                     if (i !== idx) return c;
+                                                     const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
+                                                     const isAlreadyChecked = cur.includes(opt);
+                                                     const next = isAlreadyChecked
+                                                       ? cur.filter(s => s !== opt)
+                                                       : [...cur, opt];
+                                                     return { ...c, value: next.join(', ') };
+                                                   }));
+                                                 }}
+                                                 className="h-3 w-3 accent-[#003F28] rounded cursor-pointer"
+                                               />
+                                               <span className="truncate">{opt}</span>
+                                             </label>
+                                           );
+                                         })
+                                       )}
+                                     </div>
                                   </div>
                                 )}
                               </div>

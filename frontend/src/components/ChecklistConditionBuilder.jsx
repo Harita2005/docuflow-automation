@@ -245,19 +245,25 @@ export default function ChecklistConditionBuilder() {
   const addChecklistItem = (text) => {
     if (!text || !text.trim()) return;
     const clean = text.trim();
-    if (!editingRule.itemsList.includes(clean)) {
-      setEditingRule({
-        ...editingRule,
-        itemsList: [...editingRule.itemsList, clean]
-      });
-    }
+    setEditingRule(prev => {
+      if (!prev) return prev;
+      const curList = prev.itemsList || [];
+      if (curList.includes(clean)) return prev;
+      return {
+        ...prev,
+        itemsList: [...curList, clean]
+      };
+    });
     setNewChecklistText('');
   };
 
   const removeChecklistItem = (idx) => {
-    setEditingRule({
-      ...editingRule,
-      itemsList: editingRule.itemsList.filter((_, i) => i !== idx)
+    setEditingRule(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        itemsList: (prev.itemsList || []).filter((_, i) => i !== idx)
+      };
     });
   };
 

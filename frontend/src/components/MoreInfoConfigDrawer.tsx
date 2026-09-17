@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   X,
   Search,
@@ -98,9 +98,12 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
     return availableFields.filter((f) => !isFixedSummaryField(f.field_key));
   }, [availableFields]);
 
-  // Initialize or reset drawer state from props whenever drawer opens or selectedFields change
+  // Track previous isOpen state to only initialize when drawer transitions to open
+  const prevIsOpenRef = useRef(false);
+
+  // Initialize or reset drawer state from props ONLY when drawer transitions from closed to open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       const validSelected = selectedFields.filter((f) => !isFixedSummaryField(f.field_key));
       const keys = new Set(validSelected.map((f) => f.field_key));
       setSelectedKeys(keys);
@@ -109,6 +112,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
       setSearchQuery("");
       setActiveTab("fields");
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, selectedFields]);
 
   // Lookup map for fast field detail retrieval
@@ -144,29 +148,34 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
 
   // Handle single field toggle
   const handleToggleField = (key: string) => {
-    const newSet = new Set(selectedKeys);
-    if (newSet.has(key)) {
-      newSet.delete(key);
-      setSelectedKeys(newSet);
-      setOrderedFieldKeys((prev) => prev.filter((k) => k !== key));
-    } else {
-      newSet.add(key);
-      setSelectedKeys(newSet);
-      // Append to the end of the ordering list
-      setOrderedFieldKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
-    }
+    setSelectedKeys((prevKeys) => {
+      const nextSet = new Set(prevKeys);
+      if (nextSet.has(key)) {
+        nextSet.delete(key);
+      } else {
+        nextSet.add(key);
+      }
+      return nextSet;
+    });
+
+    setOrderedFieldKeys((prevOrder) => {
+      if (prevOrder.includes(key)) {
+        return prevOrder.filter((k) => k !== key);
+      } else {
+        return [...prevOrder, key];
+      }
+    });
   };
 
   // Handle Select All
   const handleSelectAll = () => {
-    const newKeys = new Set(selectableAvailableFields.map((f) => f.field_key));
-    setSelectedKeys(newKeys);
-    // Keep existing order for already selected, append remaining
-    const existingOrder = orderedFieldKeys.filter((k) => newKeys.has(k));
-    const newlyAdded = selectableAvailableFields
-      .map((f) => f.field_key)
-      .filter((k) => !existingOrder.includes(k));
-    setOrderedFieldKeys([...existingOrder, ...newlyAdded]);
+    const allKeys = selectableAvailableFields.map((f) => f.field_key);
+    setSelectedKeys(new Set(allKeys));
+    setOrderedFieldKeys((prevOrder) => {
+      const existingOrder = prevOrder.filter((k) => allKeys.includes(k));
+      const newlyAdded = allKeys.filter((k) => !existingOrder.includes(k));
+      return [...existingOrder, ...newlyAdded];
+    });
   };
 
   // Handle Clear All
