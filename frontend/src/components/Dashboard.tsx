@@ -136,7 +136,13 @@ export default function Dashboard({
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
   const baseDocs = displayDocs.filter(d => !isApprovedStatus(d.status));
 
-  const pendingCount = baseDocs.filter(d => isAssignedToUser(d) && isPendingStatus(d.status)).length;
+  // Pending action required helper: Must be active, assigned to user, and user must NOT have already approved it
+  const isPendingActionForUser = (d: any) => {
+    if (d.has_approved) return false;
+    return isAssignedToUser(d) && isPendingStatus(d.status);
+  };
+
+  const pendingCount = baseDocs.filter(isPendingActionForUser).length;
   const holdCount = baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status)).length;
   const rejectedCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
   const progressCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
@@ -160,7 +166,7 @@ export default function Dashboard({
     ? baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
       ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status))
-      : baseDocs.filter(d => isAssignedToUser(d) && isPendingStatus(d.status));
+      : baseDocs.filter(isPendingActionForUser);
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {

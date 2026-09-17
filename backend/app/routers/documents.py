@@ -20,7 +20,6 @@ from app.database.models import (
     ApprovalAssignment,
     AuditLog,
     ChecklistRule,
-    ChecklistTemplate,
     InAppNotification,
     Invoice,
     InvoiceChecklistState,
@@ -36,7 +35,7 @@ from app.auth import get_current_user, get_current_user_optional, get_current_ac
 from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
-from app.services.rbac_service import authorize_document_access, check_permission
+from app.services.rbac_service import authorize_document_access
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
 
 logger = logging.getLogger(__name__)
@@ -876,10 +875,17 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
                         user_approved_stages.add((doc_id_clean, stg_num))
                     else:
                         user_approved_stages.add((raw_id, 'all'))
-                        user_approved_stages.add((doc_id_clean, 'all'))
                 if 'reject' in act or 'return' in act or 'cancel' in act:
                     rejected_invoice_ids.add(raw_id)
                     rejected_invoice_ids.add(doc_id_clean)
+
+        wf_step_or = []
+        for name in user_names:
+            wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
+            wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
+        user_wf_profiles = set(row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0])
+    else:
+        user_wf_profiles = set()
 
     user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     results = []
@@ -903,6 +909,10 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
             or (str(inv.id), 'all') in user_approved_stages
             or (doc_key_clean, 'all') in user_approved_stages
         )
+        has_approved_any_stage = (
+            str(inv.id) in user_approved_doc_ids
+            or doc_key_clean in user_approved_doc_ids
+        )
         has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
 
         is_curr = False
@@ -910,24 +920,28 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db)
 
         # Division check:
-        # If user is the explicitly assigned approver for this stage (is_curr), they are authorized.
+        # If user is the explicitly assigned approver for this stage (is_curr), or approved a stage, they are authorized.
         # Otherwise, respect division boundaries.
-        if not is_curr:
+        if not is_curr and not has_approved_any_stage:
             user_div = (current_user.division or '').strip().upper()
             doc_div = (inv.division or '').strip().upper()
             if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
                 continue
 
         if not user_is_admin:
-            # Non-admin approver must be the active assigned approver and must NOT have approved the current stage
-            if not (is_curr and not has_approved_curr_stage):
+            # Non-admin approver can track the document in Work Tracker if:
+            # 1. They are the active assigned approver for the current stage, OR
+            # 2. They approved a prior stage of this document (tracking its progress as it moves through workflow), OR
+            # 3. They are part of the workflow definition for this document
+            is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
+            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow):
                 continue
 
         # Status filter query parameter enforcement
         if status:
             s_req = status.strip().lower()
             if s_req == 'pending':
-                if not is_curr:
+                if not (is_curr and not has_approved_curr_stage):
                     continue
             elif s_req == 'hold':
                 if inv.status != 'On Hold':
@@ -938,7 +952,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         inv_res = InvoiceResponse.from_orm(inv)
         inv_res.is_current_approver = is_curr
-        inv_res.has_approved = has_approved_curr_stage
+        inv_res.has_approved = has_approved_curr_stage or has_approved_any_stage
         inv_res.has_rejected = has_rej
         inv_res.current_stage_name = resolve_document_stage_name(db, inv)
         results.append(inv_res)
@@ -2082,7 +2096,6 @@ async def extract_document_preview(
 
     # Perform OCR + LLM extraction
     from app.services.ocr_service import extract_document_for_verification
-    extracted = {}
     try:
         extracted = extract_document_for_verification(file_path)
     except Exception as exc:
@@ -2174,10 +2187,6 @@ async def confirm_and_ingest_document(
     from app.services.rbac_service import check_permission
     if not check_permission(current_user, 'doc:create', db):
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to ingest documents.")
-
-    final_file_path = None
-    final_file_name = "uploaded_document.pdf"
-    final_file_size = 0
 
     if temp_file_id:
         clean_temp = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(temp_file_id))

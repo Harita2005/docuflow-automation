@@ -187,21 +187,28 @@ export default function App() {
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const isDocumentPendingForUser = (doc: DbInvoice) => {
-    const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
+    if (!doc) return false;
+    const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved", "On Hold"];
     if (terminalStates.includes(doc.status)) return false;
+    const st = (doc.status || "").toLowerCase();
+    if (st.includes("hold") || st.includes("pause") || st.includes("reject") || st.includes("cancel") || st.includes("fail")) return false;
     if ((doc as any).has_approved) return false;
 
     // Check if the user is explicitly assigned to it at current stage
     if (doc.is_current_approver) return true;
 
+    const uHandle = (currentUserUsername || "").toLowerCase().trim();
+    const eHandle = (currentUserEmail || "").toLowerCase().trim();
+    const rHandle = (currentUserRole || "").toLowerCase().trim();
+
     if (doc.assigned_approver) {
       const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
-      const userHandles = [
-        (currentUserUsername || '').toLowerCase(),
-        (currentUserRole || '').toLowerCase()
-      ].filter(Boolean);
-      if (userHandles.some(h => approvers.includes(h))) return true;
+      if (uHandle && (approvers.includes(uHandle) || approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p))))) return true;
+      if (eHandle && (approvers.includes(eHandle) || approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p))))) return true;
+      if (rHandle && approvers.includes(rHandle)) return true;
     }
+
+    if (doc.status === "Data Verification Pending" && (currentUserRole === "ap_executive" || currentUserRole === "executive")) return true;
 
     return false;
   };
@@ -339,6 +346,9 @@ export default function App() {
     setCurrentUserUsername(username);
     setKickedReason(null);
     sessionStorage.removeItem("sessionKickedReason");
+    sessionStorage.setItem("hasShownWelcomeQueue", "false");
+    setShowPendingModal(false);
+    setLoadingDocs(true);
     setIsLoggedIn(true);
 
     try {
@@ -474,6 +484,9 @@ export default function App() {
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("lastActivityTime");
     sessionStorage.removeItem("hasShownWelcomeQueue");
+    setShowPendingModal(false);
+    setDocuments([]);
+    setLoadingDocs(true);
     if (reason) {
       setKickedReason(reason);
       sessionStorage.setItem("sessionKickedReason", reason);
@@ -495,25 +508,21 @@ export default function App() {
     }
   }
 
-  // Reset the hasShownWelcomeQueue flag when the app loads, the role changes, or the user logs in,
-  // ensuring they see the pending popup on every new session, refresh, or login.
+  // Welcome Pending Actions Queue: Check user's actual pending count upon login/session
   useEffect(() => {
-    sessionStorage.setItem("hasShownWelcomeQueue", "false");
-  }, [currentUserRole, isLoggedIn]);
-
-  useEffect(() => {
-    if (isLoggedIn && documents.length > 0) {
+    if (isLoggedIn && !loadingDocs) {
       const hasShown = sessionStorage.getItem("hasShownWelcomeQueue");
       if (hasShown !== "true") {
         const pending = documents.filter(isDocumentPendingForUser);
-
         if (pending.length > 0) {
           setShowPendingModal(true);
+        } else {
+          setShowPendingModal(false);
         }
         sessionStorage.setItem("hasShownWelcomeQueue", "true");
       }
     }
-  }, [documents, isLoggedIn, currentUserRole]);
+  }, [documents, loadingDocs, isLoggedIn, currentUserRole, currentUserUsername, currentUserEmail]);
 
   // Redirect to work tracker if approval queue is empty
   useEffect(() => {
@@ -552,6 +561,8 @@ export default function App() {
       />
     );
   }
+
+  const pendingActionDocs = !loadingDocs ? documents.filter(isDocumentPendingForUser) : [];
 
   return (
     <div className="h-screen w-full bg-[#FAF8F3] text-slate-900 flex font-sans overflow-hidden">
@@ -707,7 +718,7 @@ export default function App() {
                     setSelectedDocId(null);
                   }}
                   onSelectDocument={(docId) => setSelectedDocId(docId)}
-                  pendingDocIds={documents.filter(isDocumentPendingForUser).map(d => d.id)}
+                  pendingDocIds={pendingActionDocs.map(d => d.id)}
                 />
               )
             )}
@@ -717,8 +728,8 @@ export default function App() {
 
       </div>
 
-      {/* Welcome Pending Approvals Modal */}
-      {showPendingModal && (
+      {/* Welcome Pending Approvals Modal - Strictly shown only when actual pending count > 0 */}
+      {showPendingModal && !loadingDocs && pendingActionDocs.length > 0 && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn border border-slate-100">
             {/* Header / Graphic */}
@@ -738,7 +749,7 @@ export default function App() {
                 Welcome back, {currentUserUsername || currentUserEmail.split('@')[0]}!
               </h3>
               <p className="text-[11px] text-emerald-100 font-semibold tracking-wide uppercase mt-1">
-                You have {documents.filter(isDocumentPendingForUser).length} pending actions waiting
+                You have {pendingActionDocs.length} pending actions waiting
               </p>
             </div>
 
@@ -747,7 +758,7 @@ export default function App() {
               <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-3">Awaiting your approval</p>
               
               <div className="space-y-2.5 max-h-[220px] overflow-y-auto custom-scrollbar mb-5 p-1.5 pr-2">
-                {documents.filter(isDocumentPendingForUser).slice(0, 3).map(doc => (
+                {pendingActionDocs.slice(0, 3).map(doc => (
                   <div 
                     key={doc.id}
                     onClick={() => {

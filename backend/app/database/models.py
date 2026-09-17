@@ -349,13 +349,13 @@ class Document(Base):
                 return pending[0].approver_user_id
         return None
 
-    @property
-    def current_stage_name(self):
+    def _get_current_stage_name(self):
         return getattr(self, "_current_stage_name", None)
 
-    @current_stage_name.setter
-    def current_stage_name(self, val):
+    def _set_current_stage_name(self, val):
         self._current_stage_name = val
+
+    current_stage_name = property(_get_current_stage_name, _set_current_stage_name)
 
     __table_args__ = (
         Index(
@@ -1216,3 +1216,50 @@ class IntegrationAuditHistory(Base):
         default=datetime.datetime.utcnow,
         index=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Document Type Field Configuration (More Info display configuration)
+# ---------------------------------------------------------------------------
+
+class DocumentTypeFieldConfiguration(Base):
+    __tablename__ = "document_type_field_configurations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_type = Column(String(100), nullable=False, index=True)
+    field_key = Column(String(100), nullable=False, index=True)
+    field_label = Column(String(150), nullable=True)
+    category = Column(String(100), nullable=True)
+    source = Column(String(50), default="ERP", nullable=False)
+    display_order = Column(Integer, default=0, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
+    configuration_scope = Column(String(50), default="USER", nullable=False)  # 'GLOBAL' or 'USER'
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    created_by = Column(String(150), nullable=True)
+    updated_by = Column(String(150), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index(
+            "ix_dtfc_doc_type_user",
+            "document_type",
+            "user_id",
+        ),
+        Index(
+            "ix_dtfc_doc_type_field",
+            "document_type",
+            "field_key",
+        ),
+    )

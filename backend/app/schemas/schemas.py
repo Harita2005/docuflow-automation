@@ -588,3 +588,44 @@ class TestCallbackRequest(BaseModel):
     sample_company: Optional[str] = 'VCC'
     sample_document_type: Optional[str] = 'AP INVOICE'
     rule_config: Optional[CallbackRuleCreate] = None
+
+
+# ---------------------------------------------------------------------------
+# More Info Field Configuration Schemas
+# ---------------------------------------------------------------------------
+
+class MoreInfoFieldConfigItem(BaseModel):
+    field_key: str
+    label: str
+    category: str = "OTHER"
+    source: str = "ERP"  # "ERP", "Document", "Calculated"
+    display_order: int = 0
+    is_visible: bool = True
+    sample_value: Optional[Any] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MoreInfoConfigResponse(BaseModel):
+    document_type: str
+    scope: str = "GLOBAL"  # "USER" or "GLOBAL"
+    has_user_override: bool = False
+    can_manage_default: bool = False
+    selected_fields: List[MoreInfoFieldConfigItem] = []
+    available_fields: List[MoreInfoFieldConfigItem] = []
+
+
+class MoreInfoFieldSaveItem(BaseModel):
+    field_key: str
+    display_order: int = 0
+    is_visible: bool = True
+    label: Optional[str] = None
+    category: Optional[str] = None
+    source: Optional[str] = None
+
+
+class MoreInfoConfigSaveRequest(BaseModel):
+    fields: List[MoreInfoFieldSaveItem] = []
+    save_as_default: bool = False
+    reset_to_default: bool = False

@@ -403,17 +403,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newPermIcon, setNewPermIcon] = useState("Shield");
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  const flatPermissions = permissionsList.flatMap(c => 
-    c.items.map(item => ({
-      ...item,
-      icon: ICON_MAP[item.iconName] || ShieldCheck,
-      iconColor: item.iconColor || "bg-blue-50 text-blue-600 border-blue-100"
-    }))
-  );
-
-  // Custom permissions UI side panel state
-  const [panelUserGroup, setPanelUserGroup] = useState("ap_specialist");
-  const [panelPermissions, setPanelPermissions] = useState({});
   const [_selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
@@ -493,31 +482,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
-
-  // Update permissions side-panel toggles when selectedUser changes
-  useEffect(() => {
-    if (selectedUser && activeTab === "users") {
-      setPanelUserGroup(selectedUser.role || "employee");
-      
-      const userKey = selectedUser.username || selectedUser.email;
-      const userRole = selectedUser.role || "employee";
-      const roleBase = rolePermissions[userRole] || INITIAL_ROLE_PERMS[userRole] || {};
-      const overrides = userOverrides[userKey] || {};
-      
-      const initialPerms = {};
-      flatPermissions.forEach(perm => {
-        const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-        const overrideVal = overrides[perm.id];
-        
-        let effectiveVal = baseVal;
-        if (overrideVal !== undefined) {
-          effectiveVal = overrideVal.write !== undefined ? overrideVal.write : (overrideVal.read !== undefined ? overrideVal.read : baseVal);
-        }
-        initialPerms[perm.id] = effectiveVal;
-      });
-      setPanelPermissions(initialPerms);
-    }
-  }, [selectedUser, userOverrides, rolePermissions, activeTab]);
 
   const loadData = async () => {
     setLoading(true);
@@ -827,111 +791,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
       if (selectedUser?.id === id) setSelectedUser(null);
     } catch { 
       setUsers(prev => prev.filter(u => u.id !== id));
-    }
-  };
-
-  const handleTogglePermission = (permId) => {
-    if (!isAdmin) return;
-    setPanelPermissions(prev => ({
-      ...prev,
-      [permId]: !prev[permId]
-    }));
-  };
-
-  const handlePanelGroupChange = (newRole) => {
-    if (!isAdmin) return;
-    setPanelUserGroup(newRole);
-    
-    const roleBase = rolePermissions[newRole] || INITIAL_ROLE_PERMS[newRole] || {};
-    const newPerms = {};
-    flatPermissions.forEach(perm => {
-      const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-      newPerms[perm.id] = baseVal;
-    });
-    setPanelPermissions(newPerms);
-  };
-
-  const handleSavePermissionChanges = async () => {
-    if (!isAdmin || !selectedUser) {
-      setErrorMsg("Action Restricted: Only Administrators can modify user permissions.");
-      setTimeout(() => setErrorMsg(""), 3500);
-      return;
-    }
-
-    setSaving(true);
-    setErrorMsg("");
-    setSuccessMsg("");
-
-    try {
-      const userKey = selectedUser.username || selectedUser.email;
-      const updatedOverrides = { ...userOverrides };
-      const overridesForUser = {};
-      const roleBase = rolePermissions[panelUserGroup] || INITIAL_ROLE_PERMS[panelUserGroup] || {};
-
-      flatPermissions.forEach(perm => {
-        const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-        const currentVal = panelPermissions[perm.id];
-
-        if (currentVal !== baseVal) {
-          overridesForUser[perm.id] = {
-            read: currentVal,
-            write: currentVal,
-            admin: currentVal && !!roleBase[perm.id]?.admin
-          };
-        }
-      });
-
-      if (Object.keys(overridesForUser).length > 0) {
-        updatedOverrides[userKey] = overridesForUser;
-      } else {
-        delete updatedOverrides[userKey];
-      }
-
-      const token = localStorage.getItem("authToken");
-      const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
-
-      await fetch("/api/admin/config", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          key: "UBAC_USER_OVERRIDES",
-          value: JSON.stringify(updatedOverrides),
-          description: "User permission overrides"
-        })
-      });
-
-      setUserOverrides(updatedOverrides);
-
-      const payload = {
-        employee_id: selectedUser.employee_id || selectedUser.username,
-        employee_name: selectedUser.name,
-        name: selectedUser.name,
-        email: selectedUser.email,
-        username: selectedUser.username,
-        role: panelUserGroup,
-        department: selectedUser.department || selectedUser.dept,
-        division: selectedUser.division || "VCC"
-      };
-
-      await fetch(`/api/users/${selectedUser.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(payload)
-      });
-
-      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: panelUserGroup } : u));
-
-      setSuccessMsg(`✓ Permissions for "${selectedUser.name}" saved successfully!`);
-      setSelectedUser(null); 
-      
-      window.dispatchEvent(new CustomEvent("role-permissions-updated"));
-      setTimeout(() => setSuccessMsg(""), 3500);
-    } catch(e) {
-      console.error(e);
-      setErrorMsg("Failed to save permission modifications.");
-      setTimeout(() => setErrorMsg(""), 3500);
-    } finally {
-      setSaving(false);
     }
   };
 

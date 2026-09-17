@@ -17,12 +17,14 @@ from .routers.conditions import router as conditions_router
 from .routers.documents import router as documents_router
 from .routers.events import router as events_router
 from .routers.integrations import router as integrations_router
+from .routers.more_info import router as more_info_router
 from .routers.roles import permission_router as permissions_router, router as roles_router
 from .routers.sync import router as sync_router
 from .routers.sync_router import router as m2m_sync_router
 from .routers.users import admin_router as admin_users_router, router as users_router
 from .routers.workflows import router as workflows_router
 from .services.security_middleware import RateLimiterMiddleware, SecurityHeadersMiddleware
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,26 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("IF COL_LENGTH('document_approval_logs', 'previous_status') IS NULL ALTER TABLE document_approval_logs ADD previous_status VARCHAR(50) NULL;"))
                 conn.execute(text("IF COL_LENGTH('document_approval_logs', 'new_status') IS NULL ALTER TABLE document_approval_logs ADD new_status VARCHAR(50) NULL;"))
                 conn.execute(text("IF COL_LENGTH('document_approval_logs', 'remarks') IS NULL ALTER TABLE document_approval_logs ADD remarks NVARCHAR(MAX) NULL;"))
+
+                # Filtered indexes on document_type_field_configurations
+                conn.execute(text("""
+                    IF OBJECT_ID('document_type_field_configurations', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'uq_dtfc_global_default' AND object_id = OBJECT_ID('document_type_field_configurations'))
+                        BEGIN
+                            CREATE UNIQUE NONCLUSTERED INDEX uq_dtfc_global_default
+                            ON document_type_field_configurations (document_type, field_key)
+                            WHERE user_id IS NULL;
+                        END
+
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'uq_dtfc_user_override' AND object_id = OBJECT_ID('document_type_field_configurations'))
+                        BEGIN
+                            CREATE UNIQUE NONCLUSTERED INDEX uq_dtfc_user_override
+                            ON document_type_field_configurations (document_type, field_key, user_id)
+                            WHERE user_id IS NOT NULL;
+                        END
+                    END
+                """))
 
             # Automatic retention pruning for audit logs on startup
             try:
@@ -115,6 +137,7 @@ app.include_router(admin_users_router)
 app.include_router(roles_router)
 app.include_router(permissions_router)
 app.include_router(documents_router)
+app.include_router(more_info_router)
 app.include_router(workflows_router)
 app.include_router(conditions_router)
 app.include_router(events_router)
@@ -126,6 +149,7 @@ app.include_router(m2m_sync_router)
 
 # ---------------------------------------------------------------------------
 # Static Directories
+
 # ---------------------------------------------------------------------------
 
 if settings.UPLOAD_DIR.exists():

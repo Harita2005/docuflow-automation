@@ -182,23 +182,22 @@ export default function WorkTrackerPage({
   };
 
   const isActionableForUser = (doc: DbInvoice): boolean => {
-    // If user has already approved their stage, it is no longer an active actionable item for them
-    if (doc.has_approved) return false;
-    // When loaded from authoritative backend API, server has already filtered to actionable documents
+    // When loaded from authoritative backend API, server has already filtered to authorized documents
     if (hasLoadedApi) return true;
-    return Boolean(doc.is_current_approver) || isAssignedToUser(doc);
+    return Boolean(doc.is_current_approver) || isAssignedToUser(doc) || Boolean(doc.has_approved);
   };
 
   const sourceDocs = hasLoadedApi ? trackerDocs : documents;
 
-  // Work Tracker strictly scopes documents: only active, in-progress documents awaiting approval
+  // Work Tracker strictly scopes documents: only active, in-progress documents (non-terminal)
   const visibleDocs = useMemo(() => {
     const activeDocs = sourceDocs.filter(doc => !isTerminalOrApproved(doc));
     const isAdmin = currentUserRole === "admin" || currentUserRole === "system_admin" || currentUserRole === "superadmin";
+    if (isAdmin) return activeDocs;
+    if (hasLoadedApi) return activeDocs;
+
     return activeDocs.filter(doc => {
-      // If user has already signed off/approved on this document, it is no longer an active actionable item for them
-      if (doc.has_approved) return false;
-      if (isAdmin) return true;
+      // Visible in Work Tracker if user is the current approver or has approved a prior stage (tracking progress)
       return isActionableForUser(doc);
     });
   }, [sourceDocs, currentUserRole, currentUserUsername, currentUserEmail, hasLoadedApi]);
@@ -285,7 +284,7 @@ export default function WorkTrackerPage({
       if (statusFilter !== "all" && statusFilter !== "approved" && statusFilter !== "cancelled") {
         const st = (doc.status || "").toLowerCase();
         const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !doc.has_approved;
-        const isInProgress = st.includes("in progress") || !isActionRequired;
+        const isInProgress = Boolean(doc.has_approved) || st.includes("in progress") || st.includes("stage") || !isActionRequired;
 
         if (statusFilter === "pending") {
           if (!isActionRequired) return false;

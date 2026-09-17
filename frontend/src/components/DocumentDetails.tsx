@@ -10,7 +10,6 @@ import {
   Shield,
   AlertCircle,
   Database,
-  Plus,
   Calendar,
   Pause,
   ChevronDown,
@@ -26,10 +25,14 @@ import {
   ZoomOut,
   Download,
   Printer,
-  Upload
+  Upload,
+  Settings,
+  Activity,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly } from "../utils/formatters";
+import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
+
 
 interface DocumentDetailsProps {
   document: DbInvoice | null;
@@ -180,7 +183,18 @@ export default function DocumentDetails({
   const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
   const [isUploadingVersion, setIsUploadingVersion] = useState<boolean>(false);
   const [showMoreMetadata, setShowMoreMetadata] = useState<boolean>(false);
+  const [showConfigDrawer, setShowConfigDrawer] = useState<boolean>(false);
+  const [moreInfoConfig, setMoreInfoConfig] = useState<{
+    document_type: string;
+    scope: "USER" | "GLOBAL";
+    has_user_override: boolean;
+    can_manage_default: boolean;
+    selected_fields: ConfigFieldItem[];
+    available_fields: ConfigFieldItem[];
+  } | null>(null);
+  const [_isLoadingConfig, setIsLoadingConfig] = useState<boolean>(false);
   const [_containerWidth, setContainerWidth] = useState<number>(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -196,6 +210,13 @@ export default function DocumentDetails({
 
   // Dynamic ERP & Extra Metadata Extractor
   const dynamicSyncPayload = useMemo(() => {
+    if (!document) {
+      return {
+        entries: [],
+        rawPayload: {}
+      };
+    }
+
     let customObj: Record<string, any> = {};
     if (document?.custom_data) {
       if (typeof document.custom_data === 'object') {
@@ -208,23 +229,20 @@ export default function DocumentDetails({
     }
 
     const grossAmt = Number(amount || document.amount || 0);
-    const baseTaxableAmt = grossAmt > 0 ? grossAmt / 1.18 : 0;
-    const gstTaxAmt = grossAmt > 0 ? grossAmt - baseTaxableAmt : 0;
+    const baseTaxableAmt = document.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
+    const gstTaxAmt = document.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
 
     const baseEntries: { label: string; value: string | number; key: string }[] = [
-      { key: 'vendor_name', label: 'Vendor / Entity', value: vendorName || document.vendor_name || 'AKG Enterprise Solutions Ltd' },
-      { key: 'invoice_number', label: 'Bill No & Date', value: `${invoiceNumber || document.invoice_number || 'INV-' + document.id} • ${invoiceDate || document.invoice_date || (document.created_at ? new Date(document.created_at).toISOString().split('T')[0] : '-')}` },
-      { key: 'po_number', label: 'Purchase Order', value: poNumber || document.po_number || '-' },
-      { key: 'amount', label: 'Total Gross (₹)', value: `₹${grossAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` },
-      { key: 'base_taxable', label: 'Taxable Base', value: `₹${baseTaxableAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { key: 'gst_tax', label: 'GST (18%)', value: `₹${gstTaxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { key: 'vendor_gstin', label: 'Vendor GSTIN', value: (document as any)?.vendor_gstin || customObj.vendor_gstin || customObj.gstin || '-' },
-      { key: 'cost_center', label: 'Cost Center', value: (document as any)?.cost_center || customObj.cost_center || '-' },
-      { key: 'division', label: 'Division / Branch', value: document.division || customObj.division || '-' },
-      { key: 'plant', label: 'Plant Location', value: document.plant || customObj.plant || '-' },
-      { key: 'payment_terms', label: 'Payment Terms', value: paymentTerms || document.payment_terms || customObj.payment_terms || 'Net 30 Days' },
-      { key: 'document_type', label: 'Document Type', value: document.document_type || 'AP INVOICE' },
-      { key: 'currency', label: 'Currency', value: document.currency || 'INR' },
+      { key: 'vendor_gstin', label: 'Vendor GSTIN', value: (document as any)?.vendor_gstin || customObj.vendor_gstin || customObj.gstin || customObj.GSTIN || '-' },
+      { key: 'vendor_code', label: 'Vendor Code', value: (document as any)?.vendor_code || customObj.vendor_code || customObj.CardCode || '-' },
+      { key: 'po_date', label: 'PO Date', value: customObj.po_date || customObj.poDate || customObj.orderDate || '-' },
+      { key: 'taxable_amount', label: 'Taxable Base', value: `₹${Number(baseTaxableAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { key: 'gst_amount', label: 'GST Amount', value: `₹${Number(gstTaxAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { key: 'cost_center', label: 'Cost Center', value: (document as any)?.cost_center || customObj.cost_center || customObj.CostCenter || '-' },
+      { key: 'division', label: 'Division / Branch', value: document.division || customObj.division || customObj.CompanyCode || '-' },
+      { key: 'plant', label: 'Plant Location', value: document.plant || customObj.plant || customObj.Branch || '-' },
+      { key: 'payment_terms', label: 'Payment Terms', value: paymentTerms || document.payment_terms || customObj.payment_terms || customObj.PaymentTerms || 'Net 30 Days' },
+      { key: 'currency', label: 'Currency', value: document.currency || customObj.currency || 'INR' },
     ];
 
     // Add any extra custom fields synced dynamically from ERP
@@ -266,7 +284,194 @@ export default function DocumentDetails({
     };
   }, [document, vendorName, invoiceNumber, poNumber, amount, invoiceDate, paymentTerms]);
 
+  // Fetch More Info configuration for this document and user
+  const fetchMoreInfoConfig = async (docId: string) => {
+    if (!docId) return;
+    setIsLoadingConfig(true);
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/more-info/config`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setMoreInfoConfig(data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch More Info configuration:", err);
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  };
+
+  useEffect(() => {
+    if (document?.id) {
+      fetchMoreInfoConfig(document.id);
+    }
+  }, [document?.id, document?.document_type]);
+
+  const handleSaveMoreInfoConfig = async (fields: ConfigFieldItem[], saveAsDefault: boolean) => {
+    if (!document?.id) return;
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/more-info/config`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        fields: fields.map((f, idx) => ({
+          field_key: f.field_key,
+          label: f.label,
+          category: f.category,
+          source: f.source,
+          display_order: idx + 1,
+          is_visible: true,
+        })),
+        save_as_default: saveAsDefault,
+        reset_to_default: false,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      setMoreInfoConfig(data);
+      showToast("✓ More Info configuration saved.", "success");
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Failed to save configuration.");
+    }
+  };
+
+  const handleResetMoreInfoConfig = async () => {
+    if (!document?.id) return;
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/more-info/config`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        fields: [],
+        save_as_default: false,
+        reset_to_default: true,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      setMoreInfoConfig(data);
+      showToast("✓ More Info configuration reset to default.", "info");
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Failed to reset configuration.");
+    }
+  };
+
+  // Map of current dynamic values from document / payload
+  const currentDocValuesMap = useMemo(() => {
+    const map = new Map<string, string | number>();
+    if (!document) return map;
+
+    // 1. Direct document properties & calculations
+    const grossAmt = Number(amount || document.amount || 0);
+    const baseTaxableAmt = document.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
+    const gstTaxAmt = document.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
+    const formattedBase = `₹${Number(baseTaxableAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formattedGst = `₹${Number(gstTaxAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    map.set("taxable_amount", formattedBase);
+    map.set("base_taxable", formattedBase);
+    map.set("base_amount", formattedBase);
+    map.set("gst_amount", formattedGst);
+    map.set("gst_tax", formattedGst);
+    map.set("tax_amount", formattedGst);
+
+    if (document.vendor_gstin) {
+      map.set("vendor_gstin", document.vendor_gstin);
+      map.set("gstin", document.vendor_gstin);
+    }
+    if (document.vendor_code) {
+      map.set("vendor_code", document.vendor_code);
+      map.set("cardcode", document.vendor_code);
+    }
+    if (document.cost_center) {
+      map.set("cost_center", document.cost_center);
+      map.set("costcenter", document.cost_center);
+    }
+    if (document.division) {
+      map.set("division", document.division);
+      map.set("companycode", document.division);
+    }
+    if (document.plant) {
+      map.set("plant", document.plant);
+      map.set("branch", document.plant);
+    }
+    if (document.currency) {
+      map.set("currency", document.currency);
+    }
+    if (paymentTerms || document.payment_terms) {
+      map.set("payment_terms", paymentTerms || document.payment_terms || "");
+    }
+
+    // 2. Values from dynamicSyncPayload
+    dynamicSyncPayload.entries.forEach((e) => {
+      map.set(e.key.toLowerCase(), e.value);
+    });
+
+    // 3. Values from custom_data
+    let customObj: Record<string, any> = {};
+    if (document.custom_data) {
+      try {
+        customObj = typeof document.custom_data === "string" ? JSON.parse(document.custom_data) : document.custom_data;
+      } catch {}
+    }
+    Object.entries(customObj).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") {
+        map.set(k.toLowerCase(), typeof v === "object" ? JSON.stringify(v) : String(v));
+      }
+    });
+
+    return map;
+  }, [dynamicSyncPayload, document, amount, paymentTerms]);
+
+  // Effective fields to display in More Info (strictly excluding fields present in the fixed top summary row)
+  const effectiveMoreInfoFields = useMemo(() => {
+    let fields: ConfigFieldItem[] = [];
+    if (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0) {
+      fields = moreInfoConfig.selected_fields;
+    } else {
+      fields = dynamicSyncPayload.entries.map((entry, idx) => ({
+        field_key: entry.key,
+        label: entry.label,
+        category: "INFORMATION",
+        source: "ERP",
+        display_order: idx + 1,
+        is_visible: true,
+        sample_value: entry.value,
+      }));
+    }
+    return fields.filter((field) => !isFixedSummaryField(field.field_key));
+  }, [moreInfoConfig, dynamicSyncPayload]);
+
+  const getFieldValue = (field: ConfigFieldItem): string => {
+    const fk = field.field_key.toLowerCase();
+    if (currentDocValuesMap.has(fk)) {
+      const val = currentDocValuesMap.get(fk);
+      if (val !== undefined && val !== null && String(val).trim() !== "") {
+        return String(val);
+      }
+    }
+    if (field.sample_value !== undefined && field.sample_value !== null && String(field.sample_value).trim() !== "") {
+      return String(field.sample_value);
+    }
+    return "Not available";
+  };
+
   const handleUploadVersion = async (file: File) => {
+
     if (!document) return;
     if (!canReplacePdf) {
       setActionError("⚠️ PDF replacement is restricted: You can only replace or attach the physical PDF during Attachment Status (Stage 1).");
@@ -412,9 +617,9 @@ export default function DocumentDetails({
         if (res.ok) {
           const fresh = await res.json();
           if (
-            fresh.current_stage !== document.current_stage ||
-            fresh.status !== document.status ||
-            Boolean(fresh.completed_by_peer) !== Boolean(document.completed_by_peer)
+            fresh.current_stage !== document?.current_stage ||
+            fresh.status !== document?.status ||
+            Boolean(fresh.completed_by_peer) !== Boolean(document?.completed_by_peer)
           ) {
             onRefreshDocument();
           }
@@ -1389,39 +1594,81 @@ export default function DocumentDetails({
 
             </div>
 
-            {/* Extra Data Dropdown Toggle Button */}
-            <button
-              type="button"
-              onClick={() => setShowMoreMetadata(!showMoreMetadata)}
-              className={`py-1.5 px-3 rounded-lg border text-[9.5px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
-                showMoreMetadata 
-                  ? "bg-[#006747] border-[#005333] text-white shadow-sm" 
-                  : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300"
-              }`}
-              title="Toggle additional information"
-            >
-              <span>{showMoreMetadata ? "Less Info" : "More Info ▾"}</span>
-              {showMoreMetadata ? <span className="text-[9px]">▴</span> : <span className="text-[9px] text-slate-500">▾</span>}
-            </button>
+            {/* More Info & Edit Fields Buttons Group */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowMoreMetadata(!showMoreMetadata)}
+                className={`py-1.5 px-3 rounded-lg border text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
+                  showMoreMetadata 
+                    ? "bg-[#006747] border-[#005333] text-white shadow-xs" 
+                    : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300"
+                }`}
+                title="Toggle additional information"
+              >
+                <span>{showMoreMetadata ? "Less Info" : "More Info"}</span>
+                <span className="text-[11px] leading-none">{showMoreMetadata ? "▴" : "▾"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowConfigDrawer(true)}
+                className="py-1.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:border-slate-300 text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Configure which fields appear in More Info"
+              >
+                <Settings className="h-3.5 w-3.5 text-slate-500" />
+                <span>Edit Fields</span>
+              </button>
+            </div>
           </div>
 
-          {/* Secondary Collapsible Extra Data Panel (Fully Dynamic) */}
+          {/* Secondary Collapsible Extra Data Panel (Exact Visual Match to Summary Strip) */}
           {showMoreMetadata && (
-            <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-300 animate-fadeIn">
-              {dynamicSyncPayload.entries
-                .filter(entry => !['vendor_name', 'invoice_number', 'po_number', 'amount'].includes(entry.key))
-                .map(entry => (
-                  <div key={entry.key} className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[110px]">
-                    <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 truncate" title={entry.label}>
-                      {entry.label}
+            <div className="pt-2 border-t border-slate-300 animate-fadeIn">
+              <div className="flex flex-wrap items-center gap-2.5">
+                {effectiveMoreInfoFields.map((field) => {
+                  const val = getFieldValue(field);
+                  const isMissing = val === "Not available";
+                  return (
+                    <div
+                      key={field.field_key}
+                      className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]"
+                    >
+                      <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
+                        <span className="truncate" title={field.label}>
+                          {field.label}
+                        </span>
+                        {field.source && (
+                          <span
+                            className={`text-[7px] font-bold uppercase px-1 rounded border shrink-0 ${
+                              field.source === "ERP"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : field.source === "Calculated"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : "bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            {field.source}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`text-[11px] font-bold truncate ${
+                          isMissing
+                            ? "italic text-slate-400 font-normal"
+                            : "text-slate-900"
+                        }`}
+                        title={val}
+                      >
+                        {val}
+                      </div>
                     </div>
-                    <div className="text-[11px] font-bold text-slate-800 truncate" title={String(entry.value)}>
-                      {entry.value}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
             </div>
           )}
+
         </div>
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
           
@@ -2585,7 +2832,7 @@ export default function DocumentDetails({
               )}
             </div>
 
-            <div className="flex flex-col gap-2.5 pt-2">
+            <div className="flex flex-col gap-2 pt-2">
               {pendingNextId && onSelectDocument ? (
                 <button
                   type="button"
@@ -2597,14 +2844,36 @@ export default function DocumentDetails({
                 >
                   <span>Move to Next Document ➔</span>
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="w-full py-2.5 px-4 bg-slate-100 text-slate-400 font-bold text-xs rounded-xl border border-slate-200 cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <span>No More Pending Docs in Queue</span>
-                </button>
+              ) : null}
+
+              {actionModalType === 'approve' && (
+                !approvedNextStageInfo?.isCompleted && document?.status !== 'Approved' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNextActionModal(false);
+                      onRefreshDocument();
+                      window.dispatchEvent(new CustomEvent("navigate-view", { detail: "work-tracker" }));
+                    }}
+                    className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Activity className="h-3.5 w-3.5" />
+                    <span>Track Progress in Work Tracker ➔</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNextActionModal(false);
+                      onRefreshDocument();
+                      window.dispatchEvent(new CustomEvent("navigate-view", { detail: "approved-documents" }));
+                    }}
+                    className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>View in Approved Documents ➔</span>
+                  </button>
+                )
               )}
 
               <button
@@ -2614,15 +2883,29 @@ export default function DocumentDetails({
                   onRefreshDocument();
                   onGoBack();
                 }}
-                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
-                <span>Back / Return ➔</span>
+                <span>Back to Dashboard ➔</span>
               </button>
             </div>
 
           </div>
         </div>
       )}
+
+      {/* MORE INFO FIELD CONFIGURATION DRAWER */}
+      <MoreInfoConfigDrawer
+        isOpen={showConfigDrawer}
+        onClose={() => setShowConfigDrawer(false)}
+        documentType={moreInfoConfig?.document_type || document?.document_type || "AP INVOICE"}
+        availableFields={moreInfoConfig?.available_fields || []}
+        selectedFields={effectiveMoreInfoFields}
+        scope={moreInfoConfig?.scope || "GLOBAL"}
+        hasUserOverride={Boolean(moreInfoConfig?.has_user_override)}
+        canManageDefault={Boolean(moreInfoConfig?.can_manage_default || currentUserRole === "admin")}
+        onSave={handleSaveMoreInfoConfig}
+        onResetToDefault={handleResetMoreInfoConfig}
+      />
 
     </div>
   );
