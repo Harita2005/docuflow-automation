@@ -79,7 +79,6 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   documentType,
   availableFields,
   selectedFields,
-  scope,
   hasUserOverride,
   canManageDefault,
   onSave,
