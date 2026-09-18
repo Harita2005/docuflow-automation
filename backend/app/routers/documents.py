@@ -32,7 +32,7 @@ from app.database.models import (
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
 from app.auth import get_current_user, get_current_user_optional, get_current_active_user, decode_token
-from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, generate_document_id
+from app.services.rules_engine import evaluate_business_rules, generate_document_id
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.services.rbac_service import authorize_document_access
