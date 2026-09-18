@@ -131,6 +131,9 @@ export function getDocTypePrefix(docType?: string, category?: string): string {
   if (combined.includes("NON - RETURNABLE") || combined.includes("NON-RETURNABLE")) {
     return "NR";
   }
+  if (combined.includes("PURCHASE ORDER") || combined === "PO" || combined.startsWith("PO ") || combined.endsWith(" PO") || combined.includes(" PO ")) {
+    return "PO";
+  }
   if (combined.includes("INVOICE") || combined.includes("AP") || combined.includes("TAX")) {
     return "INV";
   }
@@ -151,7 +154,7 @@ export function formatDocNumber(id?: string | number, docType?: string, category
   const raw = String(id).replace(/^#+/, "").replace(/^•+/, "").trim();
 
   // Strip existing known prefixes or leading symbols
-  const cleanNum = raw.replace(/^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?/i, "").trim();
+  const cleanNum = raw.replace(/^(DOC|INV|PO|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?/i, "").trim();
   const prefix = getDocTypePrefix(docType, category);
 
   return cleanNum ? `${prefix}-${cleanNum}` : `${prefix}-${raw}`;

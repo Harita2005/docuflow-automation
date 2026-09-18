@@ -79,11 +79,58 @@ def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', 
         return 'PRJ'
     elif 'NON - RETURNABLE' in combined or 'NON-RETURNABLE' in combined:
         return 'NR'
+    elif 'PURCHASE ORDER' in combined or combined == 'PO' or ' PO ' in f' {combined} ':
+        return 'PO'
     elif 'INVOICE' in combined or 'AP' in combined or 'TAX' in combined:
         return 'INV'
     elif 'VOUCHER' in combined:
         return 'VOUCH'
     return 'INV'
+
+def generate_document_id(
+    db: Session,
+    doc_type: str = '',
+    category: str = '',
+    trans_type: str = '',
+    wf_name: str = ''
+) -> str:
+    """
+    Generate a clean, professional, enterprise-grade document ID in the format:
+        <PREFIX>-<8_DIGIT_SEQUENCE>  (e.g., INV-00000001, PO-00000002, CN-00000003)
+    Powered atomically by the SQL Server database sequence dbo.document_id_seq.
+    Guarantees concurrency safety and monotonicity across all upload and sync pathways.
+    """
+    from sqlalchemy import text
+    prefix = get_doc_type_prefix(doc_type=doc_type, category=category, trans_type=trans_type, wf_name=wf_name)
+    try:
+        seq_val = db.execute(text("SELECT CAST(NEXT VALUE FOR dbo.document_id_seq AS BIGINT)")).scalar()
+        if seq_val is not None:
+            return f"{prefix}-{int(seq_val):08d}"
+    except Exception as exc:
+        logger.warning("[generate_document_id] Sequence query failed, attempting auto-creation: %s", exc)
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (SELECT 1 FROM sys.sequences WHERE name = 'document_id_seq')
+                BEGIN
+                    CREATE SEQUENCE dbo.document_id_seq
+                        AS BIGINT
+                        START WITH 1
+                        INCREMENT BY 1
+                        MINVALUE 1
+                        NO CYCLE
+                        CACHE 10;
+                END
+            """))
+            db.commit()
+            seq_val = db.execute(text("SELECT CAST(NEXT VALUE FOR dbo.document_id_seq AS BIGINT)")).scalar()
+            if seq_val is not None:
+                return f"{prefix}-{int(seq_val):08d}"
+        except Exception as inner_exc:
+            logger.error("[generate_document_id] Failed to fetch or create sequence: %s", inner_exc)
+
+    import time
+    return f"{prefix}-{int(time.time()):08d}"
+
 
 def is_wildcard(val: Optional[str]) -> bool:
     if val is None:

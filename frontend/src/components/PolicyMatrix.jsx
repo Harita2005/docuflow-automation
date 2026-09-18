@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Save, Plus, ArrowRight, Settings2, Trash2, Play, AlertTriangle, CheckCircle, ShieldAlert, Sparkles, X, RefreshCw } from 'lucide-react';
 
 export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, setActiveTab }) {
-  const [_editingId, setEditingId] = useState(null);
+  const [, setEditingId] = useState(null);
   
   // Simulator State
   const [showSimulator, setShowSimulator] = useState(false);
@@ -122,11 +122,6 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
 
   const updateRuleName = (ruleId, name) => {
     setRules(prevRules => prevRules.map(r => r.id === ruleId ? { ...r, rule_name: name } : r));
-    setHasChanges(true);
-  };
-
-  const _updateRuleFlow = (ruleId, flowName) => {
-    setRules(prevRules => prevRules.map(r => r.id === ruleId ? { ...r, target_workflow_id: flowName } : r));
     setHasChanges(true);
   };
   

@@ -32,7 +32,7 @@ from app.database.models import (
 from app.services.pdf_compressor import compress_pdf
 from app.schemas import InvoiceResponse, InvoiceUpdate, InvoiceActionRequest, NotificationProviderSchema, NotificationRaciSchema, NotificationTestSchema
 from app.auth import get_current_user, get_current_user_optional, get_current_active_user, decode_token
-from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix
+from app.services.rules_engine import evaluate_business_rules, get_doc_type_prefix, generate_document_id
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.services.rbac_service import authorize_document_access
@@ -2224,9 +2224,7 @@ async def confirm_and_ingest_document(
         raise HTTPException(status_code=500, detail="Physical document file missing on server storage.")
 
     timestamp = int(datetime.datetime.utcnow().timestamp())
-    prefix = get_doc_type_prefix(document_type or '', '')
-    rand_hex = uuid.uuid4().hex[:6].upper()
-    new_id = f'{prefix}-{timestamp % 1000000}_{rand_hex}'
+    new_id = generate_document_id(db, doc_type=document_type or 'AP INVOICE')
 
     final_amount = float(amount or 0.0)
     final_base = float(base_amount) if base_amount is not None else (round(final_amount / 1.18, 2) if final_amount else 0.0)
@@ -2397,9 +2395,7 @@ async def upload_document(
             logger.debug('Handled ocr exception: %s', exc)
 
     timestamp = int(datetime.datetime.utcnow().timestamp())
-    prefix = get_doc_type_prefix(document_type or '', '')
-    rand_hex = uuid.uuid4().hex[:6].upper()
-    new_id = f'{prefix}-{timestamp % 1000000}_{rand_hex}'
+    new_id = generate_document_id(db, doc_type=document_type or 'AP INVOICE')
 
     final_amount = float(amount if amount is not None else (ocr_data.get('amount') or 0.0))
     final_base = round(final_amount / 1.18, 2) if final_amount else 0.0

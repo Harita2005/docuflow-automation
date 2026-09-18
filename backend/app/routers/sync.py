@@ -23,7 +23,7 @@ from app.database.models import (
     WorkflowStepDefinition,
 )
 from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
-from app.services.rules_engine import get_doc_type_prefix
+from app.services.rules_engine import get_doc_type_prefix, generate_document_id
 from app.services.ocr_service import extract_text_from_pdf
 from app.auth import verify_service_api_key
 
@@ -238,22 +238,37 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         existing.deleted_at = None
         target_inv = existing
     else:
-        timestamp = int(datetime.datetime.utcnow().timestamp() * 1000)
-        prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
-        key = req.doc_key if req.doc_key else timestamp % 100000
-        doc_id = f'{prefix}-{key}'
-        existing_by_id = db.query(Invoice).filter(Invoice.id == doc_id).first()
-        if existing_by_id:
-            target_inv = existing_by_id
-            target_inv.doc_num = req.doc_num or target_inv.doc_num
-            target_inv.vendor_name = req.vendor_name or target_inv.vendor_name
-            target_inv.amount = req.amount if req.amount > 0 else target_inv.amount
-            target_inv.is_deleted = False
-            target_inv.deleted_at = None
-        else:
-            new_inv = Invoice(id=doc_id, doc_key=str(req.doc_key) if req.doc_key is not None else None, doc_num=str(req.doc_num) if req.doc_num is not None else None, doc_date=req.invoice_date, vendor_name=req.vendor_name or 'Unknown Vendor', vendor_code=req.vendor_code, vendor_gstin=req.vendor_gstin, invoice_number=req.invoice_number or f'INV-{timestamp % 10000}', invoice_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'), po_number=req.po_number, amount=req.amount, base_amount=calculated_base or 0.0, tax_amount=calculated_tax or 0.0, currency=req.currency or 'INR', document_type=req.document_type or 'AP INVOICE', division=effective_division, category=req.category, cost_center=req.cost_center, plant=req.plant, payment_terms=req.payment_terms or 'Net 30', status='Pending Approval', current_stage=1, total_stages=2, line_items_json=line_items_str, custom_data=custom_data_str)
-            db.add(new_inv)
-            target_inv = new_inv
+        doc_id = generate_document_id(db, doc_type=req.document_type or 'AP INVOICE', category=req.category or '')
+        timestamp = int(datetime.datetime.utcnow().timestamp())
+        new_inv = Invoice(
+            id=doc_id,
+            doc_key=str(req.doc_key) if req.doc_key is not None else None,
+            doc_num=str(req.doc_num) if req.doc_num is not None else (req.invoice_number or None),
+            doc_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'),
+            vendor_name=req.vendor_name or 'Unknown Vendor',
+            vendor_code=req.vendor_code,
+            vendor_gstin=req.vendor_gstin,
+            invoice_number=req.invoice_number or f'INV-{timestamp % 100000}',
+            invoice_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'),
+            po_number=req.po_number,
+            amount=req.amount,
+            base_amount=calculated_base or 0.0,
+            tax_amount=calculated_tax or 0.0,
+            currency=req.currency or 'INR',
+            document_type=req.document_type or 'AP INVOICE',
+            division=effective_division,
+            category=req.category,
+            cost_center=req.cost_center,
+            plant=req.plant,
+            payment_terms=req.payment_terms or 'Net 30',
+            status='Pending Approval',
+            current_stage=1,
+            total_stages=2,
+            line_items_json=line_items_str,
+            custom_data=custom_data_str
+        )
+        db.add(new_inv)
+        target_inv = new_inv
     db.commit()
     db.refresh(target_inv)
     db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == target_inv.id).delete()

@@ -9,6 +9,18 @@ import AdminRBAC from '../components/AdminRBAC.jsx';
 import AdminBackups from '../components/AdminBackups.jsx';
 import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
 import DapiSyncBackHub from '../components/dapi-sync-back/DapiSyncBackHub.tsx';
+
+const formatAuditTimestamp = (ts) => {
+  if (!ts) return "—";
+  if (ts instanceof Date) return isNaN(ts.getTime()) ? "—" : ts.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+  let s = String(ts).trim();
+  if (!s.endsWith("Z") && !s.includes("+") && !s.slice(10).includes("-")) {
+    s = s.replace(" ", "T") + "Z";
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? String(ts) : d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+};
+
 export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -1176,7 +1188,7 @@ export default function Admin() {
                   return (
                     <tr key={log.id} className="hover:bg-blue-50/30 transition-colors duration-200 group">
                       <td className="px-4 py-2.5 text-slate-400 font-mono text-[9px] whitespace-nowrap">
-                        {new Date(log.timestamp).toLocaleString()}
+                        {formatAuditTimestamp(log.timestamp)}
                       </td>
                       <td className="px-4 py-2.5 font-bold text-slate-700 flex items-center gap-1.5">
                         {actionStr.includes("sync") && <Database className="h-3 w-3 text-cyan-600 shrink-0" />}
@@ -1327,7 +1339,7 @@ export default function Admin() {
             {retentionInfo.cutoff_timestamp && (
               <div className="flex justify-between text-slate-600">
                 <span>Cutoff date:</span>
-                <span className="font-mono text-[10px] text-slate-700">{new Date(retentionInfo.cutoff_timestamp).toLocaleString()}</span>
+                <span className="font-mono text-[10px] text-slate-700">{formatAuditTimestamp(retentionInfo.cutoff_timestamp)}</span>
               </div>
             )}
             <div className="flex justify-between text-slate-600">
