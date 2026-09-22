@@ -670,12 +670,13 @@ def resolve_effective_configuration(
     - Combined Selected: Admin Defaults + User Selected.
     """
     norm_type = normalize_doc_type(doc_type)
-    if norm_type not in DEFAULT_ADMIN_TOP3_FIELDS and available_fields:
+    fallback_type = norm_type
+    if fallback_type not in DEFAULT_ADMIN_TOP3_FIELDS and available_fields:
         cat = available_fields[0].category
         if cat in DEFAULT_ADMIN_TOP3_FIELDS:
-            norm_type = cat
+            fallback_type = cat
         else:
-            norm_type = "AP INVOICE"
+            fallback_type = "AP INVOICE"
     avail_map = {f.field_key: f for f in available_fields}
 
     # 1. Fetch Admin Default Fields (user_id IS NULL)
@@ -694,7 +695,7 @@ def resolve_effective_configuration(
     admin_default_keys: Set[str] = set()
 
     if admin_default_configs:
-        for cfg in admin_default_configs[:3]:
+        for cfg in admin_default_configs:
             base = avail_map.get(cfg.field_key)
             item = MoreInfoFieldConfigItem(
                 field_key=cfg.field_key,
@@ -756,24 +757,25 @@ def resolve_effective_configuration(
         if user_configs:
             has_user_override = True
             for cfg in user_configs:
-                # Deduplicate: Only add if NOT already in Admin Top 3 Defaults
-                if cfg.field_key not in admin_default_keys:
-                    base = avail_map.get(cfg.field_key)
-                    item = MoreInfoFieldConfigItem(
-                        field_key=cfg.field_key,
-                        label=cfg.field_label or (base.label if base else cfg.field_key.replace("_", " ").title()),
-                        category=cfg.category or (base.category if base else norm_type),
-                        source=cfg.source or (base.source if base else "Document"),
-                        display_order=cfg.display_order,
-                        is_visible=True,
-                        is_admin_default=False,
-                        is_user_selected=True,
-                        sample_value=base.sample_value if base else None,
-                    )
-                    user_selected.append(item)
+                base = avail_map.get(cfg.field_key)
+                item = MoreInfoFieldConfigItem(
+                    field_key=cfg.field_key,
+                    label=cfg.field_label or (base.label if base else cfg.field_key.replace("_", " ").title()),
+                    category=cfg.category or (base.category if base else norm_type),
+                    source=cfg.source or (base.source if base else "Document"),
+                    display_order=cfg.display_order,
+                    is_visible=True,
+                    is_admin_default=False,
+                    is_user_selected=True,
+                    sample_value=base.sample_value if base else None,
+                )
+                user_selected.append(item)
 
-    # 3. Combine: Admin Top 3 Defaults + User Selected Fields
-    combined = list(admin_defaults) + list(user_selected)
+    # 3. Combine: If user override exists, effective selected fields are user_selected. Otherwise admin_defaults.
+    if has_user_override:
+        combined = list(user_selected)
+    else:
+        combined = list(admin_defaults)
     scope = "USER" if has_user_override else "GLOBAL"
 
     return admin_defaults, user_selected, combined, scope, has_user_override
@@ -942,6 +944,27 @@ def save_doc_type_more_info_config(
         if item.is_visible:
             new_keys.append(item.field_key)
 
+    try:
+        audit_entry = AuditLog(
+            invoice_id=None,
+            user=current_user.username,
+            action="MORE_INFO_CONFIG_UPDATE",
+            stage="MoreInfoConfig",
+            notes=f"Updated More Info configuration for doc type {norm_type} (scope: {target_scope})",
+            ip_address="127.0.0.1",
+        )
+        db.add(audit_entry)
+
+        sys_log = SystemEngineLog(
+            module_name="MoreInfoConfig",
+            log_level="INFO",
+            message=f"Saved More Info config for doc type {norm_type} by user {current_user.username} (scope: {target_scope})",
+            details=json.dumps({"document_type": norm_type, "scope": target_scope, "fields_count": len(payload.fields)}),
+        )
+        db.add(sys_log)
+    except Exception as exc:
+        logger.debug("Failed to record More Info audit log: %s", exc)
+
     db.commit()
 
     sample_doc = (
@@ -1076,6 +1099,27 @@ def save_document_more_info_config(
         db.add(new_row)
         if item.is_visible:
             new_keys.append(item.field_key)
+
+    try:
+        audit_entry = AuditLog(
+            invoice_id=doc.id,
+            user=current_user.username,
+            action="MORE_INFO_CONFIG_UPDATE",
+            stage="MoreInfoConfig",
+            notes=f"Updated More Info configuration for document {doc.id} (scope: {target_scope})",
+            ip_address="127.0.0.1",
+        )
+        db.add(audit_entry)
+
+        sys_log = SystemEngineLog(
+            module_name="MoreInfoConfig",
+            log_level="INFO",
+            message=f"Saved More Info config for document {doc.id} by user {current_user.username} (scope: {target_scope})",
+            details=json.dumps({"document_id": doc.id, "scope": target_scope, "fields_count": len(payload.fields)}),
+        )
+        db.add(sys_log)
+    except Exception as exc:
+        logger.debug("Failed to record More Info audit log: %s", exc)
 
     db.commit()
 

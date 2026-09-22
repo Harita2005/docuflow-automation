@@ -80,8 +80,6 @@ class PermissionRegistryResponse(BaseModel):
     subpages: dict
     actions: List[str]
     scopes: List[str]
-
-
 class RoleResponse(BaseModel):
     id: int
     code: str

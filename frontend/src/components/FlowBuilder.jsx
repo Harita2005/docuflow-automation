@@ -23,6 +23,7 @@ export default function FlowBuilder({ users = [] }) {
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [internalUsers, setInternalUsers] = useState(users || []);
+  const [roles, setRoles] = useState([]);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
   const [savedWorkflowModal, setSavedWorkflowModal] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -211,10 +212,26 @@ export default function FlowBuilder({ users = [] }) {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/roles', {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRoles(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch roles:", e);
+    }
+  };
+
   useEffect(() => {
     fetchWorkflows();
     fetchConditions();
     fetchChecklistRules();
+    fetchRoles();
   }, []);
 
   // Listen for open-workflow-editor event from Condition Matrix or Checklists
@@ -1170,6 +1187,10 @@ export default function FlowBuilder({ users = [] }) {
                               <span className="text-xs font-bold text-slate-800">{step.approver_type || 'Specific Employee'}</span>
                               <span className="text-[10px] text-slate-500 mt-0.5">
                                 {step.approver_target ? (() => {
+                                  if (step.approver_type === 'Role Based') {
+                                    const foundRole = roles.find(r => r.code === step.approver_target || r.name === step.approver_target);
+                                    return foundRole ? `${foundRole.name} (${foundRole.code})` : step.approver_target;
+                                  }
                                   const match = internalUsers.find(u => u.username === step.approver_target || u.email === step.approver_target);
                                   return match ? `${match.name} (${step.approver_target})` : step.approver_target;
                                 })() : 'Not configured'}
@@ -1305,7 +1326,15 @@ export default function FlowBuilder({ users = [] }) {
                               Pool ({members.length} Approvers • Any One)
                             </span>
                           ) : (
-                            <span>{step.approver_target || step.approver_type || 'Unassigned'}</span>
+                            <span>
+                              {(() => {
+                                if (step.approver_type === 'Role Based' && step.approver_target) {
+                                  const foundRole = roles.find(r => r.code === step.approver_target || r.name === step.approver_target);
+                                  return foundRole ? foundRole.name : step.approver_target;
+                                }
+                                return step.approver_target || step.approver_type || 'Unassigned';
+                              })()}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1637,21 +1666,30 @@ export default function FlowBuilder({ users = [] }) {
                     <div className="space-y-3">
                       <div>
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Target Role</label>
-                        <select value={editingWorkflow.steps[configuringStepIndex].approver_target} onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors">
+                        <select 
+                          value={editingWorkflow.steps[configuringStepIndex].approver_target || ''} 
+                          onChange={e => updateStep(configuringStepIndex, 'approver_target', e.target.value)} 
+                          className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:border-blue-500 outline-none text-slate-700 font-medium hover:border-slate-300 transition-colors"
+                        >
                           <option value="">-- Select Target Role --</option>
-                          <option value="Finance Manager">Finance Manager</option>
-                          <option value="Chief Information Technology Officer">Chief Information Technology Officer</option>
-                          <option value="General Manager">General Manager</option>
-                          <option value="Department Head">Department Head</option>
-                          <option value="Outbound Incharge">Outbound Incharge</option>
-                          <option value="Warehouse Ops Manager">Warehouse Ops Manager</option>
-                          <option value="Warehouse Lead">Warehouse Lead</option>
-                          <option value="Operations Lead">Operations Lead</option>
-                          <option value="Unit Head">Unit Head</option>
-                          <option value="Logistics Lead">Logistics Lead</option>
-                          <option value="Head - WH & Logistics">Head - WH & Logistics</option>
-                          <option value="CEO">CEO</option>
-                          <option value="JMD">JMD</option>
+                          {(() => {
+                            const currentTarget = editingWorkflow.steps[configuringStepIndex].approver_target || '';
+                            const activeRoles = roles.filter(r => r.is_active !== false);
+                            const existsInActive = activeRoles.some(r => r.code === currentTarget || r.name === currentTarget);
+                            
+                            return (
+                              <>
+                                {currentTarget && !existsInActive && (
+                                  <option value={currentTarget}>{currentTarget}</option>
+                                )}
+                                {activeRoles.map(r => (
+                                  <option key={r.id || r.code} value={r.code}>
+                                    {r.name}
+                                  </option>
+                                ))}
+                              </>
+                            );
+                          })()}
                         </select>
                       </div>
                     </div>
