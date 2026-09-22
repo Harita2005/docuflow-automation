@@ -6,7 +6,7 @@ import {
   X, 
   Eye 
 } from "lucide-react";
-import { DbInvoice } from "../types.ts";
+import { DbInvoice } from "../types";
 import { formatDocNumber } from "../utils/formatters";
 
 interface WorkTrackerPageProps {

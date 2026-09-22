@@ -315,6 +315,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [search, setSearch] = useState("");
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [savingRolePerms, setSavingRolePerms] = useState(false);
 
   // Add User modal states
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -354,7 +356,9 @@ export default function AdminRBAC({ onRefreshSignal }) {
       (u.employee_id || u.username || "").toLowerCase().includes(search.toLowerCase());
     
     if (roleFilter === "ALL") return matchesSearch;
-    return u.role === roleFilter && matchesSearch;
+    const uRole = (u.role || "").toLowerCase();
+    const filterRole = roleFilter.toLowerCase();
+    return uRole === filterRole && matchesSearch;
   });
 
   const getAvatarColor = (name = "") => {
@@ -424,18 +428,51 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("authToken");
-      const [configRes, usersRes] = await Promise.all([
-        fetch("/api/admin/config", { headers: token ? { "Authorization": `Bearer ${token}` } : {} }),
-        fetch("/api/admin/users", { headers: token ? { "Authorization": `Bearer ${token}` } : {} })
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+      const [configRes, usersRes, rolesRes] = await Promise.all([
+        fetch("/api/admin/config", { headers }),
+        fetch("/api/admin/users", { headers }),
+        fetch("/api/admin/roles", { headers })
       ]);
+
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json();
+        if (Array.isArray(rolesData) && rolesData.length > 0) {
+          const loadedRoles = rolesData.map(r => ({
+            id: String(r.id),
+            db_id: r.id,
+            code: r.code,
+            name: r.name,
+            badge: r.code ? r.code.toUpperCase() : r.name.slice(0, 10),
+            color: "bg-blue-50 text-blue-700 border-blue-200",
+            permissions: r.permissions || []
+          }));
+          setRoles(loadedRoles);
+
+          setRolePermissions(prev => {
+            const updated = { ...prev };
+            rolesData.forEach(r => {
+              const rCode = r.code;
+              if (!updated[rCode]) updated[rCode] = {};
+              (r.permissions || []).forEach(pCode => {
+                if (!updated[rCode][pCode]) {
+                  updated[rCode][pCode] = { read: true, write: true, admin: false };
+                }
+              });
+            });
+            return updated;
+          });
+        }
+      }
 
       if (configRes.ok) {
         const configs = await configRes.json();
         if (Array.isArray(configs)) {
           const matrixCfg = configs.find(c => c.key === "RBAC_GRANULAR_MATRIX");
           if (matrixCfg && matrixCfg.value) {
-            try { setRolePermissions(JSON.parse(matrixCfg.value)); } catch {}
+            try { setRolePermissions(prev => ({ ...JSON.parse(matrixCfg.value), ...prev })); } catch {}
           }
           const flacCfg = configs.find(c => c.key === "RBAC_FIELD_PERMISSIONS");
           if (flacCfg && flacCfg.value) {
@@ -451,10 +488,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
           const customFieldsCfg = configs.find(c => c.key === "RBAC_CUSTOM_FIELDS");
           if (customFieldsCfg && customFieldsCfg.value) {
             try { setCustomFields(JSON.parse(customFieldsCfg.value)); } catch {}
-          }
-          const rolesCfg = configs.find(c => c.key === "RBAC_CUSTOM_ROLES");
-          if (rolesCfg && rolesCfg.value) {
-            try { setRoles(JSON.parse(rolesCfg.value)); } catch {}
           }
           const overridesCfg = configs.find(c => c.key === "UBAC_USER_OVERRIDES");
           if (overridesCfg && overridesCfg.value) {
@@ -732,27 +765,110 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
-  const handleAddRole = (e) => {
+  const handleAddRole = async (e) => {
     e.preventDefault();
     if (!isAdmin || !newRoleName.trim()) return;
-    const roleId = newRoleName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const newRole = {
-      id: roleId,
-      name: newRoleName.trim(),
-      badge: newRoleName.trim().slice(0, 8),
-      color: "bg-blue-50 text-blue-700 border-blue-200"
-    };
 
-    setRoles(prev => [...prev, newRole]);
-    setRolePermissions(prev => ({
-      ...prev,
-      [roleId]: JSON.parse(JSON.stringify(prev.employee || {}))
-    }));
+    const trimmedName = newRoleName.trim();
+    // Safe role code generation according to backend regex: ^[a-z0-9_]{2,50}$
+    let generatedCode = trimmedName.toLowerCase().replace(/[\s\-\/\\]+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (generatedCode.length < 2) {
+      setErrorMsg("Role title must produce a valid code at least 2 characters long (letters, numbers, underscores).");
+      return;
+    }
 
-    setNewRoleName("");
-    setShowAddRoleModal(false);
-    setSuccessMsg(`Role "${newRole.name}" created! Click Save Changes.`);
-    setTimeout(() => setSuccessMsg(""), 3000);
+    // Check duplicate role code
+    const isDuplicate = roles.some(r => (r.code || r.id).toLowerCase() === generatedCode.toLowerCase());
+    if (isDuplicate) {
+      setErrorMsg(`Role code '${generatedCode}' already exists in database.`);
+      return;
+    }
+
+    setIsCreatingRole(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+
+      const res = await fetch("/api/admin/roles", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          code: generatedCode,
+          name: trimmedName,
+          description: "",
+          permissions: []
+        })
+      });
+
+      if (res.ok) {
+        const createdRole = await res.json();
+        setNewRoleName("");
+        setShowAddRoleModal(false);
+        setSuccessMsg(`Role "${createdRole.name}" created successfully in database!`);
+        await loadData();
+        setTimeout(() => setSuccessMsg(""), 3500);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error("Role creation failed:", errData);
+        setErrorMsg(errData.detail || "Failed to create role in backend.");
+      }
+    } catch (err) {
+      console.error("Error calling POST /api/admin/roles:", err);
+      setErrorMsg("Network error connecting to backend role API.");
+    } finally {
+      setIsCreatingRole(false);
+    }
+  };
+
+  const handleSaveRolePermissions = async (roleToSave) => {
+    if (!isAdmin || !roleToSave) return;
+    const targetRoleId = roleToSave.db_id || roleToSave.id;
+    const roleCodeKey = roleToSave.code || roleToSave.id;
+    
+    // Collect active permission codes from rolePermissions[roleCodeKey]
+    const currentPermMap = rolePermissions[roleCodeKey] || {};
+    const activePermCodes = Object.keys(currentPermMap).filter(permCode => {
+      const pState = currentPermMap[permCode];
+      return pState && (pState.read || pState.write || pState.admin);
+    });
+
+    setSavingRolePerms(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+      const res = await fetch(`/api/admin/roles/${targetRoleId}/permissions`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          permission_codes: activePermCodes
+        })
+      });
+
+      if (res.ok) {
+        setSuccessMsg(`✓ Permissions for role "${roleToSave.name}" updated in database!`);
+        await loadData();
+        setTimeout(() => setSuccessMsg(""), 3500);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setErrorMsg(errData.detail || "Failed to update role permissions.");
+      }
+    } catch (err) {
+      console.error("Error updating role permissions:", err);
+      setErrorMsg("Network error updating role permissions.");
+    } finally {
+      setSavingRolePerms(false);
+    }
   };
 
   const handleSaveAll = async () => {
@@ -765,8 +881,25 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
+
+      // Update backend role permissions for each role
+      for (const r of roles) {
+        const roleId = r.db_id || r.id;
+        const roleCode = r.code || r.id;
+        if (roleId && rolePermissions[roleCode]) {
+          const activePermCodes = Object.keys(rolePermissions[roleCode]).filter(pCode => {
+            const pState = rolePermissions[roleCode][pCode];
+            return pState && (pState.read || pState.write || pState.admin);
+          });
+          await fetch(`/api/admin/roles/${roleId}/permissions`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ permission_codes: activePermCodes })
+          }).catch(() => {});
+        }
+      }
 
       await fetch("/api/admin/config", {
         method: "POST",
@@ -795,16 +928,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
           key: "RBAC_CUSTOM_FIELDS",
           value: JSON.stringify(customFields),
           description: "Dynamic custom fields configured per scope"
-        })
-      });
-
-      await fetch("/api/admin/config", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          key: "RBAC_CUSTOM_ROLES",
-          value: JSON.stringify(roles),
-          description: "System roles list"
         })
       });
 
@@ -1473,13 +1596,28 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
 
                 {/* Modal footer */}
-                <div className="p-3.5 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end">
+                <div className="p-3.5 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setSelectedRoleId("")}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer"
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition cursor-pointer"
                   >
-                    Done
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const activeRoleObj = roles.find(r => r.id === selectedRoleId || r.code === selectedRoleId);
+                      if (activeRoleObj) {
+                        await handleSaveRolePermissions(activeRoleObj);
+                      }
+                      setSelectedRoleId("");
+                    }}
+                    disabled={savingRolePerms}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {savingRolePerms ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    <span>Save & Apply Clearances</span>
                   </button>
                 </div>
               </div>
@@ -1510,50 +1648,24 @@ export default function AdminRBAC({ onRefreshSignal }) {
               >
                 All users
               </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("admin")}
-                className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
-                  roleFilter === "admin" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Administrator
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("manager")}
-                className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
-                  roleFilter === "manager" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("ap_specialist")}
-                className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
-                  roleFilter === "ap_specialist" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Consultant
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("auditor")}
-                className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
-                  roleFilter === "auditor" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Auditor
-              </button>
+              {roles.map(r => {
+                const rCode = r.code || r.id;
+                const isSelected = roleFilter.toLowerCase() === rCode.toLowerCase();
+                return (
+                  <button
+                    key={rCode}
+                    type="button"
+                    onClick={() => setRoleFilter(rCode)}
+                    className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
+                      isSelected
+                        ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
+                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {r.name}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Users List Data Table */}
@@ -1984,13 +2096,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <select
                     value={newUserRole}
                     onChange={e => setNewUserRole(e.target.value)}
-                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
                   >
-                    <option value="employee">General Employee</option>
-                    <option value="ap_specialist">AP Specialist</option>
-                    <option value="manager">Approver / Manager</option>
-                    <option value="auditor">Internal Auditor</option>
-                    <option value="admin">Administrator</option>
+                    {roles.map(r => (
+                      <option key={r.code || r.id} value={r.code || r.id}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -2132,13 +2244,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <select
                     value={editingUserModal.role || 'employee'}
                     onChange={e => setEditingUserModal({ ...editingUserModal, role: e.target.value })}
-                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
                   >
-                    <option value="employee">General Employee</option>
-                    <option value="ap_specialist">AP Specialist</option>
-                    <option value="manager">Approver / Manager</option>
-                    <option value="auditor">Internal Auditor</option>
-                    <option value="admin">Administrator</option>
+                    {roles.map(r => (
+                      <option key={r.code || r.id} value={r.code || r.id}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

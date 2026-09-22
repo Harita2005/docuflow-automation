@@ -1,9 +1,4 @@
-import os, re
-from app.routers.documents import resolve_checklist_items
-import json
-import base64
-import datetime
-import logging
+import os, re, threading, json, base64, datetime, logging
 from pathlib import Path
 from typing import List, Optional, Any, Union
 from pydantic import BaseModel
@@ -22,6 +17,170 @@ from app.database.models import (
     WorkflowProfile,
     WorkflowStepDefinition,
 )
+from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
+from app.services.rules_engine import get_doc_type_prefix, generate_document_id
+from app.services.ocr_service import extract_text_from_pdf
+from app.auth import verify_service_api_key
+from app.routers.documents import resolve_checklist_items
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
+
+SCHEMA_ALTER_LOCK = threading.Lock()
+
+CANONICAL_FIELD_ALIASES = {
+    "account_name": "account_name",
+    "accountname": "account_name",
+    "business_partner_code": "bp_code",
+    "businesspartnercode": "bp_code",
+    "bp_code": "bp_code",
+    "bpcode": "bp_code",
+    "dealer_distributor_name": "dealer_name",
+    "dealerdistributorname": "dealer_name",
+    "dealer_name": "dealer_name",
+    "dealername": "dealer_name",
+    "employee_name": "employee_name",
+    "employeename": "employee_name",
+    "employee_id": "employee_id",
+    "employeeid": "employee_id",
+    "employee_division": "employee_division",
+    "employeedivision": "employee_division",
+    "employee_segment": "employee_segment",
+    "employeesegment": "employee_segment",
+    "survey_date": "survey_date",
+    "surveydate": "survey_date",
+    "subtype_of_complaint": "subtype_of_complaint",
+    "subtypeofcomplaint": "subtype_of_complaint",
+    "additional_comments": "additional_comments",
+    "additionalcomments": "additional_comments",
+    "bp_type": "bp_type",
+    "bptype": "bp_type",
+    "type_of_complaint": "type_of_complaint",
+    "typeofcomplaint": "type_of_complaint",
+    "customer_code": "customer_code",
+    "customercode": "customer_code",
+    "invoice_number": "invoice_number",
+    "invoicenumber": "invoice_number",
+    "docrefno": "invoice_number",
+    "expense_type": "expense_type",
+    "expensetype": "expense_type",
+    "department": "department",
+    "credit_note_number": "credit_note_number",
+    "creditnotenumber": "credit_note_number",
+    "reason_for_credit": "reason_for_credit",
+    "reasonforcredit": "reason_for_credit",
+    "original_invoice_ref": "original_invoice_ref",
+    "originalinvoiceref": "original_invoice_ref",
+    "image_1": "image_1",
+    "image_2": "image_2",
+    "image_3": "image_3",
+    "image_4": "image_4",
+    "image_5": "image_5",
+}
+
+def sanitize_column_name(raw_name: str) -> str:
+    """
+    Converts incoming field name into a safe SQL Server column identifier (lower_snake_case).
+    Normalizes field names and maps to real SQL column identifiers.
+    """
+    s = raw_name.strip()
+    s = re.sub(r'[\s\-\.\/]+', '_', s)
+    s = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', s)
+    s = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', '_', s)
+    s = s.lower()
+    s = re.sub(r'[^a-zA-Z0-9_]', '_', s)
+    s = re.sub(r'_+', '_', s)
+    s = re.sub(r'^[0-9]+', '', s)
+    s = s.strip('_')
+    if s in CANONICAL_FIELD_ALIASES:
+        return CANONICAL_FIELD_ALIASES[s]
+    no_underscore = s.replace('_', '')
+    if no_underscore in CANONICAL_FIELD_ALIASES:
+        return CANONICAL_FIELD_ALIASES[no_underscore]
+    if not s:
+        s = "col_custom"
+    s = s[:128]
+    reserved_words = {'select', 'insert', 'update', 'delete', 'table', 'from', 'where', 'drop', 'alter', 'create', 'index', 'column', 'null'}
+    if s in reserved_words:
+        s = f"field_{s}"
+    return s
+
+def infer_sql_server_datatype(val: Any) -> str:
+    """Infers appropriate SQL Server data type based on incoming Python value."""
+    if isinstance(val, bool):
+        return "BIT"
+    elif isinstance(val, int):
+        return "INT"
+    elif isinstance(val, float):
+        return "NUMERIC(18,2)"
+    elif isinstance(val, str):
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', val.strip()):
+            return "VARCHAR(50)"
+        return "NVARCHAR(MAX)"
+    elif isinstance(val, (dict, list)):
+        return "NVARCHAR(MAX)"
+    return "NVARCHAR(MAX)"
+
+def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_value: Any) -> str:
+    """
+    Safely checks whether a real column exists in `documents` table using database metadata.
+    If column exists (case-insensitive) -> returns the existing column name.
+    If column does NOT exist -> safely executes ALTER TABLE to create column and returns new column name.
+    """
+    col_name = sanitize_column_name(raw_field_name)
+    if not col_name:
+        return raw_field_name
+
+    with SCHEMA_ALTER_LOCK:
+        try:
+            from sqlalchemy import text
+            dialect_name = db.bind.dialect.name if (db.bind and hasattr(db.bind, 'dialect')) else 'mssql'
+            
+            if dialect_name == 'mssql':
+                check_query = text("""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_NAME = 'documents' AND LOWER(COLUMN_NAME) = LOWER(:col_name)
+                """)
+            else:
+                check_query = text("""
+                    SELECT name 
+                    FROM pragma_table_info('documents') 
+                    WHERE LOWER(name) = LOWER(:col_name)
+                """)
+            
+            existing = db.execute(check_query, {"col_name": col_name}).fetchone()
+            if existing:
+                return existing[0]
+
+            sql_type = infer_sql_server_datatype(sample_value)
+            
+            if dialect_name == 'mssql':
+                alter_query = text(f"""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = 'documents' AND LOWER(COLUMN_NAME) = LOWER(:col_name)
+                    )
+                    BEGIN
+                        ALTER TABLE dbo.documents ADD [{col_name}] {sql_type} NULL
+                    END
+                """)
+                db.execute(alter_query, {"col_name": col_name})
+                db.commit()
+            else:
+                try:
+                    alter_query = text(f"ALTER TABLE documents ADD COLUMN [{col_name}] {sql_type}")
+                    db.execute(alter_query)
+                    db.commit()
+                except Exception as exc:
+                    logging.getLogger(__name__).debug("Database alter column error (ignoring if exists): %s", exc)
+
+            logger.info("Dynamically created REAL SQL Server column '%s' (%s) in documents table", col_name, sql_type)
+            return col_name
+        except Exception as e:
+            logger.error("Error creating dynamic column '%s': %s", col_name, e)
+            return col_name
+
 from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
 from app.services.rules_engine import get_doc_type_prefix, generate_document_id
 from app.services.ocr_service import extract_text_from_pdf
@@ -100,7 +259,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
             db.execute(text("\n                INSERT INTO integration.source_records (source_system_id, sync_run_id, external_record_key, payload_json, status, ingested_at)\n                VALUES (:sys_id, :run_id, :key, :payload, 'RECEIVED', SYSUTCDATETIME())\n            "), {'sys_id': sys_id, 'run_id': run_id, 'key': idempotency_key, 'payload': raw_payload})
             rec_row_new = db.execute(text('SELECT source_record_id FROM integration.source_records WHERE source_system_id = :sys_id AND external_record_key = :key'), {'sys_id': sys_id, 'key': idempotency_key}).fetchone()
             source_rec_id = rec_row_new[0] if rec_row_new else 1
-        doc_type_code = req.document_type or 'AP INVOICE'
+        doc_type_code = req.document_type or req.category or 'General Records'
         db.execute(text('\n            IF NOT EXISTS (SELECT 1 FROM core.document_types WHERE type_code = :code)\n            BEGIN\n                INSERT INTO core.document_types (type_code, type_name, is_active, created_at)\n                VALUES (:code, :name, 1, SYSUTCDATETIME())\n            END\n        '), {'code': doc_type_code, 'name': f'Document Type {doc_type_code}'})
         type_row = db.execute(text('SELECT document_type_id FROM core.document_types WHERE type_code = :code'), {'code': doc_type_code}).fetchone()
         doc_type_id = type_row[0] if type_row else 1
@@ -108,7 +267,8 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
         db.execute(text("\n            IF NOT EXISTS (SELECT 1 FROM security.app_users WHERE username = :uname)\n            BEGIN\n                INSERT INTO security.app_users (username, email, password_hash, external_user_key, is_active, created_at)\n                VALUES (:uname, :email, '$2b$12$Z0000000000000000000000000000000000000000000000000000', :uname, 1, SYSUTCDATETIME())\n            END\n        "), {'uname': creator_name, 'email': 'system@docuflow.local'})
         user_row = db.execute(text('SELECT user_id FROM security.app_users WHERE username = :uname'), {'uname': creator_name}).fetchone()
         user_id = user_row[0] if user_row else 1
-        doc_number = req.invoice_number or f'INV-{idempotency_key}'
+        doc_pref = get_doc_type_prefix(doc_type=req.document_type or '', category=req.category or '')
+        doc_number = req.invoice_number or f'{doc_pref}-{idempotency_key}'
         doc_row = db.execute(text('SELECT document_id, status FROM core.documents WHERE document_type_id = :type_id AND document_number = :doc_num'), {'type_id': doc_type_id, 'doc_num': doc_number}).fetchone()
         doc_id = None
         doc_status = target_inv.status or 'SUBMITTED'
@@ -204,15 +364,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         calculated_base = round(req.amount / 1.18, 2)
         calculated_tax = round(req.amount - calculated_base, 2)
     line_items_str = json.dumps(req.line_items) if req.line_items else None
-    custom_dict = {}
-    if existing and existing.custom_data:
-        try:
-            custom_dict.update(json.loads(existing.custom_data) if isinstance(existing.custom_data, str) else existing.custom_data)
-        except Exception as exc:
-            logger.debug("Failed parsing existing custom_data: %s", exc)
-    if req.custom_data and isinstance(req.custom_data, dict):
-        custom_dict.update(req.custom_data)
-    custom_data_str = json.dumps(custom_dict) if custom_dict else None
+
+    existing_custom_str = existing.custom_data if (existing and existing.custom_data) else None
+
     if existing:
         existing.doc_num = req.doc_num or existing.doc_num
         existing.vendor_name = req.vendor_name or existing.vendor_name
@@ -230,16 +384,37 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         existing.cost_center = req.cost_center or existing.cost_center
         existing.plant = req.plant or existing.plant
         existing.payment_terms = req.payment_terms or existing.payment_terms
+
+        # Explicit real column mappings for document fields
+        if req.account_name is not None: existing.account_name = req.account_name
+        if req.bp_code is not None: existing.bp_code = req.bp_code
+        if req.employee_name is not None: existing.employee_name = req.employee_name
+        if req.employee_id is not None: existing.employee_id = req.employee_id
+        if req.employee_division is not None: existing.employee_division = req.employee_division
+        if req.employee_segment is not None: existing.employee_segment = req.employee_segment
+        if req.survey_date is not None: existing.survey_date = req.survey_date
+        if req.subtype_of_complaint is not None: existing.subtype_of_complaint = req.subtype_of_complaint
+        if req.additional_comments is not None: existing.additional_comments = req.additional_comments
+        if req.dealer_name is not None: existing.dealer_name = req.dealer_name
+        if req.bp_type is not None: existing.bp_type = req.bp_type
+        if req.type_of_complaint is not None: existing.type_of_complaint = req.type_of_complaint
+        if req.customer_code is not None: existing.customer_code = req.customer_code
+        if req.image_1 is not None: existing.image_1 = req.image_1
+        if req.image_2 is not None: existing.image_2 = req.image_2
+        if req.image_3 is not None: existing.image_3 = req.image_3
+        if req.image_4 is not None: existing.image_4 = req.image_4
+        if req.image_5 is not None: existing.image_5 = req.image_5
+
         if line_items_str:
             existing.line_items_json = line_items_str
-        if custom_data_str:
-            existing.custom_data = custom_data_str
         existing.is_deleted = False
         existing.deleted_at = None
         target_inv = existing
     else:
-        doc_id = generate_document_id(db, doc_type=req.document_type or 'AP INVOICE', category=req.category or '')
+        doc_type_pref = get_doc_type_prefix(doc_type=req.document_type or '', category=req.category or '')
+        doc_id = generate_document_id(db, doc_type=req.document_type or '', category=req.category or '')
         timestamp = int(datetime.datetime.utcnow().timestamp())
+        effective_doc_type = req.document_type or req.category or 'General Records'
         new_inv = Invoice(
             id=doc_id,
             doc_key=str(req.doc_key) if req.doc_key is not None else None,
@@ -248,29 +423,140 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             vendor_name=req.vendor_name or 'Unknown Vendor',
             vendor_code=req.vendor_code,
             vendor_gstin=req.vendor_gstin,
-            invoice_number=req.invoice_number or f'INV-{timestamp % 100000}',
+            invoice_number=req.invoice_number or f'{doc_type_pref}-{timestamp % 100000}',
             invoice_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'),
             po_number=req.po_number,
             amount=req.amount,
             base_amount=calculated_base or 0.0,
             tax_amount=calculated_tax or 0.0,
             currency=req.currency or 'INR',
-            document_type=req.document_type or 'AP INVOICE',
+            document_type=effective_doc_type,
             division=effective_division,
             category=req.category,
             cost_center=req.cost_center,
             plant=req.plant,
             payment_terms=req.payment_terms or 'Net 30',
+            account_name=req.account_name,
+            bp_code=req.bp_code,
+            employee_name=req.employee_name,
+            employee_id=req.employee_id,
+            employee_division=req.employee_division,
+            employee_segment=req.employee_segment,
+            survey_date=req.survey_date,
+            subtype_of_complaint=req.subtype_of_complaint,
+            additional_comments=req.additional_comments,
+            dealer_name=req.dealer_name,
+            bp_type=req.bp_type,
+            type_of_complaint=req.type_of_complaint,
+            customer_code=req.customer_code,
+            image_1=req.image_1,
+            image_2=req.image_2,
+            image_3=req.image_3,
+            image_4=req.image_4,
+            image_5=req.image_5,
             status='Pending Approval',
             current_stage=1,
             total_stages=2,
             line_items_json=line_items_str,
-            custom_data=custom_data_str
+            custom_data=existing_custom_str
         )
         db.add(new_inv)
         target_inv = new_inv
     db.commit()
     db.refresh(target_inv)
+
+    # Process all incoming fields dynamically: create real SQL Server columns if missing & update values directly
+    raw_payload_dict = req.dict() if hasattr(req, 'dict') else req.model_dump()
+    if hasattr(req, '__dict__'):
+        for k, v in req.__dict__.items():
+            if not k.startswith('_') and k not in raw_payload_dict:
+                raw_payload_dict[k] = v
+
+    excluded_keys = {
+        'access_token', 'accessToken', 'token', 'Token', 
+        'api_key', 'apiKey', 'secret_key', 'secretKey', 
+        'auto_route', 'line_items', 'custom_data',
+        'company_code', 'CompanyCode', 'DocKey', 'DocNum', 
+        'DocEntry', 'TransType', 'Category', 'CostCenter', 
+        'Branch', 'CardName', 'CardCode', 'GSTIN', 'DocRefNo', 
+        'DocDate', 'PONumber', 'DocTotal'
+    }
+
+    from sqlalchemy import text
+    from app.database.models import Document
+    real_doc_columns = {c.name for c in Document.__table__.columns if c.name != "custom_data"}
+
+    dynamic_updates = {}
+    cleaned_custom_data = dict(req.custom_data) if (req.custom_data and isinstance(req.custom_data, dict)) else {}
+
+    # 1. Process top-level raw payload fields
+    for k, v in raw_payload_dict.items():
+        if k in excluded_keys or v is None:
+            continue
+        
+        col_name = sanitize_column_name(k)
+        if col_name in real_doc_columns:
+            dynamic_updates[col_name] = v
+        else:
+            col_name_real = ensure_dynamic_column_and_get_name(db, k, v)
+            dynamic_updates[col_name_real] = v
+
+    # 2. Process fields passed inside custom_data payload dictionary (if any)
+    if req.custom_data and isinstance(req.custom_data, dict):
+        keys_to_remove = []
+        for ck, cv in req.custom_data.items():
+            col_name = sanitize_column_name(ck)
+            if col_name in real_doc_columns:
+                if cv is not None:
+                    dynamic_updates[col_name] = cv
+                keys_to_remove.append(ck)
+            else:
+                col_name_real = ensure_dynamic_column_and_get_name(db, ck, cv)
+                if col_name_real in real_doc_columns:
+                    if cv is not None:
+                        dynamic_updates[col_name_real] = cv
+                    keys_to_remove.append(ck)
+        for rk in keys_to_remove:
+            cleaned_custom_data.pop(rk, None)
+
+    # 3. Purge any remaining keys in cleaned_custom_data that map to real SQL columns
+    if cleaned_custom_data:
+        keys_to_purge = []
+        for k, v in cleaned_custom_data.items():
+            col_name = sanitize_column_name(k)
+            if col_name in real_doc_columns:
+                if v is not None and col_name not in dynamic_updates:
+                    dynamic_updates[col_name] = v
+                keys_to_purge.append(k)
+        for pk in keys_to_purge:
+            cleaned_custom_data.pop(pk, None)
+
+    if dynamic_updates:
+        for col_name, val in dynamic_updates.items():
+            val_formatted = json.dumps(val) if isinstance(val, (dict, list)) else val
+            try:
+                db.execute(
+                    text(f"UPDATE documents SET [{col_name}] = :val WHERE id = :doc_id"),
+                    {"val": val_formatted, "doc_id": target_inv.id}
+                )
+                if hasattr(target_inv, col_name):
+                    setattr(target_inv, col_name, val)
+            except Exception as exc:
+                logger.error("Failed setting dynamic column '%s' value: %s", col_name, exc)
+
+    final_custom_data_str = json.dumps(cleaned_custom_data) if cleaned_custom_data else None
+    try:
+        db.execute(
+            text("UPDATE documents SET custom_data = :cd WHERE id = :doc_id"),
+            {"cd": final_custom_data_str, "doc_id": target_inv.id}
+        )
+        target_inv.custom_data = final_custom_data_str
+    except Exception as exc:
+        logger.error("Failed setting custom_data: %s", exc)
+
+    db.commit()
+    db.refresh(target_inv)
+
     db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == target_inv.id).delete()
     if req.line_items:
         for itm in req.line_items:
@@ -289,7 +575,12 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if profile:
             from app.services.rules_engine import infer_document_type
             target_inv.workflow_profile_id = profile.profile_name
-            target_inv.document_type = profile.workflow_type or infer_document_type(category=target_inv.category, wf_name=target_wf, doc_type=target_inv.document_type)
+            if req.document_type and req.document_type.strip():
+                target_inv.document_type = req.document_type
+            elif profile.workflow_type and profile.workflow_type.upper().strip() not in ("GENERAL RECORDS", "AP INVOICE", ""):
+                target_inv.document_type = profile.workflow_type
+            else:
+                target_inv.document_type = infer_document_type(category=target_inv.category, wf_name=target_wf, doc_type=target_inv.document_type)
             steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == profile.profile_name).order_by(WorkflowStepDefinition.stage_number.asc()).all()
             target_inv.total_stages = len(steps) if steps else 2
             if rule_action == 'AUTO_APPROVE':

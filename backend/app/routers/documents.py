@@ -9,7 +9,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, and_, func, extract
@@ -72,12 +72,68 @@ def safe_broadcast_event(event_type: str, payload: dict):
         logger.debug('Handled exception: %s', e)
 router = APIRouter(tags=['Invoices & Documents'])
 
+def _unpack_custom_data_into_dict(inv_dict: dict) -> dict:
+    """
+    Promotes fields stored inside the custom_data JSON blob into top-level
+    response keys, but ONLY when the real column value is NULL/None.
+    This handles legacy documents synced before direct-column mapping was in place.
+    Does NOT modify the database - read-only promotion for API response only.
+    """
+    raw_cd = inv_dict.get('custom_data')
+    if not raw_cd:
+        return inv_dict
+    try:
+        cd = json.loads(raw_cd) if isinstance(raw_cd, str) else (raw_cd if isinstance(raw_cd, dict) else {})
+    except Exception:
+        return inv_dict
+    if not isinstance(cd, dict):
+        return inv_dict
+    for k, v in cd.items():
+        if v is None or v == '':
+            continue
+        # Only promote if the real column is NULL/None or absent at top level
+        existing = inv_dict.get(k)
+        if existing is None:
+            inv_dict[k] = v
+    return inv_dict
+
+
+def attach_dynamic_columns_to_document(db: Session, inv: Any):
+    if not inv or not hasattr(inv, 'id'):
+        return inv
+    try:
+        from sqlalchemy import text
+        row = db.execute(text("SELECT * FROM documents WHERE id = :id"), {"id": str(inv.id)}).mappings().first()
+        if row:
+            for col_name, val in row.items():
+                if not hasattr(inv, col_name) or getattr(inv, col_name) is None:
+                    setattr(inv, col_name, val)
+            # Unpack custom_data JSON fields onto ORM object for legacy documents
+            # where real columns are NULL but data lives inside custom_data blob
+            raw_cd = row.get('custom_data')
+            if raw_cd:
+                try:
+                    cd = json.loads(raw_cd) if isinstance(raw_cd, str) else (raw_cd if isinstance(raw_cd, dict) else {})
+                    if isinstance(cd, dict):
+                        for ck, cv in cd.items():
+                            if cv is not None and cv != '' and (not hasattr(inv, ck) or getattr(inv, ck) is None):
+                                try:
+                                    setattr(inv, ck, cv)
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+    except Exception as exc:
+        logger.debug("Failed attaching dynamic columns to document: %s", exc)
+    return inv
+
 def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     raw_str = str(invoice_id).strip()
     id_clean = re.sub('^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?', '', raw_str, flags=re.IGNORECASE).strip()
     inv = db.query(Invoice).filter((Invoice.id == raw_str) | (Invoice.id == f'DOC-{id_clean}') | (Invoice.id == f'INV-{id_clean}') | (Invoice.id == f'GRN-{id_clean}') | (Invoice.id == f'CV-{id_clean}') | (Invoice.id == id_clean) | Invoice.id.ilike(f'%{id_clean}%') | (Invoice.invoice_number == raw_str) | (Invoice.invoice_number == id_clean) | Invoice.invoice_number.ilike(f'%{id_clean}%') | (Invoice.doc_key == raw_str) | (Invoice.doc_key == id_clean) | Invoice.doc_key.ilike(f'%{id_clean}%')).filter(Invoice.is_deleted == False).first()
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+    attach_dynamic_columns_to_document(db, inv)
     return inv
 
 def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: Optional[Session] = None) -> bool:
@@ -825,6 +881,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                 if not any(k in st_low for k in ['reject', 'return', 'failed', 'cancelled']):
                     continue
 
+        attach_dynamic_columns_to_document(db, inv)
         inv_res = InvoiceResponse.from_orm(inv)
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_appr
@@ -1077,7 +1134,17 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                     detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
                 )
 
-    inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
+    try:
+        from sqlalchemy import text
+        row_mapping = db.execute(text("SELECT * FROM documents WHERE id = :id"), {"id": str(inv.id)}).mappings().first()
+        inv_dict = dict(row_mapping) if row_mapping else {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
+    except Exception:
+        inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
+
+    # Promote fields from custom_data JSON into top-level response for legacy documents
+    # where real DB columns are NULL but data was stored inside the custom_data blob.
+    inv_dict = _unpack_custom_data_into_dict(inv_dict)
+
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
     inv_dict['has_rejected'] = has_rej
@@ -2486,6 +2553,34 @@ async def upload_document(
     db.refresh(new_inv)
     safe_broadcast_event('DOCUMENT_CREATED', {'document_id': str(new_inv.id), 'status': new_inv.status, 'current_stage': new_inv.current_stage, 'assigned_approver': new_inv.assigned_approver})
     return {'success': True, 'invoice': new_inv}
+
+@router.post('/api/documents/trigger-workflow/excel')
+async def trigger_workflow_from_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Excel-driven Workflow Trigger Engine:
+    Reads Excel of invoice numbers, matches existing DAAS records, retrieves
+    Compliance Type & Division, determines applicable workflow via Condition Engine,
+    and starts the workflow with Stage 1 approver resolved via Compliance Type + Division + Role.
+    """
+    from app.services.rbac_service import check_permission
+    if not check_permission(current_user, 'doc:create', db) and not check_permission(current_user, 'wf:trigger', db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access Denied: Missing required permission to trigger workflows via Excel."
+        )
+
+    from app.services.excel_trigger_service import process_excel_workflow_trigger
+    file_bytes = await file.read()
+    return process_excel_workflow_trigger(
+        file_bytes=file_bytes,
+        filename=file.filename or 'batch.xlsx',
+        db=db,
+        current_user=current_user
+    )
 
 @router.post('/api/documents/upload-and-route/{synced_doc_id}')
 async def upload_and_route(

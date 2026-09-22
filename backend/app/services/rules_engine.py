@@ -22,8 +22,8 @@ def parse_date_str(val: Any) -> Optional[datetime.date]:
     return None
 
 def infer_document_type(category: str='', trans_type: str='', wf_name: str='', doc_type: str='') -> str:
-    if doc_type and doc_type.upper() not in ['AP INVOICE', '']:
-        return doc_type
+    if doc_type and doc_type.strip():
+        return doc_type.strip()
     n = f'{category} {trans_type} {wf_name}'.upper()
     if 'EVOUCHER' in n or 'E-VOUCHER' in n or 'E_VOUCHER' in n:
         return 'E-VOUCHER'
@@ -31,14 +31,16 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
         return 'CAPEX / FIXED ASSET'
     elif 'GRN' in n or 'STOCK' in n or 'GOODS' in n:
         return 'GRN / GOODS RECEIPT'
-    elif 'CASHFLOW' in n or 'CASH_FLOW' in n or 'PETTY' in n or ('CASH FLOW' in n):
+    elif 'CASHFLOW' in n or 'CASH_FLOW' in n or 'PETTY' in n or ('CASH FLOW' in n) or 'CASH VOUCHER' in n:
         return 'CASH VOUCHER'
     elif 'FREIGHT' in n or 'TRANSPORT' in n or 'COURIER' in n or ('POSTAGE' in n):
         return 'FREIGHT & LOGISTICS'
-    elif 'RENT' in n or 'EB' in n or 'ELECTRICITY' in n or ('POWER' in n):
+    elif 'RENT' in n or 'EB' in n or 'ELECTRICITY' in n or ('POWER' in n) or 'UTILITY' in n:
         return 'UTILITY & RENT'
-    elif 'TRAVEL' in n or 'WELFARE' in n or 'INCENTIVE' in n or ('SALARY' in n):
+    elif 'TRAVEL' in n or 'WELFARE' in n or 'INCENTIVE' in n or ('SALARY' in n) or 'STAFF' in n or 'HR' in n:
         return 'STAFF & HR EXPENSE'
+    elif 'COMPLAINT' in n or 'FEEDBACK' in n:
+        return 'CUSTOMER FEEDBACK'
     elif 'PURCHASE' in n or 'PO_' in n:
         return 'PURCHASE INVOICE'
     elif 'MAINTENANCE' in n or 'REPAIRS' in n or 'SERVICE' in n:
@@ -47,7 +49,9 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
         return 'ADVANCE VOUCHER'
     elif 'JRNL' in n or 'JOURNAL' in n:
         return 'JOURNAL VOUCHER'
-    return doc_type or 'PURCHASE INVOICE'
+    elif category and category.strip():
+        return category.strip()
+    return 'General Records'
 
 def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', wf_name: str='') -> str:
     combined = f"{doc_type or ''} {category or ''} {trans_type or ''} {wf_name or ''}".strip().upper()
@@ -79,13 +83,17 @@ def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', 
         return 'PRJ'
     elif 'NON - RETURNABLE' in combined or 'NON-RETURNABLE' in combined:
         return 'NR'
+    elif 'CUSTOMER COMPLAINT' in combined or 'COMPLAINT' in combined or 'FEEDBACK' in combined:
+        return 'CMP'
     elif 'PURCHASE ORDER' in combined or combined == 'PO' or ' PO ' in f' {combined} ':
         return 'PO'
+    elif 'GENERAL' in combined or 'RECORD' in combined:
+        return 'DOC'
     elif 'INVOICE' in combined or 'AP' in combined or 'TAX' in combined:
         return 'INV'
     elif 'VOUCHER' in combined:
         return 'VOUCH'
-    return 'INV'
+    return 'DOC'
 
 def generate_document_id(
     db: Session,

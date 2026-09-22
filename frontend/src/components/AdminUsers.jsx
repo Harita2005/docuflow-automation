@@ -26,103 +26,6 @@ import {
   FileSpreadsheet,
   Sliders
 } from 'lucide-react';
-
-const PERMISSION_DEFINITIONS = [
-  {
-    id: "doc:verify",
-    label: "Auditing",
-    desc: "Allows full access to review and activate candidates",
-    iconColor: "bg-blue-50 text-blue-600 border-blue-100",
-    icon: BarChart3
-  },
-  {
-    id: "doc:edit",
-    label: "Allocate as job authority",
-    desc: "Allows the user to gain full access to review",
-    iconColor: "bg-sky-50 text-sky-600 border-sky-100",
-    icon: CheckSquare
-  },
-  {
-    id: "wf:approve",
-    label: "Candidate activation",
-    desc: "Allows to activate candidates enabling them to work",
-    iconColor: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    icon: ShieldCheck
-  },
-  {
-    id: "doc:upload",
-    label: "Candidate documents",
-    desc: "Allows the user to view all candidate documents",
-    iconColor: "bg-purple-50 text-purple-600 border-purple-100",
-    icon: FileText
-  },
-  {
-    id: "audit:signoff",
-    label: "Financial information",
-    desc: "Allows to view the financial information of candidates",
-    iconColor: "bg-amber-50 text-amber-600 border-amber-100",
-    icon: DollarSign
-  },
-  {
-    id: "sys:flows",
-    label: "Job posting",
-    desc: "Allows bulk texts, posting jobs to paid job boards",
-    iconColor: "bg-indigo-50 text-indigo-600 border-indigo-100",
-    icon: FileSpreadsheet
-  }
-];
-
-const DEFAULT_ROLE_PERMISSIONS = {
-  admin: {
-    "doc:verify": { read: true, write: true, admin: true },
-    "doc:edit": { read: true, write: true, admin: true },
-    "wf:approve": { read: true, write: true, admin: true },
-    "doc:upload": { read: true, write: true, admin: true },
-    "audit:signoff": { read: true, write: true, admin: true },
-    "sys:flows": { read: true, write: true, admin: true }
-  },
-  manager: {
-    "doc:verify": { read: true, write: true, admin: false },
-    "doc:edit": { read: true, write: false, admin: false },
-    "wf:approve": { read: true, write: true, admin: true },
-    "doc:upload": { read: true, write: true, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "sys:flows": { read: false, write: false, admin: false }
-  },
-  auditor: {
-    "doc:verify": { read: true, write: true, admin: false },
-    "doc:edit": { read: true, write: false, admin: false },
-    "wf:approve": { read: true, write: false, admin: false },
-    "doc:upload": { read: true, write: false, admin: false },
-    "audit:signoff": { read: true, write: true, admin: true },
-    "sys:flows": { read: true, write: false, admin: false }
-  },
-  ap_specialist: {
-    "doc:verify": { read: true, write: true, admin: false },
-    "doc:edit": { read: true, write: false, admin: false },
-    "wf:approve": { read: false, write: false, admin: false },
-    "doc:upload": { read: true, write: false, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "sys:flows": { read: false, write: false, admin: false }
-  },
-  employee: {
-    "doc:verify": { read: true, write: false, admin: false },
-    "doc:edit": { read: false, write: false, admin: false },
-    "wf:approve": { read: false, write: false, admin: false },
-    "doc:upload": { read: true, write: false, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "sys:flows": { read: false, write: false, admin: false }
-  }
-};
-
-const SYSTEM_ROLES = [
-  { id: "admin", name: "Administrator" },
-  { id: "manager", name: "Manager" },
-  { id: "ap_specialist", name: "Consultant" },
-  { id: "auditor", name: "Internal Auditor" },
-  { id: "employee", name: "Employee" }
-];
-
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -130,26 +33,33 @@ export default function AdminUsers() {
   const [saving, setSaving] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  
-  // Custom permissions UI side panel state
-  const [panelUserGroup, setPanelUserGroup] = useState("ap_specialist");
+
+  const [roles, setRoles] = useState([]);
+  const [permissions, setPermissions] = useState([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+
+  const [panelUserGroup, setPanelUserGroup] = useState("");
   const [panelPermissions, setPanelPermissions] = useState({});
   const [userOverrides, setUserOverrides] = useState({});
-  const [rolePermissions, setRolePermissions] = useState(DEFAULT_ROLE_PERMISSIONS);
-  
+
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("ALL"); // "ALL" | "admin" | "manager" | "ap_specialist" | "auditor" | "employee"
+  const [roleFilter, setRoleFilter] = useState("ALL");
+
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
   const [toastMsg, setToastMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
+  
 
   const currentUserRole = (localStorage.getItem("currentUserRole") || "admin").toLowerCase();
   const isAdmin = currentUserRole === "admin" || currentUserRole === "settings_editor";
 
   useEffect(() => { 
-    fetchUsers(); 
-    fetchConfigs();
+  fetchUsers();
+  fetchRoles();
+  fetchPermissions();
+  fetchConfigs();
     
     // Window click listener to close action menus
     const handleOutsideClick = () => {
@@ -160,31 +70,71 @@ export default function AdminUsers() {
   }, []);
 
   // Update permission panel values when selectedUser or configs change
-  useEffect(() => {
-    if (selectedUser) {
-      setPanelUserGroup(selectedUser.role || "employee");
-      
-      const userKey = selectedUser.username || selectedUser.email;
-      const userRole = selectedUser.role || "employee";
-      const roleBase = rolePermissions[userRole] || DEFAULT_ROLE_PERMISSIONS[userRole] || {};
-      const overrides = userOverrides[userKey] || {};
-      
-      const initialPerms = {};
-      PERMISSION_DEFINITIONS.forEach(perm => {
-        // Inherited base value
-        const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-        // Override value
-        const overrideVal = overrides[perm.id];
-        
-        let effectiveVal = baseVal;
-        if (overrideVal !== undefined) {
-          effectiveVal = overrideVal.write !== undefined ? overrideVal.write : (overrideVal.read !== undefined ? overrideVal.read : baseVal);
-        }
-        initialPerms[perm.id] = effectiveVal;
-      });
-      setPanelPermissions(initialPerms);
+  // Update permission panel when selected user, roles, permissions, or overrides change
+useEffect(() => {
+  if (!selectedUser) return;
+
+  const userRole =
+    selectedUser.role_code ||
+    selectedUser.role ||
+    "";
+
+  setPanelUserGroup(userRole);
+
+  const userKey =
+    selectedUser.username ||
+    selectedUser.email;
+
+  const overrides =
+    userOverrides[userKey] || {};
+
+  const selectedRole = roles.find(
+    role => role.code === userRole
+  );
+
+  const initialPerms = {};
+
+  permissions.forEach(permission => {
+    const permissionKey =
+      permission.code ||
+      permission.id ||
+      permission.key;
+
+    if (!permissionKey) return;
+
+    const rolePermission =
+      selectedRole?.permissions?.find(
+        rp =>
+          (rp.code || rp.id || rp.key) === permissionKey
+      );
+
+    let enabled =
+      rolePermission?.write ??
+      rolePermission?.enabled ??
+      rolePermission?.read ??
+      false;
+
+    const override = overrides[permissionKey];
+
+    if (override !== undefined) {
+      enabled =
+        typeof override === "object"
+          ? override.write ??
+            override.read ??
+            enabled
+          : !!override;
     }
-  }, [selectedUser, userOverrides, rolePermissions]);
+
+    initialPerms[permissionKey] = !!enabled;
+  });
+
+  setPanelPermissions(initialPerms);
+}, [
+  selectedUser,
+  userOverrides,
+  roles,
+  permissions
+]);
 
   const fetchConfigs = async () => {
     try {
@@ -203,17 +153,75 @@ export default function AdminUsers() {
           }
         }
         
-        const matrixCfg = data.find(c => c.key === "RBAC_GRANULAR_MATRIX");
-        if (matrixCfg) {
-          try {
-            setRolePermissions(JSON.parse(matrixCfg.value));
-          } catch (e) {
-            console.error(e);
-          }
-        }
+        
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+    const fetchRoles = async () => {
+    setLoadingRoles(true);
+
+    try {
+      const token = localStorage.getItem("authToken");
+
+      const res = await fetch("/api/admin/roles", {
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : {},
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to load roles");
+      }
+
+      const data = await res.json();
+
+      const roleList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.roles)
+          ? data.roles
+          : [];
+
+      setRoles(roleList);
+    } catch (error) {
+      console.error("Failed to load roles:", error);
+      setRoles([]);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+  const fetchPermissions = async () => {
+    setLoadingPermissions(true);
+
+    try {
+      const token = localStorage.getItem("authToken");
+
+      const res = await fetch("/api/admin/permissions", {
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : {},
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to load permissions");
+      }
+
+      const data = await res.json();
+
+      const permissionList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.permissions)
+          ? data.permissions
+          : [];
+
+      setPermissions(permissionList);
+    } catch (error) {
+      console.error("Failed to load permissions:", error);
+      setPermissions([]);
+    } finally {
+      setLoadingPermissions(false);
     }
   };
 
@@ -240,7 +248,10 @@ export default function AdminUsers() {
             username: u.username || u.employee_id,
             email: u.email || `${u.username || 'user'}@labourlink.com`,
             phone_number: u.phone_number || "+91 98400 00000",
-            role: u.role || 'employee',
+            role: u.role,
+            role_id: u.role_id,
+            role_code: u.role_code || u.role,
+            role_name: u.role_name,
             department: u.department || 'General Operations',
             division: u.division || 'VCC',
             is_active: u.is_active !== undefined ? u.is_active : true,
@@ -423,20 +434,41 @@ export default function AdminUsers() {
   };
 
   // Triggered when panel user group dropdown changes
-  const handlePanelGroupChange = (newRole) => {
-    if (!isAdmin) return;
-    setPanelUserGroup(newRole);
-    
-    // Fetch baseline permissions of the newly selected role
-    const roleBase = rolePermissions[newRole] || DEFAULT_ROLE_PERMISSIONS[newRole] || {};
-    const newPerms = {};
-    PERMISSION_DEFINITIONS.forEach(perm => {
-      // Determine base value
-      const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-      newPerms[perm.id] = baseVal;
-    });
-    setPanelPermissions(newPerms);
-  };
+  // Triggered when panel user group dropdown changes
+const handlePanelGroupChange = (newRole) => {
+  if (!isAdmin) return;
+
+  setPanelUserGroup(newRole);
+
+  const selectedRole = roles.find(
+    role => role.code === newRole
+  );
+
+  const newPerms = {};
+
+  permissions.forEach(permission => {
+    const permissionKey =
+      permission.code ||
+      permission.id ||
+      permission.key;
+
+    if (!permissionKey) return;
+
+    const rolePermission =
+      selectedRole?.permissions?.find(
+        rp =>
+          (rp.code || rp.id || rp.key) === permissionKey
+      );
+
+    newPerms[permissionKey] =
+      rolePermission?.write ??
+      rolePermission?.enabled ??
+      rolePermission?.read ??
+      false;
+  });
+
+  setPanelPermissions(newPerms);
+};
 
   // Persists panel role & toggled overrides to backend configurations and user profile
   const handleSavePermissionChanges = async () => {
@@ -454,18 +486,35 @@ export default function AdminUsers() {
       const userKey = selectedUser.username || selectedUser.email;
       const updatedOverrides = { ...userOverrides };
       const overridesForUser = {};
-      const roleBase = rolePermissions[panelUserGroup] || DEFAULT_ROLE_PERMISSIONS[panelUserGroup] || {};
+      const selectedRole = roles.find(role => role.code === panelUserGroup);
 
-      PERMISSION_DEFINITIONS.forEach(perm => {
-        const baseVal = roleBase[perm.id] ? (roleBase[perm.id].write || roleBase[perm.id].read) : false;
-        const currentVal = panelPermissions[perm.id];
+      permissions.forEach(permission => {
+        const permissionKey =
+          permission.code ||
+          permission.id ||
+          permission.key;
+
+        if (!permissionKey) return;
+
+        const rolePermission =
+          selectedRole?.permissions?.find(
+            rp => (rp.code || rp.id || rp.key) === permissionKey
+          );
+
+        const baseVal = !!(
+          rolePermission?.write ??
+          rolePermission?.enabled ??
+          rolePermission?.read ??
+          false
+        );
+        const currentVal = !!panelPermissions[permissionKey];
 
         // If the toggled setting differs from baseline role permission, write an override
         if (currentVal !== baseVal) {
-          overridesForUser[perm.id] = {
+          overridesForUser[permissionKey] = {
             read: currentVal,
             write: currentVal,
-            admin: currentVal && !!roleBase[perm.id]?.admin
+            admin: currentVal && !!rolePermission?.admin
           };
         }
       });
@@ -527,10 +576,15 @@ export default function AdminUsers() {
     }
   };
 
-  const getRoleDisplayName = (roleId) => {
-    const matched = SYSTEM_ROLES.find(r => r.id === roleId);
-    return matched ? matched.name : roleId;
-  };
+  const getRoleDisplayName = (roleCode) => {
+  const matched = roles.find(
+    role => role.code === roleCode
+  );
+
+  return matched?.name ||
+    roleCode ||
+    "Unassigned";
+};
 
   // Filter based on search input and top tabs
   const filteredUsers = users.filter(u => {
@@ -541,7 +595,9 @@ export default function AdminUsers() {
       (u.user_uid && u.user_uid.toLowerCase().includes(search.toLowerCase())) ||
       u.department.toLowerCase().includes(search.toLowerCase());
       
-    const matchesRole = roleFilter === "ALL" || u.role === roleFilter;
+    const matchesRole =
+  roleFilter === "ALL" ||
+  (u.role_code || u.role) === roleFilter;
     return matchesSearch && matchesRole;
   });
 
@@ -630,7 +686,8 @@ export default function AdminUsers() {
                   window.crypto.getRandomValues(buf);
                   return `EMP-${1000 + (buf[0] % 9000)}`;
                 })(), 
-                role: 'employee', 
+                role:
+                roles.find(role => role.is_active !== false)?.code || "",
                 department: 'General Operations', 
                 division: 'VCC',
                 is_active: true,
@@ -744,14 +801,26 @@ export default function AdminUsers() {
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Role / Group Assignment</label>
                 <select 
                   name="role" 
-                  defaultValue={editingUser.role} 
+                  defaultValue={
+                    editingUser.role_code || editingUser.role ||
+  ""
+} 
                   className="w-full p-2 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none bg-white font-bold text-slate-800"
                 >
-                  <option value="admin">Administrator (Full Access & RBAC)</option>
-                  <option value="manager">Manager / Approver</option>
-                  <option value="ap_specialist">Consultant</option>
-                  <option value="auditor">Internal Auditor</option>
-                  <option value="employee">Employee (Read-Only)</option>
+                 <option value="">
+  {loadingRoles ? "Loading roles..." : "Select role"}
+</option>
+
+{roles
+  .filter(role => role.is_active !== false)
+  .map(role => (
+    <option
+      key={role.id}
+      value={role.code}
+    >
+      {role.name}
+    </option>
+  ))} 
                 </select>
               </div>
 
@@ -849,50 +918,25 @@ export default function AdminUsers() {
               >
                 All users
               </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("admin")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  roleFilter === "admin" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Administrator
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("manager")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  roleFilter === "manager" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("ap_specialist")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  roleFilter === "ap_specialist" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Consultant
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoleFilter("auditor")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
-                  roleFilter === "auditor" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                Auditor
-              </button>
+              
+              {roles
+                .filter(role => role.is_active !== false)
+                .map(role => (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() =>
+                      setRoleFilter(role.code)
+                    }
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                      roleFilter === role.code
+                        ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {role.name}
+                  </button>
+                ))}
             </div>
 
             {/* Search Input Box */}
@@ -1013,7 +1057,9 @@ export default function AdminUsers() {
 
                         {/* Permissions (Role name) */}
                         <td className="px-4 py-3 text-slate-600 font-medium align-middle">
-                          {getRoleDisplayName(u.role)}
+                          {getRoleDisplayName(
+  u.role_code || u.role
+)}
                         </td>
 
                         {/* Date Added */}
@@ -1166,13 +1212,23 @@ export default function AdminUsers() {
                   id="user-group-dropdown"
                   value={panelUserGroup}
                   onChange={e => handlePanelGroupChange(e.target.value)}
+                  disabled={loadingRoles}
                   className="w-full text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 pr-8 outline-none appearance-none cursor-pointer focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 shadow-3xs"
                 >
-                  <option value="admin">Administrator</option>
-                  <option value="manager">Manager</option>
-                  <option value="ap_specialist">Consultant</option>
-                  <option value="auditor">Internal Auditor</option>
-                  <option value="employee">Employee</option>
+                  <option value="">
+                    {loadingRoles ? "Loading roles..." : "Select role"}
+                  </option>
+
+                  {roles
+                    .filter(role => role.is_active !== false)
+                    .map(role => (
+                      <option
+                        key={role.id}
+                        value={role.code}
+                      >
+                        {role.name}
+                      </option>
+                    ))}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               </div>
@@ -1180,43 +1236,82 @@ export default function AdminUsers() {
 
             {/* Scrollable list of permissions toggles */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-              {PERMISSION_DEFINITIONS.map(perm => {
-                const isEnabled = !!panelPermissions[perm.id];
-                const IconComponent = perm.icon;
-                
-                return (
-                  <div 
-                    key={perm.id} 
-                    className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 hover:border-slate-300 transition shadow-3xs select-none"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center border shrink-0 ${perm.iconColor}`}>
-                        <IconComponent className="h-4 w-4" />
-                      </div>
-                      <div className="flex flex-col text-left">
-                        <span className="text-[11px] font-extrabold text-slate-900 leading-snug">{perm.label}</span>
-                        <span className="text-[9.5px] text-slate-400 leading-tight mt-0.5">{perm.desc}</span>
-                      </div>
-                    </div>
+              {loadingPermissions ? (
+  <div className="p-6 text-center text-xs text-slate-400">
+    <RefreshCw className="h-4 w-4 animate-spin inline mr-2" />
+    Loading permissions...
+  </div>
+) : permissions.length === 0 ? (
+  <div className="p-6 text-center text-xs text-slate-400">
+    No permissions configured.
+  </div>
+) : (
+  permissions.map(permission => {
+    const permissionKey =
+      permission.code ||
+      permission.id ||
+      permission.key;
 
-                    {/* Toggle switch */}
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePermission(perm.id)}
-                      disabled={!isAdmin}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-2 focus:ring-indigo-500/25 ${
-                        isEnabled ? 'bg-emerald-500' : 'bg-slate-200'
-                      } ${!isAdmin ? 'opacity-65 cursor-not-allowed' : ''}`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                          isEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                );
-              })}
+    const isEnabled =
+      !!panelPermissions[permissionKey];
+
+    return (
+      <div
+        key={permissionKey}
+        className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 hover:border-slate-300 transition shadow-3xs select-none"
+      >
+        <div className="flex items-center gap-3">
+
+          <div className="h-8 w-8 rounded-lg flex items-center justify-center border shrink-0 bg-indigo-50 text-indigo-600 border-indigo-100">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+
+          <div className="flex flex-col text-left">
+
+            <span className="text-[11px] font-extrabold text-slate-900 leading-snug">
+              {permission.name ||
+                permission.label ||
+                permission.code}
+            </span>
+
+            <span className="text-[9.5px] text-slate-400 leading-tight mt-0.5">
+              {permission.description ||
+                permission.desc ||
+                `${permission.module || ""} ${permission.action || ""}`}
+            </span>
+
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            handleTogglePermission(permissionKey)
+          }
+          disabled={!isAdmin}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+            isEnabled
+              ? "bg-emerald-500"
+              : "bg-slate-200"
+          } ${
+            !isAdmin
+              ? "opacity-65 cursor-not-allowed"
+              : ""
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
+              isEnabled
+                ? "translate-x-4"
+                : "translate-x-0"
+            }`}
+          />
+        </button>
+
+      </div>
+    );
+  })
+)}
             </div>
 
             {/* Panel save changes action footer */}

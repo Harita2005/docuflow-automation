@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { 
   Clock, 
   PauseCircle, 
@@ -11,7 +11,7 @@ import {
   ArrowRight,
   Loader2
 } from "lucide-react";
-import { DbInvoice } from "../types.ts";
+import { DbInvoice } from "../types";
 // import REFERENCE_DOCUMENTS removed to avoid mock data
 
 interface DashboardProps {
@@ -48,23 +48,12 @@ export default function Dashboard({
   const [customToDate, setCustomToDate] = useState<string>("");
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 min-h-[300px]">
-        <Loader2 className="h-8 w-8 text-[#003F28] animate-spin mb-2" />
-        <p className="text-slate-500 font-bold text-[9.5px] uppercase tracking-widest font-display">
-          Loading DAAS Dashboard...
-        </p>
-      </div>
-    );
-  }
-
   // Merge real documents with reference documents if real documents list is empty
   const displayDocs = documents && documents.length > 0
     ? documents.map(d => ({
         id: d.id,
         vendor_name: d.vendor_name || "Enterprise Vendor",
-        document_type: (d.document_type || "AP INVOICE").toUpperCase().trim(),
+        document_type: (d.document_type || d.category || "GENERAL RECORDS").toUpperCase().trim(),
         invoice_number: d.invoice_number || `INV-${d.id.slice(0, 5)}`,
         invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
         status: d.status || "UNROUTED (NO RULE MATCHED)",
@@ -200,21 +189,46 @@ export default function Dashboard({
 
   // Dynamic Doc Type Pills Filter list for the current active queue
   const currentQueueLabel = `ALL ${kpiFilter.toUpperCase()}`;
-  const docTypeFilters = [
-    { label: currentQueueLabel, count: currentStatusDocs.length },
-    ...["E-VOUCHER", "UTILITY & RENT", "CASH VOUCHER", "AP INVOICE", "STAFF & HR EXPENSE", "GENERAL RECORDS", "PURCHASE INVOICE", "CAPEX / FIXED ASSET"].map(label => {
-      const cnt = currentStatusDocs.filter(d => d.document_type.toUpperCase().trim() === label).length;
-      return { label, count: cnt };
-    })
-  ].filter(item => item.label === currentQueueLabel || item.count > 0 || currentUserRole === "admin");
+
+  // Dynamically group currentStatusDocs by document_type (no hardcoding)
+  const docTypeCountsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    currentStatusDocs.forEach((d) => {
+      let type = (d.document_type || "OTHER").toUpperCase().trim();
+      if (type === "CUSTOMER COMPLAINT") type = "CUSTOMER FEEDBACK";
+      map.set(type, (map.get(type) || 0) + 1);
+    });
+    return map;
+  }, [currentStatusDocs]);
+
+  const docTypeFilters = useMemo(() => {
+    const filters = [{ label: currentQueueLabel, count: currentStatusDocs.length }];
+    docTypeCountsMap.forEach((count, label) => {
+      if (count > 0) {
+        filters.push({ label, count });
+      }
+    });
+    return filters;
+  }, [currentQueueLabel, currentStatusDocs.length, docTypeCountsMap]);
 
   // Combine Time Range + Doc Type filter for current queue
-  const filteredDocs = currentStatusDocs.filter(d => {
+  const filteredDocs = currentStatusDocs.filter((d) => {
     // 1. Time Range filter
     if (!isInTimeRange(d.invoice_date)) return false;
     // 2. Doc Type filter
-    if (activeDocType !== currentQueueLabel && activeDocType !== "ALL" && activeDocType !== "ALL DOCUMENTS") {
-      if (d.document_type.toUpperCase().trim() !== activeDocType.toUpperCase().trim()) {
+    if (
+      activeDocType !== currentQueueLabel &&
+      activeDocType !== "ALL" &&
+      activeDocType !== "ALL DOCUMENTS" &&
+      activeDocType !== "ALL PENDING" &&
+      activeDocType !== "ALL HOLD" &&
+      activeDocType !== "ALL REJECTED"
+    ) {
+      let docType = (d.document_type || "").toUpperCase().trim();
+      let targetType = activeDocType.toUpperCase().trim();
+      if (docType === "CUSTOMER COMPLAINT") docType = "CUSTOMER FEEDBACK";
+      if (targetType === "CUSTOMER COMPLAINT") targetType = "CUSTOMER FEEDBACK";
+      if (docType !== targetType) {
         return false;
       }
     }
@@ -227,7 +241,7 @@ export default function Dashboard({
 
     if (sLower.includes("attachment status") || sLower.includes("initiated (attachment")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
           <span className="h-1 w-1 rounded-full bg-[#E65100]" />
           INITIATED (ATTACHMENT STATUS)
         </span>
@@ -236,7 +250,7 @@ export default function Dashboard({
 
     if (badgeType === "initiated_first" || sLower.includes("first approval") || sLower.includes("initiated (first") || sLower === "initiated") {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80]">
           <span className="h-1 w-1 rounded-full bg-[#E65100]" />
           INITIATED (FIRST APPROVAL)
         </span>
@@ -245,16 +259,16 @@ export default function Dashboard({
 
     if (sLower.includes("approved") || sLower.includes("settled") || sLower.includes("paid")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0]">
           <span className="h-1 w-1 rounded-full bg-[#059669]" />
           {statusText.toUpperCase()}
         </span>
       );
     }
 
-    if (sLower.includes("progress") || sLower.includes("stage")) {
+    if (sLower.includes("progress") || sLower.includes("stage") || sLower.includes("verif") || sLower.includes("approval") || sLower.includes("review")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EBF5FF] text-[#1E40AF] border border-[#BFDBFE]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#EBF5FF] text-[#1E40AF] border border-[#BFDBFE]">
           <span className="h-1 w-1 rounded-full bg-[#2563EB]" />
           {statusText.toUpperCase()}
         </span>
@@ -263,7 +277,7 @@ export default function Dashboard({
 
     if (sLower.includes("escalat")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]">
           <span className="h-1 w-1 rounded-full bg-[#D97706]" />
           {statusText.toUpperCase()}
         </span>
@@ -272,7 +286,7 @@ export default function Dashboard({
 
     if (sLower.includes("reject") || sLower.includes("cancel") || sLower.includes("fail")) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA]">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA]">
           <span className="h-1 w-1 rounded-full bg-[#EF4444]" />
           {statusText.toUpperCase()}
         </span>
@@ -281,18 +295,29 @@ export default function Dashboard({
 
     if (badgeType === "unrouted" || sLower.includes("unrouted") || sLower.includes("no rule") || !sLower) {
       return (
-        <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
           UNROUTED (NO RULE MATCHED)
         </span>
       );
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[8.5px] font-extrabold tracking-wide uppercase bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[9px] font-medium tracking-wide uppercase leading-none bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]">
         {statusText}
       </span>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 min-h-[300px]">
+        <Loader2 className="h-8 w-8 text-[#003F28] animate-spin mb-2" />
+        <p className="text-slate-500 font-bold text-[9.5px] uppercase tracking-widest font-display">
+          Loading DAAS Dashboard...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#FAF8F3] p-2 sm:p-2.5 space-y-2.5 animate-fadeIn font-sans text-slate-800 max-w-[1720px] mx-auto">
@@ -674,7 +699,7 @@ export default function Dashboard({
         {/* Filter By Doc Type Pills */}
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-            <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mr-0.5 font-display">
+            <span className="text-[8.5px] font-extrabold text-slate-400 uppercase tracking-wider mr-0.5 font-display">
               FILTER BY DOC TYPE:
             </span>
             
@@ -684,14 +709,14 @@ export default function Dashboard({
                 <button
                   key={filter.label}
                   onClick={() => setActiveDocType(filter.label)}
-                  className={`px-2 py-0.5 rounded-[14px] text-[8.5px] font-extrabold uppercase tracking-wider transition-all duration-200 flex items-center gap-1 cursor-pointer shadow-2xs ${
+                  className={`px-2 py-0.5 rounded-[14px] text-[8px] font-extrabold uppercase tracking-wider transition-all duration-200 flex items-center gap-1 cursor-pointer shadow-2xs ${
                     isActive
                       ? "bg-[#003F28] text-white border border-[#003F28]"
                       : "bg-white text-slate-700 border border-[#E8E4DA] hover:bg-slate-100 hover:border-slate-300"
                   }`}
                 >
                   <span>{filter.label}</span>
-                  <span className={`px-1 py-0.1 rounded text-[7.5px] font-black font-mono ${
+                  <span className={`px-1 py-0.1 rounded text-[7px] font-black font-mono ${
                     isActive ? "bg-[#FFBE00] text-[#003F28]" : "bg-slate-100 text-slate-600"
                   }`}>
                     {filter.count}
@@ -720,35 +745,35 @@ export default function Dashboard({
 
                   <div className="flex flex-col min-w-0">
                     {/* Vendor Name */}
-                    <span className="font-extrabold text-slate-900 text-[11px] tracking-tight font-display group-hover:text-[#003F28] transition-colors truncate">
+                    <span className="font-semibold text-slate-900 text-[12px] tracking-tight font-display group-hover:text-[#003F28] transition-colors truncate">
                       {doc.vendor_name}
                     </span>
 
                     {/* Metadata Row */}
-                    <div className="flex flex-wrap items-center gap-1 text-[9px] font-semibold text-slate-500 font-sans mt-0.2">
+                    <div className="flex flex-wrap items-center gap-1 text-[10px] font-normal text-slate-500 font-sans mt-0.2">
                       {/* Doc Type Badge */}
-                      <span className="bg-[#F1F5F2] text-slate-700 px-1 py-0.1 rounded text-[8px] font-bold uppercase tracking-wider border border-slate-200">
+                      <span className="bg-[#F1F5F2] text-slate-700 px-1 py-0.1 rounded-[3px] text-[9px] font-medium uppercase tracking-wider border border-slate-200">
                         {doc.document_type}
                       </span>
 
                       <span className="text-slate-300">|</span>
 
                       {/* Doc ID */}
-                      <span className="font-mono text-slate-600 text-[9px] font-bold">
+                      <span className="font-mono text-slate-600 text-[10px] font-normal">
                         {doc.id}
                       </span>
 
                       <span className="text-slate-300">|</span>
 
                       {/* Invoice Number */}
-                      <span className="font-mono text-slate-600 text-[9px]">
+                      <span className="font-mono text-slate-600 text-[10px]">
                         {doc.invoice_number}
                       </span>
 
                       <span className="text-slate-300">|</span>
 
                       {/* Date */}
-                      <span className="font-mono text-slate-500 text-[9px]">
+                      <span className="font-mono text-slate-500 text-[10px]">
                         {doc.invoice_date}
                       </span>
 
@@ -763,7 +788,7 @@ export default function Dashboard({
                       )}
                       {/* Assigned Approver */}
                       {doc.assigned_approver && (
-                        <span className="ml-1 text-[9px] text-slate-600">⎈ {doc.assigned_approver}</span>
+                        <span className="ml-1 text-[10px] text-slate-600 font-normal">⎈ {doc.assigned_approver}</span>
                       )}
                     </div>
                   </div>
@@ -772,10 +797,10 @@ export default function Dashboard({
                 {/* Right Side: Amount & Circular Arrow Button */}
                 <div className="flex items-center gap-2.5 shrink-0">
                   <div className="flex flex-col items-end">
-                    <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-widest leading-none mb-0.5">
                       AMOUNT
                     </span>
-                    <span className="text-[11px] font-black text-slate-900 tracking-tight font-display leading-none">
+                    <span className="text-[12px] font-semibold text-slate-900 tracking-tight font-display leading-none">
                       ₹{doc.amount.toLocaleString("en-IN")}
                     </span>
                   </div>

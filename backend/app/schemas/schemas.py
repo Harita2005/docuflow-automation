@@ -60,7 +60,10 @@ class UserMasterCreate(BaseModel):
     email: str = Field(..., description='Official Company Email')
     phone_number: Optional[str] = Field(None, description='Mobile number for SMS OTP')
     password: str = Field(..., description='Plain password (will be automatically bcrypt-hashed)')
-    role: str = Field('employee', description='admin, manager, finance_auditor, employee')
+    role: Optional[str] = Field(
+            None,
+            description='Role code from the dynamic roles table'
+    )
     division: Optional[str] = Field('VCC', description='Company Division')
     department: Optional[str] = Field(None, description='Department (Finance, Audit, Operations)')
     plant: Optional[str] = Field(None, description='Assigned Plant / Branch (e.g. TN-SIVAKASI)')
@@ -100,7 +103,13 @@ class UserResponse(BaseModel):
     division: Optional[str] = 'VCC'
     department: Optional[str] = None
     plant: Optional[str] = None
-    role: str
+
+    # Dynamic RBAC role information
+    role: Optional[str] = None
+    role_id: Optional[int] = None
+    role_code: Optional[str] = None
+    role_name: Optional[str] = None
+
     is_active: bool
     mfa_enabled: bool
     mfa_type: str
@@ -124,14 +133,14 @@ class InvoiceBase(BaseModel):
     tax_amount: float = 0.0
     currency: str = 'INR'
     document_type: str = 'AP INVOICE'
-    division: str = 'VCC'
+    division: Optional[str] = None
     category: Optional[str] = None
     cost_center: Optional[str] = None
     plant: Optional[str] = None
-    payment_terms: str = 'Net 30'
-    status: str = 'Pending Approval'
-    current_stage: int = 1
-    total_stages: int = 2
+    payment_terms: Optional[str] = None
+    status: Optional[str] = None
+    current_stage: Optional[int] = None
+    total_stages: Optional[int] = None
     assigned_approver: Optional[str] = None
     workflow_profile_id: Optional[str] = None
     checklist_state: Optional[str] = None
@@ -140,6 +149,38 @@ class InvoiceBase(BaseModel):
     cgst: Optional[float] = 0.0
     sgst: Optional[float] = 0.0
     igst: Optional[float] = 0.0
+
+    account_name: Optional[str] = None
+    bp_code: Optional[str] = None
+    employee_name: Optional[str] = None
+    employee_id: Optional[str] = None
+    employee_division: Optional[str] = None
+    employee_segment: Optional[str] = None
+    survey_date: Optional[str] = None
+    subtype_of_complaint: Optional[str] = None
+    additional_comments: Optional[str] = None
+    dealer_name: Optional[str] = None
+    bp_type: Optional[str] = None
+    type_of_complaint: Optional[str] = None
+    customer_code: Optional[str] = None
+    image_1: Optional[str] = None
+    image_2: Optional[str] = None
+    image_3: Optional[str] = None
+    image_4: Optional[str] = None
+    image_5: Optional[str] = None
+    expense_type: Optional[str] = None
+    department: Optional[str] = None
+    expense_date: Optional[str] = None
+    receipt_number: Optional[str] = None
+    credit_note_number: Optional[str] = None
+    reason_for_credit: Optional[str] = None
+    original_invoice_ref: Optional[str] = None
+    credit_note_date: Optional[str] = None
+    credit_status: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+        extra = 'allow'
 
 class InvoiceCreate(InvoiceBase):
     id: Optional[str] = None
@@ -182,6 +223,7 @@ class InvoiceResponse(InvoiceBase):
 
     class Config:
         from_attributes = True
+        extra = 'allow'
 
 class WorkflowStepSchema(BaseModel):
     stage_number: int
@@ -273,7 +315,7 @@ class DocumentSyncRequest(BaseModel):
     doc_entry: Optional[Any] = Field(None, alias='DocEntry', description='ERP Entry ID')
     company_code: Optional[str] = Field(None, alias='CompanyCode', description='Company / Division Code (e.g. VCC, ACC, ENES)')
     division: Optional[str] = Field('VCC', description='Company Division')
-    document_type: str = Field('AP INVOICE', alias='TransType', description='AP INVOICE, AP DEBIT NOTE, AR CREDITNOTE, JOURNAL ENTRY')
+    document_type: Optional[str] = Field(None, alias='TransType', description='AP INVOICE, AP DEBIT NOTE, AR CREDITNOTE, JOURNAL ENTRY')
     category: Optional[str] = Field(None, alias='Category', description='Expense Category')
     cost_center: Optional[str] = Field(None, alias='CostCenter', description='Cost Center Code/Name')
     plant: Optional[str] = Field(None, alias='Branch', description='Plant or Regional Branch (e.g. TN-SIVAKASI)')
@@ -291,6 +333,27 @@ class DocumentSyncRequest(BaseModel):
     payment_terms: str = Field('Net 30', description='Credit / Payment Terms')
     line_items: Optional[List[dict]] = Field(None, description='Line item objects breakdown')
     custom_data: Optional[dict] = Field(None, description='Additional arbitrary ERP custom attributes')
+    
+    # Feedback & Complaint specific fields (mapped to custom_data on save)
+    account_name: Optional[str] = None
+    bp_code: Optional[str] = None
+    employee_name: Optional[str] = None
+    employee_id: Optional[str] = None
+    employee_division: Optional[str] = None
+    employee_segment: Optional[str] = None
+    survey_date: Optional[str] = None
+    subtype_of_complaint: Optional[str] = None
+    additional_comments: Optional[str] = None
+    dealer_name: Optional[str] = None
+    bp_type: Optional[str] = None
+    type_of_complaint: Optional[str] = None
+    customer_code: Optional[str] = None
+    image_1: Optional[str] = None
+    image_2: Optional[str] = None
+    image_3: Optional[str] = None
+    image_4: Optional[str] = None
+    image_5: Optional[str] = None
+
     auto_route: bool = Field(True, description='Immediately evaluate business rules and attach workflow')
     access_token: Optional[str] = Field(None, alias='accessToken', description='Access token passed directly inside raw JSON body')
     token: Optional[str] = Field(None, alias='Token', description='Token string passed directly inside raw JSON body')
@@ -302,30 +365,57 @@ class DocumentSyncRequest(BaseModel):
     def populate_numbers(cls, data: Any) -> Any:
         if isinstance(data, dict):
             doc_num = data.get('document_number')
-            inv_num = data.get('invoice_number') or data.get('DocRefNo')
+            inv_num = data.get('invoice_number') or data.get('DocRefNo') or data.get('Invoice Number')
             if doc_num and (not inv_num):
                 data['invoice_number'] = doc_num
                 data['DocRefNo'] = doc_num
             elif inv_num and (not doc_num):
                 data['document_number'] = inv_num
 
-            # Collect any dynamic third-party fields into custom_data
-            standard_keys = {
-                'doc_key', 'DocKey', 'doc_num', 'DocNum', 'doc_entry', 'DocEntry',
-                'company_code', 'CompanyCode', 'division', 'document_type', 'TransType',
-                'category', 'Category', 'cost_center', 'CostCenter', 'plant', 'Branch',
-                'vendor_name', 'CardName', 'vendor_code', 'CardCode', 'vendor_gstin', 'GSTIN',
-                'invoice_number', 'DocRefNo', 'document_number', 'invoice_date', 'DocDate',
-                'po_number', 'PONumber', 'amount', 'DocTotal', 'base_amount', 'tax_amount',
-                'currency', 'payment_terms', 'line_items', 'custom_data', 'auto_route',
-                'access_token', 'accessToken', 'token', 'Token', 'api_key', 'apiKey', 'secret_key', 'secretKey'
+            # Field mappings to populate snake_case model fields directly from raw payload names
+            field_mappings = {
+                "Account Name": "account_name",
+                "Business Partner Code": "bp_code",
+                "Employee Name": "employee_name",
+                "Employee ID": "employee_id",
+                "Employee Division": "employee_division",
+                "Employee Segment": "employee_segment",
+                "Survey Date": "survey_date",
+                "Subtype of complaint": "subtype_of_complaint",
+                "Additional Comments": "additional_comments",
+                "Dealer/Distributor Name": "dealer_name",
+                "Dealer Distributor Name": "dealer_name",
+                "BP Type": "bp_type",
+                "Type of Complaint": "type_of_complaint",
+                "Customer Code": "customer_code",
+                "Invoice Number": "invoice_number",
+                "Image 1": "image_1",
+                "Image 2": "image_2",
+                "Image 3": "image_3",
+                "Image 4": "image_4",
+                "Image 5": "image_5",
             }
-            existing_custom = dict(data.get('custom_data') or {})
-            for k, v in data.items():
-                if k not in standard_keys and v is not None:
-                    existing_custom[k] = v
-            if existing_custom:
-                data['custom_data'] = existing_custom
+            for raw_k, model_k in field_mappings.items():
+                if raw_k in data and (data.get(model_k) is None or data.get(model_k) == ""):
+                    data[model_k] = data[raw_k]
+
+            custom_data = data.get('custom_data')
+            if isinstance(custom_data, dict):
+                cleaned_cd = dict(custom_data)
+                for raw_k, model_k in field_mappings.items():
+                    if raw_k in custom_data:
+                        val = custom_data[raw_k]
+                        if val is not None and (data.get(model_k) is None or data.get(model_k) == ""):
+                            data[model_k] = val
+                        cleaned_cd.pop(raw_k, None)
+                for model_k in field_mappings.values():
+                    if model_k in custom_data:
+                        val = custom_data[model_k]
+                        if val is not None and (data.get(model_k) is None or data.get(model_k) == ""):
+                            data[model_k] = val
+                        cleaned_cd.pop(model_k, None)
+                data['custom_data'] = cleaned_cd if cleaned_cd else None
+
         return data
 
     class Config:
@@ -601,6 +691,8 @@ class MoreInfoFieldConfigItem(BaseModel):
     source: str = "ERP"  # "ERP", "Document", "Calculated"
     display_order: int = 0
     is_visible: bool = True
+    is_admin_default: bool = False
+    is_user_selected: bool = False
     sample_value: Optional[Any] = None
 
     class Config:
@@ -612,6 +704,8 @@ class MoreInfoConfigResponse(BaseModel):
     scope: str = "GLOBAL"  # "USER" or "GLOBAL"
     has_user_override: bool = False
     can_manage_default: bool = False
+    admin_default_fields: List[MoreInfoFieldConfigItem] = []
+    user_selected_fields: List[MoreInfoFieldConfigItem] = []
     selected_fields: List[MoreInfoFieldConfigItem] = []
     available_fields: List[MoreInfoFieldConfigItem] = []
 
@@ -628,4 +722,4 @@ class MoreInfoFieldSaveItem(BaseModel):
 class MoreInfoConfigSaveRequest(BaseModel):
     fields: List[MoreInfoFieldSaveItem] = []
     save_as_default: bool = False
-    reset_to_default: bool = False
+    reset_to_default: bool = False

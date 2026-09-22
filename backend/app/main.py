@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
                     prune_expired_audit_logs(db_session)
             except Exception as prune_err:
                 logger.warning(f"Audit log retention pruning deferred: {prune_err}")
-        except Exception as exc:
+        except Exception as exc: 
             logger.warning(f"Database schema initialization deferred: {exc}")
     yield
 

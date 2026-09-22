@@ -44,6 +44,34 @@ class Settings(BaseSettings):
     DB_DRIVER: str = "ODBC Driver 17 for SQL Server"
     DB_TRUST_SERVER_CERTIFICATE: bool = True
 
+    def get_database_url(self) -> str:
+        """Build the SQL Server connection URL.
+
+        Enforces connection to 192.168.179.22:1443 and avoids localhost defaults.
+        """
+        # Use explicit DATABASE_URL if provided and not forbidden
+        if self.DATABASE_URL:
+            db_url = self.DATABASE_URL.strip()
+            forbidden = ["localhost", "127.0.0.1", ":1433", "@db:", "sqlite", "postgresql", "mysql"]
+            if not any(f in db_url.lower() for f in forbidden):
+                return db_url
+        host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
+        if host.lower() in ("localhost", "127.0.0.1", "db"):
+            host = "192.168.179.22"
+        port = self.DB_PORT
+        if not port or port == 1433:
+            port = 1443
+        driver = quote_plus(self.DB_DRIVER)
+        if self.DB_USER and self.DB_PASSWORD:
+            user = quote_plus(self.DB_USER)
+            pwd = quote_plus(self.DB_PASSWORD)
+            return (
+                f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{self.DB_NAME}?driver={driver}&TrustServerCertificate={'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
+            )
+        return (
+            f"mssql+pyodbc://@{host}:{port}/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
+        )
+
     # Authentication
     SECRET_KEY: str = ""
     SERVICE_API_KEY: str = "DocuFlow-M2M-Integration-Secret-2026"
@@ -132,62 +160,7 @@ class Settings(BaseSettings):
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
-        return self
 
-    # -----------------------------------------------------------------------
-    # Database URL
-    # -----------------------------------------------------------------------
-
-    def get_database_url(self) -> str:
-        """
-        Build the SQL Server connection URL from the configured settings.
-
-        Enforces connection strictly to 192.168.179.22:1443 and eliminates any
-        legacy localhost / 1433 / SQLite / MySQL / PostgreSQL configurations.
-        """
-
-        # Sanitize explicit database URL if provided
-        if self.DATABASE_URL:
-            db_url = self.DATABASE_URL.strip()
-            forbidden = ["localhost", "127.0.0.1", ":1433", "@db:", "sqlite", "postgresql", "mysql"]
-            if not any(f in db_url.lower() for f in forbidden):
-                return db_url
-
-        host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
-        if host.lower() in ("localhost", "127.0.0.1", "db"):
-            host = "192.168.179.22"
-
-        port = self.DB_PORT
-        if port == 1433 or not port:
-            port = 1443
-
-        driver = quote_plus(self.DB_DRIVER)
-
-        # SQL Server username/password authentication
-        if self.DB_USER and self.DB_PASSWORD:
-            username = quote_plus(self.DB_USER)
-            password = quote_plus(self.DB_PASSWORD)
-
-            return (
-                f"mssql+pyodbc://{username}:{password}"
-                f"@{host}:{port}/{self.DB_NAME}"
-                f"?driver={driver}"
-                f"&TrustServerCertificate="
-                f"{'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
-            )
-
-        # Windows / trusted connection
-        return (
-            f"mssql+pyodbc://@"
-            f"{host}:{port}/{self.DB_NAME}"
-            f"?driver={driver}"
-            f"&trusted_connection=yes"
-            f"&TrustServerCertificate="
-            f"{'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
-        )
-
-
-# ---------------------------------------------------------------------------
 # Global settings instance
 # ---------------------------------------------------------------------------
 

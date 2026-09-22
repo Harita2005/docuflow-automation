@@ -28,6 +28,8 @@ import {
   Upload,
   Settings,
   Activity,
+  History,
+  MessageSquare,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly } from "../utils/formatters";
@@ -117,6 +119,162 @@ const DEFAULT_FIELD_PERMS: Record<string, Record<string, "hidden" | "view" | "ed
   }
 };
 
+const getCleanAuditRemarks = (text: string | null | undefined, steps: any[] = []) => {
+  if (!text) return null;
+  let cleaned = text.trim();
+  
+  // Strip trailing system transitions like "➔ Advanced to Stage..."
+  if (cleaned.includes("➔")) {
+    cleaned = cleaned.split("➔")[0].trim();
+  }
+
+  // Known command/instruction phrases to filter out from audit remarks
+  const commandPatterns = [
+    /completer? the approval verifies the vendor and the amount/i,
+    /verify po, tax details and accounting codes before approval/i,
+    /attach physical document pdf and verify compliance checklist/i,
+    /attach physical document pdf & verify checklist/i,
+    /awaiting compliance checklist verification/i,
+    /approved stage \d+ \(document attached & compliance checklist verified\)/i,
+    /compliance items verified and signed off/i,
+    /signed off without remarks/i,
+    /Updated user More Info configuration/i,
+  ];
+
+  // Also filter out any dynamic commands/instructions from step definitions
+  (steps || []).forEach((s: any) => {
+    if (s?.command && typeof s.command === "string" && s.command.trim().length > 3) {
+      if (cleaned.toLowerCase() === s.command.trim().toLowerCase()) {
+        cleaned = "";
+      }
+    }
+    if (s?.instruction && typeof s.instruction === "string" && s.instruction.trim().length > 3) {
+      if (cleaned.toLowerCase() === s.instruction.trim().toLowerCase()) {
+        cleaned = "";
+      }
+    }
+    if (s?.action_required && typeof s.action_required === "string" && s.action_required.trim().length > 3) {
+      if (cleaned.toLowerCase() === s.action_required.trim().toLowerCase()) {
+        cleaned = "";
+      }
+    }
+  });
+
+  for (const pattern of commandPatterns) {
+    if (pattern.test(cleaned)) {
+      cleaned = "";
+      break;
+    }
+  }
+
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+const getStageAndStatus = (comm: any) => {
+  const actionLower = (comm?.action || "").toLowerCase();
+  let status = "Approved";
+  if (actionLower.includes("reject")) status = "Rejected";
+  else if (actionLower.includes("return")) status = "Returned";
+  else if (actionLower.includes("hold")) status = "On Hold";
+  else if (actionLower.includes("cancel") || actionLower.includes("void")) status = "Cancelled";
+
+  let stageLabel = "";
+  if (comm?.stage) {
+    const match = String(comm.stage).match(/stage\s*(\d+)/i);
+    if (match) stageLabel = `Stage ${match[1]}`;
+    else stageLabel = String(comm.stage);
+  }
+  if (!stageLabel && comm?.action) {
+    const match = String(comm.action).match(/stage\s*(\d+)/i);
+    if (match) stageLabel = `Stage ${match[1]}`;
+  }
+  if (!stageLabel) stageLabel = "Stage 1";
+
+  return `${stageLabel} · ${status}`;
+};
+
+const formatAuditDateTime = (ts: string | null | undefined) => {
+  if (!ts) return "";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return ts;
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    });
+  } catch {
+    return ts;
+  }
+};
+
+export const CANONICAL_KEY_MAP: Record<string, string> = {
+  "account_name": "account_name",
+  "account name": "account_name",
+  "bp_code": "bp_code",
+  "bp code": "bp_code",
+  "business partner code": "bp_code",
+  "business_partner_code": "bp_code",
+  "employee_name": "employee_name",
+  "employee name": "employee_name",
+  "employee_id": "employee_id",
+  "employee id": "employee_id",
+  "employee_division": "employee_division",
+  "employee division": "employee_division",
+  "employee_segment": "employee_segment",
+  "employee segment": "employee_segment",
+  "survey_date": "survey_date",
+  "survey date": "survey_date",
+  "subtype_of_complaint": "subtype_of_complaint",
+  "subtype of complaint": "subtype_of_complaint",
+  "additional_comments": "additional_comments",
+  "additional comments": "additional_comments",
+  "dealer_name": "dealer_name",
+  "dealer name": "dealer_name",
+  "dealer/distributor name": "dealer_name",
+  "dealer / distributor name": "dealer_name",
+  "dealer_distributor_name": "dealer_name",
+  "dealer distributor name": "dealer_name",
+  "bp_type": "bp_type",
+  "bp type": "bp_type",
+  "type_of_complaint": "type_of_complaint",
+  "type of complaint": "type_of_complaint",
+  "customer_code": "customer_code",
+  "customer code": "customer_code",
+  "invoice_number": "invoice_number",
+  "invoice number": "invoice_number",
+  "image_1": "image_1",
+  "image 1": "image_1",
+  "image_2": "image_2",
+  "image 2": "image_2",
+  "image_3": "image_3",
+  "image 3": "image_3",
+  "image_4": "image_4",
+  "image 4": "image_4",
+  "image_5": "image_5",
+  "image 5": "image_5",
+};
+
+export const getCanonicalKey = (rawKey: string): string => {
+  if (!rawKey) return "";
+  const cleaned = rawKey.toLowerCase().trim();
+  if (CANONICAL_KEY_MAP[cleaned]) {
+    return CANONICAL_KEY_MAP[cleaned];
+  }
+  const snake = cleaned
+    .replace(/[\s\-\.\/]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (CANONICAL_KEY_MAP[snake]) {
+    return CANONICAL_KEY_MAP[snake];
+  }
+  return snake || cleaned;
+};
+
 export default function DocumentDetails({
   document,
   currentUserRole,
@@ -127,6 +285,26 @@ export default function DocumentDetails({
   onSelectDocument,
   pendingDocIds,
 }: DocumentDetailsProps) {
+  const [freshDocument, setFreshDocument] = useState<DbInvoice | null>(null);
+
+  useEffect(() => {
+    if (!document?.id) return;
+    setFreshDocument(null);
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+    fetch(`/api/documents/${encodeURIComponent(document.id)}`, {
+      headers: token ? { "Authorization": `Bearer ${token}` } : {}
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data === "object") {
+          setFreshDocument(data);
+        }
+      })
+      .catch(() => {});
+  }, [document?.id]);
+
+  const activeDoc = freshDocument || document;
+
   const [_activeTab, _setActiveTab] = useState<"original" | "layout" | "rawtext">(
     "original",
   );
@@ -189,6 +367,8 @@ export default function DocumentDetails({
     scope: "USER" | "GLOBAL";
     has_user_override: boolean;
     can_manage_default: boolean;
+    admin_default_fields?: ConfigFieldItem[];
+    user_selected_fields?: ConfigFieldItem[];
     selected_fields: ConfigFieldItem[];
     available_fields: ConfigFieldItem[];
   } | null>(null);
@@ -210,49 +390,29 @@ export default function DocumentDetails({
 
   // Dynamic ERP & Extra Metadata Extractor
   const dynamicSyncPayload = useMemo(() => {
-    if (!document) {
+    const target = activeDoc;
+    if (!target) {
       return {
         entries: [],
         rawPayload: {}
       };
     }
 
-    let customObj: Record<string, any> = {};
-    if (document?.custom_data) {
-      if (typeof document.custom_data === 'object') {
-        customObj = { ...document.custom_data };
-      } else if (typeof document.custom_data === 'string') {
-        try {
-          customObj = JSON.parse(document.custom_data);
-        } catch {}
-      }
-    }
+    const grossAmt = Number(amount || target.amount || 0);
+    const baseTaxableAmt = target.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
+    const gstTaxAmt = target.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
 
-    const grossAmt = Number(amount || document.amount || 0);
-    const baseTaxableAmt = document.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
-    const gstTaxAmt = document.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
+    const baseEntries: { label: string; value: string | number; key: string }[] = [];
 
-    const baseEntries: { label: string; value: string | number; key: string }[] = [
-      { key: 'vendor_gstin', label: 'Vendor GSTIN', value: (document as any)?.vendor_gstin || customObj.vendor_gstin || customObj.gstin || customObj.GSTIN || '-' },
-      { key: 'vendor_code', label: 'Vendor Code', value: (document as any)?.vendor_code || customObj.vendor_code || customObj.CardCode || '-' },
-      { key: 'po_date', label: 'PO Date', value: customObj.po_date || customObj.poDate || customObj.orderDate || '-' },
-      { key: 'taxable_amount', label: 'Taxable Base', value: `₹${Number(baseTaxableAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { key: 'gst_amount', label: 'GST Amount', value: `₹${Number(gstTaxAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-      { key: 'cost_center', label: 'Cost Center', value: (document as any)?.cost_center || customObj.cost_center || customObj.CostCenter || '-' },
-      { key: 'division', label: 'Division / Branch', value: document.division || customObj.division || customObj.CompanyCode || '-' },
-      { key: 'plant', label: 'Plant Location', value: document.plant || customObj.plant || customObj.Branch || '-' },
-      { key: 'payment_terms', label: 'Payment Terms', value: paymentTerms || document.payment_terms || customObj.payment_terms || customObj.PaymentTerms || 'Net 30 Days' },
-      { key: 'currency', label: 'Currency', value: document.currency || customObj.currency || 'INR' },
-    ];
-
-    // Add any extra custom fields synced dynamically from ERP
-    const coveredKeys = new Set(baseEntries.map(e => e.key.toLowerCase()));
-    Object.entries(customObj).forEach(([k, v]) => {
-      const cleanKey = k.toLowerCase().trim();
-      if (!coveredKeys.has(cleanKey) && v !== undefined && v !== null && v !== '') {
-        const formattedLabel = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    // Extract all real SQL properties on the document object
+    Object.keys(target).forEach((key) => {
+      if (["id", "custom_data", "file_url", "file_path", "created_at", "updated_at"].includes(key)) return;
+      const v = (target as any)[key];
+      if (v !== undefined && v !== null && String(v).trim() !== "" && String(v).trim() !== "null") {
+        const canonical = getCanonicalKey(key);
+        const formattedLabel = canonical.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         baseEntries.push({
-          key: k,
+          key: canonical,
           label: formattedLabel,
           value: typeof v === 'object' ? JSON.stringify(v) : String(v)
         });
@@ -262,27 +422,26 @@ export default function DocumentDetails({
     return {
       entries: baseEntries,
       rawPayload: {
-        DocKey: document.doc_key || document.id,
-        DocNum: document.doc_num || document.id,
-        DocDate: invoiceDate || document.invoice_date,
-        CardCode: document.vendor_code || "VEND-AKG-999",
-        CardName: vendorName || document.vendor_name,
-        DocRefNo: invoiceNumber || document.invoice_number,
+        DocKey: target.doc_key || target.id,
+        DocNum: target.doc_num || target.id,
+        DocDate: invoiceDate || target.invoice_date,
+        CardCode: target.vendor_code || "VEND-AKG-999",
+        CardName: vendorName || target.vendor_name,
+        DocRefNo: invoiceNumber || target.invoice_number,
         DocTotal: grossAmt,
         BaseAmount: baseTaxableAmt,
         TaxAmount: gstTaxAmt,
-        GSTIN: (document as any)?.vendor_gstin || customObj.gstin || "-",
-        CompanyCode: document.division || "-",
-        Branch: document.plant || "-",
-        CostCenter: (document as any)?.cost_center || customObj.cost_center || "-",
-        PaymentTerms: paymentTerms || document.payment_terms || "-",
-        ...customObj,
+        GSTIN: (target as any)?.vendor_gstin || "-",
+        CompanyCode: target.division || "-",
+        Branch: target.plant || "-",
+        CostCenter: (target as any)?.cost_center || "-",
+        PaymentTerms: paymentTerms || target.payment_terms || "-",
         SyncAgent: "SAP S/4HANA & MS SQL Integration Pipeline",
         SyncStatus: "SUCCESS",
-        Timestamp: document.updated_at || new Date().toISOString()
+        Timestamp: target.updated_at || new Date().toISOString()
       }
     };
-  }, [document, vendorName, invoiceNumber, poNumber, amount, invoiceDate, paymentTerms]);
+  }, [activeDoc, vendorName, invoiceNumber, poNumber, amount, invoiceDate, paymentTerms]);
 
   // Fetch More Info configuration for this document and user
   const fetchMoreInfoConfig = async (docId: string) => {
@@ -306,23 +465,23 @@ export default function DocumentDetails({
   };
 
   useEffect(() => {
-    if (document?.id) {
-      fetchMoreInfoConfig(document.id);
+    if (activeDoc?.id) {
+      fetchMoreInfoConfig(activeDoc.id);
     }
-  }, [document?.id, document?.document_type]);
+  }, [activeDoc?.id, activeDoc?.document_type]);
 
   const handleSaveMoreInfoConfig = async (fields: ConfigFieldItem[], saveAsDefault: boolean) => {
-    if (!document?.id) return;
+    if (!activeDoc?.id) return;
     const token = localStorage.getItem("token") || localStorage.getItem("authToken");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/more-info/config`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/more-info/config`, {
       method: "PUT",
       headers,
       body: JSON.stringify({
         fields: fields.map((f, idx) => ({
-          field_key: f.field_key,
+          field_key: getCanonicalKey(f.field_key),
           label: f.label,
           category: f.category,
           source: f.source,
@@ -345,12 +504,12 @@ export default function DocumentDetails({
   };
 
   const handleResetMoreInfoConfig = async () => {
-    if (!document?.id) return;
+    if (!activeDoc?.id) return;
     const token = localStorage.getItem("token") || localStorage.getItem("authToken");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/more-info/config`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/more-info/config`, {
       method: "PUT",
       headers,
       body: JSON.stringify({
@@ -370,81 +529,138 @@ export default function DocumentDetails({
     }
   };
 
-  // Map of current dynamic values from document / payload
+  // Map of current dynamic values strictly from document REAL SQL properties and field configurations
   const currentDocValuesMap = useMemo(() => {
     const map = new Map<string, string | number>();
-    if (!document) return map;
+    const target = activeDoc;
 
-    // 1. Direct document properties & calculations
-    const grossAmt = Number(amount || document.amount || 0);
-    const baseTaxableAmt = document.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
-    const gstTaxAmt = document.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
-    const formattedBase = `₹${Number(baseTaxableAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formattedGst = `₹${Number(gstTaxAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-    map.set("taxable_amount", formattedBase);
-    map.set("base_taxable", formattedBase);
-    map.set("base_amount", formattedBase);
-    map.set("gst_amount", formattedGst);
-    map.set("gst_tax", formattedGst);
-    map.set("tax_amount", formattedGst);
-
-    if (document.vendor_gstin) {
-      map.set("vendor_gstin", document.vendor_gstin);
-      map.set("gstin", document.vendor_gstin);
-    }
-    if (document.vendor_code) {
-      map.set("vendor_code", document.vendor_code);
-      map.set("cardcode", document.vendor_code);
-    }
-    if (document.cost_center) {
-      map.set("cost_center", document.cost_center);
-      map.set("costcenter", document.cost_center);
-    }
-    if (document.division) {
-      map.set("division", document.division);
-      map.set("companycode", document.division);
-    }
-    if (document.plant) {
-      map.set("plant", document.plant);
-      map.set("branch", document.plant);
-    }
-    if (document.currency) {
-      map.set("currency", document.currency);
-    }
-    if (paymentTerms || document.payment_terms) {
-      map.set("payment_terms", paymentTerms || document.payment_terms || "");
+    if (target) {
+      // 1. Direct real SQL document properties
+      Object.keys(target).forEach((key) => {
+        if (key === "custom_data") return;
+        const val = (target as any)[key];
+        if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
+          const canonical = getCanonicalKey(key);
+          const strVal = typeof val === "object" ? JSON.stringify(val) : String(val);
+          map.set(canonical, strVal);
+          map.set(key.toLowerCase(), strVal);
+          map.set(key, strVal);
+        }
+      });
     }
 
-    // 2. Values from dynamicSyncPayload
-    dynamicSyncPayload.entries.forEach((e) => {
-      map.set(e.key.toLowerCase(), e.value);
-    });
-
-    // 3. Values from custom_data
-    let customObj: Record<string, any> = {};
-    if (document.custom_data) {
-      try {
-        customObj = typeof document.custom_data === "string" ? JSON.parse(document.custom_data) : document.custom_data;
-      } catch {}
+    // 2. Fallback sample values from moreInfoConfig available_fields & selected_fields
+    if (moreInfoConfig?.available_fields) {
+      moreInfoConfig.available_fields.forEach((f) => {
+        if (f.sample_value !== undefined && f.sample_value !== null && String(f.sample_value).trim() !== "" && String(f.sample_value).trim() !== "null") {
+          const canonical = getCanonicalKey(f.field_key);
+          const strVal = String(f.sample_value);
+          if (!map.has(canonical)) map.set(canonical, strVal);
+          if (!map.has(f.field_key.toLowerCase())) map.set(f.field_key.toLowerCase(), strVal);
+          if (f.label) {
+            const labelCanonical = getCanonicalKey(f.label);
+            if (!map.has(labelCanonical)) map.set(labelCanonical, strVal);
+          }
+        }
+      });
     }
-    Object.entries(customObj).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") {
-        map.set(k.toLowerCase(), typeof v === "object" ? JSON.stringify(v) : String(v));
+
+    if (moreInfoConfig?.selected_fields) {
+      moreInfoConfig.selected_fields.forEach((f) => {
+        if (f.sample_value !== undefined && f.sample_value !== null && String(f.sample_value).trim() !== "" && String(f.sample_value).trim() !== "null") {
+          const canonical = getCanonicalKey(f.field_key);
+          const strVal = String(f.sample_value);
+          if (!map.has(canonical)) map.set(canonical, strVal);
+          if (!map.has(f.field_key.toLowerCase())) map.set(f.field_key.toLowerCase(), strVal);
+          if (f.label) {
+            const labelCanonical = getCanonicalKey(f.label);
+            if (!map.has(labelCanonical)) map.set(labelCanonical, strVal);
+          }
+        }
+      });
+    }
+
+    // 3. Computed / formatted aliases
+    if (target) {
+      const grossAmt = Number(amount || target.amount || 0);
+      if (grossAmt > 0) {
+        const formattedGross = `₹${grossAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        map.set("total_gross", formattedGross);
+        if (!map.has("amount")) map.set("amount", formattedGross);
       }
-    });
+
+      const baseTaxableAmt = target.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
+      const gstTaxAmt = target.tax_amount || (grossAmt > 0 ? grossAmt - baseTaxableAmt : 0);
+      if (baseTaxableAmt > 0) {
+        const formattedBase = `₹${Number(baseTaxableAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        map.set("taxable_amount", formattedBase);
+        map.set("base_taxable", formattedBase);
+        map.set("base_amount", formattedBase);
+      }
+      if (gstTaxAmt > 0) {
+        const formattedGst = `₹${Number(gstTaxAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        map.set("gst_amount", formattedGst);
+        map.set("gst_tax", formattedGst);
+        map.set("tax_amount", formattedGst);
+      }
+    }
 
     return map;
-  }, [dynamicSyncPayload, document, amount, paymentTerms]);
+  }, [activeDoc, amount, moreInfoConfig]);
 
-  // Effective fields to display in More Info (strictly excluding fields present in the fixed top summary row)
+  // Determine Admin Top 3 Defaults per Document Type
+  const adminTop3Fields = useMemo(() => {
+    if (moreInfoConfig?.admin_default_fields && moreInfoConfig.admin_default_fields.length > 0) {
+      return moreInfoConfig.admin_default_fields.slice(0, 3).map((f) => ({
+        ...f,
+        field_key: getCanonicalKey(f.field_key),
+      }));
+    }
+    const docTypeClean = (activeDoc?.document_type || "").toUpperCase();
+    if (docTypeClean.includes("COMPLAINT") || docTypeClean.includes("FEEDBACK")) {
+      return [
+        { field_key: "account_name", label: "Account Name", category: "CUSTOMER COMPLAINT", source: "Document" },
+        { field_key: "type_of_complaint", label: "Type of Complaint", category: "CUSTOMER COMPLAINT", source: "Document" },
+        { field_key: "dealer_name", label: "Dealer / Distributor Name", category: "CUSTOMER COMPLAINT", source: "Document" },
+      ];
+    }
+    if (docTypeClean.includes("EXPENSE") || docTypeClean.includes("HR")) {
+      return [
+        { field_key: "employee_name", label: "Employee Name", category: "HR EXPENSE", source: "ERP" },
+        { field_key: "expense_type", label: "Expense Type", category: "HR EXPENSE", source: "ERP" },
+        { field_key: "department", label: "Department", category: "HR EXPENSE", source: "ERP" },
+      ];
+    }
+    if (docTypeClean.includes("CREDIT")) {
+      return [
+        { field_key: "credit_note_number", label: "Credit Note Number", category: "CREDIT NOTE", source: "Document" },
+        { field_key: "reason_for_credit", label: "Reason For Credit", category: "CREDIT NOTE", source: "Document" },
+        { field_key: "original_invoice_ref", label: "Original Invoice Ref", category: "CREDIT NOTE", source: "Document" },
+      ];
+    }
+    return [
+      { field_key: "vendor_name", label: "Supplier / Vendor", category: "VENDOR INFORMATION", source: "ERP" },
+      { field_key: "invoice_number", label: "Bill / Invoice Number", category: "INVOICE INFORMATION", source: "Document" },
+      { field_key: "amount", label: "Total Gross (₹)", category: "FINANCIAL INFORMATION", source: "Calculated" },
+    ];
+  }, [moreInfoConfig, activeDoc?.document_type]);
+
+  const adminTop3Keys = useMemo(() => {
+    return new Set(adminTop3Fields.map((f) => getCanonicalKey(f.field_key)));
+  }, [adminTop3Fields]);
+
+  // Effective fields to display in More Info (excluding Admin Top 3 Defaults)
   const effectiveMoreInfoFields = useMemo(() => {
     let fields: ConfigFieldItem[] = [];
-    if (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0) {
-      fields = moreInfoConfig.selected_fields;
+    if (moreInfoConfig?.user_selected_fields && moreInfoConfig.user_selected_fields.length > 0) {
+      fields = moreInfoConfig.user_selected_fields;
+    } else if (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0) {
+      fields = moreInfoConfig.selected_fields.filter((f) => !adminTop3Keys.has(getCanonicalKey(f.field_key)));
+    } else if (moreInfoConfig?.available_fields && moreInfoConfig.available_fields.length > 0) {
+      fields = moreInfoConfig.available_fields.filter((f) => !adminTop3Keys.has(getCanonicalKey(f.field_key)));
     } else {
       fields = dynamicSyncPayload.entries.map((entry, idx) => ({
-        field_key: entry.key,
+        field_key: getCanonicalKey(entry.key),
         label: entry.label,
         category: "INFORMATION",
         source: "ERP",
@@ -453,21 +669,110 @@ export default function DocumentDetails({
         sample_value: entry.value,
       }));
     }
-    return fields.filter((field) => !isFixedSummaryField(field.field_key));
-  }, [moreInfoConfig, dynamicSyncPayload]);
+    return fields
+      .map((f) => ({
+        ...f,
+        field_key: getCanonicalKey(f.field_key),
+      }))
+      .filter((field) => !adminTop3Keys.has(field.field_key) && !isFixedSummaryField(field.field_key));
+  }, [moreInfoConfig, dynamicSyncPayload, adminTop3Keys]);
 
-  const getFieldValue = (field: ConfigFieldItem): string => {
-    const fk = field.field_key.toLowerCase();
-    if (currentDocValuesMap.has(fk)) {
-      const val = currentDocValuesMap.get(fk);
-      if (val !== undefined && val !== null && String(val).trim() !== "") {
+  const getFieldValueByKey = (key: string, sampleValue?: string): string => {
+    const canonicalKey = getCanonicalKey(key);
+    const target = activeDoc;
+
+    // 1. Direct property check on target (activeDoc)
+    if (target) {
+      const docVal = (target as any)[canonicalKey] ?? (target as any)[key];
+      if (docVal !== undefined && docVal !== null && String(docVal).trim() !== "" && String(docVal).trim() !== "null") {
+        return String(docVal);
+      }
+
+      // Check property scan on target matching canonical key
+      const targetProps = Object.keys(target);
+      const matchingProp = targetProps.find((p) => getCanonicalKey(p) === canonicalKey);
+      if (matchingProp) {
+        const docValFuzzy = (target as any)[matchingProp];
+        if (docValFuzzy !== undefined && docValFuzzy !== null && String(docValFuzzy).trim() !== "" && String(docValFuzzy).trim() !== "null") {
+          return String(docValFuzzy);
+        }
+      }
+    }
+
+    // 2. Check currentDocValuesMap (populated from target properties & moreInfoConfig field values)
+    const fk = key.toLowerCase();
+    if (currentDocValuesMap.has(canonicalKey)) {
+      const val = currentDocValuesMap.get(canonicalKey);
+      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
         return String(val);
       }
     }
-    if (field.sample_value !== undefined && field.sample_value !== null && String(field.sample_value).trim() !== "") {
-      return String(field.sample_value);
+    if (currentDocValuesMap.has(fk)) {
+      const val = currentDocValuesMap.get(fk);
+      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
+        return String(val);
+      }
     }
+
+    // 3. Check sampleValue argument if provided
+    if (sampleValue !== undefined && sampleValue !== null && String(sampleValue).trim() !== "" && String(sampleValue).trim() !== "null") {
+      return String(sampleValue);
+    }
+
+    // 4. Check available_fields / selected_fields in moreInfoConfig for matching canonical key sample_value
+    if (moreInfoConfig?.available_fields) {
+      const availField = moreInfoConfig.available_fields.find(
+        (f) => getCanonicalKey(f.field_key) === canonicalKey || getCanonicalKey(f.label) === canonicalKey
+      );
+      if (availField?.sample_value !== undefined && availField?.sample_value !== null && String(availField.sample_value).trim() !== "" && String(availField.sample_value).trim() !== "null") {
+        return String(availField.sample_value);
+      }
+    }
+
     return "Not available";
+  };
+
+  const getFieldValue = (field: ConfigFieldItem): string => {
+    return getFieldValueByKey(field.field_key, field.sample_value !== undefined && field.sample_value !== null ? String(field.sample_value) : undefined);
+  };
+
+  const isImageFieldKey = (key: string): boolean => {
+    const fk = key.toLowerCase().trim().replace(/[\s\-_]+/g, "_");
+    return ["image_1", "image_2", "image_3", "image_4", "image_5"].includes(fk);
+  };
+
+  const renderFieldValueContent = (fieldKey: string, val: string) => {
+    const isMissing = !val || val === "Not available" || val.trim() === "" || val.trim() === "null";
+
+    if (isImageFieldKey(fieldKey)) {
+      if (isMissing) {
+        return <span className="italic text-slate-400 font-normal">Not available</span>;
+      }
+      const rawVal = val.trim();
+      const isUrl = /^(https?:\/\/|\/)/i.test(rawVal);
+      if (isUrl) {
+        return (
+          <a
+            href={rawVal}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-extrabold text-[11px] hover:underline cursor-pointer"
+            title={rawVal}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span>Open Image</span>
+            <span className="text-[10px]">↗</span>
+          </a>
+        );
+      }
+      return <span>{val}</span>;
+    }
+
+    if (isMissing) {
+      return <span className="italic text-slate-400 font-normal">Not available</span>;
+    }
+
+    return <span>{val}</span>;
   };
 
   const handleUploadVersion = async (file: File) => {
@@ -1222,7 +1527,7 @@ export default function DocumentDetails({
   const handleToggleAllChecklist = async () => {
     if (isDocumentLocked) return;
     const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
-    const updatedStates: Record<string, boolean> = {};
+    const updatedStates: Record<string, boolean> = { ...checkedStates };
     effectiveChecklist.forEach((item) => {
       updatedStates[item] = !allChecked;
     });
@@ -1244,10 +1549,74 @@ export default function DocumentDetails({
     }
   };
 
+  const isDocUnrouted = !document?.workflow_profile_id || 
+                        document?.workflow_profile_id === 'UNROUTED' || 
+                        (document?.status || '').toLowerCase().includes('unrouted') ||
+                        (document?.status || '').toLowerCase().includes('no rule matched');
+  const effectiveChecklist = isDocUnrouted ? [] : checklistItems;
+
+  const combinedChecklist = useMemo(() => {
+    if (isDocUnrouted) return [];
+
+    const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
+    const currentStep = (workflowStepDefinitions || []).find((s: any) => s.stage_number === currentStageNum);
+
+    const itemsMap: Map<string, { key: string; label: string; givenBy: string; stageNumber?: number }> = new Map();
+
+    // 1. Populate from workflow step definitions (commands / instructions)
+    (workflowStepDefinitions || []).forEach((step: any) => {
+      const cmd = step?.instruction || step?.command || (step?.action_required && !['Approve', 'Approved'].includes(step.action_required) ? step.action_required : null);
+      if (cmd && typeof cmd === "string" && cmd.trim()) {
+        const key = cmd.trim();
+        const rawTarget = step.approver_target || step.stage_name || step.step_name || `Stage ${step.stage_number} Approver`;
+        const cleanTarget = rawTarget.split(",")[0].trim();
+        itemsMap.set(key, {
+          key,
+          label: key,
+          givenBy: cleanTarget,
+          stageNumber: step.stage_number
+        });
+      }
+    });
+
+    // 2. Ensure current active stage's command is present if defined
+    const currentCmd = currentStep?.instruction || currentStep?.command;
+    
+    if (currentCmd && typeof currentCmd === "string" && currentCmd.trim() && !itemsMap.has(currentCmd.trim())) {
+      const rawTarget = currentStep?.approver_target || currentStep?.stage_name || currentStep?.step_name || (currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`);
+      const cleanTarget = rawTarget.split(",")[0].trim();
+      itemsMap.set(currentCmd.trim(), {
+        key: currentCmd.trim(),
+        label: currentCmd.trim(),
+        givenBy: cleanTarget,
+        stageNumber: currentStageNum
+      });
+    }
+
+    // 3. Include items from effectiveChecklist
+    effectiveChecklist.forEach((chkItem) => {
+      if (chkItem && typeof chkItem === "string" && chkItem.trim()) {
+        const key = chkItem.trim();
+        if (!itemsMap.has(key)) {
+          const rawTarget = currentStep?.approver_target || currentStep?.stage_name || currentStep?.step_name || (currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`);
+          const cleanTarget = rawTarget.split(",")[0].trim();
+          itemsMap.set(key, {
+            key,
+            label: key,
+            givenBy: cleanTarget,
+            stageNumber: currentStageNum
+          });
+        }
+      }
+    });
+
+    return Array.from(itemsMap.values());
+  }, [isDocUnrouted, workflowStepDefinitions, effectiveChecklist, activeApprovalLog, document?.current_stage]);
+
   const handleInlineApprove = async () => {
     const hasDocAttachment = Boolean(iframeSrc);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
-    const checkedCount = Object.values(checkedStates).filter(Boolean).length;
+    const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
     const totalCount = effectiveChecklist.length;
     const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
 
@@ -1323,11 +1692,6 @@ export default function DocumentDetails({
     setActionLoading(false);
   };
 
-  const isDocUnrouted = !document?.workflow_profile_id || 
-                        document?.workflow_profile_id === 'UNROUTED' || 
-                        (document?.status || '').toLowerCase().includes('unrouted') ||
-                        (document?.status || '').toLowerCase().includes('no rule matched');
-  const effectiveChecklist = isDocUnrouted ? [] : checklistItems;
 
   const getStatusBadge = () => {
     const status = document.status;
@@ -1403,44 +1767,44 @@ export default function DocumentDetails({
       <div className="bg-white border border-slate-200/90 rounded-xl shadow-lg shadow-slate-900/5 flex flex-col h-[calc(100vh-76px)] min-h-[620px] overflow-hidden animate-fadeIn text-[11px]">
         
         {/* DOCUMENT TITLE BAR */}
-        <div className="bg-white text-slate-800 px-3 py-2 flex items-end justify-between shrink-0 border-b border-slate-200">
-          <div className="min-w-0">
-            <button type="button" onClick={onGoBack} className="flex items-center gap-1 text-[9px] font-bold text-slate-500 hover:text-[#003F28] mb-1 cursor-pointer">
-              <ArrowLeft className="h-3 w-3" /> Back to Documents
+        <div className="bg-white text-slate-800 px-3 py-2 flex items-center justify-between shrink-0 border-b border-slate-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={onGoBack}
+              className="h-7 w-7 rounded-md bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 flex items-center justify-center text-[#003F28] hover:text-[#005333] shrink-0 transition cursor-pointer shadow-3xs active:scale-95"
+              title="Back to Documents"
+            >
+              <ArrowLeft className="h-4 w-4 stroke-[2.5]" />
             </button>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-7 w-7 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[#003F28] shrink-0">
-                <FileText className="h-3.5 w-3.5" />
-              </div>
-              <span className="document-details-title font-extrabold text-base tracking-tight text-slate-800 font-display truncate">
-                Document Details
+            <span className="document-details-title font-extrabold text-base tracking-tight text-slate-800 font-display truncate">
+              Document Details
+            </span>
+            <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600 shrink-0">
+              {formatDocNumber(document.id, document.document_type, (document as any).category)}
+            </span>
+            <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1 shrink-0">
+              <FileText className="h-2.5 w-2.5" />
+              {document.document_type || "DOCUMENT"}
+            </span>
+            {getStatusBadge()}
+            {document.workflow_profile_id && (
+              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[9px] font-bold text-emerald-800 flex items-center gap-1 shrink-0" title={`Active Workflow Profile: ${document.workflow_profile_id}`}>
+                <Shield className="h-2.5 w-2.5 text-[#003F28]" />
+                Flow: {document.workflow_profile_id}
               </span>
-              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600 shrink-0">
-                {formatDocNumber(document.id, document.document_type, (document as any).category)}
+            )}
+            {Boolean(document.doc_key) && ((document?.current_stage || 1) === 1 || (document?.status || "").toLowerCase().includes("attachment")) && (
+              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-blue-50 border border-blue-200 text-[9px] font-bold text-blue-800 flex items-center gap-1 shrink-0" title="Synced from third-party ERP. Financial and header fields are locked in read-only mode during Attachment Status.">
+                <Database className="h-2.5 w-2.5 text-blue-600" />
+                ERP Data (Locked)
               </span>
-              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1 shrink-0">
-                <FileText className="h-2.5 w-2.5" />
-                {document.document_type || "DOCUMENT"}
-              </span>
-              {getStatusBadge()}
-              {document.workflow_profile_id && (
-                <span className="document-details-meta-badge px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[9px] font-bold text-emerald-800 flex items-center gap-1 shrink-0" title={`Active Workflow Profile: ${document.workflow_profile_id}`}>
-                  <Shield className="h-2.5 w-2.5 text-[#003F28]" />
-                  Flow: {document.workflow_profile_id}
-                </span>
-              )}
-              {Boolean(document.doc_key) && ((document?.current_stage || 1) === 1 || (document?.status || "").toLowerCase().includes("attachment")) && (
-                <span className="document-details-meta-badge px-2 py-1 rounded-md bg-blue-50 border border-blue-200 text-[9px] font-bold text-blue-800 flex items-center gap-1 shrink-0" title="Synced from third-party ERP. Financial and header fields are locked in read-only mode during Attachment Status.">
-                  <Database className="h-2.5 w-2.5 text-blue-600" />
-                  ERP Data (Locked)
-                </span>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* ERP Data Sync Button: Opens ERP Data Sync & Reconciliation Modal */}
-            {getFieldPerm("erp_sync_data") !== "hidden" ? (
+            {/* ERP Data Sync Button: Opens ERP Data Sync & Reconciliation Modal (Admin Only) */}
+            {["admin", "administrator", "system_admin", "superadmin"].includes((currentUserRole || "").toLowerCase()) && getFieldPerm("erp_sync_data") !== "hidden" ? (
               <button
                 onClick={() => setShowErpSyncModal(true)}
                 className="p-1.5 rounded-lg bg-[#006747] hover:bg-[#005333] text-white transition text-[10px] font-bold flex items-center gap-1.5 px-3 border border-[#005333] shadow-xs cursor-pointer"
@@ -1452,7 +1816,7 @@ export default function DocumentDetails({
             ) : (
               <button
                 onClick={onRefreshDocument}
-                className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition text-[10px] font-bold flex items-center gap-1 px-2 py-0.5 border border-slate-200"
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition text-[10px] font-bold flex items-center gap-1 px-2.5 border border-slate-200 cursor-pointer"
                 title="Refresh Document"
               >
                 <RotateCw className="h-3 w-3" />
@@ -1489,111 +1853,26 @@ export default function DocumentDetails({
         <div ref={containerRef} className="bg-slate-50 border-b border-slate-300 px-4 py-2 shrink-0 space-y-2 select-none animate-fadeIn">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Primary Metrics Group */}
-            <div className="flex flex-1 flex-wrap items-center gap-2.5">
-              
-              {/* 1. Supplier / Vendor */}
-              {getFieldPerm("vendor_name") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[190px]">
-                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
-                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
-                    <span>Supplier / Vendor</span>
+              {adminTop3Fields.map((field) => {
+                const val = getFieldValueByKey(field.field_key, field.sample_value !== undefined && field.sample_value !== null ? String(field.sample_value) : undefined);
+                return (
+                  <div
+                    key={field.field_key}
+                    className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[150px]"
+                  >
+                    <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
+                      <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
+                      <span>{field.label}</span>
+                    </div>
+                    <div
+                      className="text-[11px] font-bold truncate text-slate-900"
+                      title={val}
+                    >
+                      {renderFieldValueContent(field.field_key, val)}
+                    </div>
                   </div>
-                  {getFieldPerm("vendor_name") === "edit" ? (
-                    <input 
-                      type="text"
-                      value={vendorName || document.vendor_name || "-"}
-                      onChange={e => setVendorName(e.target.value)}
-                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
-                      title={vendorName || document.vendor_name || "-"}
-                    />
-                  ) : (
-                    <div className="text-[11px] font-bold text-slate-900 truncate" title={vendorName || document.vendor_name || "-"}>
-                      {vendorName || document.vendor_name || "-"}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 2. Bill No & Date */}
-              {getFieldPerm("invoice_num_date") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[155px]">
-                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
-                    <span className="flex items-center gap-1"><Calendar className="h-2 w-2 text-emerald-600 stroke-[3]" /> Bill No & Date</span>
-                  </div>
-                  {getFieldPerm("invoice_num_date") === "edit" ? (
-                    <div className="flex items-center gap-1.5">
-                      <input 
-                        type="text"
-                        value={invoiceNumber || document.invoice_number || "-"}
-                        onChange={e => setInvoiceNumber(e.target.value)}
-                        className="w-5/12 text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate"
-                        placeholder="Bill No"
-                      />
-                      <span className="text-slate-300 font-bold">•</span>
-                      <input 
-                        type="text"
-                        value={invoiceDate || document.invoice_date || "2026-03-13"}
-                        onChange={e => setInvoiceDate(e.target.value)}
-                        className="w-7/12 text-[11px] font-bold text-slate-700 bg-transparent border-0 p-0 outline-none truncate"
-                        placeholder="Date"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 truncate">
-                      <span>{invoiceNumber || document.invoice_number || "-"}</span>
-                      <span className="text-slate-300 font-bold">•</span>
-                      <span className="text-slate-600 font-medium">{invoiceDate || document.invoice_date || "2026-03-13"}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 3. PO Reference */}
-              {getFieldPerm("po_reference") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]">
-                  <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
-                    <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
-                    <span>PO Reference</span>
-                  </div>
-                  {getFieldPerm("po_reference") === "edit" ? (
-                    <input 
-                      type="text"
-                      value={poNumber || document.po_number || "-"}
-                      onChange={e => setPoNumber(e.target.value)}
-                      className="w-full text-[11px] font-bold text-slate-900 bg-transparent border-0 p-0 outline-none truncate font-mono"
-                    />
-                  ) : (
-                    <div className="text-[11px] font-bold font-mono text-slate-900 truncate">
-                      {poNumber || document.po_number || "-"}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 4. Total Amount (Gross) */}
-              {getFieldPerm("total_gross") !== "hidden" && (
-                <div className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]">
-                  <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
-                    <span className="text-indigo-600 font-bold">Total Gross (₹)</span>
-                    <span className="text-emerald-700 font-bold text-[7px] bg-emerald-50 px-1 rounded">INR</span>
-                  </div>
-                  {getFieldPerm("total_gross") === "edit" ? (
-                    <input 
-                      type="text"
-                      value={Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      onChange={e => setAmount(Number(e.target.value.replace(/,/g, '')))}
-                      className="w-full text-[11px] font-black text-indigo-700 bg-transparent border-0 p-0 outline-none"
-                    />
-                  ) : (
-                    <div className="text-[11px] font-black text-indigo-700 truncate">
-                      ₹{Number(amount || document.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-            </div>
-
+                );
+              })}
             {/* More Info & Edit Fields Buttons Group */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
@@ -1628,7 +1907,6 @@ export default function DocumentDetails({
               <div className="flex flex-wrap items-center gap-2.5">
                 {effectiveMoreInfoFields.map((field) => {
                   const val = getFieldValue(field);
-                  const isMissing = val === "Not available";
                   return (
                     <div
                       key={field.field_key}
@@ -1653,14 +1931,10 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div
-                        className={`text-[11px] font-bold truncate ${
-                          isMissing
-                            ? "italic text-slate-400 font-normal"
-                            : "text-slate-900"
-                        }`}
+                        className="text-[11px] font-bold truncate text-slate-900"
                         title={val}
                       >
-                        {val}
+                        {renderFieldValueContent(field.field_key, val)}
                       </div>
                     </div>
                   );
@@ -1670,155 +1944,167 @@ export default function DocumentDetails({
           )}
 
         </div>
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2.5 gap-3 bg-slate-50/40 min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2 gap-2.5 bg-slate-50/40 min-h-0">
           
           {/* LEFT COLUMN: UNIFIED SCROLLABLE AUDIT & COMPLIANCE PANEL (OPTIMAL COMPACT WIDTH) */}
-          <div className="w-full lg:w-[30%] xl:w-[30%] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1.5 space-y-2.5 max-h-full">
+          <div className="w-full lg:w-[30%] xl:w-[30%] flex flex-col shrink-0 overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-full">
             
             {/* 1. Sleek Stepper Progress Strip */}
             <div 
               onClick={() => setShowTimelineModal(true)}
-              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2.5 shadow-2xs shrink-0 flex flex-col gap-2 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
+              className="bg-white rounded-xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex flex-col gap-1 cursor-pointer hover:border-indigo-300 hover:shadow-xs transition group select-none"
               title="Click to view full Approval Timeline & Audit Trail"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-black text-slate-800 flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5 text-[#003F28]" /> Approval Workflow
-                  </span>
-                  {document?.workflow_profile_id && (
-                    <span className="text-[9.5px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shadow-3xs">
-                      {document.workflow_profile_id}
-                    </span>
-                  )}
-                </div>
-                <span className="px-2 py-0.5 rounded-md border border-slate-200 text-[8px] font-bold text-slate-600">View Timeline →</span>
-              </div>
-              {/* Horizontal Stepper */}
-              <div className="hidden flex-col gap-1.5 overflow-x-auto custom-scrollbar flex-1 min-w-0 w-full">
-                {workflowStepDefinitions.length > 0 ? (
-                  workflowStepDefinitions.slice(0, 2).map((step: any, sIdx: number) => {
-                    const isDocSettled = ["Approved", "Settled", "Paid", "Ready for Payment"].includes(document?.status || "");
-                    const docStatusLower = (document?.status || "").toLowerCase();
-                    const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
-                    const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
-
-                    const matchingCancelLog = (commentsList || []).find((c: any) => {
-                      const action = (c.action || "").toLowerCase();
-                      return action.includes("cancel") || action.includes("reject") || action.includes("returned") || action.includes("send back");
-                    });
-
-                    const isStepCancelled = (isDocCancelled && step.stage_number === currentStageNum) || Boolean(matchingCancelLog && matchingCancelLog.stage && matchingCancelLog.stage.includes(String(step.stage_number)));
-                    const isPassed = !isStepCancelled && (isDocSettled || (!isDocCancelled && step.stage_number < currentStageNum));
-                    const isCurrent = !isDocSettled && !isDocCancelled && !isTerminal && step.stage_number === currentStageNum;
-
-                    return (
-                      <React.Fragment key={sIdx}>
-                        {sIdx > 0 && <span className="text-slate-300 font-black text-[9px] shrink-0 ml-1">↓</span>}
-                        <div 
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[9.5px] transition shrink-0 ${
-                            isStepCancelled
-                              ? "bg-rose-50/80 border border-rose-200 text-rose-900 font-bold shadow-3xs"
-                              : isCurrent
-                              ? "bg-indigo-50 border border-indigo-200 text-indigo-900 font-extrabold shadow-2xs"
-                              : isPassed
-                              ? "bg-emerald-50 text-emerald-800 font-bold"
-                              : "text-slate-400 font-medium"
-                          }`}
-                        >
-                          <span className={`h-3.5 w-3.5 rounded-full flex items-center justify-center text-[7.5px] font-black ${
-                            isStepCancelled
-                              ? "bg-rose-500 text-white shadow-3xs"
-                              : isCurrent
-                              ? "bg-indigo-600 text-white"
-                              : isPassed
-                              ? "bg-emerald-600 text-white"
-                              : "bg-slate-150 text-slate-500 border border-slate-200"
-                          }`}>
-                            {isStepCancelled ? "✕" : isPassed ? "✓" : step.stage_number}
-                          </span>
-                          <span className="truncate max-w-[95px]">
-                            {step.stage_name}
-                          </span>
-                          {isStepCancelled ? (
-                            <span className="text-[8px] font-mono text-rose-600 font-extrabold uppercase">
-                              (CANCELLED)
-                            </span>
-                          ) : isCurrent ? (
-                            <span className="text-[8px] font-mono text-indigo-600/80 uppercase">
-                              ({step.approver_target || currentUserUsername || "anbu"})
-                            </span>
-                          ) : null}
-                        </div>
-                      </React.Fragment>
-                    );
-                  })
-                ) : (
-                  <div className="flex flex-col items-start gap-1.5">
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-900 font-extrabold">
-                      <span className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[7.5px]">1</span>
-                      <span>Accounts Review ({currentUserUsername || "anbu"})</span>
-                    </span>
-                    <span className="text-slate-300 font-black text-[9px] ml-1">↓</span>
-                    <span className="text-slate-400 text-[9.5px] font-medium">Final Settlement</span>
-                  </div>
-                )}
+                <span className="text-[10.5px] font-black text-slate-800 flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-[#003F28]" /> Approval Workflow
+                </span>
+                <span className="px-2 py-0.5 rounded-md border border-slate-200 text-[8.5px] font-bold text-slate-600 group-hover:border-emerald-300 group-hover:text-emerald-800 transition">
+                  View Timeline →
+                </span>
               </div>
             </div>
 
             {document?.completed_by_peer && (
-              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex items-center gap-2.5 shadow-2xs shrink-0">
-                <div className="h-6 w-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+              <div className="p-2 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex items-center gap-2 shadow-2xs shrink-0">
+                <div className="h-5 w-5 rounded-md bg-amber-500 text-white flex items-center justify-center font-black text-[10px] shrink-0 shadow-xs">
                   ✓
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold text-amber-900">
+                  <div className="text-[10.5px] font-bold text-amber-900">
                     Stage Completed by Peer Approver
                   </div>
-                  <div className="text-[10px] text-amber-700">
+                  <div className="text-[9.5px] text-amber-700">
                     This approval stage has already been completed by another approver. Document is now read-only for you.
                   </div>
                 </div>
               </div>
             )}
             {lockInfo.isLocked && !lockInfo.isSelf && !document?.completed_by_peer && !isTerminal && (
-              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 flex items-center gap-2 shadow-2xs shrink-0">
-                <Users className="h-4 w-4 text-blue-600 shrink-0" />
-                <div className="text-[10.5px]">
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 flex items-center gap-2 shadow-2xs shrink-0">
+                <Users className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <div className="text-[10px]">
                   <span className="font-bold">{lockInfo.lockedBy}</span> is also reviewing this document. Either of you can approve this stage.
                 </div>
               </div>
             )}
 
-            {/* 2. Stage 1 Prerequisite Status Callout & Actions Bar */}
+            {/* 2. APPROVE / REJECT / RETURN (TOP ACTION BAR) */}
+            {(() => {
+              const isSettled = (document?.status || '').toLowerCase().includes('settled') || (document?.status || '').toLowerCase().includes('paid') || document?.status === 'Approved';
+              const isCancelled = ["Cancelled", "Failed"].includes(document?.status || "");
+              if (isSettled || isCancelled || isDocumentLocked) return null;
+
+              const hasDocAttachment = Boolean(document?.file_url || document?.file_path || iframeSrc);
+              const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+              const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
+              const totalCount = effectiveChecklist.length;
+              const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
+              const canApprove = (!isStage1Attachment || hasDocAttachment) && allItemsChecked && !actionLoading;
+
+              return (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleInlineApprove}
+                    disabled={!canApprove}
+                    className={`flex-1 py-1.5 px-2.5 font-extrabold text-[10.5px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
+                      canApprove
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/35 hover:shadow-emerald-600/50 hover:shadow-md ring-1 ring-emerald-500/20"
+                        : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                    }`}
+                    title={
+                      !hasDocAttachment && isStage1Attachment
+                        ? "Attach physical document PDF first"
+                        : !allItemsChecked
+                        ? "Verify all checklist items first"
+                        : "Click to approve and forward to next stage approver"
+                    }
+                  >
+                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                    <span>
+                      {actionLoading 
+                        ? "Processing..." 
+                        : isStage1Attachment && !hasDocAttachment
+                        ? "Attach PDF to Unlock"
+                        : !allItemsChecked
+                        ? "Verify Checklist"
+                        : "Approve ➔"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInlineHold}
+                    disabled={actionLoading}
+                    className="px-2.5 py-1.5 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                    title="Hold and request clarification"
+                  >
+                    <Pause className="h-3 w-3" />
+                    <span>Hold</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInlineReject}
+                    disabled={actionLoading}
+                    className="px-2.5 py-1.5 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                    title={
+                      (document?.current_stage || 1) > 1
+                        ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
+                        : "Cancel and void this process at Attachment stage"
+                    }
+                  >
+                    {(document?.current_stage || 1) > 1 ? (
+                      <>
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Reject / Return</span>
+                      </>
+                    ) : (
+                      <>
+                        <X className="h-3 w-3 stroke-[3]" />
+                        <span>Cancel Process</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* 3. CHECKLIST VERIFICATION */}
             {(() => {
               const isSettled = (document?.status || '').toLowerCase().includes('settled') || (document?.status || '').toLowerCase().includes('paid') || document?.status === 'Approved';
               const isCancelled = ["Cancelled", "Failed"].includes(document?.status || "");
               const isReturned = (document?.status || '').toLowerCase().includes('return');
-              
+              const hasDocAttachment = Boolean(document?.file_url || document?.file_path || iframeSrc);
+              const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
+              const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
+              const totalCount = effectiveChecklist.length;
+              const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
+
               if (isSettled) {
                 return (
-                  <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 flex flex-col gap-2 shadow-2xs shrink-0 animate-fadeIn">
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 flex flex-col gap-1.5 shadow-2xs shrink-0 animate-fadeIn">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                        <div className="h-6 w-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
                           ✓
                         </div>
                         <div>
-                          <span className="font-extrabold text-xs block text-emerald-900 leading-tight">Document Fully Settled & Approved</span>
-                          <span className="text-[10px] text-emerald-700 font-medium">All workflow sign-off stages completed. Cleared for payment disbursement.</span>
+                          <span className="font-extrabold text-[11px] block text-emerald-900 leading-tight">Document Fully Settled & Approved</span>
+                          <span className="text-[9.5px] text-emerald-700 font-medium">All workflow sign-off stages completed. Cleared for payment disbursement.</span>
                         </div>
                       </div>
-                      <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                      <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[9px] font-black uppercase tracking-wider shadow-2xs">
                         Settled
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowTimelineModal(true)}
-                      className="w-full py-1.5 px-3 bg-white hover:bg-emerald-100/60 text-emerald-900 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="w-full py-1 px-2.5 bg-white hover:bg-emerald-100/60 text-emerald-900 border border-emerald-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
-                      <Clock className="h-3.5 w-3.5 text-emerald-600" />
+                      <Clock className="h-3 w-3 text-emerald-600" />
                       <span>View Sign-Off History & Named Approver Audit Log ➔</span>
                     </button>
                   </div>
@@ -1827,27 +2113,27 @@ export default function DocumentDetails({
 
               if (isCancelled) {
                 return (
-                  <div className="p-3 bg-gradient-to-r from-rose-50/90 to-orange-50/40 border border-rose-200/90 rounded-xl text-rose-950 flex flex-col gap-2.5 shadow-2xs shrink-0 animate-fadeIn">
+                  <div className="p-2.5 bg-gradient-to-r from-rose-50/90 to-orange-50/40 border border-rose-200/90 rounded-xl text-rose-950 flex flex-col gap-1.5 shadow-2xs shrink-0 animate-fadeIn">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-rose-500 text-white flex items-center justify-center font-black text-xs shadow-xs shrink-0">
+                        <div className="h-6 w-6 rounded-lg bg-rose-500 text-white flex items-center justify-center font-black text-xs shadow-xs shrink-0">
                           ✕
                         </div>
                         <div>
-                          <span className="font-extrabold text-xs block text-rose-950 leading-tight">Document Process Cancelled</span>
-                          <span className="text-[10px] text-rose-700/90 font-medium">This workflow process was cancelled and voided.</span>
+                          <span className="font-extrabold text-[11px] block text-rose-950 leading-tight">Document Process Cancelled</span>
+                          <span className="text-[9.5px] text-rose-700/90 font-medium">This workflow process was cancelled and voided.</span>
                         </div>
                       </div>
-                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-300/70 rounded-md text-[9.5px] font-extrabold uppercase tracking-wider shadow-3xs">
+                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 border border-rose-300/70 rounded-md text-[9px] font-extrabold uppercase tracking-wider shadow-3xs">
                         Cancelled
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowTimelineModal(true)}
-                      className="w-full py-1.5 px-3 bg-white hover:bg-rose-50 text-rose-900 border border-rose-200 rounded-lg text-[10.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs"
+                      className="w-full py-1 px-2.5 bg-white hover:bg-rose-50 text-rose-900 border border-rose-200 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs"
                     >
-                      <Clock className="h-3.5 w-3.5 text-rose-600" />
+                      <Clock className="h-3 w-3 text-rose-600" />
                       <span>View Cancellation Audit Trail ➔</span>
                     </button>
                   </div>
@@ -1856,51 +2142,44 @@ export default function DocumentDetails({
 
               if (isDocumentLocked) {
                 return (
-                  <div className="p-3 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10.5px] font-medium flex flex-col gap-2 shrink-0 animate-fadeIn shadow-2xs">
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-[10px] font-medium flex flex-col gap-1.5 shrink-0 animate-fadeIn shadow-2xs">
                     <div className="flex items-center gap-1.5 text-slate-800 font-bold">
-                      <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                      <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                       <span>
-                        Document Locked (Read-Only): Currently at Stage {document.current_stage || 1} {document.assigned_approver ? `(Assigned: ${document.assigned_approver})` : ''}
+                        Document Locked (Read-Only): Currently at Stage {document?.current_stage || 1} {document?.assigned_approver ? `(Assigned: ${document.assigned_approver})` : ''}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                    <p className="text-[9.5px] text-slate-500 leading-relaxed">
                       {isTerminal 
-                        ? `This document is in a completed terminal state (${document.status}) and cannot be edited.`
+                        ? `This document is in a completed terminal state (${document?.status}) and cannot be edited.`
                         : `This document has been signed off for this stage. All fields, checklists, and document attachments are locked in read-only mode until returned via rejection.`
                       }
                     </p>
                     <button
                       type="button"
                       onClick={() => setShowTimelineModal(true)}
-                      className="w-full py-1.5 px-3 bg-white hover:bg-slate-100/90 text-slate-800 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="w-full py-1 px-2.5 bg-white hover:bg-slate-100/90 text-slate-800 border border-slate-300 rounded-lg text-[9.5px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
-                      <Clock className="h-3.5 w-3.5 text-slate-500" />
+                      <Clock className="h-3 w-3 text-slate-500" />
                       <span>View Stage Approval Timeline & Audit Trail</span>
                     </button>
                   </div>
                 );
               }
 
-              const hasDocAttachment = Boolean(document?.file_url || document?.file_path);
-              const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
-              const checkedCount = Object.values(checkedStates).filter(Boolean).length;
-              const totalCount = effectiveChecklist.length;
-              const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
-              const canApprove = (!isStage1Attachment || hasDocAttachment) && allItemsChecked && !actionLoading;
-
               return (
-                <div className="space-y-1.5 shrink-0">
+                <div className="space-y-1 shrink-0">
                   {/* Step-Down Returned Notice */}
                   {isReturned && (
-                    <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                    <div className="p-1.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-lg text-[9.5px] font-bold flex items-center justify-between shadow-2xs">
                       <div className="flex items-center gap-1.5">
-                        <RotateCcw className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                        <RotateCcw className="h-3 w-3 text-rose-600 shrink-0" />
                         <span>Returned Document: Rejected by next stage approver. Review feedback, verify checklist, and re-approve.</span>
                       </div>
                       <button 
                         type="button" 
                         onClick={() => setShowTimelineModal(true)} 
-                        className="text-[8.5px] uppercase tracking-wider text-rose-700 bg-rose-100 hover:bg-rose-200 px-1.5 py-0.5 rounded font-extrabold cursor-pointer"
+                        className="text-[8px] uppercase tracking-wider text-rose-700 bg-rose-100 hover:bg-rose-200 px-1.5 py-0.5 rounded font-extrabold cursor-pointer"
                       >
                         View Notes
                       </button>
@@ -1909,124 +2188,58 @@ export default function DocumentDetails({
 
                   {/* Stage Guidance Alert Pill */}
                   {isStage1Attachment && !hasDocAttachment ? (
-                    <div className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
-                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <div className="p-1.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-[9.5px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
                       <span>Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval.</span>
                     </div>
                   ) : isStage1Attachment && hasDocAttachment && !allItemsChecked ? (
-                    <div className="p-2 bg-amber-50/70 border border-amber-200 text-amber-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                    <div className="p-1.5 bg-amber-50/70 border border-amber-200 text-amber-900 rounded-lg text-[9.5px] font-bold flex items-center justify-between shadow-2xs">
                       <div className="flex items-center gap-1.5">
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
                         <span>Attachment Stage: Review document, verify checklist ({checkedCount}/{totalCount}), and click Approve to forward (or Cancel).</span>
                       </div>
-                      <span className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-extrabold">Stage 1</span>
+                      <span className="text-[8.5px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-extrabold">Stage 1</span>
                     </div>
                   ) : !allItemsChecked ? (
-                    <div className="p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-[10px] font-bold flex items-center justify-between shadow-2xs">
+                    <div className="p-1.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-[9.5px] font-bold flex items-center justify-between shadow-2xs">
                       <div className="flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        <Shield className="h-3 w-3 text-blue-600 shrink-0" />
                         <span>Checklist Verification: ({checkedCount}/{totalCount}) items verified</span>
                       </div>
-                      <span className="text-[9px] uppercase tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-extrabold">Required</span>
+                      <span className="text-[8.5px] uppercase tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-extrabold">Required</span>
                     </div>
                   ) : (
-                    <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
-                      <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3] shrink-0" />
+                    <div className="p-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-[9.5px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <Check className="h-3 w-3 text-emerald-600 stroke-[3] shrink-0" />
                       <span>All Stage {document?.current_stage || 1} criteria satisfied! Click Approve to forward to next stage.</span>
                     </div>
                   )}
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleInlineApprove}
-                      disabled={!canApprove}
-                      className={`flex-1 py-2 px-3 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
-                        canApprove
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/35 hover:shadow-emerald-600/50 hover:shadow-md ring-1 ring-emerald-500/20"
-                          : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-                      }`}
-                      title={
-                        !hasDocAttachment && isStage1Attachment
-                          ? "Attach physical document PDF first"
-                          : !allItemsChecked
-                          ? "Verify all checklist items first"
-                          : "Click to approve and forward to next stage approver"
-                      }
-                    >
-                      <Check className="h-4 w-4 stroke-[3]" />
-                      <span>
-                        {actionLoading 
-                          ? "Processing..." 
-                          : isStage1Attachment && !hasDocAttachment
-                          ? "Attach PDF to Unlock"
-                          : !allItemsChecked
-                          ? `Verify Checklist (${checkedCount}/${totalCount})`
-                          : "Approve & Forward ➔"}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleInlineHold}
-                      disabled={actionLoading}
-                      className="px-3 py-2 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
-                      title="Hold and request clarification"
-                    >
-                      <Pause className="h-3.5 w-3.5" />
-                      <span>Hold</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleInlineReject}
-                      disabled={actionLoading}
-                      className="px-3 py-2 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[10px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
-                      title={
-                        (document?.current_stage || 1) > 1
-                          ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
-                          : "Cancel and void this process at Attachment stage"
-                      }
-                    >
-                      {(document?.current_stage || 1) > 1 ? (
-                        <>
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          <span>Reject / Return</span>
-                        </>
-                      ) : (
-                        <>
-                          <X className="h-3.5 w-3.5 stroke-[3]" />
-                          <span>Cancel Process</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
               );
             })()}
 
-            {/* 3. 9-POINT COMPLIANCE CHECKLIST STATION (SINGLE UNIFIED CONTAINER) */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 space-y-2.5 shrink-0">
+            {/* 4. COMPLIANCE CHECKLIST */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-1.5 shrink-0">
               
               {/* Checklist Header Controls */}
-              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-[#003F28]" />
-                  <span>Compliance Checklist {isDocUnrouted ? "(Unrouted)" : `(${Object.values(checkedStates).filter(Boolean).length}/${effectiveChecklist.length})`}</span>
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Shield className="h-3 w-3 text-[#003F28]" />
+                  <span>Checklist {isDocUnrouted ? "(Unrouted)" : `(${effectiveChecklist.filter(item => Boolean(checkedStates[item])).length}/${effectiveChecklist.length})`}</span>
                 </span>
                 {isDocUnrouted ? (
-                  <span className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                  <span className="text-[8.5px] uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
                     Unrouted
                   </span>
                 ) : isDocumentLocked ? (
-                  <span className="text-[9px] uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-extrabold flex items-center gap-1">
-                    <Lock className="h-2.5 w-2.5" /> Locked (Read-Only)
+                  <span className="text-[8.5px] uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-extrabold flex items-center gap-1">
+                    <Lock className="h-2 w-2" /> Locked
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={handleToggleAllChecklist}
-                    className="text-[9.5px] font-bold text-[#003F28] hover:text-[#005333] underline cursor-pointer"
+                    className="text-[9px] font-bold text-[#003F28] hover:text-[#005333] underline cursor-pointer"
                   >
                     {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
                   </button>
@@ -2034,13 +2247,13 @@ export default function DocumentDetails({
               </div>
 
               {/* Checklist Items Matrix */}
-              <div className="space-y-1.5">
+              <div className="space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar pr-0.5">
                 {isDocUnrouted ? (
-                  <div className="p-3 bg-amber-50/60 border border-amber-200/80 text-amber-900 rounded-xl text-center text-[10px] font-medium">
+                  <div className="p-2 bg-amber-50/60 border border-amber-200/80 text-amber-900 rounded-lg text-center text-[9.5px] font-medium">
                     Document is unrouted (no workflow matched). No checklist items apply.
                   </div>
                 ) : effectiveChecklist.length === 0 ? (
-                  <div className="p-3 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-xl text-center text-[10px] font-medium italic">
+                  <div className="p-2 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-lg text-center text-[9.5px] font-medium italic">
                     No checklist requirements for this workflow stage.
                   </div>
                 ) : (
@@ -2050,7 +2263,7 @@ export default function DocumentDetails({
                       <div
                         key={idx}
                         onClick={isDocumentLocked ? undefined : () => handleToggleChecklist(item)}
-                        className={`p-2 rounded-lg border transition-all flex items-center gap-2.5 select-none shadow-2xs ${
+                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-2 select-none shadow-2xs ${
                           isDocumentLocked
                             ? isChecked
                               ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 font-bold cursor-default"
@@ -2061,54 +2274,168 @@ export default function DocumentDetails({
                         }`}
                       >
                         <div
-                          className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                          className={`h-3.5 w-3.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
                             isChecked
                               ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                               : "bg-white border-slate-300"
                           }`}
                         >
-                          {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                          {isChecked && <Check className="h-2 w-2 stroke-[3]" />}
                         </div>
-                        <span className="text-[10px] leading-tight font-bold" title={item}>{item}</span>
+                        <span className="text-[10.5px] leading-tight font-bold" title={item}>{item}</span>
                       </div>
                     );
                   })
                 )}
               </div>
 
-              {/* Decision Remarks & Audit Notes Box */}
-              <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[8.5px] uppercase font-bold text-slate-500">
-                    Audit Notes / Decision Remarks
-                  </label>
-                  {isDocumentLocked && (
-                    <span className="text-[8.5px] text-slate-400 font-medium flex items-center gap-1">
-                      <Lock className="h-2.5 w-2.5" /> Read-Only
-                    </span>
-                  )}
-                </div>
-                
-                <textarea
-                  rows={3}
-                  value={approvalComment}
-                  onChange={(e) => setApprovalComment(e.target.value)}
-                  disabled={isDocumentLocked || actionLoading}
-                  placeholder={
-                    isDocumentLocked
-                      ? "Document is locked in read-only mode for this stage."
-                      : (document?.current_stage || 1) === 1
-                      ? "Enter reason notes if cancelling, or optional compliance remarks..."
-                      : "Enter reason notes if rejecting / returning to previous approver, or optional remarks..."
-                  }
-                  className={`w-full text-[10.5px] font-medium p-2 border rounded-xl outline-none transition resize-none ${
-                    isDocumentLocked 
-                      ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" 
-                      : "bg-slate-50 border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500/20"
-                  }`}
-                />
-              </div>
+            </div>
 
+            {/* 4. COMMENT (Shown ONLY if an explicit comment exists) */}
+            {(() => {
+              const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
+              const currentStep = (workflowStepDefinitions || []).find(
+                (s: any) => s.stage_number === currentStageNum
+              );
+
+              // Find real user comments from commentsList
+              const userComments = (commentsList || []).filter((c: any) => {
+                const author = (c.author || c.user_name || c.user || "").toLowerCase();
+                const action = (c.action || "").toLowerCase();
+                const notes = (c.text || c.comment || c.remarks || c.notes || c.message || "").toLowerCase();
+                const isSync = author.includes("sync") || author.includes("erp") || action.includes("sync");
+                const isConfig = action.includes("config") || notes.includes("updated user more info configuration") || notes.includes("data sync");
+                return !isSync && !isConfig;
+              });
+
+              const prevStageNum = currentStageNum - 1;
+              let prevStageLog = (userComments || []).find((c: any) => {
+                const stageStr = String(c.stage || c.action || "");
+                return stageStr.includes(String(prevStageNum)) || stageStr.toLowerCase().includes(`stage ${prevStageNum}`);
+              });
+
+              // Fallback to the latest user comment if specific stage match isn't found
+              if (!prevStageLog && userComments.length > 0) {
+                prevStageLog = userComments[0];
+              }
+
+              const prevApproverName = prevStageLog 
+                ? (prevStageLog.author || prevStageLog.user_name || prevStageLog.user || "").split("(")[0].trim().toUpperCase() 
+                : null;
+
+              const explicitStepCmd = 
+                currentStep?.instruction || 
+                currentStep?.command || 
+                (currentStep?.action_required && !['Approve', 'Approved'].includes(currentStep.action_required) ? currentStep.action_required : null);
+
+              const rawCommentText = prevStageLog 
+                ? (prevStageLog.text || prevStageLog.comment || prevStageLog.remarks || prevStageLog.notes || prevStageLog.message || "").trim() 
+                : "";
+
+              // Clean up standard auto-generated signoff string if no custom remark was written
+              const prevStageComment = rawCommentText && !rawCommentText.startsWith("Approved Stage ") && !rawCommentText.startsWith("Advanced to ")
+                ? rawCommentText 
+                : null;
+
+              const instruction = prevStageComment || explicitStepCmd;
+
+              // Hide entire COMMENT card if no explicit instruction/comment was passed
+              if (!instruction || !instruction.trim()) {
+                return null;
+              }
+
+              const rawApprover = 
+                currentStep?.approver_target || 
+                document?.assigned_approver || 
+                currentUserUsername || 
+                "Assigned Approver";
+              const approverName = rawApprover.split(",")[0].trim();
+              const approverInitial = approverName ? approverName.charAt(0).toUpperCase() : "A";
+
+              // Clean role: Do not display mismatched stage names like 'FIRST APPROVAL' on Stage 2+
+              let rawRole = currentStep?.stage_name || currentStep?.step_name || "";
+              if (currentStageNum > 1 && rawRole.toLowerCase().includes("first")) {
+                rawRole = `Stage ${currentStageNum} Approver`;
+              }
+              if (!rawRole) {
+                rawRole = currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`;
+              }
+              const cleanRole = rawRole.replace(/^\(|\)$/g, "").trim();
+              const displayApproverWithRole = cleanRole && !approverName.toLowerCase().includes(cleanRole.toLowerCase())
+                ? `${approverName.toUpperCase()} (${cleanRole.toUpperCase()})`
+                : approverName.toUpperCase();
+
+              return (
+                <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-2 shrink-0">
+                  {/* Card Title & Stage Badge */}
+                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <Shield className="h-3 w-3 text-[#003F28]" />
+                      <span>COMMENT</span>
+                    </span>
+                    <span className="text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-3xs">
+                      STAGE {currentStageNum}
+                    </span>
+                  </div>
+
+                  {/* Approver Avatar Initial + Name & Role */}
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-[#003F28] text-white flex items-center justify-center font-black text-[10.5px] shrink-0 shadow-3xs">
+                      {approverInitial}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10.5px] font-extrabold text-slate-900 leading-tight truncate">
+                        {displayApproverWithRole}
+                      </div>
+                      <div className="text-[9px] font-medium text-slate-500 leading-tight mt-0.5">
+                        {prevApproverName 
+                          ? `Passed from Stage ${prevStageNum} by ${prevApproverName}. Your approval is required.` 
+                          : "Your approval is required at this stage."}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Command Callout Box */}
+                  <div className="p-2 bg-emerald-50/70 border border-emerald-200/90 rounded-lg flex items-start gap-1.5 text-[9.5px] font-medium text-emerald-950 leading-relaxed shadow-3xs">
+                    <span className="text-xs shrink-0 select-none leading-none mt-0.5">💬</span>
+                    <span className="flex-1 font-medium">{instruction}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 5. AUDIT NOTES / DECISION REMARKS */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-1.5 shrink-0">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3 text-[#003F28]" />
+                  <span>Audit Notes / Decision Remarks</span>
+                </span>
+                {isDocumentLocked && (
+                  <span className="text-[8px] text-slate-400 font-medium flex items-center gap-1">
+                    <Lock className="h-2 w-2" /> Read-Only
+                  </span>
+                )}
+              </div>
+              
+              <textarea
+                rows={2}
+                value={approvalComment}
+                onChange={(e) => setApprovalComment(e.target.value)}
+                disabled={isDocumentLocked || actionLoading}
+                placeholder={
+                  isDocumentLocked
+                    ? "Document is locked in read-only mode for this stage."
+                    : (document?.current_stage || 1) === 1
+                    ? "Enter reason notes if cancelling, or optional remarks..."
+                    : "Enter reason notes if rejecting / returning to previous approver, or optional remarks..."
+                }
+                className={`w-full text-[9.5px] font-medium p-1.5 border rounded-lg outline-none transition resize-none ${
+                  isDocumentLocked 
+                    ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" 
+                    : "bg-slate-50 border-slate-200 focus:border-[#003F28] focus:bg-white focus:ring-1 focus:ring-[#003F28]/20"
+                }`}
+              />
             </div>
 
           </div>
@@ -2409,7 +2736,7 @@ export default function DocumentDetails({
                       {dynamicSyncPayload.entries.map((entry) => (
                         <tr key={entry.key} className="hover:bg-slate-50">
                           <td className="py-2 px-3 font-bold text-slate-700">{entry.label}</td>
-                          <td className="py-2 px-3 font-medium text-slate-900">{entry.value}</td>
+                          <td className="py-2 px-3 font-medium text-slate-900">{renderFieldValueContent(entry.key, entry.value)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2750,7 +3077,7 @@ export default function DocumentDetails({
                             </div>
                           </div>
                           <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
-                            {comm.text || comm.comment || "Signed off without remarks."}
+                            {getCleanAuditRemarks(comm.text || comm.comment, workflowStepDefinitions) || "Signed off and verified."}
                           </p>
                         </div>
                       );

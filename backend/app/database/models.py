@@ -78,6 +78,11 @@ class Role(Base):
         back_populates="role",
         cascade="all, delete-orphan",
     )
+    users = relationship(
+            "User",
+            foreign_keys="User.role_id",
+            back_populates="role_rel",
+)
 
 
 class Permission(Base):
@@ -87,8 +92,20 @@ class Permission(Base):
     code = Column(String(100), unique=True, index=True, nullable=False)
     name = Column(String(150), nullable=False)
     module = Column(String(50), default="DOCUMENT", index=True)
+    subpage = Column(String(50), nullable=True, index=True)
     action = Column(String(50), default="READ")
+    supported_scopes = Column(String(100), nullable=True)
+    description = Column(String(255), nullable=True)
+    legacy_code = Column(String(100), nullable=True, index=True)
+    is_custom = Column(Boolean, default=False, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_by = Column(String(150), default="System")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
 
 
 class RolePermission(Base):
@@ -107,6 +124,7 @@ class RolePermission(Base):
         nullable=False,
         index=True,
     )
+    scope = Column(String(50), default="ALL", nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     role = relationship("Role", back_populates="permissions")
@@ -198,9 +216,10 @@ class User(Base):
 
 
     role_rel = relationship(
-        "Role",
-        foreign_keys=[role_id],
-    )
+    "Role",
+    foreign_keys=[role_id],
+    back_populates="users",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +277,36 @@ class Document(Base):
     checklist_state = Column(Text, nullable=True)
     line_items_json = Column(Text, nullable=True)
     custom_data = Column(Text, nullable=True)
+
+    # Document type specific synced columns
+    account_name = Column(String(255), nullable=True)
+    type_of_complaint = Column(String(255), nullable=True)
+    dealer_name = Column(String(255), nullable=True)
+    bp_code = Column(String(100), nullable=True)
+    customer_code = Column(String(100), nullable=True)
+    employee_name = Column(String(255), nullable=True)
+    employee_id = Column(String(100), nullable=True)
+    employee_division = Column(String(100), nullable=True)
+    employee_segment = Column(String(100), nullable=True)
+    survey_date = Column(String(50), nullable=True)
+    subtype_of_complaint = Column(String(255), nullable=True)
+    bp_type = Column(String(100), nullable=True)
+    feedback_date = Column(String(50), nullable=True)
+    additional_comments = Column(Text, nullable=True)
+    image_1 = Column(String(500), nullable=True)
+    image_2 = Column(String(500), nullable=True)
+    image_3 = Column(String(500), nullable=True)
+    image_4 = Column(String(500), nullable=True)
+    image_5 = Column(String(500), nullable=True)
+    expense_type = Column(String(255), nullable=True)
+    department = Column(String(255), nullable=True)
+    expense_date = Column(String(50), nullable=True)
+    receipt_number = Column(String(100), nullable=True)
+    credit_note_number = Column(String(100), nullable=True)
+    reason_for_credit = Column(String(255), nullable=True)
+    original_invoice_ref = Column(String(100), nullable=True)
+    credit_note_date = Column(String(50), nullable=True)
+    credit_status = Column(String(50), nullable=True)
 
     file_url = Column(String(500), nullable=True)
     file_path = Column(String(500), nullable=True)
@@ -1262,4 +1311,4 @@ class DocumentTypeFieldConfiguration(Base):
             "document_type",
             "field_key",
         ),
-    )
+    )

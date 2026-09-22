@@ -288,28 +288,28 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
       />
 
       {/* Slide-in Drawer Container */}
-      <div className="relative w-full max-w-[480px] sm:w-[480px] bg-white h-full shadow-2xl flex flex-col z-10 border-l border-slate-200 animate-in slide-in-from-right duration-250 select-none">
+      <div className="relative w-full max-w-[420px] sm:w-[420px] bg-white h-full shadow-2xl flex flex-col z-10 border-l border-slate-200 animate-in slide-in-from-right duration-250 select-none">
         
         {/* DRAWER HEADER */}
-        <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50/80 flex items-start justify-between shrink-0">
+        <div className="px-3.5 py-2 border-b border-slate-200 bg-slate-50/80 flex items-start justify-between shrink-0">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-md bg-emerald-100 border border-emerald-200 flex items-center justify-center text-[#003F28] shrink-0">
-                <Sliders className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5">
+              <div className="h-5 w-5 rounded-md bg-emerald-100 border border-emerald-200 flex items-center justify-center text-[#003F28] shrink-0">
+                <Sliders className="h-3 w-3" />
               </div>
-              <h2 className="text-[14px] font-bold text-slate-900 tracking-tight font-display">
+              <h2 className="text-[12.5px] font-bold text-slate-900 tracking-tight font-display">
                 Configure More Info
               </h2>
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
+            <p className="text-[9.5px] text-slate-500 mt-0.5 font-normal">
               Choose the information you want to display for this document.
             </p>
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <span className="text-[9.5px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[8.5px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
                 {documentType || "AP INVOICE"}
               </span>
               <span
-                className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded border ${
+                className={`text-[8.5px] font-semibold px-1.5 py-0.2 rounded border ${
                   hasUserOverride
                     ? "bg-amber-50 text-amber-800 border-amber-200"
                     : "bg-slate-100 text-slate-600 border-slate-200"
@@ -330,33 +330,33 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
         </div>
 
         {/* DRAWER TABS & COUNTER */}
-        <div className="px-4 pt-2 pb-2 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200 text-[10.5px]">
+        <div className="px-3.5 pt-1.5 pb-1.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200 text-[9.5px]">
             <button
               onClick={() => setActiveTab("fields")}
-              className={`px-2.5 py-1 rounded font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
                 activeTab === "fields"
                   ? "bg-white text-slate-900 shadow-2xs border border-slate-200"
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              <Layers className="h-3 w-3" />
+              <Layers className="h-2.5 w-2.5" />
               <span>Select Fields</span>
             </button>
             <button
               onClick={() => setActiveTab("order")}
-              className={`px-2.5 py-1 rounded font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
                 activeTab === "order"
                   ? "bg-white text-slate-900 shadow-2xs border border-slate-200"
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              <GripVertical className="h-3 w-3" />
+              <GripVertical className="h-2.5 w-2.5" />
               <span>Reorder ({selectedKeys.size})</span>
             </button>
           </div>
 
-          <div className="text-[10.5px] font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+          <div className="text-[9.5px] font-bold text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
             <span className="text-[#006747] font-extrabold">{selectedKeys.size}</span> of{" "}
             {selectableAvailableFields.length} selected
           </div>
@@ -366,39 +366,39 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
         {activeTab === "fields" && (
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Search and Bulk Actions Toolbar */}
-            <div className="p-2.5 border-b border-slate-200 bg-slate-50/50 space-y-1.5 shrink-0">
+            <div className="p-2 border-b border-slate-200 bg-slate-50/50 space-y-1 shrink-0">
               <div className="relative">
-                <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="h-3 w-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search available fields..."
-                  className="w-full pl-8 pr-2.5 py-1 text-[11px] bg-white border border-slate-200 rounded-md outline-none focus:border-[#006747] focus:ring-1 focus:ring-[#006747] transition placeholder:text-slate-400 text-slate-800 font-medium"
+                  className="w-full pl-7 pr-2 py-0.5 text-[9.5px] bg-white border border-slate-200 rounded-md outline-none focus:border-[#006747] focus:ring-1 focus:ring-[#006747] transition placeholder:text-slate-400 text-slate-800 font-medium"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-2.5 w-2.5" />
                   </button>
                 )}
               </div>
 
-              <div className="flex items-center justify-between text-[10px]">
+              <div className="flex items-center justify-between text-[8.5px]">
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={handleSelectAll}
-                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition cursor-pointer flex items-center justify-center"
+                    className="px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition cursor-pointer flex items-center justify-center"
                   >
                     Select All
                   </button>
                   <button
                     type="button"
                     onClick={handleClearAll}
-                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition cursor-pointer flex items-center justify-center"
+                    className="px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition cursor-pointer flex items-center justify-center"
                   >
                     Clear All
                   </button>
@@ -412,7 +412,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                     className="text-amber-700 hover:text-amber-800 font-bold flex items-center justify-center gap-1 cursor-pointer transition disabled:opacity-50"
                     title="Revert to organization default view"
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-2.5 w-2.5" />
                     <span>Reset to Default</span>
                   </button>
                 )}
@@ -420,9 +420,9 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
             </div>
 
             {/* Scrollable Categories & Checklists */}
-            <div className="flex-1 overflow-y-auto px-4 py-2.5 space-y-2.5 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 custom-scrollbar">
               {Object.keys(categorizedFields).length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-[11px]">
+                <div className="text-center py-6 text-slate-400 text-[9.5px]">
                   No matching fields found for "{searchQuery}".
                 </div>
               ) : (
@@ -431,11 +431,11 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                     key={categoryName}
                     className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden"
                   >
-                    <div className="bg-slate-50/90 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    <div className="bg-slate-50/90 px-2.5 py-0.5 border-b border-slate-200 flex items-center justify-between">
+                      <span className="text-[5.5px] font-bold uppercase tracking-wider text-slate-600 scale-[0.8] origin-left inline-block">
                         {categoryName}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-1.5 py-0.5 rounded flex items-center justify-center leading-none">
+                      <span className="text-[5.5px] font-bold text-slate-500 bg-slate-200/70 px-1 py-0.2 rounded flex items-center justify-center leading-none scale-[0.8] origin-right">
                         {fields.filter((f) => selectedKeys.has(f.field_key)).length} /{" "}
                         {fields.length}
                       </span>
@@ -448,28 +448,28 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                           <div
                             key={field.field_key}
                             onClick={() => handleToggleField(field.field_key)}
-                            className={`px-3 py-1.5 flex items-center justify-between hover:bg-slate-50/80 cursor-pointer transition ${
+                            className={`px-2.5 py-1 flex items-center justify-between hover:bg-slate-50/80 cursor-pointer transition ${
                               isSelected ? "bg-emerald-50/30" : ""
                             }`}
                           >
-                            <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5 min-w-0 pr-2">
                               <div
-                                className={`h-3.5 w-3.5 rounded border flex items-center justify-center transition shrink-0 ${
+                                className={`h-3 w-3 rounded border flex items-center justify-center transition shrink-0 ${
                                   isSelected
                                     ? "bg-[#006747] border-[#005333] text-white"
                                     : "bg-white border-slate-300"
                                 }`}
                               >
-                                {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                                {isSelected && <Check className="h-2 w-2 stroke-[3]" />}
                               </div>
 
                               <div className="min-w-0">
-                                <div className="text-[11px] font-bold text-slate-800 truncate">
+                                <div className="text-[9.5px] font-bold text-slate-800 truncate leading-tight">
                                   {field.label}
                                 </div>
                                 {field.sample_value && (
                                   <div
-                                    className="text-[10px] text-slate-500 truncate font-mono mt-0.5"
+                                    className="text-[8.5px] text-slate-500 truncate font-mono mt-0.2 leading-tight"
                                     title={String(field.sample_value)}
                                   >
                                     {String(field.sample_value)}
@@ -478,10 +478,10 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                               </div>
                             </div>
 
-                            {/* Source Badge (ERP / DOCUMENT / CALCULATED) */}
-                            <div className="shrink-0 flex items-center pl-2">
+                            {/* Micro Source Badge (ERP / DOCUMENT / CALCULATED) */}
+                            <div className="shrink-0 flex items-center pl-1">
                               <span
-                                className={`inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-tight uppercase border transition-colors ${
+                                className={`inline-flex items-center justify-center gap-0.5 px-1 py-0.2 rounded text-[3px] font-bold tracking-tight uppercase border transition-colors leading-none scale-[0.5] origin-right ${
                                   field.source === "ERP"
                                     ? "bg-blue-50 text-blue-700 border-blue-200"
                                     : field.source === "Calculated"
@@ -490,11 +490,11 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                                 }`}
                               >
                                 {field.source === "ERP" ? (
-                                  <Database className="h-2.5 w-2.5 text-blue-600 shrink-0" />
+                                  <Database className="h-2 w-2 text-blue-600 shrink-0" />
                                 ) : field.source === "Calculated" ? (
-                                  <Calculator className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                                  <Calculator className="h-2 w-2 text-emerald-600 shrink-0" />
                                 ) : (
-                                  <FileText className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+                                  <FileText className="h-2 w-2 text-slate-500 shrink-0" />
                                 )}
                                 <span className="leading-none">{field.source || "ERP"}</span>
                               </span>
@@ -513,15 +513,15 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
         {/* TAB 2: FIELD REORDER (DRAG & DROP + UP/DOWN BUTTONS) */}
         {activeTab === "order" && (
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <div className="p-2.5 border-b border-slate-200 bg-slate-50/50 shrink-0">
-              <p className="text-[10.5px] text-slate-600">
+            <div className="p-2 border-b border-slate-200 bg-slate-50/50 shrink-0">
+              <p className="text-[9.5px] text-slate-600">
                 Drag items or use the arrows to set the exact display order in More Info.
               </p>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-2.5 space-y-1.5 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar">
               {orderedFieldKeys.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-[11px]">
+                <div className="text-center py-6 text-slate-400 text-[9.5px]">
                   No fields selected. Switch to "Select Fields" to choose fields first.
                 </div>
               ) : (
@@ -537,27 +537,27 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                       onDragStart={() => handleDragStart(index)}
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDragEnd={handleDragEnd}
-                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border bg-white shadow-2xs transition ${
+                      className={`flex items-center justify-between px-2 py-1 rounded-lg border bg-white shadow-2xs transition ${
                         isDragging
                           ? "border-[#006747] bg-emerald-50/40 opacity-50 scale-[0.98]"
                           : "border-slate-200 hover:border-slate-300"
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5 min-w-0 pr-1.5">
                         <div
                           className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-0.5 shrink-0"
                           title="Drag to reorder"
                         >
-                          <GripVertical className="h-3.5 w-3.5" />
+                          <GripVertical className="h-3 w-3" />
                         </div>
-                        <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0 w-4">
+                        <span className="text-[9px] font-mono font-bold text-slate-500 shrink-0 w-3.5">
                           {index + 1}.
                         </span>
                         <div className="min-w-0">
-                          <div className="text-[11px] font-bold text-slate-800 truncate">
+                          <div className="text-[9.5px] font-bold text-slate-800 truncate leading-tight">
                             {item.label}
                           </div>
-                          <div className="text-[10px] text-slate-500 truncate">
+                          <div className="text-[8.5px] text-slate-500 truncate leading-tight">
                             {item.category || "Information"}
                           </div>
                         </div>
@@ -566,7 +566,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                       <div className="flex items-center gap-1 shrink-0">
                         {/* Source Tag */}
                         <span
-                          className={`inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border mr-1 ${
+                          className={`inline-flex items-center justify-center gap-0.5 px-1 py-0.2 rounded text-[3px] font-bold uppercase border mr-0.5 leading-none scale-[0.5] origin-right ${
                             item.source === "ERP"
                               ? "bg-blue-50 text-blue-700 border-blue-200"
                               : item.source === "Calculated"
@@ -575,11 +575,11 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                           }`}
                         >
                           {item.source === "ERP" ? (
-                            <Database className="h-2.5 w-2.5 text-blue-600 shrink-0" />
+                            <Database className="h-2 w-2 text-blue-600 shrink-0" />
                           ) : item.source === "Calculated" ? (
-                            <Calculator className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                            <Calculator className="h-2 w-2 text-emerald-600 shrink-0" />
                           ) : (
-                            <FileText className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+                            <FileText className="h-2 w-2 text-slate-500 shrink-0" />
                           )}
                           <span className="leading-none">{item.source || "ERP"}</span>
                         </span>
@@ -592,7 +592,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                           className="p-0.5 rounded hover:bg-slate-100 text-slate-500 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition"
                           title="Move up"
                         >
-                          <ArrowUp className="h-3 w-3" />
+                          <ArrowUp className="h-2.5 w-2.5" />
                         </button>
                         <button
                           type="button"
@@ -601,7 +601,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                           className="p-0.5 rounded hover:bg-slate-100 text-slate-500 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition"
                           title="Move down"
                         >
-                          <ArrowDown className="h-3 w-3" />
+                          <ArrowDown className="h-2.5 w-2.5" />
                         </button>
                       </div>
                     </div>
@@ -613,28 +613,28 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
         )}
 
         {/* DRAWER FOOTER */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50/80 shrink-0 space-y-2">
+        <div className="p-2.5 border-t border-slate-200 bg-slate-50/80 shrink-0 space-y-1.5">
           {/* Admin Toggle to Save as Organization Default */}
           {canManageDefault && (
-            <label className="flex items-center gap-2 cursor-pointer text-[10.5px] text-slate-700 font-bold p-1.5 rounded-md hover:bg-slate-100/80 border border-slate-200/80 bg-white">
+            <label className="flex items-center gap-1.5 cursor-pointer text-[9.5px] text-slate-700 font-bold p-1 rounded-md hover:bg-slate-100/80 border border-slate-200/80 bg-white">
               <input
                 type="checkbox"
                 checked={saveAsDefault}
                 onChange={(e) => setSaveAsDefault(e.target.checked)}
-                className="h-3.5 w-3.5 rounded text-[#006747] focus:ring-[#006747] border-slate-300"
+                className="h-3 w-3 rounded text-[#006747] focus:ring-[#006747] border-slate-300"
               />
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3 text-emerald-700 shrink-0" />
                 <span>Save as organization default for all users</span>
               </div>
             </label>
           )}
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold transition flex items-center justify-center cursor-pointer"
+              className="px-2.5 py-0.5 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[9.5px] font-bold transition flex items-center justify-center cursor-pointer"
             >
               Cancel
             </button>
@@ -642,9 +642,9 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
               type="button"
               onClick={handleSave}
               disabled={isSaving || selectedKeys.size === 0}
-              className="px-3.5 py-1 rounded-md bg-[#006747] hover:bg-[#005333] text-white text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+              className="px-3 py-0.5 rounded-md bg-[#006747] hover:bg-[#005333] text-white text-[9.5px] font-bold transition flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <Save className="h-3.5 w-3.5" />
+              <Save className="h-3 w-3" />
               <span>{isSaving ? "Saving..." : "Save Changes"}</span>
             </button>
           </div>

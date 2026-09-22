@@ -8,6 +8,7 @@ export interface InvoiceLineItem {
 }
 
 export interface DbInvoice {
+  [key: string]: any;
   id: string;
   tracking_id?: string;
   document_type?: string;

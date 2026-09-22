@@ -15,7 +15,7 @@ import AdminPage from "./pages/Admin.jsx";
 import WorkflowRulesPage from "./pages/WorkflowRulesPage.jsx";
 
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
-import { DbInvoice } from "./types.ts";
+import { DbInvoice } from "./types";
 import { ClipboardCheck, ArrowRight, X, Clock } from "lucide-react";
 
 import { formatCurrencyINR } from "./utils/formatters.ts";
@@ -702,10 +702,19 @@ export default function App() {
 
             {currentView === "details" && (
               !activeDocument ? (
-                <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center animate-pulse">
-                  <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4" />
-                  <p className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">Loading Document Details...</p>
-                </div>
+                loadingDocs ? (
+                  <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center animate-pulse">
+                    <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4" />
+                    <p className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">Loading Document Details...</p>
+                  </div>
+                ) : (
+                  <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center">
+                    <p className="text-slate-700 font-bold mb-4">Document Not Found or Access Denied</p>
+                    <button onClick={() => setCurrentView("dashboard")} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+                      Return to Dashboard
+                    </button>
+                  </div>
+                )
               ) : (
                 <DocumentDetails
                   document={activeDocument}
