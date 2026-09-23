@@ -32,7 +32,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
-import { formatDocNumber, formatDate, formatTimeOnly } from "../utils/formatters";
+import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay } from "../utils/formatters";
 import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
 
 
@@ -265,7 +265,7 @@ export const getCanonicalKey = (rawKey: string): string => {
     return CANONICAL_KEY_MAP[cleaned];
   }
   const snake = cleaned
-    .replace(/[\s\-\.\/]+/g, "_")
+    .replace(/[\s\-./]+/g, "_")
     .replace(/[^a-z0-9_]/g, "")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
@@ -304,6 +304,15 @@ export default function DocumentDetails({
   }, [document?.id]);
 
   const activeDoc = freshDocument || document;
+  const canonicalDocType = useMemo(() => getCanonicalDocumentType(activeDoc || document), [activeDoc, document]);
+
+  const headerTitle = useMemo(() => {
+    const docObj = activeDoc || document;
+    if (!docObj) return "Document Details";
+    const rawType = docObj.document_type || docObj.Document_type || docObj.trans_type || docObj.doc_type || docObj.category;
+    if (!rawType || typeof rawType !== "string" || !rawType.trim()) return "Document Details";
+    return formatDocumentTypeDisplay(canonicalDocType) || "Document Details";
+  }, [activeDoc, document, canonicalDocType]);
 
   const [_activeTab, _setActiveTab] = useState<"original" | "layout" | "rawtext">(
     "original",
@@ -468,7 +477,7 @@ export default function DocumentDetails({
     if (activeDoc?.id) {
       fetchMoreInfoConfig(activeDoc.id);
     }
-  }, [activeDoc?.id, activeDoc?.document_type]);
+  }, [activeDoc?.id, canonicalDocType]);
 
   const handleSaveMoreInfoConfig = async (fields: ConfigFieldItem[], saveAsDefault: boolean) => {
     if (!activeDoc?.id) return;
@@ -616,7 +625,7 @@ export default function DocumentDetails({
         field_key: getCanonicalKey(f.field_key),
       }));
     }
-    const docTypeClean = (activeDoc?.document_type || "").toUpperCase();
+    const docTypeClean = canonicalDocType;
     if (docTypeClean.includes("COMPLAINT") || docTypeClean.includes("FEEDBACK")) {
       return [
         { field_key: "account_name", label: "Account Name", category: "CUSTOMER COMPLAINT", source: "Document" },
@@ -643,7 +652,7 @@ export default function DocumentDetails({
       { field_key: "invoice_number", label: "Bill / Invoice Number", category: "INVOICE INFORMATION", source: "Document" },
       { field_key: "amount", label: "Total Gross (₹)", category: "FINANCIAL INFORMATION", source: "Calculated" },
     ];
-  }, [moreInfoConfig, activeDoc?.document_type]);
+  }, [moreInfoConfig, canonicalDocType]);
 
   const adminTop3Keys = useMemo(() => {
     return new Set(adminTop3Fields.map((f) => getCanonicalKey(f.field_key)));
@@ -954,7 +963,7 @@ export default function DocumentDetails({
     const role = (currentUserRole || "admin").toLowerCase();
     
     // Determine scope key from document type / workflow
-    const docTypeStr = ((document?.document_type || "") + " " + (document?.workflow_profile_id || "")).toLowerCase();
+    const docTypeStr = (canonicalDocType + " " + (document?.workflow_profile_id || "")).toLowerCase();
     let matchedScope = "CAT_INVOICE";
     if (docTypeStr.includes("capex") || docTypeStr.includes("asset") || docTypeStr.includes("machinery")) {
       matchedScope = "CAT_CAPEX";
@@ -1224,7 +1233,7 @@ export default function DocumentDetails({
       fetchWorkflowData();
       fetchComments();
       fetchVersions();
-      setDocumentType(document.document_type || "Invoice");
+      setDocumentType(formatDocumentTypeDisplay(canonicalDocType));
       setVendorName(document.vendor_name || "");
       setInvoiceNumber(document.invoice_number || "");
       setPoNumber(document.po_number || "");
@@ -1377,8 +1386,6 @@ export default function DocumentDetails({
       setIframeSrc("");
     }
   }, [document?.id, document?.file_url, document?.file_path]);
-
-  if (!document) return null;
 
   const fetchVersions = async () => {
     if (!document) return;
@@ -1694,46 +1701,70 @@ export default function DocumentDetails({
 
 
   const getStatusBadge = () => {
-    const status = document.status;
+    const status = document.status || "";
+    const sLower = status.toLowerCase();
     const isStage1 = activeApprovalLog?.current_stage_number === 1;
     const hasAttachment = Boolean(document?.file_url || document?.file_path);
 
-    if (["Approved", "Paid", "Ready for Payment", "Settled"].includes(status)) {
+    // Positive / Success Statuses (Approved, Paid, Ready for Payment, Settled)
+    if (["approved", "paid", "ready for payment", "settled"].some((s) => sLower.includes(s))) {
       return (
-        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-extrabold text-emerald-300 uppercase tracking-wider">
-          Approved
+        <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-[#E7F9F1] text-[#059669] border border-[#A7F3D0] shrink-0">
+          <span className="h-1 w-1 rounded-full bg-[#059669]" />
+          {status.toUpperCase()}
         </span>
       );
     }
-    if (["Cancelled", "Failed"].includes(status)) {
+
+    // Cancelled / Failed
+    if (["cancelled", "failed", "void"].some((s) => sLower.includes(s))) {
       return (
-        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-slate-700/60 border border-slate-500/40 text-[9px] font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-          Cancelled
+        <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA] shrink-0">
+          <span className="h-1 w-1 rounded-full bg-[#EF4444]" />
+          {status.toUpperCase()}
         </span>
       );
     }
-    if ((status || '').toLowerCase().includes('return') || (status || '').toLowerCase().includes('reject')) {
+
+    // Returned / Rejected / Hold
+    if (["return", "reject", "hold", "pause"].some((s) => sLower.includes(s))) {
       return (
-        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-bold text-amber-200 uppercase tracking-wider flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          Returned
+        <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] shrink-0">
+          <span className="h-1 w-1 rounded-full bg-[#D97706]" />
+          {status.toUpperCase()}
         </span>
       );
     }
+
+    // Unrouted / No Rule Matched
+    if (sLower.includes("unrouted") || sLower.includes("no rule")) {
+      return (
+        <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE] shrink-0">
+          UNROUTED (NO RULE MATCHED)
+        </span>
+      );
+    }
+
+    // Pending Attachment (Stage 1 without physical file)
     if (isStage1 && !hasAttachment) {
       return (
-        <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/30 text-[9px] font-extrabold text-black uppercase tracking-wider animate-pulse">
-          Pending Attachment
+        <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-[#FFF9E6] text-[#E65100] border border-[#FFCC80] shrink-0 animate-pulse">
+          <span className="h-1 w-1 rounded-full bg-[#E65100]" />
+          PENDING ATTACHMENT
         </span>
       );
     }
+
+    // Default / Under Review / Initiated / In Progress
     return (
-      <span className="document-details-meta-badge px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[9px] font-extrabold text-white uppercase tracking-wider">
-        Under Review
+      <span className="document-details-meta-badge inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[#EBF5FF] text-[#1E40AF] border border-[#BFDBFE] shrink-0">
+        <span className="h-1 w-1 rounded-full bg-[#2563EB]" />
+        {(status || "UNDER REVIEW").toUpperCase()}
       </span>
     );
   };
+
+  if (!document) return null;
 
   return (
     <div className="document-details-compact animate-fadeIn relative w-full max-w-[1600px] mx-auto">
@@ -1778,19 +1809,15 @@ export default function DocumentDetails({
               <ArrowLeft className="h-4 w-4 stroke-[2.5]" />
             </button>
             <span className="document-details-title font-extrabold text-base tracking-tight text-slate-800 font-display truncate">
-              Document Details
+              {headerTitle}
             </span>
             <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-mono font-bold text-slate-600 shrink-0">
-              {formatDocNumber(document.id, document.document_type, (document as any).category)}
-            </span>
-            <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1 shrink-0">
-              <FileText className="h-2.5 w-2.5" />
-              {document.document_type || "DOCUMENT"}
+              {formatDocNumber(document.id, canonicalDocType, (document as any).category)}
             </span>
             {getStatusBadge()}
             {document.workflow_profile_id && (
-              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[9px] font-bold text-emerald-800 flex items-center gap-1 shrink-0" title={`Active Workflow Profile: ${document.workflow_profile_id}`}>
-                <Shield className="h-2.5 w-2.5 text-[#003F28]" />
+              <span className="document-details-meta-badge px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[9px] font-semibold text-slate-600 flex items-center gap-1 shrink-0" title={`Active Workflow Profile: ${document.workflow_profile_id}`}>
+                <Shield className="h-2.5 w-2.5 text-slate-500" />
                 Flow: {document.workflow_profile_id}
               </span>
             )}
@@ -2799,7 +2826,7 @@ export default function DocumentDetails({
                   <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
                     <span>Approval Timeline & Audit Trail</span>
                     <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
-                      {formatDocNumber(document.id, document.document_type, (document as any).category)}
+                      {formatDocNumber(document.id, canonicalDocType, (document as any).category)}
                     </span>
                     {document?.workflow_profile_id && (
                       <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-2 py-0.5 rounded border border-emerald-600/70">
@@ -3224,7 +3251,7 @@ export default function DocumentDetails({
       <MoreInfoConfigDrawer
         isOpen={showConfigDrawer}
         onClose={() => setShowConfigDrawer(false)}
-        documentType={moreInfoConfig?.document_type || document?.document_type || "AP INVOICE"}
+        documentType={moreInfoConfig?.document_type || canonicalDocType}
         availableFields={moreInfoConfig?.available_fields || []}
         selectedFields={effectiveMoreInfoFields}
         scope={moreInfoConfig?.scope || "GLOBAL"}

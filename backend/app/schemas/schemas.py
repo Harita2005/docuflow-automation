@@ -177,6 +177,11 @@ class InvoiceBase(BaseModel):
     original_invoice_ref: Optional[str] = None
     credit_note_date: Optional[str] = None
     credit_status: Optional[str] = None
+    customer_name: Optional[str] = None
+    feedback_type: Optional[str] = None
+    rating: Optional[Union[int, str]] = None
+    feedback_date: Optional[str] = None
+    due_date: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -334,7 +339,7 @@ class DocumentSyncRequest(BaseModel):
     line_items: Optional[List[dict]] = Field(None, description='Line item objects breakdown')
     custom_data: Optional[dict] = Field(None, description='Additional arbitrary ERP custom attributes')
     
-    # Feedback & Complaint specific fields (mapped to custom_data on save)
+    # Known document fields (mapped directly to real SQL columns on documents table)
     account_name: Optional[str] = None
     bp_code: Optional[str] = None
     employee_name: Optional[str] = None
@@ -348,11 +353,25 @@ class DocumentSyncRequest(BaseModel):
     bp_type: Optional[str] = None
     type_of_complaint: Optional[str] = None
     customer_code: Optional[str] = None
+    customer_name: Optional[str] = None
+    feedback_type: Optional[str] = None
+    rating: Optional[Union[int, str]] = None
+    feedback_date: Optional[str] = None
+    due_date: Optional[str] = None
     image_1: Optional[str] = None
     image_2: Optional[str] = None
     image_3: Optional[str] = None
     image_4: Optional[str] = None
     image_5: Optional[str] = None
+    expense_type: Optional[str] = None
+    department: Optional[str] = None
+    expense_date: Optional[str] = None
+    receipt_number: Optional[str] = None
+    credit_note_number: Optional[str] = None
+    reason_for_credit: Optional[str] = None
+    original_invoice_ref: Optional[str] = None
+    credit_note_date: Optional[str] = None
+    credit_status: Optional[str] = None
 
     auto_route: bool = Field(True, description='Immediately evaluate business rules and attach workflow')
     access_token: Optional[str] = Field(None, alias='accessToken', description='Access token passed directly inside raw JSON body')
@@ -388,12 +407,26 @@ class DocumentSyncRequest(BaseModel):
                 "BP Type": "bp_type",
                 "Type of Complaint": "type_of_complaint",
                 "Customer Code": "customer_code",
+                "Customer Name": "customer_name",
+                "Feedback Type": "feedback_type",
+                "Rating": "rating",
+                "Feedback Date": "feedback_date",
+                "Due Date": "due_date",
                 "Invoice Number": "invoice_number",
                 "Image 1": "image_1",
                 "Image 2": "image_2",
                 "Image 3": "image_3",
                 "Image 4": "image_4",
                 "Image 5": "image_5",
+                "Expense Type": "expense_type",
+                "Expense Date": "expense_date",
+                "Department": "department",
+                "Receipt Number": "receipt_number",
+                "Credit Note Number": "credit_note_number",
+                "Reason For Credit": "reason_for_credit",
+                "Original Invoice Ref": "original_invoice_ref",
+                "Credit Note Date": "credit_note_date",
+                "Credit Status": "credit_status",
             }
             for raw_k, model_k in field_mappings.items():
                 if raw_k in data and (data.get(model_k) is None or data.get(model_k) == ""):
@@ -415,6 +448,20 @@ class DocumentSyncRequest(BaseModel):
                             data[model_k] = val
                         cleaned_cd.pop(model_k, None)
                 data['custom_data'] = cleaned_cd if cleaned_cd else None
+
+            # Coerce rating to integer if present
+            if data.get('rating') is not None:
+                val = data['rating']
+                if isinstance(val, int):
+                    data['rating'] = val
+                elif isinstance(val, str):
+                    import re
+                    m = re.search(r'\d+', val)
+                    data['rating'] = int(m.group(0)) if m else None
+                elif isinstance(val, float):
+                    data['rating'] = int(val)
+                else:
+                    data['rating'] = None
 
         return data
 

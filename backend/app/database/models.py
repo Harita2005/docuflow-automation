@@ -307,6 +307,11 @@ class Document(Base):
     original_invoice_ref = Column(String(100), nullable=True)
     credit_note_date = Column(String(50), nullable=True)
     credit_status = Column(String(50), nullable=True)
+    customer_name = Column(String(255), nullable=True)
+    feedback_type = Column(String(255), nullable=True)
+    rating = Column(Integer, nullable=True)
+    due_date = Column(String(50), nullable=True)
+    document_number = Column(String(100), nullable=True)
 
     file_url = Column(String(500), nullable=True)
     file_path = Column(String(500), nullable=True)

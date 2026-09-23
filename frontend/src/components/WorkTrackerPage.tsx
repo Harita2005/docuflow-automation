@@ -7,7 +7,7 @@ import {
   Eye 
 } from "lucide-react";
 import { DbInvoice } from "../types";
-import { formatDocNumber } from "../utils/formatters";
+import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, formatAssignedToDisplay } from "../utils/formatters";
 
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
@@ -204,7 +204,7 @@ export default function WorkTrackerPage({
 
   // Derive dynamic document types (includes 'ALL' for cross-category views)
   const dynamicTypes = useMemo(() => {
-    const types = Array.from(new Set(visibleDocs.map(d => (d.document_type || "").toUpperCase().trim()).filter(Boolean)));
+    const types = Array.from(new Set(visibleDocs.map(d => getCanonicalDocumentType(d)).filter(Boolean)));
     return ["ALL", ...(types.length > 0 ? types : ["AP INVOICE", "GENERAL RECORDS"])];
   }, [visibleDocs]);
 
@@ -266,7 +266,7 @@ export default function WorkTrackerPage({
   const filteredAndSortedDocs = useMemo(() => {
     const list = visibleDocs.filter(doc => {
       // Document-wise Tab filter
-      const docType = (doc.document_type || "").toUpperCase().trim();
+      const docType = getCanonicalDocumentType(doc);
       const selectedTab = activeTab.toUpperCase().trim();
       if (selectedTab !== "ALL" && docType !== selectedTab) {
         // Fallback matching for similar doc type labels
@@ -476,7 +476,7 @@ export default function WorkTrackerPage({
                  <th className="py-1.5 px-2.5 w-[26%]">Supplier / Vendor</th>
                  <th className="py-1.5 px-2.5 w-[14%]">Document Type</th>
                  <th className="py-1.5 px-2.5 w-[15%] text-right">Amount (₹)</th>
-                 <th className="py-1.5 px-2.5 w-[11%] text-center">Current Stage</th>
+                 <th className="py-1.5 px-2.5 w-[11%] text-center">ASSIGNED TO</th>
                  <th className="py-1.5 px-2.5 w-[10%] text-center">Status</th>
                  <th className="py-1.5 px-2.5 w-[9%] text-center">Action</th>
                </tr>
@@ -487,45 +487,25 @@ export default function WorkTrackerPage({
               {filteredAndSortedDocs.map((doc, idx) => {
                 const vendorName = doc.vendor_name || "Enterprise Supplier";
                 const grossAmount = Number(doc.amount || 0);
-                const displayId = formatDocNumber(doc.id, doc.document_type, (doc as any).category);
+                const displayId = formatDocNumber(doc.id, getCanonicalDocumentType(doc), (doc as any).category);
                 const docDate = doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "");
                 const isSelected = selectedDocIds.includes(doc.id);
 
-                // Helper for Stage Pill
-                const renderStageBadge = () => {
-                  const status = (doc.status || "Pending Approval").trim();
-                  const stageNum = doc.current_stage || doc.activeApprovalLog?.current_stage_number || 1;
-
-                  if (status === "Settled" || status === "Approved" || status === "Paid" || status === "Ready for Payment") {
-                    return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Approved
-                      </span>
-                    );
-                  }
-                  if (status === "On Hold") {
-                    return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                        Stage {stageNum}
-                      </span>
-                    );
-                  }
-                  if (status === "Rejected" || status === "Failed") {
-                    return (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                        Stage {stageNum}
-                      </span>
-                    );
-                  }
-                  
-                  const isStage2 = stageNum === 2;
-                  const badgeClass = isStage2
-                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                    : "bg-amber-50 text-amber-700 border border-amber-200";
+                // Helper for Assigned To Badge
+                const renderAssignedToBadge = () => {
+                  const assignedName = formatAssignedToDisplay(doc);
+                  const isUnassigned = assignedName === "Unassigned";
 
                   return (
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${badgeClass}`}>
-                      Stage {stageNum}
+                    <span 
+                      className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium max-w-full truncate ${
+                        isUnassigned 
+                          ? "bg-slate-100 text-slate-500 border border-slate-200" 
+                          : "bg-blue-50 text-blue-700 border border-blue-200"
+                      }`}
+                      title={assignedName}
+                    >
+                      <span className="truncate">{assignedName}</span>
                     </span>
                   );
                 };
@@ -604,7 +584,7 @@ export default function WorkTrackerPage({
                   </button>
                 );
 
-                const docTypeLabel = doc.document_type || "AP Invoice";
+                const docTypeLabel = formatDocumentTypeDisplay(doc);
 
                 return (
                   <tr 
@@ -649,9 +629,9 @@ export default function WorkTrackerPage({
                       </span>
                     </td>
 
-                    {/* 6. Current Stage */}
+                    {/* 6. Assigned To */}
                     <td className="py-1.5 px-2.5 align-middle text-center w-[11%]">
-                      {renderStageBadge()}
+                      {renderAssignedToBadge()}
                     </td>
 
                     {/* 7. Status */}

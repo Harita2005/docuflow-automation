@@ -52,7 +52,6 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
     elif category and category.strip():
         return category.strip()
     return 'General Records'
-
 def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', wf_name: str='') -> str:
     combined = f"{doc_type or ''} {category or ''} {trans_type or ''} {wf_name or ''}".strip().upper()
     if 'CASH VOUCHER' in combined or 'CASH' in combined or 'PETTY' in combined:

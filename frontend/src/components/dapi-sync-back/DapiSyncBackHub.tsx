@@ -108,6 +108,36 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
         console.error("Error loading live sync logs in hub:", err);
       }
     };
+    const fetchLiveApps = async () => {
+      try {
+        const res = await fetch('/api/integrations/v2/applications');
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success && Array.isArray(body.data) && body.data.length > 0) {
+            const mapped: ThirdPartyApplication[] = body.data.map((a: any) => ({
+              id: String(a.id),
+              name: a.name,
+              code: a.code,
+              description: a.description || '',
+              documentTypes: ['Purchase Order', 'AP Invoice', 'Customer Feedback'],
+              status: a.status || 'Active',
+              syncStatus: 'Enabled',
+              approvalEndpoint: a.base_url ? `${a.base_url}/approval` : '',
+              rejectionEndpoint: a.base_url ? `${a.base_url}/rejection` : '',
+              lastSync: a.last_callback || 'Never',
+              rulesCount: a.rules_count || 0,
+              environment: a.environment || 'Production'
+            }));
+            setApps(mapped);
+            setSelectedAppIdForConfig(mapped[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching live applications:", err);
+      }
+    };
+
+    fetchLiveApps();
     fetchLiveLogs();
   }, []);
 

@@ -107,6 +107,7 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRootView(true);
     if (activeTab === "audit") {
       fetchAuditLogs();

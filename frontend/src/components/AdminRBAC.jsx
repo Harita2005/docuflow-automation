@@ -771,7 +771,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
     const trimmedName = newRoleName.trim();
     // Safe role code generation according to backend regex: ^[a-z0-9_]{2,50}$
-    let generatedCode = trimmedName.toLowerCase().replace(/[\s\-\/\\]+/g, '_').replace(/[^a-z0-9_]/g, '');
+    let generatedCode = trimmedName.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '');
     if (generatedCode.length < 2) {
       setErrorMsg("Role title must produce a valid code at least 2 characters long (letters, numbers, underscores).");
       return;
@@ -1377,7 +1377,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
                   {roles.map(r => {
-                    const userCount = users.filter(u => u.role === r.id).length;
+                    const rIdStr = String(r.id || '').trim().toLowerCase();
+                    const rCodeStr = String(r.code || '').trim().toLowerCase();
+                    const rNameStr = String(r.name || '').trim().toLowerCase();
+                    
+                    const userCount = users.filter(u => {
+                      if (!u.role) return false;
+                      const uRoleStr = String(u.role).trim().toLowerCase();
+                      return (rCodeStr && uRoleStr === rCodeStr) || 
+                             (rIdStr && uRoleStr === rIdStr) || 
+                             (rNameStr && uRoleStr === rNameStr);
+                    }).length;
                     
                     return (
                       <tr 

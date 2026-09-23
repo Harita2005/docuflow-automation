@@ -332,19 +332,7 @@ def normalize_doc_type(doc_type: Optional[str]) -> str:
     if not doc_type:
         return "AP INVOICE"
     cleaned = doc_type.strip().upper()
-    if cleaned in ("INVOICE", "AP INVOICE", "TAX INVOICE", "STANDARD INVOICE"):
-        return "AP INVOICE"
-    if "CREDIT" in cleaned:
-        return "CREDIT NOTE"
-    if "DEBIT" in cleaned:
-        return "DEBIT NOTE"
-    if "HR" in cleaned or "EXPENSE" in cleaned:
-        return "HR EXPENSE"
-    if "PURCHASE" in cleaned or "PO" in cleaned:
-        return "PURCHASE ORDER"
-    if "FEEDBACK" in cleaned or "FEED BACK" in cleaned or "COMPLAINT" in cleaned:
-        return "CUSTOMER COMPLAINT"
-    return cleaned
+    return cleaned if cleaned else "AP INVOICE"
 
 
 def extract_custom_data_dict(doc: Invoice) -> Dict[str, Any]:
@@ -412,17 +400,9 @@ def get_field_value_from_document(doc: Optional[Invoice], field_key: str, custom
 def _is_column_allowed_for_doc_type(col_name: str, norm_type: str) -> bool:
     """
     Returns True if the column is visible for the given document type.
-    Universal columns: always visible.
-    Type-restricted columns: only visible for their specific types.
-    Dynamically created columns (not in either set): always visible.
+    All real database columns and configured columns are allowed for any document type.
     """
-    if col_name in UNIVERSAL_COLUMNS:
-        return True
-    affinity = COLUMN_DOC_TYPE_AFFINITY.get(col_name)
-    if affinity is None:
-        # Unknown column (possibly dynamically created) — show for all types
-        return True
-    return norm_type in affinity
+    return True
 
 
 def _get_live_db_columns(db: Optional[Session]) -> List[str]:

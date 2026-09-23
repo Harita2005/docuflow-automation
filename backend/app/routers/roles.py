@@ -137,11 +137,21 @@ def get_permissions_registry(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Returns application-registered Modules, Subpages, Actions, and Scopes for the permission creator UI."""
+    """Returns application-registered Modules, Subpages, Actions, and Scopes dynamically from the permissions table."""
     _require_rbac_admin(current_user, db)
+
+    db_modules = [m[0].upper() for m in db.query(Permission.module).filter(Permission.module.isnot(None)).distinct().all() if m[0]]
+    modules = sorted(list(set(REGISTERED_MODULES + db_modules)))
+
+    subpages = {m: list(REGISTERED_SUBPAGES.get(m, [])) for m in modules}
+    for m in modules:
+        db_subpages = [sp[0].lower() for sp in db.query(Permission.subpage).filter(Permission.module.ilike(m), Permission.subpage.isnot(None)).distinct().all() if sp[0]]
+        merged = sorted(list(set(subpages[m] + db_subpages)))
+        subpages[m] = merged
+
     return PermissionRegistryResponse(
-        modules=REGISTERED_MODULES,
-        subpages=REGISTERED_SUBPAGES,
+        modules=modules,
+        subpages=subpages,
         actions=REGISTERED_ACTIONS,
         scopes=REGISTERED_SCOPES,
     )

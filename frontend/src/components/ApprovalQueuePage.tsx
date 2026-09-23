@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AlertCircle, CheckSquare, ShieldCheck, Loader2 } from "lucide-react";
-import { formatDocNumber } from "../utils/formatters";
+import { formatDocNumber, getCanonicalDocumentType } from "../utils/formatters";
 
 interface ApprovalQueuePageProps {
   currentUserRole: 'accounting' | 'manager' | 'cfo' | string;
@@ -209,7 +209,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
                               } Stage` 
                             : inv.status}
                         </span>
-                        <span className={selectedInvoice?.id === inv.id ? "text-white/60" : "text-slate-400 font-mono"}>ID: {formatDocNumber(inv.id, inv.document_type, inv.category)}</span>
+                        <span className={selectedInvoice?.id === inv.id ? "text-white/60" : "text-slate-400 font-mono"}>ID: {formatDocNumber(inv.id, getCanonicalDocumentType(inv), inv.category)}</span>
                       </div>
                     </div>
                   </div>

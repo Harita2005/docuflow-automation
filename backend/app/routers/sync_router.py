@@ -4,7 +4,6 @@ import jwt
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -46,8 +45,37 @@ def m2m_login(body: LoginRequest):
     token = jwt.encode({'sub': body.username, 'scope': 'data:sync', 'exp': expire}, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60}
 
-@router.post('/record', status_code=status.HTTP_200_OK)
-def ingest_record(payload: Dict[str, Any], _: dict=Depends(verify_m2m_token)):
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Payload must not be empty')
-    return {'status': 'received', 'records_accepted': len(payload)}
+from sqlalchemy.orm import Session
+from app.database.connection import get_db
+from app.schemas.schemas import DocumentSyncRequest, DocumentSyncResponse
+from app.routers.sync import _upsert_single_document
+
+@router.post('/record', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+def ingest_record(
+    payload: DocumentSyncRequest,
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_m2m_token)
+):
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Validation Error: 'amount' must be greater than 0.")
+    if not payload.division and not payload.company_code:
+        raise HTTPException(status_code=400, detail="Validation Error: 'division' or 'CompanyCode' is required.")
+
+    inv = _upsert_single_document(payload, db)
+    return DocumentSyncResponse(
+        success=True,
+        message='M2M record synchronized and auto-routed successfully',
+        document_id=inv.id,
+        doc_key=inv.doc_key,
+        invoice_number=inv.invoice_number,
+        document_number=inv.invoice_number,
+        vendor_name=inv.vendor_name,
+        amount=inv.amount,
+        division=inv.division,
+        plant=inv.plant,
+        workflow_profile_id=inv.workflow_profile_id,
+        total_stages=inv.total_stages,
+        current_stage=inv.current_stage,
+        assigned_approver=inv.assigned_approver,
+        status=inv.status
+    )

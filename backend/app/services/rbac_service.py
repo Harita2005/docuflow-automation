@@ -121,12 +121,6 @@ def require_permission(permission_code: str):
         return user
 
     return dependency
-
-
-# ---------------------------------------------------------------------------
-# LEGACY ROLE DEPENDENCY
-# ---------------------------------------------------------------------------
-
 def require_role(allowed_roles: List[str]):
     """
     Legacy role-name authorization.
@@ -168,14 +162,10 @@ def require_role(allowed_roles: List[str]):
             )
 
         return user
-
     return dependency
-
-
 # ---------------------------------------------------------------------------
 # DOCUMENT ACCESS AUTHORIZATION
 # ---------------------------------------------------------------------------
-
 def authorize_document_access(
     user: User,
     doc: Document,
@@ -185,19 +175,15 @@ def authorize_document_access(
     Enforces Division, Department, Assigned Approver, and Role boundaries.
 
     Prevents IDOR and cross-tenant / cross-division tampering.
-
     NOTE:
     This function intentionally preserves the existing business rules based
     on legacy role names (GM/JMD/MD/Manager/Finance/etc.).
 
     General RBAC permission checks should use check_permission().
     """
-
     if not user or not user.is_active:
         return False
-
     u_role = (user.role or "").strip().lower()
-
     # -----------------------------------------------------------------------
     # System administrators
     # -----------------------------------------------------------------------
@@ -208,7 +194,6 @@ def authorize_document_access(
         "superadmin",
     }:
         return True
-
     # -----------------------------------------------------------------------
     # Build all possible user identifiers
     # -----------------------------------------------------------------------
@@ -219,9 +204,7 @@ def authorize_document_access(
         (user.name or "").strip().lower(),
         (user.email or "").strip().lower(),
     ]
-
     user_handles = [handle for handle in raw_handles if handle]
-
     # -----------------------------------------------------------------------
     # Strict Division Boundary
     #

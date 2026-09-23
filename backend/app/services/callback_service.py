@@ -7,6 +7,7 @@ import uuid
 import hmac
 import hashlib
 import datetime
+import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication

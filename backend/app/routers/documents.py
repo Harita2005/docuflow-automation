@@ -6,6 +6,7 @@ import json
 import shutil
 import datetime
 import smtplib
+import socket
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -2248,7 +2249,6 @@ async def confirm_and_ingest_document(
     Commits verified manual document to database and routes through existing Condition Engine,
     Workflow Engine, and Universal Checklist Matrix.
     """
-    import uuid
     from app.services.rbac_service import check_permission
     if not check_permission(current_user, 'doc:create', db):
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to ingest documents.")
@@ -2440,7 +2440,6 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    import uuid
     from app.services.rbac_service import check_permission
     if not check_permission(current_user, 'doc:create', db):
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")

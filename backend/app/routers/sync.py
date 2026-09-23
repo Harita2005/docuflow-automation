@@ -59,6 +59,17 @@ CANONICAL_FIELD_ALIASES = {
     "typeofcomplaint": "type_of_complaint",
     "customer_code": "customer_code",
     "customercode": "customer_code",
+    "customer_name": "customer_name",
+    "customername": "customer_name",
+    "feedback_type": "feedback_type",
+    "feedbacktype": "feedback_type",
+    "rating": "rating",
+    "feedback_date": "feedback_date",
+    "feedbackdate": "feedback_date",
+    "due_date": "due_date",
+    "duedate": "due_date",
+    "document_number": "document_number",
+    "documentnumber": "document_number",
     "invoice_number": "invoice_number",
     "invoicenumber": "invoice_number",
     "docrefno": "invoice_number",
@@ -180,11 +191,6 @@ def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_
         except Exception as e:
             logger.error("Error creating dynamic column '%s': %s", col_name, e)
             return col_name
-
-from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
-from app.services.rules_engine import get_doc_type_prefix, generate_document_id
-from app.services.ocr_service import extract_text_from_pdf
-from app.auth import verify_service_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
@@ -399,11 +405,25 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if req.bp_type is not None: existing.bp_type = req.bp_type
         if req.type_of_complaint is not None: existing.type_of_complaint = req.type_of_complaint
         if req.customer_code is not None: existing.customer_code = req.customer_code
+        if req.customer_name is not None: existing.customer_name = req.customer_name
+        if req.feedback_type is not None: existing.feedback_type = req.feedback_type
+        if req.rating is not None: existing.rating = req.rating
+        if req.feedback_date is not None: existing.feedback_date = req.feedback_date
+        if req.due_date is not None: existing.due_date = req.due_date
         if req.image_1 is not None: existing.image_1 = req.image_1
         if req.image_2 is not None: existing.image_2 = req.image_2
         if req.image_3 is not None: existing.image_3 = req.image_3
         if req.image_4 is not None: existing.image_4 = req.image_4
         if req.image_5 is not None: existing.image_5 = req.image_5
+        if req.expense_type is not None: existing.expense_type = req.expense_type
+        if req.department is not None: existing.department = req.department
+        if req.expense_date is not None: existing.expense_date = req.expense_date
+        if req.receipt_number is not None: existing.receipt_number = req.receipt_number
+        if req.credit_note_number is not None: existing.credit_note_number = req.credit_note_number
+        if req.reason_for_credit is not None: existing.reason_for_credit = req.reason_for_credit
+        if req.original_invoice_ref is not None: existing.original_invoice_ref = req.original_invoice_ref
+        if req.credit_note_date is not None: existing.credit_note_date = req.credit_note_date
+        if req.credit_status is not None: existing.credit_status = req.credit_status
 
         if line_items_str:
             existing.line_items_json = line_items_str
@@ -449,11 +469,25 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             bp_type=req.bp_type,
             type_of_complaint=req.type_of_complaint,
             customer_code=req.customer_code,
+            customer_name=req.customer_name,
+            feedback_type=req.feedback_type,
+            rating=req.rating,
+            feedback_date=req.feedback_date,
+            due_date=req.due_date,
             image_1=req.image_1,
             image_2=req.image_2,
             image_3=req.image_3,
             image_4=req.image_4,
             image_5=req.image_5,
+            expense_type=req.expense_type,
+            department=req.department,
+            expense_date=req.expense_date,
+            receipt_number=req.receipt_number,
+            credit_note_number=req.credit_note_number,
+            reason_for_credit=req.reason_for_credit,
+            original_invoice_ref=req.original_invoice_ref,
+            credit_note_date=req.credit_note_date,
+            credit_status=req.credit_status,
             status='Pending Approval',
             current_stage=1,
             total_stages=2,

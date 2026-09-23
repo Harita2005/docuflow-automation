@@ -78,6 +78,7 @@ export default function WorkflowRulesPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRootView(true);
   }, [activeTab]);
 
