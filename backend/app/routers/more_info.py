@@ -418,8 +418,8 @@ def _get_live_db_columns(db: Optional[Session]) -> List[str]:
         dialect = None
         try:
             dialect = db.bind.dialect.name if db.bind else None
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed getting dialect name: %s", exc)
         if dialect == "mssql":
             rows = db.execute(text(
                 "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "

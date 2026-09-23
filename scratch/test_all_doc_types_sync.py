@@ -1,5 +1,4 @@
 import sys
-import json
 import logging
 logging.basicConfig(level=logging.ERROR)
 

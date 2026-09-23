@@ -4,7 +4,6 @@ backend_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(backend_dir))
 
 from app.database.connection import SessionLocal
-from app.database.models import Invoice
 from app.schemas.schemas import DocumentSyncRequest
 from app.routers.sync import _upsert_single_document
 from sqlalchemy import text

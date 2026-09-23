@@ -19,11 +19,6 @@ import {
   ExternalLink,
   Info,
   ChevronDown,
-  DollarSign,
-  FileText,
-  BarChart3,
-  CheckSquare,
-  FileSpreadsheet,
   Sliders
 } from 'lucide-react';
 export default function AdminUsers() {

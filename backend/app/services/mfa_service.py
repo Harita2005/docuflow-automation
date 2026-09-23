@@ -42,7 +42,6 @@ _CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 
 
 def _sync_cache_load() -> None:
-    global _MFA_TICKETS
     if os.path.exists(_CACHE_PATH):
         try:
             import json

@@ -1,6 +1,4 @@
 import sys
-import os
-import datetime
 import pyodbc
 
 # Add backend directory to sys.path
@@ -37,6 +35,7 @@ def main():
         try:
             res = _upsert_single_document(req, db)
             doc_id = res.get("id")
+            print(f"Processing doc_id: {doc_id}")
             
             # Query DB directly to verify source of truth column
             conn = pyodbc.connect('Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=DocuFlowDB;Trusted_Connection=yes;')

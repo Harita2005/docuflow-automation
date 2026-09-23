@@ -1,5 +1,4 @@
 import sys
-import os
 import json
 import logging
 
@@ -7,15 +6,12 @@ sys.path.insert(0, r"c:\Users\TempAdmin\OneDrive\Documents\docuflow-automation\b
 
 from app.database.connection import SessionLocal
 from app.schemas.schemas import DocumentSyncRequest, MoreInfoConfigSaveRequest, MoreInfoFieldSaveItem
-from app.database.models import User, Invoice
+from app.database.models import User
 from app.routers.sync import _upsert_single_document
 from app.routers.more_info import (
-    resolve_effective_configuration,
     get_doc_type_more_info_config,
     save_doc_type_more_info_config,
-    discover_available_fields_for_doc
 )
-from app.routers.documents import get_invoice_by_id
 from app.services.rules_engine import match_condition
 from sqlalchemy import text
 

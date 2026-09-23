@@ -23,9 +23,7 @@ from app.database.connection import SessionLocal
 from app.database.models import Invoice, User, AuditLog, WorkflowProfile, WorkflowStepDefinition
 from app.services.excel_trigger_service import (
     process_excel_workflow_trigger,
-    find_invoice_by_num_or_id,
     resolve_approver_by_compliance,
-    extract_compliance_type,
 )
 
 def run_test():

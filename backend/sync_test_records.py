@@ -1,9 +1,7 @@
 import sys
-import json
 sys.path.insert(0, 'backend')
 
 from app.database.connection import SessionLocal
-from app.database.models import Document
 from app.routers.sync import _upsert_single_document
 from app.schemas.schemas import DocumentSyncRequest
 

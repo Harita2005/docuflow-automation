@@ -120,10 +120,10 @@ def attach_dynamic_columns_to_document(db: Session, inv: Any):
                             if cv is not None and cv != '' and (not hasattr(inv, ck) or getattr(inv, ck) is None):
                                 try:
                                     setattr(inv, ck, cv)
-                                except Exception:
-                                    pass
-                except Exception:
-                    pass
+                                except Exception as exc:
+                                    logger.debug("Attribute setter ignored for %s: %s", ck, exc)
+                except Exception as exc:
+                    logger.debug("Failed parsing custom_data JSON: %s", exc)
     except Exception as exc:
         logger.debug("Failed attaching dynamic columns to document: %s", exc)
     return inv

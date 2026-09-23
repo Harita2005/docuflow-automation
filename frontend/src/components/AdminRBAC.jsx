@@ -315,7 +315,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [search, setSearch] = useState("");
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
-  const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [savingRolePerms, setSavingRolePerms] = useState(false);
 
   // Add User modal states

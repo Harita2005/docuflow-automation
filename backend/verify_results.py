@@ -4,7 +4,6 @@ sys.path.insert(0, 'backend')
 
 from app.database.connection import SessionLocal
 from app.database.models import Document
-from sqlalchemy import text
 
 db = SessionLocal()
 

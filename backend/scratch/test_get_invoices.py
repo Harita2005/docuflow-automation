@@ -1,4 +1,4 @@
-import sys, os
+import sys
 sys.path.insert(0, 'backend')
 from app.database.connection import SessionLocal
 from app.routers.documents import get_all_invoices
