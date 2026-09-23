@@ -10,7 +10,6 @@ import {
   Shield,
   AlertCircle,
   Database,
-  Calendar,
   Pause,
   ChevronDown,
   ChevronUp,
@@ -28,8 +27,6 @@ import {
   Upload,
   Settings,
   Activity,
-  History,
-  MessageSquare,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay } from "../utils/formatters";
@@ -168,47 +165,6 @@ const getCleanAuditRemarks = (text: string | null | undefined, steps: any[] = []
   }
 
   return cleaned.length > 0 ? cleaned : null;
-};
-
-const getStageAndStatus = (comm: any) => {
-  const actionLower = (comm?.action || "").toLowerCase();
-  let status = "Approved";
-  if (actionLower.includes("reject")) status = "Rejected";
-  else if (actionLower.includes("return")) status = "Returned";
-  else if (actionLower.includes("hold")) status = "On Hold";
-  else if (actionLower.includes("cancel") || actionLower.includes("void")) status = "Cancelled";
-
-  let stageLabel = "";
-  if (comm?.stage) {
-    const match = String(comm.stage).match(/stage\s*(\d+)/i);
-    if (match) stageLabel = `Stage ${match[1]}`;
-    else stageLabel = String(comm.stage);
-  }
-  if (!stageLabel && comm?.action) {
-    const match = String(comm.action).match(/stage\s*(\d+)/i);
-    if (match) stageLabel = `Stage ${match[1]}`;
-  }
-  if (!stageLabel) stageLabel = "Stage 1";
-
-  return `${stageLabel} · ${status}`;
-};
-
-const formatAuditDateTime = (ts: string | null | undefined) => {
-  if (!ts) return "";
-  try {
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return ts;
-    return date.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    });
-  } catch {
-    return ts;
-  }
 };
 
 export const CANONICAL_KEY_MAP: Record<string, string> = {
@@ -1562,63 +1518,6 @@ export default function DocumentDetails({
                         (document?.status || '').toLowerCase().includes('no rule matched');
   const effectiveChecklist = isDocUnrouted ? [] : checklistItems;
 
-  const combinedChecklist = useMemo(() => {
-    if (isDocUnrouted) return [];
-
-    const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
-    const currentStep = (workflowStepDefinitions || []).find((s: any) => s.stage_number === currentStageNum);
-
-    const itemsMap: Map<string, { key: string; label: string; givenBy: string; stageNumber?: number }> = new Map();
-
-    // 1. Populate from workflow step definitions (commands / instructions)
-    (workflowStepDefinitions || []).forEach((step: any) => {
-      const cmd = step?.instruction || step?.command || (step?.action_required && !['Approve', 'Approved'].includes(step.action_required) ? step.action_required : null);
-      if (cmd && typeof cmd === "string" && cmd.trim()) {
-        const key = cmd.trim();
-        const rawTarget = step.approver_target || step.stage_name || step.step_name || `Stage ${step.stage_number} Approver`;
-        const cleanTarget = rawTarget.split(",")[0].trim();
-        itemsMap.set(key, {
-          key,
-          label: key,
-          givenBy: cleanTarget,
-          stageNumber: step.stage_number
-        });
-      }
-    });
-
-    // 2. Ensure current active stage's command is present if defined
-    const currentCmd = currentStep?.instruction || currentStep?.command;
-    
-    if (currentCmd && typeof currentCmd === "string" && currentCmd.trim() && !itemsMap.has(currentCmd.trim())) {
-      const rawTarget = currentStep?.approver_target || currentStep?.stage_name || currentStep?.step_name || (currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`);
-      const cleanTarget = rawTarget.split(",")[0].trim();
-      itemsMap.set(currentCmd.trim(), {
-        key: currentCmd.trim(),
-        label: currentCmd.trim(),
-        givenBy: cleanTarget,
-        stageNumber: currentStageNum
-      });
-    }
-
-    // 3. Include items from effectiveChecklist
-    effectiveChecklist.forEach((chkItem) => {
-      if (chkItem && typeof chkItem === "string" && chkItem.trim()) {
-        const key = chkItem.trim();
-        if (!itemsMap.has(key)) {
-          const rawTarget = currentStep?.approver_target || currentStep?.stage_name || currentStep?.step_name || (currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`);
-          const cleanTarget = rawTarget.split(",")[0].trim();
-          itemsMap.set(key, {
-            key,
-            label: key,
-            givenBy: cleanTarget,
-            stageNumber: currentStageNum
-          });
-        }
-      }
-    });
-
-    return Array.from(itemsMap.values());
-  }, [isDocUnrouted, workflowStepDefinitions, effectiveChecklist, activeApprovalLog, document?.current_stage]);
 
   const handleInlineApprove = async () => {
     const hasDocAttachment = Boolean(iframeSrc);
