@@ -691,7 +691,7 @@ def resolve_effective_configuration(
             admin_defaults.append(item)
             admin_default_keys.add(cfg.field_key)
     else:
-        top3_keys = DEFAULT_ADMIN_TOP3_FIELDS.get(norm_type, DEFAULT_FALLBACK_FIELDS)
+        top3_keys = DEFAULT_ADMIN_TOP3_FIELDS.get(norm_type, DEFAULT_ADMIN_TOP3_FIELDS.get(fallback_type, DEFAULT_FALLBACK_FIELDS))
         for idx, key in enumerate(top3_keys[:3]):
             base = avail_map.get(key)
             if base:
@@ -737,6 +737,8 @@ def resolve_effective_configuration(
         if user_configs:
             has_user_override = True
             for cfg in user_configs:
+                if cfg.field_key in admin_default_keys:
+                    continue
                 base = avail_map.get(cfg.field_key)
                 item = MoreInfoFieldConfigItem(
                     field_key=cfg.field_key,
