@@ -192,9 +192,6 @@ def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_
             logger.error("Error creating dynamic column '%s': %s", col_name, e)
             return col_name
 
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
-
 def generate_compliance_checklist_for_category(category: Optional[str], doc_type: Optional[str], division: Optional[str]=None, plant: Optional[str]=None, document_id: Optional[str]=None, workflow_profile: Optional[str]=None, stage_name: Optional[str]=None, db: Optional[Any]=None) -> List[str]:
     """
     Strict rule-based checklist resolution.
