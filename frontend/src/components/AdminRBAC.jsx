@@ -498,7 +498,21 @@ export default function AdminRBAC({ onRefreshSignal }) {
           }
           const permsListCfg = configs.find(c => c.key === "RBAC_PERMISSION_DEFINITIONS");
           if (permsListCfg && permsListCfg.value) {
-            try { setPermissionsList(JSON.parse(permsListCfg.value)); } catch {}
+            try {
+              const loaded = JSON.parse(permsListCfg.value);
+              const merged = INITIAL_PERMISSIONS.map(initCat => {
+                const foundCat = Array.isArray(loaded) ? loaded.find(c => c.id === initCat.id || c.category === initCat.category) : null;
+                if (!foundCat) return initCat;
+                const mergedItems = [...initCat.items];
+                (foundCat.items || []).forEach(item => {
+                  if (!mergedItems.some(i => i.id === item.id)) {
+                    mergedItems.push(item);
+                  }
+                });
+                return { ...foundCat, items: mergedItems };
+              });
+              setPermissionsList(merged);
+            } catch {}
           }
         }
       }
