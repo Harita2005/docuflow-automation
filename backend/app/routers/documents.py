@@ -130,7 +130,7 @@ def attach_dynamic_columns_to_document(db: Session, inv: Any):
 
 def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     raw_str = str(invoice_id).strip()
-    id_clean = re.sub('^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?', '', raw_str, flags=re.IGNORECASE).strip()
+    id_clean = re.sub('^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH|CMP|CF)[-_#]?', '', raw_str, flags=re.IGNORECASE).strip()
     inv = db.query(Invoice).filter((Invoice.id == raw_str) | (Invoice.id == f'DOC-{id_clean}') | (Invoice.id == f'INV-{id_clean}') | (Invoice.id == f'GRN-{id_clean}') | (Invoice.id == f'CV-{id_clean}') | (Invoice.id == id_clean) | Invoice.id.ilike(f'%{id_clean}%') | (Invoice.invoice_number == raw_str) | (Invoice.invoice_number == id_clean) | Invoice.invoice_number.ilike(f'%{id_clean}%') | (Invoice.doc_key == raw_str) | (Invoice.doc_key == id_clean) | Invoice.doc_key.ilike(f'%{id_clean}%')).filter(Invoice.is_deleted == False).first()
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
@@ -1504,10 +1504,8 @@ def stream_document_file(
         raise HTTPException(status_code=403, detail='Access Denied: You are not authorized to access this document file.')
 
     target_ref = getattr(inv, 'file_path', None) or inv.file_url
-    if not target_ref and not getattr(inv, 'file_name', None):
-        raise HTTPException(status_code=404, detail='No physical file attached to this document.')
-
     safe_path = None
+
     if target_ref:
         try:
             cand = get_safe_file_path(target_ref)
@@ -1536,15 +1534,50 @@ def stream_document_file(
                 except Exception as exc:
                     logger.debug('Fallback lookup by clean_id failed: %s', exc)
 
-    if not safe_path or not safe_path.is_file():
-        raise HTTPException(status_code=404, detail='Document file not found on server storage.')
+    if safe_path and safe_path.is_file():
+        media_type = 'application/pdf' if safe_path.suffix.lower() == '.pdf' else 'image/jpeg'
+        return FileResponse(
+            path=str(safe_path),
+            media_type=media_type,
+            filename=safe_path.name,
+            headers={'Content-Disposition': f'inline; filename="{safe_path.name}"'}
+        )
 
-    media_type = 'application/pdf' if safe_path.suffix.lower() == '.pdf' else 'image/jpeg'
-    return FileResponse(
-        path=str(safe_path),
-        media_type=media_type,
-        filename=safe_path.name,
-        headers={'Content-Disposition': f'inline; filename="{safe_path.name}"'}
+    # Dynamic fallback PDF generator when physical file is not yet attached/uploaded
+    doc_id_str = str(inv.id or invoice_id)
+    doc_type_str = str(getattr(inv, 'document_type', None) or 'CUSTOMER FEEDBACK').upper()
+    doc_title = str(getattr(inv, 'title', None) or getattr(inv, 'account_name', None) or f"Document {doc_id_str}").replace('(', '[').replace(')', ']')
+    
+    stream_content = f"BT /F1 16 Tf 50 720 Td ({doc_type_str} - {doc_id_str}) Tj 0 -30 Td /F1 11 Tf (Reference ID: {doc_id_str}) Tj 0 -20 Td (Title: {doc_title}) Tj 0 -20 Td (Status: Attachment Pending / Synthetic View) Tj ET"
+    stream_len = len(stream_content)
+    
+    pdf_bytes = f"""%PDF-1.4
+1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj
+2 0 obj <</Type/Pages/Count 1/Kids[3 0 R]>> endobj
+3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>> endobj
+4 0 obj <</Length {stream_len}>>
+stream
+{stream_content}
+endstream
+endobj
+5 0 obj <</Type/Font/Subtype/Type1/BaseFont/Helvetica>> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000052 00000 n 
+0000000101 00000 n 
+0000000212 00000 n 
+0000000300 00000 n 
+0000000390 00000 n 
+trailer <</Size 6/Root 1 0 R>>
+startxref
+460
+%%EOF""".encode('ascii', errors='ignore')
+
+    return Response(
+        content=pdf_bytes,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f'inline; filename="{doc_id_str}_summary.pdf"'}
     )
 
 def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None):
