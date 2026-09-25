@@ -368,6 +368,22 @@ def match_condition(rule: Any, document: Any) -> bool:
             field_val = get_val(document, 'vendor_gstin') or ''
         elif clean_field_key in ['ponumber', 'po_number', 'po']:
             field_val = get_val(document, 'po_number') or ''
+        elif clean_field_key in ['typeofcomplaint', 'type_of_complaint', 'complainttype', 'complaint_type', 'complaint']:
+            field_val = get_val(document, 'type_of_complaint') or ''
+        elif clean_field_key in ['subtypeofcomplaint', 'subtype_of_complaint', 'complaintsubtype', 'complaint_subtype', 'subtype']:
+            field_val = get_val(document, 'subtype_of_complaint') or ''
+        elif clean_field_key in ['accountname', 'account_name', 'customername', 'customer_name', 'account']:
+            field_val = get_val(document, 'account_name') or get_val(document, 'vendor_name') or ''
+        elif clean_field_key in ['bpcode', 'bp_code', 'bp']:
+            field_val = get_val(document, 'bp_code') or ''
+        elif clean_field_key in ['customercode', 'customer_code']:
+            field_val = get_val(document, 'customer_code') or ''
+        elif clean_field_key in ['dealername', 'dealer_name', 'distributorname', 'distributor_name', 'dealer']:
+            field_val = get_val(document, 'dealer_name') or ''
+        elif clean_field_key in ['employeename', 'employee_name']:
+            field_val = get_val(document, 'employee_name') or ''
+        elif clean_field_key in ['employeedivision', 'employee_division']:
+            field_val = get_val(document, 'employee_division') or get_val(document, 'division') or ''
         else:
             field_mapping = {
                 'Division': get_val(document, 'division') or '',
