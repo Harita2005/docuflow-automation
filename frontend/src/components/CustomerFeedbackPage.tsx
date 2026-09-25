@@ -52,23 +52,28 @@ export default function CustomerFeedbackPage({
   // Filter only Customer Feedback documents
   const feedbackDocs = useMemo(() => {
     return documents.filter((doc) => {
+      if (!doc) return false;
       const rawType = (
         doc.document_type ||
         doc.subtype_of_complaint ||
         doc.type_of_complaint ||
         ""
       ).toUpperCase();
-      const canonicalType = getCanonicalDocumentType(rawType);
+      const canonicalType = getCanonicalDocumentType(doc);
       const docIdUpper = (doc.id || "").toUpperCase();
       const docNumUpper = (doc.document_number || doc.invoice_number || "").toUpperCase();
+      const wfProf = (doc.workflow_profile_id || doc.workflow_profile || "").toUpperCase();
 
       return (
         canonicalType === "CUSTOMER FEEDBACK" ||
+        rawType.includes("FEEDBACK") ||
+        rawType.includes("COMPLAINT") ||
         docIdUpper.startsWith("CMP") ||
         docIdUpper.startsWith("CF") ||
         docNumUpper.startsWith("CMP") ||
         docNumUpper.startsWith("CF") ||
-        Boolean(doc.type_of_complaint)
+        Boolean(doc.type_of_complaint) ||
+        wfProf.includes("FEEDBACK")
       );
     });
   }, [documents]);
@@ -89,7 +94,7 @@ export default function CustomerFeedbackPage({
     if (st.includes("approved") || st.includes("cleared") || st.includes("settled") || st.includes("resolved") || st.includes("completed")) {
       return "CLEARED";
     }
-    if (st.includes("progress") || st.includes("investigat") || st.includes("routing") || st.includes("processing")) {
+    if (st.includes("progress") || st.includes("investigat") || st.includes("routing") || st.includes("processing") || st.includes("initiated") || st.includes("stage")) {
       return "PROGRESS";
     }
     // Default to PENDING for new / initiated / unrouted / review items
@@ -102,8 +107,13 @@ export default function CustomerFeedbackPage({
       const category = getFeedbackCategory(doc);
 
       // 1. Status Filter
-      if (statusFilter !== "ALL" && category !== statusFilter) {
-        return false;
+      if (statusFilter !== "ALL") {
+        if (statusFilter === "CLEARED" && category !== "CLEARED") {
+          return false;
+        }
+        if ((statusFilter === "PENDING" || statusFilter === "PROGRESS") && category === "CLEARED") {
+          return false;
+        }
       }
 
       // 2. Search Term
@@ -124,8 +134,8 @@ export default function CustomerFeedbackPage({
 
   // KPI Calculations
   const totalCount = feedbackDocs.length;
-  const pendingCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "PENDING").length;
-  const progressCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "PROGRESS").length;
+  const pendingCount = feedbackDocs.filter((d) => getFeedbackCategory(d) !== "CLEARED").length;
+  const progressCount = feedbackDocs.filter((d) => getFeedbackCategory(d) !== "CLEARED").length;
   const clearedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "CLEARED").length;
   const withImagesCount = feedbackDocs.filter((d) => d.image_1 || d.image_2 || d.image_3 || d.image_4 || d.image_5).length;
 
