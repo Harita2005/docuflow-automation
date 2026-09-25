@@ -1921,10 +1921,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newRoleName.trim()}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
+                  disabled={!newRoleName.trim() || isCreatingRole}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
                 >
-                  Add Role
+                  {isCreatingRole ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  <span>{isCreatingRole ? "Creating..." : "Add Role"}</span>
                 </button>
               </div>
             </form>
