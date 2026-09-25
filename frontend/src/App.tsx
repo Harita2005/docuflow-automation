@@ -459,18 +459,23 @@ export default function App() {
     );
     
     const viewMapping: Record<string, string> = {
+      "dashboard": "dashboard",
       "admin": "admin",
       "upload": "upload",
       "goods-receipt": "upload",
       "data-verification": "data-verification",
-      "customer-feedback": "customer-feedback"
+      "customer-feedback": "customer-feedback",
+      "work-tracker": "work-tracker",
+      "approved-documents": "approved-documents",
+      "workflow-rules": "workflow-rules"
     };
 
     const requiredPermission = viewMapping[currentView];
     if (requiredPermission && !permissions.includes(requiredPermission)) {
-      const fallback = permissions.includes("dashboard") ? "dashboard" : 
+      const fallback = permissions.includes("customer-feedback") ? "customer-feedback" : 
+                       permissions.includes("dashboard") ? "dashboard" : 
                        permissions.includes("work-tracker") ? "work-tracker" : 
-                       permissions.includes("admin") ? "admin" : "dashboard";
+                       permissions.includes("admin") ? "admin" : "customer-feedback";
       setCurrentView(fallback);
     }
   }, [currentView, currentUserRole, isLoggedIn, rolePermissions]);
