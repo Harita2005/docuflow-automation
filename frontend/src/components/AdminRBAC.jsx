@@ -316,6 +316,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [search, setSearch] = useState("");
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleCode, setNewRoleCode] = useState("");
   const [savingRolePerms, setSavingRolePerms] = useState(false);
 
   // Add User modal states
@@ -771,17 +772,18 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
     const trimmedName = newRoleName.trim();
     // Safe role code generation according to backend regex: ^[a-z0-9_]{2,50}$
-    let generatedCode = trimmedName.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '');
-    if (generatedCode.length < 2) {
-      setErrorMsg("Role title must produce a valid code at least 2 characters long (letters, numbers, underscores).");
+    let rawCode = (newRoleCode.trim() || trimmedName).toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (rawCode.length < 2) {
+      setErrorMsg("Role code must produce a valid identifier at least 2 characters long (letters, numbers, underscores).");
       return;
     }
 
-    // Check duplicate role code
-    const isDuplicate = roles.some(r => (r.code || r.id).toLowerCase() === generatedCode.toLowerCase());
-    if (isDuplicate) {
-      setErrorMsg(`Role code '${generatedCode}' already exists in database.`);
-      return;
+    // Auto-disambiguate duplicate codes (e.g. manager -> manager_2)
+    let finalCode = rawCode;
+    let counter = 1;
+    while (roles.some(r => (r.code || r.id).toLowerCase() === finalCode.toLowerCase())) {
+      counter++;
+      finalCode = `${rawCode}_${counter}`;
     }
 
     setIsCreatingRole(true);
@@ -799,7 +801,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         method: "POST",
         headers,
         body: JSON.stringify({
-          code: generatedCode,
+          code: finalCode,
           name: trimmedName,
           description: "",
           permissions: []
@@ -809,8 +811,9 @@ export default function AdminRBAC({ onRefreshSignal }) {
       if (res.ok) {
         const createdRole = await res.json();
         setNewRoleName("");
+        setNewRoleCode("");
         setShowAddRoleModal(false);
-        setSuccessMsg(`Role "${createdRole.name}" created successfully in database!`);
+        setSuccessMsg(`Role "${createdRole.name}" (${createdRole.code}) created successfully in database!`);
         await loadData();
         setTimeout(() => setSuccessMsg(""), 3500);
       } else {
@@ -1877,15 +1880,34 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
             <form onSubmit={handleAddRole} className="space-y-2.5">
               <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Title</label>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Title / Display Name</label>
                 <input 
                   type="text"
                   required
                   value={newRoleName}
-                  onChange={e => setNewRoleName(e.target.value)}
+                  onChange={e => {
+                    setNewRoleName(e.target.value);
+                    if (!newRoleCode || newRoleCode === newRoleName.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '')) {
+                      setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''));
+                    }
+                  }}
                   placeholder="e.g. Treasury Officer"
                   className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
+                  System Role Code <span className="text-slate-400 font-normal">(Auto-generated ID)</span>
+                </label>
+                <input 
+                  type="text"
+                  value={newRoleCode}
+                  onChange={e => setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''))}
+                  placeholder="e.g. treasury_officer"
+                  className="w-full text-xs p-2 font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 text-slate-700"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">Unique identifier used in backend DB. Duplicates auto-suffix (_2, _3).</p>
               </div>
 
               <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
