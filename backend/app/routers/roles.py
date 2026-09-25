@@ -476,10 +476,17 @@ def create_role(
         seen_codes.add(key)
         perm = db.query(Permission).filter(Permission.code.ilike(clean_code)).first()
         if not perm:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Permission '{clean_code}' not found."
+            name_clean = clean_code.replace(':', ' ').replace('_', ' ').title()
+            perm = Permission(
+                code=clean_code,
+                name=name_clean,
+                module=clean_code.split(':')[0].upper() if ':' in clean_code else 'SYSTEM',
+                is_active=True,
+                is_custom=True
             )
+            db.add(perm)
+            db.commit()
+            db.refresh(perm)
         if not perm.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -556,10 +563,17 @@ def update_role_permissions(
 
         perm = db.query(Permission).filter(Permission.code.ilike(clean_code)).first()
         if not perm:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Permission '{clean_code}' not found."
+            name_clean = clean_code.replace(':', ' ').replace('_', ' ').title()
+            perm = Permission(
+                code=clean_code,
+                name=name_clean,
+                module=clean_code.split(':')[0].upper() if ':' in clean_code else 'SYSTEM',
+                is_active=True,
+                is_custom=True
             )
+            db.add(perm)
+            db.commit()
+            db.refresh(perm)
 
         if not perm.is_active:
             raise HTTPException(
