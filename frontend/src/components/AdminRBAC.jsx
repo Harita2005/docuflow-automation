@@ -50,6 +50,7 @@ const INITIAL_PERMISSIONS = [
     icon: "Folder",
     items: [
       { id: "wf:view", label: "View Task Queue", desc: "Access pending task list and SLA timers", iconName: "Eye", iconColor: "bg-slate-50 text-slate-600 border-slate-200" },
+      { id: "customer-feedback", label: "Customer Feedback Hub", desc: "Access customer complaints work tracker & registry", iconName: "MessageSquare", iconColor: "bg-purple-50 text-purple-600 border-purple-100" },
       { id: "wf:approve", label: "Approve / Reject Action", desc: "Sign off or return workflow approval stages", iconName: "ShieldCheck", iconColor: "bg-emerald-50 text-emerald-600 border-emerald-100" },
       { id: "wf:delegate", label: "Delegate Signoff", desc: "Assign approval duties to backup peers", iconName: "Users", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
       { id: "wf:force", label: "Fast-Track & Emergency Route", desc: "Emergency route bypass & manual escalation", iconName: "AlertTriangle", iconColor: "bg-amber-50 text-amber-600 border-amber-100" }

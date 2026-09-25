@@ -196,7 +196,7 @@ export default function Sidebar({
     ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "dapi-sync-back"]
   );
 
-  const permissions = rawPerms.includes("customer-feedback") ? rawPerms : [...rawPerms, "customer-feedback"];
+  const permissions = rawPerms;
 
   const menuGroups = [
     {

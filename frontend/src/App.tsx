@@ -453,16 +453,17 @@ export default function App() {
     if (!isLoggedIn) return;
     
     const permissions = rolePermissions[currentUserRole] || (
-      currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "admin"] :
-      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "admin"] :
-      ["dashboard", "work-tracker", "approved-documents"]
+      currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "admin"] :
+      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "admin"] :
+      ["dashboard", "work-tracker", "approved-documents", "customer-feedback"]
     );
     
     const viewMapping: Record<string, string> = {
       "admin": "admin",
       "upload": "upload",
       "goods-receipt": "upload",
-      "data-verification": "data-verification"
+      "data-verification": "data-verification",
+      "customer-feedback": "customer-feedback"
     };
 
     const requiredPermission = viewMapping[currentView];
