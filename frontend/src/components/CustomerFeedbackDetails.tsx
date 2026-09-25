@@ -343,11 +343,10 @@ export default function CustomerFeedbackDetails({
         } catch {
           if (txt) msg = txt;
         }
-        // Fallback local status update if backend endpoint non-critical
-        setActionSuccess("✓ Feedback Approved!");
+        setActionError(msg);
       }
     } catch (err: any) {
-      setActionSuccess("✓ Feedback Approved!");
+      setActionError(err.message || "Network error approving record.");
     } finally {
       setActionLoading(false);
       setTimeout(() => {

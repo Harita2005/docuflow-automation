@@ -1687,8 +1687,10 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             except Exception:
                 has_attachment = False
 
-        if is_attachment_stage and (not has_attachment):
-            raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical invoice PDF file must be attached and uploaded before approving Stage 1 (Attachment Status).')
+        is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
+
+        if is_attachment_stage and (not has_attachment) and not is_feedback_doc:
+            raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical document file must be attached and uploaded before approving Stage 1.')
 
         checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
         if not checklist_items:
@@ -1698,7 +1700,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                 db.add(item)
                 checklist_items.append(item)
             db.commit()
-        if checklist_items:
+        if checklist_items and not is_feedback_doc:
             unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
             if unchecked_mandatory:
                 missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])
