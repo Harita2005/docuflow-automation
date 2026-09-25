@@ -14,18 +14,29 @@ import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
 import WorkflowRulesPage from "./pages/WorkflowRulesPage.jsx";
 
+import CustomerFeedbackDetails from "./components/CustomerFeedbackDetails.tsx";
+import CustomerFeedbackPage from "./components/CustomerFeedbackPage.tsx";
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types";
 import { ClipboardCheck, ArrowRight, X, Clock } from "lucide-react";
 
-import { formatCurrencyINR } from "./utils/formatters.ts";
+import { formatCurrencyINR, getCanonicalDocumentType } from "./utils/formatters.ts";
 
 export default function App() {
   const getInitialRoute = () => {
     const path = window.location.pathname;
+    const matchFeedback = path.match(/^\/customer-feedback\/([^/]+)$/);
+    if (matchFeedback) {
+      return { docId: matchFeedback[1], view: "customer-feedback" };
+    }
     const match = path.match(/^\/review\/([^/]+)$/);
     if (match) {
-      return { docId: match[1], view: "details" };
+      const docId = match[1];
+      const docType = getCanonicalDocumentType(docId);
+      if (docType === "CUSTOMER FEEDBACK" || docId.toUpperCase().startsWith("CMP")) {
+        return { docId, view: "customer-feedback" };
+      }
+      return { docId, view: "details" };
     }
     return { docId: null, view: localStorage.getItem("currentView") || "dashboard" };
   };
@@ -53,9 +64,9 @@ export default function App() {
   const [kickedReason, setKickedReason] = useState<string | null>(() => sessionStorage.getItem("sessionKickedReason") || null);
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
-    employee: ["dashboard", "work-tracker", "approved-documents", "dapi-sync-back"],
-    settings_editor: ["dashboard", "work-tracker", "approved-documents", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
-    admin: ["dashboard", "work-tracker", "approved-documents", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
+    employee: ["dashboard", "work-tracker", "customer-feedback", "approved-documents", "dapi-sync-back"],
+    settings_editor: ["dashboard", "work-tracker", "customer-feedback", "approved-documents", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
+    admin: ["dashboard", "work-tracker", "customer-feedback", "approved-documents", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"]
   });
 
   // Multi-Tab Synchronization across tabs in the same browser
@@ -374,13 +385,18 @@ export default function App() {
 
   // Synchronize browser address bar pathname dynamically based on currentView and selectedDocId
   useEffect(() => {
-    if (currentView === "details" && selectedDocId) {
+    if (currentView === "customer-feedback" && selectedDocId) {
+      const targetPath = `/customer-feedback/${selectedDocId}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.replaceState({}, "", targetPath);
+      }
+    } else if (currentView === "details" && selectedDocId) {
       const targetPath = `/review/${selectedDocId}`;
       if (window.location.pathname !== targetPath) {
         window.history.replaceState({}, "", targetPath);
       }
     } else {
-      if (window.location.pathname.startsWith("/review/")) {
+      if (window.location.pathname.startsWith("/review/") || window.location.pathname.startsWith("/customer-feedback/")) {
         window.history.replaceState({}, "", "/");
       }
     }
@@ -465,11 +481,23 @@ export default function App() {
 
   // Handles switching directly to inspect a document details panel
   const handleViewDocument = (docId: string | number) => {
-    if (currentView !== "details") {
+    if (currentView !== "details" && currentView !== "customer-feedback") {
       setPreviousView(currentView);
     }
-    setSelectedDocId(String(docId));
-    setCurrentView("details");
+    const docIdStr = String(docId);
+    setSelectedDocId(docIdStr);
+
+    const targetDoc = documents.find(
+      (d) => String(d.id) === docIdStr || String(d.invoice_number || "").toUpperCase() === docIdStr.toUpperCase()
+    );
+    const rawType = targetDoc?.document_type || targetDoc?.subtype_of_complaint || targetDoc?.type_of_complaint || docIdStr;
+    const docType = getCanonicalDocumentType(rawType);
+
+    if (docType === "CUSTOMER FEEDBACK" || docIdStr.toUpperCase().startsWith("CMP") || docIdStr.toUpperCase().startsWith("CF")) {
+      setCurrentView("customer-feedback");
+    } else {
+      setCurrentView("details");
+    }
     fetchDocuments(true);
   };
 
@@ -700,6 +728,18 @@ export default function App() {
               />
             )}
 
+            {currentView === "customer-feedback" && (
+              <CustomerFeedbackPage
+                documents={documents}
+                selectedDocId={selectedDocId}
+                onSelectDocument={(docId) => setSelectedDocId(docId)}
+                currentUserRole={currentUserRole}
+                currentUserEmail={currentUserEmail}
+                currentUserUsername={currentUserUsername}
+                onRefreshDocs={handleFullRefresh}
+              />
+            )}
+
             {currentView === "details" && (
               !activeDocument ? (
                 loadingDocs ? (
@@ -737,91 +777,7 @@ export default function App() {
 
       </div>
 
-      {/* Welcome Pending Approvals Modal - Strictly shown only when actual pending count > 0 */}
-      {showPendingModal && !loadingDocs && pendingActionDocs.length > 0 && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fadeIn p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn border border-slate-100">
-            {/* Header / Graphic */}
-            <div className="bg-gradient-to-br from-[#003F28] via-[#00452B] to-[#005333] p-6 text-white relative">
-              <button 
-                onClick={() => setShowPendingModal(false)}
-                className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              
-              <div className="h-12 w-12 bg-white/15 rounded-xl backdrop-blur-md flex items-center justify-center mb-4 border border-white/10 shadow-inner">
-                <ClipboardCheck className="h-6 w-6 text-white" />
-              </div>
-              
-              <h3 className="text-base font-black font-display tracking-tight leading-none mb-1">
-                Welcome back, {currentUserUsername || currentUserEmail.split('@')[0]}!
-              </h3>
-              <p className="text-[11px] text-emerald-100 font-semibold tracking-wide uppercase mt-1">
-                You have {pendingActionDocs.length} pending actions waiting
-              </p>
-            </div>
 
-            {/* List of pending docs */}
-            <div className="p-5">
-              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider mb-3">Awaiting your approval</p>
-              
-              <div className="space-y-2.5 max-h-[220px] overflow-y-auto custom-scrollbar mb-5 p-1.5 pr-2">
-                {pendingActionDocs.slice(0, 3).map(doc => (
-                  <div 
-                    key={doc.id}
-                    onClick={() => {
-                      setSelectedDocId(doc.id);
-                      setCurrentView("details");
-                      setShowPendingModal(false);
-                    }}
-                    className="group border border-slate-100 hover:border-[#003F28]/40 hover:bg-[#003F28]/5 p-3 rounded-xl transition cursor-pointer flex items-center justify-between shadow-sm relative overflow-hidden"
-                  >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <span className="text-[10px] font-black text-slate-800 tracking-tight">
-                        {doc.tracking_id || doc.id}
-                      </span>
-                      <span className="text-[11px] font-extrabold text-slate-900 truncate mt-0.5">
-                        {doc.vendor_name || "Unknown Vendor"}
-                      </span>
-                      <span className="text-[9px] font-semibold text-slate-500 tracking-wide uppercase mt-0.5">
-                        {doc.document_type || "Document"} • {doc.invoice_number}
-                      </span>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="block text-[11px] font-black text-slate-900">
-                        {formatCurrencyINR(doc.amount)}
-                      </span>
-                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-[#003F28] mt-1 uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity">
-                        Review <ArrowRight className="h-2 w-2" />
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Actions */}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => {
-                    setCurrentView("work-tracker");
-                    setShowPendingModal(false);
-                  }}
-                  className="w-full py-2.5 bg-[#003F28] hover:bg-[#005333] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
-                >
-                  <ClipboardCheck className="h-4 w-4" /> Go to Work Tracker
-                </button>
-                <button
-                  onClick={() => setShowPendingModal(false)}
-                  className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 text-center active:scale-98"
-                >
-                  Review Later
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Session Pre-Expiration Warning Modal (Option 1) */}
       {showInactivityWarning && (

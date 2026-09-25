@@ -100,18 +100,38 @@ export function getCanonicalDocumentType(docOrType?: any): string {
       docOrType.Document_type,
       docOrType.trans_type,
       docOrType.doc_type,
+      docOrType.type,
       docOrType.custom_data?.document_type,
       docOrType.custom_data?.Document_type,
       docOrType.custom_data?.trans_type,
       docOrType.custom_data?.doc_type,
+      docOrType.custom_data?.type,
       docOrType.category,
+      docOrType.type_of_complaint,
+      docOrType.subtype_of_complaint,
+      docOrType.custom_data?.type_of_complaint,
+      docOrType.custom_data?.subtype_of_complaint,
+      docOrType.extracted_data?.type_of_complaint,
+      docOrType.id,
+      docOrType.document_number,
+      docOrType.doc_number,
+      docOrType.invoice_number,
     ];
   }
 
   const normalizeString = (raw: string): string => {
     const cleaned = raw.trim().replace(/\s+/g, " ");
     const upper = cleaned.toUpperCase().replace(/_/g, " ");
-    if (upper === "CUSTOMER FEEDBACK" || upper === "FEEDBACK" || upper === "CUSTOMER COMPLAINT" || upper.includes("COMPLAINT")) {
+    if (
+      upper === "CUSTOMER FEEDBACK" ||
+      upper === "FEEDBACK" ||
+      upper === "CUSTOMER COMPLAINT" ||
+      upper.includes("COMPLAINT") ||
+      upper.includes("FEEDBACK") ||
+      upper.startsWith("CMP") ||
+      upper.startsWith("CF-") ||
+      upper.startsWith("CF_")
+    ) {
       return "CUSTOMER FEEDBACK";
     }
     if (upper === "INVOICE" || upper === "TAX INVOICE" || upper === "AP INVOICE" || upper === "AP_INVOICE" || upper === "STANDARD INVOICE") {

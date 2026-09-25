@@ -48,13 +48,36 @@ export default function Dashboard({
   const [customToDate, setCustomToDate] = useState<string>("");
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
 
+  // Helper to check if a document is Customer Feedback
+  const isCustomerFeedbackDoc = (d: any) => {
+    const rawType = (
+      d.document_type ||
+      d.subtype_of_complaint ||
+      d.type_of_complaint ||
+      d.category ||
+      ""
+    ).toUpperCase();
+    const docIdUpper = String(d.id || "").toUpperCase();
+    const docNumUpper = String(d.document_number || d.invoice_number || "").toUpperCase();
+
+    return (
+      rawType.includes("CUSTOMER FEEDBACK") ||
+      rawType.includes("CUSTOMER COMPLAINT") ||
+      docIdUpper.startsWith("CMP") ||
+      docIdUpper.startsWith("CF") ||
+      docNumUpper.startsWith("CMP") ||
+      docNumUpper.startsWith("CF") ||
+      Boolean(d.type_of_complaint)
+    );
+  };
+
   // Merge real documents with reference documents if real documents list is empty
-  const displayDocs = documents && documents.length > 0
+  const rawDisplayDocs = documents && documents.length > 0
     ? documents.map(d => ({
         id: d.id,
-        vendor_name: d.vendor_name || "Enterprise Vendor",
+        vendor_name: d.vendor_name || d.account_name || d.dealer_name || "Enterprise Vendor",
         document_type: (d.document_type || d.category || "GENERAL RECORDS").toUpperCase().trim(),
-        invoice_number: d.invoice_number || `INV-${d.id.slice(0, 5)}`,
+        invoice_number: d.invoice_number || d.document_number || `INV-${d.id.slice(0, 5)}`,
         invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
         status: d.status || "UNROUTED (NO RULE MATCHED)",
         status_badge_type: (() => {
@@ -73,9 +96,14 @@ export default function Dashboard({
         is_current_approver: d.is_current_approver,
         has_approved: d.has_approved,
         has_rejected: d.has_rejected,
-        current_stage_name: d.current_stage_name
+        current_stage_name: d.current_stage_name,
+        type_of_complaint: d.type_of_complaint,
+        subtype_of_complaint: d.subtype_of_complaint
       }))
     : [];
+
+  // Exclude Customer Feedback records from AP Invoice Dashboard (they live exclusively in Customer Feedback Hub)
+  const displayDocs = rawDisplayDocs.filter(d => !isCustomerFeedbackDoc(d));
 
   // Filter documents strictly by assigned user if not admin
   const isAssignedToUser = (doc: any) => {

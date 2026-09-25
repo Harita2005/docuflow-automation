@@ -27,10 +27,13 @@ import {
   Upload,
   Settings,
   Activity,
+  ExternalLink,
+  Image as ImageIcon,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay } from "../utils/formatters";
 import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
+import CustomerFeedbackDetails from "./CustomerFeedbackDetails";
 
 
 interface DocumentDetailsProps {
@@ -339,6 +342,30 @@ export default function DocumentDetails({
   } | null>(null);
   const [_isLoadingConfig, setIsLoadingConfig] = useState<boolean>(false);
   const [_containerWidth, setContainerWidth] = useState<number>(0);
+
+  // Image Preview Modal State
+  const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
+  const [imageZoom, setImageZoom] = useState<number>(1);
+  const [imageRotation, setImageRotation] = useState<number>(0);
+  const [imageLoading, setImageLoading] = useState<boolean>(true);
+  const [imageError, setImageError] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!previewImageModal) return;
+    setImageZoom(1);
+    setImageRotation(0);
+    setImageLoading(true);
+    setImageError(false);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPreviewImageModal(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewImageModal]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -703,38 +730,53 @@ export default function DocumentDetails({
 
   const isImageFieldKey = (key: string): boolean => {
     const fk = key.toLowerCase().trim().replace(/[\s\-_]+/g, "_");
-    return ["image_1", "image_2", "image_3", "image_4", "image_5"].includes(fk);
+    return (
+      ["image_1", "image_2", "image_3", "image_4", "image_5"].includes(fk) ||
+      fk.includes("image") ||
+      fk.includes("photo") ||
+      fk.includes("picture") ||
+      fk.includes("pic")
+    );
+  };
+
+  const isImageUrlValue = (valStr: string): boolean => {
+    if (!valStr || typeof valStr !== "string") return false;
+    const s = valStr.trim().toLowerCase();
+    return (
+      /\.(jpg|jpeg|png)($|\?)/i.test(s) ||
+      /^(https?:\/\/|\/|data:image\/|blob:|[a-z0-9_\-\/.]+\.(jpg|jpeg|png))/i.test(s) ||
+      s.includes("unsplash.com") ||
+      s.includes("images") ||
+      s.includes("photo") ||
+      s.startsWith("data:image/")
+    );
   };
 
   const renderFieldValueContent = (fieldKey: string, val: string) => {
     const isMissing = !val || val === "Not available" || val.trim() === "" || val.trim() === "null";
 
-    if (isImageFieldKey(fieldKey)) {
-      if (isMissing) {
-        return <span className="italic text-slate-400 font-normal">Not available</span>;
-      }
-      const rawVal = val.trim();
-      const isUrl = /^(https?:\/\/|\/)/i.test(rawVal);
-      if (isUrl) {
-        return (
-          <a
-            href={rawVal}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-extrabold text-[11px] hover:underline cursor-pointer"
-            title={rawVal}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span>Open Image</span>
-            <span className="text-[10px]">↗</span>
-          </a>
-        );
-      }
-      return <span>{val}</span>;
-    }
-
     if (isMissing) {
       return <span className="italic text-slate-400 font-normal">Not available</span>;
+    }
+
+    const rawVal = val.trim();
+    if (isImageFieldKey(fieldKey) || isImageUrlValue(rawVal)) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setPreviewImageModal({ url: rawVal, title: fieldKey });
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300/80 font-black text-[11px] cursor-pointer transition-all shadow-2xs group"
+          title={`Preview image for ${fieldKey}`}
+        >
+          <ImageIcon className="h-3.5 w-3.5 text-emerald-700 group-hover:scale-110 transition-transform" />
+          <span>Open Image</span>
+          <span className="text-[10px] text-emerald-600">↗</span>
+        </button>
+      );
     }
 
     return <span>{val}</span>;
@@ -3142,6 +3184,163 @@ export default function DocumentDetails({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* IMAGE PREVIEW POPUP MODAL */}
+      {/* ========================================================= */}
+      {previewImageModal && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setPreviewImageModal(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-[#003F28] text-white px-5 py-3 flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
+                  <ZoomIn className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 truncate">
+                    <span>{previewImageModal.title ? previewImageModal.title.toUpperCase().replace(/_/g, " ") : "IMAGE PREVIEW"}</span>
+                  </h3>
+                  <p className="text-[10px] text-emerald-200/80 font-mono truncate max-w-sm" title={previewImageModal.url}>
+                    {previewImageModal.url}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Controls & Close Button */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Zoom & Rotation controls */}
+                <div className="flex items-center bg-emerald-950/70 border border-emerald-700/60 rounded-lg p-0.5 text-xs text-white">
+                  <button
+                    type="button"
+                    onClick={() => setImageZoom((prev) => Math.max(0.5, prev - 0.25))}
+                    className="p-1.5 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="px-2 font-mono text-[11px] text-emerald-200 min-w-[42px] text-center font-bold">
+                    {Math.round(imageZoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setImageZoom((prev) => Math.min(3, prev + 0.25))}
+                    className="p-1.5 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageZoom(1);
+                      setImageRotation(0);
+                    }}
+                    className="p-1.5 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer border-l border-emerald-700/60 ml-0.5"
+                    title="Reset Zoom & Rotation"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
+                    className="p-1.5 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                    title="Rotate Clockwise"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Download button */}
+                <a
+                  href={previewImageModal.url}
+                  download
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition cursor-pointer"
+                  title="Download image"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewImageModal(null)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-600/80 text-white transition cursor-pointer ml-1"
+                  title="Close Preview (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content - Preview Display */}
+            <div className="flex-1 bg-slate-950/90 p-4 flex items-center justify-center overflow-auto min-h-[360px] relative select-none">
+              {imageLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-10 text-slate-300 gap-2">
+                  <RotateCw className="h-5 w-5 animate-spin text-emerald-400" />
+                  <span className="text-sm font-medium">Loading image...</span>
+                </div>
+              )}
+
+              {imageError ? (
+                <div className="flex flex-col items-center justify-center text-center p-6 bg-slate-900/90 rounded-xl border border-slate-800 text-slate-300 max-w-md">
+                  <AlertCircle className="h-10 w-10 text-amber-400 mb-3" />
+                  <h4 className="font-bold text-white mb-1 text-base">Image Preview Unavailable</h4>
+                  <p className="text-xs text-slate-400 mb-4">
+                    The image URL could not be loaded into the preview modal.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImageModal(null)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition shadow-md cursor-pointer"
+                  >
+                    Close Preview
+                  </button>
+                </div>
+              ) : (
+                <div 
+                  className="transition-transform duration-150 ease-out flex items-center justify-center"
+                  style={{
+                    transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
+                    transformOrigin: "center center",
+                  }}
+                >
+                  <img
+                    src={previewImageModal.url}
+                    alt={previewImageModal.title || "Image Preview"}
+                    onLoad={() => setImageLoading(false)}
+                    onError={() => {
+                      setImageLoading(false);
+                      setImageError(true);
+                    }}
+                    className="max-h-[62vh] max-w-full object-contain rounded shadow-lg border border-slate-800/80 bg-slate-900/50"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-500 font-medium">
+                Use controls to zoom/rotate image &bull; Press <kbd className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[10px] border border-slate-300">Esc</kbd> or click outside to close
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImageModal(null)}
+                className="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

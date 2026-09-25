@@ -119,6 +119,7 @@ export default function Header({
       case "payment-readiness": return "PAYMENT READINESS";
       case "reports": return "REPORTS & SPEND ANALYTICS";
       case "admin": return "CONTROL SETTINGS";
+      case "customer-feedback": return "CUSTOMER FEEDBACK";
       case "details": return "DOCUMENT DETAILS";
       default: return "DASHBOARD";
     }

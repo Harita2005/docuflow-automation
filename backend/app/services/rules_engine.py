@@ -164,10 +164,8 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
         return doc_val is None or str(doc_val).strip() in ['', 'None', 'null', 'nan'] or doc_val == []
     if op_str in ['is not empty', 'is_not_empty', 'not empty', 'not_empty']:
         return doc_val is not None and str(doc_val).strip() not in ['', 'None', 'null', 'nan'] and doc_val != []
-
     if is_wildcard(rule_val):
         return True
-
     raw_r = str(rule_val if rule_val is not None else '').strip()
     raw_d = str(doc_val if doc_val is not None else '').strip()
 
