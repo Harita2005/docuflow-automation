@@ -41,7 +41,8 @@ const INITIAL_PERMISSIONS = [
       { id: "doc:upload", label: "Upload Documents", desc: "Upload and batch ingest vendor invoices", iconName: "FileText", iconColor: "bg-purple-50 text-purple-600 border-purple-100" },
       { id: "doc:verify", label: "OCR Verification Desk", desc: "Verify extracted fields & line items", iconName: "BarChart3", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
       { id: "doc:edit", label: "Edit & Field Overrides", desc: "Modify monetary values, HSN, and tax codes", iconName: "CheckSquare", iconColor: "bg-sky-50 text-sky-600 border-sky-100" },
-      { id: "doc:delete", label: "Delete / Purge Drafts", desc: "Remove draft records and recalled files", iconName: "Trash2", iconColor: "bg-rose-50 text-rose-600 border-rose-100" }
+      { id: "doc:delete", label: "Delete / Purge Drafts", desc: "Remove draft records and recalled files", iconName: "Trash2", iconColor: "bg-rose-50 text-rose-600 border-rose-100" },
+      { id: "customer-feedback", label: "Customer Feedback Hub", desc: "Access customer complaints work tracker & registry", iconName: "MessageSquare", iconColor: "bg-purple-50 text-purple-600 border-purple-100" }
     ]
   },
   {
