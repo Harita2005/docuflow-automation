@@ -452,11 +452,20 @@ export default function App() {
   useEffect(() => {
     if (!isLoggedIn) return;
     
-    const permissions = rolePermissions[currentUserRole] || (
-      currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "admin"] :
-      currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "admin"] :
-      ["dashboard", "work-tracker", "approved-documents", "customer-feedback"]
-    );
+    let permissions: string[] = [];
+    const rolePermObj = rolePermissions[currentUserRole];
+    if (Array.isArray(rolePermObj)) {
+      permissions = rolePermObj;
+    } else if (rolePermObj && typeof rolePermObj === "object") {
+      permissions = Object.keys(rolePermObj).filter(key => {
+        const val = (rolePermObj as Record<string, any>)[key];
+        return val === true || (typeof val === "object" && val?.read !== false);
+      });
+    } else {
+      permissions = currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "admin"] :
+                    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "admin"] :
+                    ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
+    }
     
     const viewMapping: Record<string, string> = {
       "dashboard": "dashboard",

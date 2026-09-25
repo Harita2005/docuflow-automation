@@ -190,13 +190,20 @@ export default function Sidebar({
 }: SidebarProps) {
   const isExpanded = !collapsed;
 
-  const rawPerms = rolePermissions?.[currentUserRole] || (
-    currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
-    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
-    ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "dapi-sync-back"]
-  );
-
-  const permissions = rawPerms;
+  let permissions: string[] = [];
+  const rolePermObj = rolePermissions?.[currentUserRole];
+  if (Array.isArray(rolePermObj)) {
+    permissions = rolePermObj;
+  } else if (rolePermObj && typeof rolePermObj === "object") {
+    permissions = Object.keys(rolePermObj).filter(key => {
+      const val = (rolePermObj as Record<string, any>)[key];
+      return val === true || (typeof val === "object" && val?.read !== false);
+    });
+  } else {
+    permissions = currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+                  currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
+                  ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
+  }
 
   const menuGroups = [
     {
