@@ -590,6 +590,30 @@ export default function CustomerFeedbackDetails({
   const createdDateDisplay = activeDoc.created_at || activeDoc.date || activeDoc.invoice_date;
   const currentStage = activeDoc.current_stage || 1;
 
+  const stepDefinitions = useMemo(() => {
+    const rawSteps = activeDoc?.workflow_step_definitions || (activeDoc as any)?.workflow_steps || [];
+    if (Array.isArray(rawSteps) && rawSteps.length > 0) {
+      return rawSteps.filter(
+        (step: any, index: number, self: any[]) =>
+          index === self.findIndex((t: any) => (t.stage_number || t.stage) === (step.stage_number || step.stage))
+      );
+    }
+    return [];
+  }, [activeDoc]);
+
+  const effectiveSteps = useMemo(() => {
+    if (stepDefinitions.length > 0) return stepDefinitions;
+    const total = activeDoc?.total_stages || Math.max(currentStage, 3);
+    const steps: any[] = [];
+    for (let i = 1; i <= total; i++) {
+      steps.push({
+        stage_number: i,
+        stage_name: `Stage ${i}`,
+      });
+    }
+    return steps;
+  }, [stepDefinitions, activeDoc?.total_stages, currentStage]);
+
   return (
     <div className="w-full space-y-2 animate-fadeIn font-sans text-slate-800">
       
@@ -655,45 +679,58 @@ export default function CustomerFeedbackDetails({
 
       {/* 2. WORKFLOW STAGE PROGRESS TIMELINE STRIP */}
       <div className="bg-white rounded-xl border border-slate-200/80 px-3 py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <span className="text-[10px] font-black uppercase text-[#003F28] tracking-wider shrink-0 flex items-center gap-1">
             <Activity className="h-3.5 w-3.5 text-emerald-700" />
             <span>Workflow Stage:</span>
           </span>
-          
-          {/* Stage 1, Stage 2, Stage 3 Pills */}
-          <div className="flex items-center gap-1 text-[10px] font-extrabold">
-            <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-              currentStage >= 1 ? "bg-emerald-100 text-emerald-900 border-emerald-300" : "bg-slate-100 text-slate-500 border-slate-200"
-            }`}>
-              <CheckCircle2 className="h-3 w-3 text-emerald-700" />
-              <span>Stage 1: Form Ingestion</span>
-            </span>
 
-            <span className="text-slate-300">&rarr;</span>
+          <span className="text-[9px] font-extrabold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shrink-0">
+            Flow: {activeDoc?.workflow_profile_id || activeDoc?.workflow_profile || "Customer_feedback"}
+          </span>
 
-            <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-              currentStage >= 2 ? "bg-emerald-100 text-emerald-900 border-emerald-300" : "bg-amber-50 text-amber-900 border-amber-300"
-            }`}>
-              <Clock className="h-3 w-3 text-amber-700" />
-              <span>Stage 2: Review & Audit</span>
-            </span>
+          {/* Dynamic Stage Definitions */}
+          <div className="flex items-center gap-1 text-[10px] font-extrabold flex-wrap">
+            {effectiveSteps.map((step: any, idx: number) => {
+              const stgNum = step.stage_number || idx + 1;
+              const stgName = step.stage_name || step.step_name || `Stage ${stgNum}`;
+              const isCompleted = currentStage > stgNum || statusDisplay.toLowerCase().includes("approved");
+              const isCurrent = currentStage === stgNum && !statusDisplay.toLowerCase().includes("approved");
 
-            <span className="text-slate-300">&rarr;</span>
-
-            <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-              currentStage >= 3 ? "bg-emerald-100 text-emerald-900 border-emerald-300" : "bg-slate-100 text-slate-500 border-slate-200"
-            }`}>
-              <CheckCheck className="h-3 w-3 text-slate-500" />
-              <span>Stage 3: Resolution Signoff</span>
-            </span>
+              return (
+                <React.Fragment key={stgNum}>
+                  {idx > 0 && <span className="text-slate-300">&rarr;</span>}
+                  <span
+                    className={`px-2 py-0.5 rounded-md border flex items-center gap-1 transition-colors ${
+                      isCompleted
+                        ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                        : isCurrent
+                        ? "bg-amber-50 text-amber-900 border-amber-300 shadow-2xs"
+                        : "bg-slate-100 text-slate-500 border-slate-200"
+                    }`}
+                    title={step.approver_target ? `Approver: ${step.approver_target}` : undefined}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                    ) : isCurrent ? (
+                      <Clock className="h-3 w-3 text-amber-700 animate-pulse" />
+                    ) : (
+                      <CheckCheck className="h-3 w-3 text-slate-400" />
+                    )}
+                    <span>
+                      Stage {stgNum}: {stgName}
+                    </span>
+                  </span>
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
 
         <button
           type="button"
           onClick={() => setShowAuditModal(true)}
-          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer shrink-0"
         >
           View Stage Timeline & Logs &rarr;
         </button>
@@ -1313,26 +1350,23 @@ export default function CustomerFeedbackDetails({
                 }
 
                 if (parsedTrail.length === 0) {
-                  parsedTrail = [
-                    {
-                      timestamp: createdDateDisplay,
-                      actor: (activeDoc as any)?.created_by || "System Ingestion",
-                      action: "Stage 1: Form Ingestion Completed",
-                      details: "Customer Feedback complaint form ingested & synced into registry."
-                    },
-                    ...(currentStage >= 2 ? [{
+                  parsedTrail = effectiveSteps.map((step: any, idx: number) => {
+                    const stgNum = step.stage_number || idx + 1;
+                    const stgName = step.stage_name || step.step_name || `Stage ${stgNum}`;
+                    const isCompleted = currentStage > stgNum || statusDisplay.toLowerCase().includes("approved");
+                    const isCurrent = currentStage === stgNum && !statusDisplay.toLowerCase().includes("approved");
+
+                    return {
                       timestamp: (activeDoc as any)?.updated_at || createdDateDisplay,
-                      actor: (activeDoc as any)?.assigned_approver || "Reviewer Pool",
-                      action: "Stage 2: Review & Audit Stage",
-                      details: "Complaint assigned for reviewer verification & evidence audit."
-                    }] : []),
-                    ...(currentStage >= 3 || statusDisplay.toLowerCase().includes("approved") ? [{
-                      timestamp: (activeDoc as any)?.updated_at || createdDateDisplay,
-                      actor: (activeDoc as any)?.approved_by || (activeDoc as any)?.last_updated_by || "Administrator",
-                      action: "Stage 3: Resolution Signoff (Approved)",
-                      details: "Complaint fully reviewed, approved & resolved."
-                    }] : [])
-                  ];
+                      actor: isCompleted
+                        ? ((activeDoc as any)?.approved_by || step.approver_target || "Stage Approver")
+                        : isCurrent
+                        ? ((activeDoc as any)?.assigned_approver || step.approver_target || "Reviewer Pool")
+                        : (step.approver_target || "Pending Approver"),
+                      action: `Stage ${stgNum}: ${stgName} ${isCompleted ? "(Completed)" : isCurrent ? "(In Progress)" : "(Pending)"}`,
+                      details: step.action_required || `Workflow stage ${stgNum} processing for customer feedback complaint.`
+                    };
+                  });
                 }
 
                 return parsedTrail.map((item: any, idx: number) => (
