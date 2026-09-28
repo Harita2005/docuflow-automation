@@ -1712,7 +1712,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                 db.add(item)
                 checklist_items.append(item)
             db.commit()
-        if checklist_items:
+        if checklist_items and not is_feedback_doc:
             unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
             if unchecked_mandatory:
                 missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])

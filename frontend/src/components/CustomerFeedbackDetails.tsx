@@ -581,14 +581,6 @@ export default function CustomerFeedbackDetails({
   const handleWorkflowApprove = async () => {
     if (!activeDoc) return;
 
-    // Pre-check stage compliance checklist items
-    const uncheckedItems = checklistItems.filter((i) => !checkedStates[i.item_text]);
-    if (checklistItems.length > 0 && uncheckedItems.length > 0) {
-      const missingNames = uncheckedItems.map((i) => `'${i.item_text}'`).join(", ");
-      setActionError(`Compliance Checklist Incomplete: The following checklist items must be verified and checked before approving: ${missingNames}`);
-      return;
-    }
-
     setActionLoading(true);
     setActionError(null);
     setActionSuccess(null);
