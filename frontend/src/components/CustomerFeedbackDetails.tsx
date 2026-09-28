@@ -530,19 +530,26 @@ export default function CustomerFeedbackDetails({
   const invoiceNumber = getFieldValueByKey("invoice_number") || activeDoc?.invoice_number || activeDoc?.document_number || "INV-TEST-2026-999";
   const invoiceDate = activeDoc?.invoice_date || activeDoc?.date || surveyDate || "-";
 
-  const image1 = getFieldValueByKey("image_1");
-  const image2 = getFieldValueByKey("image_2");
-  const image3 = getFieldValueByKey("image_3");
-  const image4 = getFieldValueByKey("image_4");
-  const image5 = getFieldValueByKey("image_5");
+  const image1 = getFieldValueByKey("image_1") || getFieldValueByKey("image1");
+  const image2 = getFieldValueByKey("image_2") || getFieldValueByKey("image2");
+  const image3 = getFieldValueByKey("image_3") || getFieldValueByKey("image3");
+  const image4 = getFieldValueByKey("image_4") || getFieldValueByKey("image4");
+  const image5 = getFieldValueByKey("image_5") || getFieldValueByKey("image5");
 
-  const imageFields = [
+  const imageFields = useMemo(() => [
     { key: "image_1", label: "IMAGE 1", value: image1 },
     { key: "image_2", label: "IMAGE 2", value: image2 },
     { key: "image_3", label: "IMAGE 3", value: image3 },
     { key: "image_4", label: "IMAGE 4", value: image4 },
     { key: "image_5", label: "IMAGE 5", value: image5 },
-  ];
+  ], [image1, image2, image3, image4, image5]);
+
+  const activeImageFields = useMemo(() => {
+    return imageFields.filter((img) => {
+      const v = (img.value || "").trim().toLowerCase();
+      return v && v !== "not available" && v !== "null" && v !== "n/a";
+    });
+  }, [imageFields]);
 
   // Derive Invoice PDF Source URL
   const pdfSrc = useMemo(() => {
