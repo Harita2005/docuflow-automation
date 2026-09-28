@@ -2410,6 +2410,18 @@ async def confirm_and_ingest_document(
         rule_name = rule_eval.get('rule_name', 'Default Policy') if rule_eval else 'Default Policy'
 
     if not matched_wf:
+        # Fallback: Auto-start workflow matching doc_type / division or default workflow profile
+        fallback_profile = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.profile_name.ilike(f"%{document_type}%")) |
+            (WorkflowProfile.profile_name.ilike(f"%{user_div}%"))
+        ).filter(WorkflowProfile.is_deleted == False).first()
+        if not fallback_profile:
+            fallback_profile = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
+        if fallback_profile:
+            matched_wf = fallback_profile.profile_name
+            rule_act = 'WORKFLOW_ROUTE'
+
+    if not matched_wf:
         new_inv.workflow_profile_id = None
         new_inv.assigned_approver = 'Unassigned (No Rule Matched)'
         new_inv.status = 'Unrouted (No Rule Matched)'
@@ -2518,38 +2530,49 @@ async def upload_document(
     final_file_size = process_and_validate_pdf_size(file_path, detected_type)
 
     ocr_data = {}
-    if detected_type == 'pdf':
-        try:
-            from app.services.ocr_service import extract_text_from_pdf
-            ocr_data = extract_text_from_pdf(file_path) or {}
-        except Exception as exc:
-            logger.debug('Handled ocr exception: %s', exc)
+    try:
+        from app.services.ocr_service import extract_document_for_verification
+        ocr_data = extract_document_for_verification(file_path) or {}
+    except Exception as exc:
+        logger.warning('Handled OCR/LLM extraction exception in upload_document: %s', exc)
 
     timestamp = int(datetime.datetime.utcnow().timestamp())
-    new_id = generate_document_id(db, doc_type=document_type or 'AP INVOICE')
 
-    final_amount = float(amount if amount is not None else (ocr_data.get('amount') or 0.0))
-    final_base = round(final_amount / 1.18, 2) if final_amount else 0.0
-    final_tax = round(final_amount - final_base, 2) if final_amount else 0.0
-    final_vendor = vendor_name or ocr_data.get('vendor_name') or 'Direct Upload Supplier'
-    final_inv_no = invoice_number or ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}'
-    final_gstin = ocr_data.get('gstin') or ''
-    user_div = division or current_user.division or 'VCC'
-    user_plant = plant or 'MAIN'
+    final_amount = float(amount if (amount is not None and amount > 0) else (ocr_data.get('amount') or 0.0))
+    final_base = float(ocr_data.get('base_amount') or (round(final_amount / 1.18, 2) if final_amount else 0.0))
+    final_tax = float(ocr_data.get('tax_amount') or (round(final_amount - final_base, 2) if final_amount else 0.0))
+    final_cgst = float(ocr_data.get('cgst') or 0.0)
+    final_sgst = float(ocr_data.get('sgst') or 0.0)
+    final_igst = float(ocr_data.get('igst') or 0.0)
+    final_vendor = (vendor_name or ocr_data.get('vendor_name') or 'Direct Upload Supplier').strip()
+    final_inv_no = (invoice_number or ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}').strip()
+    final_gstin = (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
+    final_po = (ocr_data.get('po_number') or '').strip() or None
+    user_div = (division or ocr_data.get('division') or current_user.division or 'VCC').strip()
+    user_plant = (plant or 'MAIN').strip()
+    final_doc_type = (document_type or ocr_data.get('document_type') or 'AP INVOICE').strip()
+    final_inv_date = ocr_data.get('invoice_date') or ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d')
+
+    new_id = generate_document_id(db, doc_type=final_doc_type, category=final_doc_type)
 
     new_inv = Invoice(
         id=new_id,
         vendor_name=final_vendor,
         invoice_number=final_inv_no,
-        invoice_date=ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d'),
+        invoice_date=final_inv_date,
         amount=final_amount,
         base_amount=final_base,
         tax_amount=final_tax,
+        cgst=final_cgst,
+        sgst=final_sgst,
+        igst=final_igst,
         vendor_gstin=final_gstin,
+        gstin=final_gstin,
+        po_number=final_po,
         division=user_div,
         plant=user_plant,
-        category=document_type or 'PURCHASE',
-        document_type=document_type or 'AP INVOICE',
+        category=final_doc_type,
+        document_type=final_doc_type,
         file_url=f'/api/documents/{new_id}/file',
         file_path=str(file_path),
         file_name=file.filename,
@@ -2572,7 +2595,19 @@ async def upload_document(
         rule_act = rule_eval.get('rule_action', 'WORKFLOW_ROUTE') if rule_eval else 'WORKFLOW_ROUTE'
         cancel_res = rule_eval.get('cancel_reason', 'Auto-cancelled by policy') if rule_eval else None
         rule_name = rule_eval.get('rule_name', 'Default Policy') if rule_eval else 'Default Policy'
-    
+
+    if not matched_wf:
+        # Fallback: Auto-start workflow matching doc_type / division or default workflow profile
+        fallback_profile = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.profile_name.ilike(f"%{final_doc_type}%")) |
+            (WorkflowProfile.profile_name.ilike(f"%{user_div}%"))
+        ).filter(WorkflowProfile.is_deleted == False).first()
+        if not fallback_profile:
+            fallback_profile = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
+        if fallback_profile:
+            matched_wf = fallback_profile.profile_name
+            rule_act = 'WORKFLOW_ROUTE'
+
     if not matched_wf:
         new_inv.workflow_profile_id = None
         new_inv.assigned_approver = 'Unassigned (No Rule Matched)'
@@ -2583,7 +2618,7 @@ async def upload_document(
         db.add(AuditLog(invoice_id=new_inv.id, user='Document Uploader', action='UNROUTED', stage='Rule Evaluation', notes='Document uploaded but no active business rule matched the document criteria. Pending rule creation.'))
     else:
         new_inv.workflow_profile_id = matched_wf
-        new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=document_type)
+        new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=final_doc_type)
         steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == matched_wf).order_by(WorkflowStepDefinition.stage_number.asc()).all()
         new_inv.total_stages = len(steps) if steps else 2
         if rule_act == 'AUTO_APPROVE':
