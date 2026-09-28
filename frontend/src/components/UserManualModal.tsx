@@ -80,7 +80,7 @@ export default function UserManualModal({
 
   // 1. OPERATIONS MANUAL
   const operationsManual = {
-    title: "📦 OPERATIONS USER MANUAL",
+    title: "OPERATIONS USER MANUAL",
     subtitle: "Step-by-step operating guide for Operations Staff & Invoice Approvers",
     color: "from-[#003F28] to-[#005638]",
     sections: [
@@ -148,7 +148,7 @@ export default function UserManualModal({
 
   // 2. CUSTOMER FEEDBACK MANUAL
   const feedbackManual = {
-    title: "💬 CUSTOMER FEEDBACK USER MANUAL",
+    title: "CUSTOMER FEEDBACK USER MANUAL",
     subtitle: "Operating guide for Customer Feedback Agents & Complaint Resolution Teams",
     color: "from-[#003F28] to-[#005638]",
     sections: [
@@ -211,7 +211,7 @@ export default function UserManualModal({
 
   // 3. ADMIN GOVERNANCE MANUAL
   const adminManual = {
-    title: "⚙️ ADMINISTRATOR & GOVERNANCE USER MANUAL",
+    title: "ADMINISTRATOR & GOVERNANCE USER MANUAL",
     subtitle: "Guide for System Administrators on permissions, flows, rules, and audit logs",
     color: "from-[#003F28] to-[#005638]",
     sections: [
@@ -351,7 +351,7 @@ export default function UserManualModal({
                     }`}
                   >
                     <Layers className="h-3.5 w-3.5" />
-                    <span>📦 Operations Manual</span>
+                    <span>Operations Manual</span>
                   </button>
                 )}
 
@@ -365,7 +365,7 @@ export default function UserManualModal({
                     }`}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
-                    <span>💬 Feedback Manual</span>
+                    <span>Feedback Manual</span>
                   </button>
                 )}
 
@@ -379,7 +379,7 @@ export default function UserManualModal({
                     }`}
                   >
                     <Sliders className="h-3.5 w-3.5" />
-                    <span>⚙️ Admin Manual</span>
+                    <span>Admin Manual</span>
                   </button>
                 )}
               </>
@@ -388,10 +388,10 @@ export default function UserManualModal({
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>
                   {activeSection === "admin"
-                    ? "⚙️ Administrator Manual (Admin Exclusive)"
+                    ? "Administrator Manual (Admin Exclusive)"
                     : activeSection === "feedback"
-                    ? "💬 Customer Feedback Operating Manual"
-                    : "📦 Operations Operating Manual"}
+                    ? "Customer Feedback Operating Manual"
+                    : "Operations Operating Manual"}
                 </span>
               </div>
             )}

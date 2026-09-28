@@ -598,7 +598,7 @@ export default function CustomerFeedbackDetails({
   const handleWorkflowApprove = async () => {
     if (!activeDoc) return;
     if (isDocApproved) {
-      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setActionError("Record is fully approved and locked. No further actions permitted.");
       setTimeout(() => setActionError(null), 4000);
       return;
     }
@@ -667,7 +667,7 @@ export default function CustomerFeedbackDetails({
   const handleWorkflowHold = async () => {
     if (!activeDoc) return;
     if (isDocApproved) {
-      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setActionError("Record is fully approved and locked. No further actions permitted.");
       setTimeout(() => setActionError(null), 4000);
       return;
     }
@@ -699,7 +699,7 @@ export default function CustomerFeedbackDetails({
       });
 
       if (res.ok) {
-        setActionSuccess(`✓ Record placed on hold. Action: ${selectedAction} (Target SLA: ${formattedTarget})`);
+        setActionSuccess(`Record placed on hold. Action: ${selectedAction} (Target SLA: ${formattedTarget})`);
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
@@ -711,11 +711,11 @@ export default function CustomerFeedbackDetails({
         } catch {
           if (txt) msg = txt;
         }
-        setActionSuccess(`✓ Record updated: ${msg}`);
+        setActionSuccess(`Record updated: ${msg}`);
         if (onRefreshDocument) onRefreshDocument();
       }
     } catch (err: any) {
-      setActionSuccess("✓ Record placed on hold.");
+      setActionSuccess("Record placed on hold.");
     } finally {
       setActionLoading(false);
       setTimeout(() => {
@@ -728,7 +728,7 @@ export default function CustomerFeedbackDetails({
   const handleWorkflowReject = async () => {
     if (!activeDoc) return;
     if (isDocApproved) {
-      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setActionError("Record is fully approved and locked. No further actions permitted.");
       setTimeout(() => setActionError(null), 4000);
       return;
     }
@@ -1246,7 +1246,7 @@ export default function CustomerFeedbackDetails({
                 </div>
               ) : checklistItems.length === 0 ? (
                 <div className="p-2 bg-white/70 border border-slate-200/80 text-slate-500 rounded-lg text-center text-[9.5px] font-medium italic">
-                  ℹ️ No mandatory checklist requirements for this workflow stage.
+                  No mandatory checklist requirements for this workflow stage.
                 </div>
               ) : (
                 <div className="space-y-1 max-h-[150px] overflow-y-auto custom-scrollbar pr-0.5">
@@ -1300,7 +1300,7 @@ export default function CustomerFeedbackDetails({
                   </div>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-wider text-emerald-200 flex items-center gap-1.5">
-                      <span>🔒 RECORD FULLY APPROVED & CLEARED</span>
+                      <span>RECORD FULLY APPROVED & CLEARED</span>
                     </h4>
                     <p className="text-[10.5px] font-medium text-emerald-100/90 leading-tight mt-0.5">
                       This Customer Feedback ticket is fully signed off and settled. All workflow actions (Approve, Hold, Reject) are locked and permanently disabled.
@@ -1327,7 +1327,7 @@ export default function CustomerFeedbackDetails({
                           ? "bg-rose-100 text-rose-800 border-rose-300 animate-pulse"
                           : "bg-emerald-100 text-emerald-900 border-emerald-300"
                       }`}>
-                        {new Date(targetCompletionDate) < new Date() ? "🚨 Auto-Escalated (Target SLA Exceeded)" : "⏱️ SLA Active"}
+                        {new Date(targetCompletionDate) < new Date() ? "Auto-Escalated (Target SLA Exceeded)" : "SLA Active"}
                       </span>
                     )}
                   </div>
