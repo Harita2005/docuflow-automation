@@ -208,8 +208,24 @@ export default function CustomerFeedbackDetails({
     fetchChecklist();
   }, [activeDoc?.id, document?.id, activeDoc?.current_stage]);
 
+  // Check if document is in a terminal approved/cleared/settled state
+  const statusLower = (activeDoc?.status || "").toLowerCase().trim();
+  const isDocApproved =
+    statusLower === "approved" ||
+    statusLower === "fully approved" ||
+    statusLower === "cleared" ||
+    statusLower === "settled" ||
+    statusLower === "completed" ||
+    statusLower === "paid" ||
+    statusLower.includes("approved") ||
+    statusLower.includes("cleared") ||
+    statusLower.includes("settled") ||
+    statusLower.includes("completed") ||
+    Boolean(activeDoc?.has_approved);
+
   // Toggle single checklist item check state
   const handleToggleChecklist = async (itemText: string) => {
+    if (isDocApproved) return;
     const newCheckedState = !checkedStates[itemText];
     const newCheckedMap = { ...checkedStates, [itemText]: newCheckedState };
     setCheckedStates(newCheckedMap);
@@ -245,6 +261,7 @@ export default function CustomerFeedbackDetails({
 
   // Batch toggle all checklist items (Verify All / Deselect All)
   const handleBatchToggleChecklist = async () => {
+    if (isDocApproved) return;
     const allChecked = checklistItems.every((item) => checkedStates[item.item_text]);
     const targetState = !allChecked;
 
@@ -580,6 +597,11 @@ export default function CustomerFeedbackDetails({
   // Workflow Handlers: Approve, Hold, Reject
   const handleWorkflowApprove = async () => {
     if (!activeDoc) return;
+    if (isDocApproved) {
+      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setTimeout(() => setActionError(null), 4000);
+      return;
+    }
 
     setActionLoading(true);
     setActionError(null);
@@ -644,6 +666,11 @@ export default function CustomerFeedbackDetails({
 
   const handleWorkflowHold = async () => {
     if (!activeDoc) return;
+    if (isDocApproved) {
+      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setTimeout(() => setActionError(null), 4000);
+      return;
+    }
     if (!approvalComment.trim()) {
       setActionError("Please enter a comment or hold reason in the remarks box.");
       setTimeout(() => setActionError(null), 4000);
@@ -700,6 +727,11 @@ export default function CustomerFeedbackDetails({
 
   const handleWorkflowReject = async () => {
     if (!activeDoc) return;
+    if (isDocApproved) {
+      setActionError("🔒 Record is fully approved and locked. No further actions permitted.");
+      setTimeout(() => setActionError(null), 4000);
+      return;
+    }
     if (!approvalComment.trim()) {
       setActionError("Please enter rejection reasons in the comments box.");
       setTimeout(() => setActionError(null), 4000);
@@ -1197,7 +1229,7 @@ export default function CustomerFeedbackDetails({
                   )}
                 </div>
 
-                {checklistItems.length > 0 && (
+                {checklistItems.length > 0 && !isDocApproved && (
                   <button
                     type="button"
                     onClick={handleBatchToggleChecklist}
@@ -1224,11 +1256,13 @@ export default function CustomerFeedbackDetails({
                     return (
                       <div
                         key={item.id || idx}
-                        onClick={() => handleToggleChecklist(itemText)}
-                        className={`p-1.5 rounded-lg border transition-all flex items-center justify-between select-none shadow-2xs cursor-pointer ${
+                        onClick={() => !isDocApproved && handleToggleChecklist(itemText)}
+                        className={`p-1.5 rounded-lg border transition-all flex items-center justify-between select-none shadow-2xs ${
+                          isDocApproved ? "cursor-default opacity-90" : "cursor-pointer"
+                        } ${
                           isChecked
-                            ? "bg-emerald-100/80 border-emerald-300 text-emerald-950 font-bold hover:bg-emerald-100"
-                            : "bg-white border-slate-200/90 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                            ? "bg-emerald-100/80 border-emerald-300 text-emerald-950 font-bold"
+                            : "bg-white border-slate-200/90 text-slate-700"
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1257,110 +1291,131 @@ export default function CustomerFeedbackDetails({
               )}
             </div>
 
-            {/* Comment Textarea & Action Buttons */}
-            <div className="space-y-2">
-              {/* ACTION SELECTOR & TARGET COMPLETION DATE/TIME (ABOVE COMMENT BOX) */}
-              {/* 4.5. ACTION SELECTOR & TARGET COMPLETION DATE/TIME (ABOVE COMMENT BOX) */}
-              <div className="bg-[#003F28]/5 border border-[#003F28]/20 rounded-xl p-2.5 space-y-2 select-none shadow-2xs">
-                <div className="flex items-center justify-between pb-1 border-b border-[#003F28]/10">
-                  <span className="text-[9.5px] font-black uppercase tracking-wider text-[#003F28] flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-[#006747]" />
-                    <span>Action & Target Completion Time</span>
-                  </span>
-                  {targetCompletionDate && (
-                    <span className={`text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded border ${
-                      new Date(targetCompletionDate) < new Date()
-                        ? "bg-rose-100 text-rose-800 border-rose-300 animate-pulse"
-                        : "bg-emerald-100 text-emerald-900 border-emerald-300"
-                    }`}>
-                      {new Date(targetCompletionDate) < new Date() ? "🚨 Auto-Escalated (Target SLA Exceeded)" : "⏱️ SLA Active"}
+            {/* Comment Textarea & Action Buttons OR Locked Read-Only State */}
+            {isDocApproved ? (
+              <div className="bg-emerald-950 text-white rounded-xl p-3.5 space-y-2 shadow-sm border border-emerald-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-lg bg-emerald-800/80 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-700">
+                    <ShieldCheck className="h-5 w-5 text-emerald-300" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-emerald-200 flex items-center gap-1.5">
+                      <span>🔒 RECORD FULLY APPROVED & CLEARED</span>
+                    </h4>
+                    <p className="text-[10.5px] font-medium text-emerald-100/90 leading-tight mt-0.5">
+                      This Customer Feedback ticket is fully signed off and settled. All workflow actions (Approve, Hold, Reject) are locked and permanently disabled.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-emerald-800/80 flex items-center justify-between text-[10px] text-emerald-300 font-mono">
+                  <span>STATUS: <strong className="text-emerald-100 font-bold uppercase">{statusDisplay}</strong></span>
+                  <span className="bg-emerald-900/90 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700">READ-ONLY LOCKED</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* 4.5. ACTION SELECTOR & TARGET COMPLETION DATE/TIME (ABOVE COMMENT BOX) */}
+                <div className="bg-[#003F28]/5 border border-[#003F28]/20 rounded-xl p-2.5 space-y-2 select-none shadow-2xs">
+                  <div className="flex items-center justify-between pb-1 border-b border-[#003F28]/10">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-[#003F28] flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-[#006747]" />
+                      <span>Action & Target Completion Time</span>
                     </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
-                  {/* Action Selector */}
-                  <div>
-                    <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
-                      Select Action:
-                    </label>
-                    <select
-                      value={selectedAction}
-                      onChange={(e) => setSelectedAction(e.target.value)}
-                      className="w-full text-[10px] font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
-                    >
-                      <option value="Awaiting Customer Clarification / Hold">Awaiting Customer Clarification / Hold</option>
-                      <option value="Field Inspection Pending">Field Inspection Pending</option>
-                      <option value="Distributor Verification">Distributor Verification</option>
-                      <option value="Technical Subtype Audit">Technical Subtype Audit</option>
-                      <option value="Resolution Signoff & Close">Resolution Signoff & Close</option>
-                    </select>
+                    {targetCompletionDate && (
+                      <span className={`text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded border ${
+                        new Date(targetCompletionDate) < new Date()
+                          ? "bg-rose-100 text-rose-800 border-rose-300 animate-pulse"
+                          : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                      }`}>
+                        {new Date(targetCompletionDate) < new Date() ? "🚨 Auto-Escalated (Target SLA Exceeded)" : "⏱️ SLA Active"}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Target Completion Date & Time Picker */}
-                  <div>
-                    <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
-                      Target Completion Date & Time:
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={targetCompletionDate}
-                      onChange={(e) => {
-                        setTargetCompletionDate(e.target.value);
-                        setAutoEscalated(false);
-                      }}
-                      className="w-full text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
+                    {/* Action Selector */}
+                    <div>
+                      <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
+                        Select Action:
+                      </label>
+                      <select
+                        value={selectedAction}
+                        onChange={(e) => setSelectedAction(e.target.value)}
+                        className="w-full text-[10px] font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
+                      >
+                        <option value="Awaiting Customer Clarification / Hold">Awaiting Customer Clarification / Hold</option>
+                        <option value="Field Inspection Pending">Field Inspection Pending</option>
+                        <option value="Distributor Verification">Distributor Verification</option>
+                        <option value="Technical Subtype Audit">Technical Subtype Audit</option>
+                        <option value="Resolution Signoff & Close">Resolution Signoff & Close</option>
+                      </select>
+                    </div>
+
+                    {/* Target Completion Date & Time Picker */}
+                    <div>
+                      <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
+                        Target Completion Date & Time:
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={targetCompletionDate}
+                        onChange={(e) => {
+                          setTargetCompletionDate(e.target.value);
+                          setAutoEscalated(false);
+                        }}
+                        className="w-full text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
+
+                <textarea
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                  placeholder="Enter reviewer notes, approval comments, or hold/rejection reason..."
+                  rows={2}
+                  className="w-full text-[11px] font-medium p-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50 resize-none"
+                />
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* Hold Button */}
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleWorkflowHold}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Hold / Send Back"
+                  >
+                    <PauseCircle className="h-3.5 w-3.5" />
+                    <span>Hold</span>
+                  </button>
+
+                  {/* Reject Button */}
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleWorkflowReject}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Reject / Cancel Complaint"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    <span>Reject</span>
+                  </button>
+
+                  {/* Approve Button */}
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleWorkflowApprove}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#003F28] hover:bg-[#002e1d] text-white font-extrabold text-xs transition shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Approve Customer Feedback"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                    <span>Approve Feedback</span>
+                  </button>
+                </div>
               </div>
-
-              <textarea
-                value={approvalComment}
-                onChange={(e) => setApprovalComment(e.target.value)}
-                placeholder="Enter reviewer notes, approval comments, or hold/rejection reason..."
-                rows={2}
-                className="w-full text-[11px] font-medium p-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50 resize-none"
-              />
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {/* Hold Button */}
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleWorkflowHold}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-                  title="Hold / Send Back"
-                >
-                  <PauseCircle className="h-3.5 w-3.5" />
-                  <span>Hold</span>
-                </button>
-
-                {/* Reject Button */}
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleWorkflowReject}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-                  title="Reject / Cancel Complaint"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  <span>Reject</span>
-                </button>
-
-                {/* Approve Button */}
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleWorkflowApprove}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#003F28] hover:bg-[#002e1d] text-white font-extrabold text-xs transition shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
-                  title="Approve Customer Feedback"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                  <span>Approve Feedback</span>
-                </button>
-              </div>
-            </div>
+            )}
           </div>
 
         </div>
