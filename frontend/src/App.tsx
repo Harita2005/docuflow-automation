@@ -405,19 +405,41 @@ export default function App() {
   const [requireGRN, setRequireGRN] = useState(true);
   const [orgName, setOrgName] = useState("Document Approval & Automation System");
 
-  // Fetch dynamic role permissions from DB
+  // Fetch dynamic role permissions from DB & Config
   const fetchRolePermissions = async () => {
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch("/api/admin/config", {
-        headers: token ? { "Authorization": `Bearer ${token}` } : {}
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+      const [configRes, rolesRes] = await Promise.all([
+        fetch("/api/admin/config", { headers }),
+        fetch("/api/admin/roles", { headers })
+      ]);
+
+      const mergedPerms: Record<string, any> = {};
+
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json();
+        if (Array.isArray(rolesData)) {
+          rolesData.forEach((r: any) => {
+            if (r.code && Array.isArray(r.permissions)) {
+              mergedPerms[r.code] = r.permissions;
+            }
+          });
+        }
+      }
+
+      if (configRes.ok) {
+        const data = await configRes.json();
         if (Array.isArray(data)) {
+          const matrixConfig = data.find((c: any) => c.key === "RBAC_GRANULAR_MATRIX");
           const roleConfig = data.find((c: any) => c.key === "ROLE_PERMISSIONS");
-          if (roleConfig && roleConfig.value) {
-            setRolePermissions(JSON.parse(roleConfig.value));
+          const activeConfig = matrixConfig || roleConfig;
+          if (activeConfig && activeConfig.value) {
+            try {
+              const parsed = JSON.parse(activeConfig.value);
+              Object.assign(mergedPerms, parsed);
+            } catch {}
           }
           const grnConfig = data.find((c: any) => c.key === "GLOBAL_REQUIRE_GRN");
           if (grnConfig) {
@@ -428,6 +450,10 @@ export default function App() {
             setOrgName(orgConfig.value);
           }
         }
+      }
+
+      if (Object.keys(mergedPerms).length > 0) {
+        setRolePermissions(mergedPerms);
       }
     } catch (e) {
       console.error("Failed to fetch role permissions", e);
@@ -448,24 +474,39 @@ export default function App() {
     return () => window.removeEventListener("role-permissions-updated", handlePermissionsUpdated);
   }, []);
 
+  // Helper to compute active user permissions
+  const getUserPermissions = (): string[] => {
+    const rawRole = (currentUserRole || "").toLowerCase().trim();
+    if (rawRole === "admin" || rawRole === "administrator" || rawRole.includes("admin") || rawRole === "settings_editor") {
+      return ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"];
+    }
+    const roleKey = rawRole.replace(/[^a-z0-9_]/g, "_");
+    const rolePermObj = 
+      rolePermissions[currentUserRole] || 
+      rolePermissions[rawRole] || 
+      rolePermissions[roleKey] ||
+      (rawRole.includes("approver") || rawRole.includes("manager") || rawRole.includes("accounts") ? (rolePermissions["manager"] || rolePermissions["accounts_approver"] || rolePermissions["accounts.approver"]) : undefined) ||
+      (rawRole.includes("feedback") ? (rolePermissions["customer_feedback_agent"] || rolePermissions["employee"]) : undefined);
+
+    if (Array.isArray(rolePermObj)) return rolePermObj;
+    if (rolePermObj && typeof rolePermObj === "object") {
+      return Object.keys(rolePermObj).filter(key => {
+        const val = (rolePermObj as Record<string, any>)[key];
+        if (typeof val === "boolean") return val;
+        if (typeof val === "object" && val !== null) {
+          return val.read === true || (val.read !== false && (val.write === true || val.admin === true));
+        }
+        return false;
+      });
+    }
+    return ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
+  };
+
   // Access Control Enforcement
   useEffect(() => {
     if (!isLoggedIn) return;
     
-    let permissions: string[] = [];
-    const rolePermObj = rolePermissions[currentUserRole];
-    if (Array.isArray(rolePermObj)) {
-      permissions = rolePermObj;
-    } else if (rolePermObj && typeof rolePermObj === "object") {
-      permissions = Object.keys(rolePermObj).filter(key => {
-        const val = (rolePermObj as Record<string, any>)[key];
-        return val === true || (typeof val === "object" && val?.read !== false);
-      });
-    } else {
-      permissions = currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "admin"] :
-                    currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "admin"] :
-                    ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
-    }
+    const permissions = getUserPermissions();
     
     const viewMapping: Record<string, string> = {
       "dashboard": "dashboard",
@@ -643,6 +684,7 @@ export default function App() {
           onLogout={handleLogout}
           onViewDocument={handleViewDocument}
           orgName={orgName}
+          userPermissions={getUserPermissions()}
         />
 
         {/* Content Viewport */}

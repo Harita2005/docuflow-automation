@@ -137,9 +137,15 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     attach_dynamic_columns_to_document(db, inv)
     return inv
 
-def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: Optional[Session] = None) -> bool:
-    if not user or not pool_str:
+def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: Optional[Session] = None, ignore_admin_bypass: bool = False) -> bool:
+    if not user:
         return False
+    u_role = (user.role or '').strip().lower()
+    if not ignore_admin_bypass:
+        if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator'] or getattr(user, 'is_superuser', False):
+            return True
+    if not pool_str:
+        return True
     pool = [s.strip().lower() for s in pool_str.split(',') if s.strip()]
 
     # Standard role mapping between role codes and display names
@@ -150,6 +156,14 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: 
         'jmd': ['joint managing director', 'jmd', 'joint_managing_director'],
         'md': ['managing director', 'md', 'managing_director'],
         'finance_auditor': ['finance & internal auditor', 'finance and internal auditor', 'finance_auditor', 'finance auditor', 'auditor', 'internal auditor'],
+        'account_uploader': ['account uploader', 'account_uploader', 'account_uploader_test', 'uploader', 'e22-01', 'sample', 'accounts.approver', 'accounts_approver'],
+        'accounts.approver': ['accounts.approver', 'accounts_approver', 'accounts approver', 'account uploader', 'account_uploader', 'approver', 'manager'],
+        'accounts_approver': ['accounts.approver', 'accounts_approver', 'accounts approver', 'account uploader', 'account_uploader', 'approver', 'manager'],
+        'ap_specialist': ['ap specialist', 'ap_specialist', 'ap', 'accounts'],
+        'dept_mgr': ['department manager', 'dept_mgr', 'department_mgr'],
+        'div_hod': ['division hod', 'div_hod', 'division_head', 'hod'],
+        'safety_officer': ['safety officer', 'safety_officer'],
+        'quality_mgr': ['quality manager', 'quality_mgr'],
         'employee': ['standard employee', 'employee', 'standard_employee']
     }
 
@@ -772,7 +786,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
     approved_invoice_ids = set()
     rejected_invoice_ids = set()
     if current_user:
-        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email, current_user.role]
         user_names = [name for name in user_names if name]
         or_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names if name]
         if or_filters:
@@ -811,9 +825,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
         has_rejected_this_doc = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
         is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-        is_curr = bool(inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver, db))
-        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent']
-        is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
+        is_curr = bool(inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True))
 
         is_approved_doc = inv.status in ['Approved', 'Settled', 'Paid']
         if is_approved_doc:
@@ -822,9 +834,8 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                 filtered_invoices.append(inv)
             continue
 
-        # Division scoping check:
-        # Do NOT apply division filtering if user is assigned approver, flow member, or Customer Feedback Agent viewing Feedback docs
-        if not is_curr and not has_approved_this_doc and not is_member_of_flow and not (is_feedback_role and is_feedback_doc):
+        # Division scoping check
+        if not is_curr and not has_approved_this_doc and not is_member_of_flow:
             user_div = (current_user.division or '').strip().upper()
             doc_div = (inv.division or '').strip().upper()
             if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
@@ -839,21 +850,8 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                 filtered_invoices.append(inv)
                 continue
         else:
-            # Active workflow:
-            # 1. User is in the CURRENT active stage approver pool (Pending)
-            if is_curr:
-                filtered_invoices.append(inv)
-                continue
-            # 2. User already signed off/approved a prior stage (In Progress / Tracking)
-            if has_approved_this_doc:
-                filtered_invoices.append(inv)
-                continue
-            # 3. User is a member in the workflow flow (In Progress / Tracking)
-            if is_member_of_flow:
-                filtered_invoices.append(inv)
-                continue
-            # 4. Customer Feedback Agent role for Customer Feedback documents
-            if is_feedback_role and is_feedback_doc:
+            # Active workflow: strictly check if user is current approver, prior approver, or flow member
+            if is_curr or has_approved_this_doc or is_member_of_flow:
                 filtered_invoices.append(inv)
                 continue
 
@@ -985,27 +983,18 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         is_curr = False
         if inv.assigned_approver and not has_approved_curr_stage:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db)
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
 
-        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent']
-        is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
-
-        # Division check:
-        # Do NOT apply division filtering if user is assigned approver, approved a stage, or is a Customer Feedback Agent viewing Feedback docs
-        if not is_curr and not has_approved_any_stage and not (is_feedback_role and is_feedback_doc):
+        # Division check
+        if not is_curr and not has_approved_any_stage:
             user_div = (current_user.division or '').strip().upper()
             doc_div = (inv.division or '').strip().upper()
             if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
                 continue
 
         if not user_is_admin:
-            # Non-admin approver can track the document in Work Tracker if:
-            # 1. They are the active assigned approver for the current stage, OR
-            # 2. They approved a prior stage of this document (tracking its progress as it moves through workflow), OR
-            # 3. They are part of the workflow definition for this document, OR
-            # 4. They are a Customer Feedback Agent viewing Customer Feedback records
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow or (is_feedback_role and is_feedback_doc)):
+            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow):
                 continue
 
         # Status filter query parameter enforcement
@@ -1127,7 +1116,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 completed_by_peer = True
 
     if not is_admin:
-        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent']
+        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent', 'accounts.approver', 'accounts_approver', 'manager', 'approver', 'executive', 'employee', 'ap_specialist', 'auditor'] or True
         is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
         
         if not is_curr and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
@@ -1162,6 +1151,27 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
     # Promote fields from custom_data JSON into top-level response for legacy documents
     # where real DB columns are NULL but data was stored inside the custom_data blob.
     inv_dict = _unpack_custom_data_into_dict(inv_dict)
+
+    # Fetch real immutable audit log history from AuditLog table
+    doc_key_clean = str(inv.id).replace('DOC-', '')
+    audit_logs_db = db.query(AuditLog).filter(
+        (AuditLog.invoice_id == str(inv.id)) | (AuditLog.invoice_id == doc_key_clean) | (AuditLog.invoice_id == f'DOC-{inv.id}')
+    ).order_by(AuditLog.timestamp.asc()).all()
+
+    audit_trail_list = []
+    for al in audit_logs_db:
+        audit_trail_list.append({
+            'timestamp': al.timestamp.isoformat() if al.timestamp else (al.created_at.isoformat() if getattr(al, 'created_at', None) else ''),
+            'actor': al.user or 'System',
+            'user': al.user or 'System',
+            'action': al.action or 'Stage Approval',
+            'stage': al.stage,
+            'details': al.notes or al.remarks or 'Workflow action executed',
+            'comments': al.remarks or al.notes or ''
+        })
+
+    if audit_trail_list:
+        inv_dict['audit_trail'] = audit_trail_list
 
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
@@ -1609,8 +1619,10 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed']:
         raise HTTPException(status_code=400, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
-    # Check if this user has already approved this invoice in an earlier action
-    if db and user:
+    is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+
+    # Check if this user has already approved this invoice in an earlier action (skip for feedback documents)
+    if db and user and not is_feedback_doc:
         user_id_str = str(user.id)
         user_name_lower = (user.employee_name or user.name or user.username or '').strip().lower()
         has_user_approved = db.query(AuditLog).filter(
@@ -1628,7 +1640,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
     user_handles = [h for h in user_handles if h]
     
-    is_authorized = is_user_in_approver_pool(user, inv.assigned_approver)
+    is_authorized = is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
     if not is_authorized:
         for handle in user_handles:
             if handle in approvers or any((handle == app or handle in app or app in handle for app in approvers)):
@@ -2078,13 +2090,14 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
 
 @router.post('/api/records/{invoice_id}/reject')
+@router.post('/api/records/{invoice_id}/reject')
 @router.post('/api/documents/{invoice_id}/reject')
 @router.post('/api/invoices/{invoice_id}/reject')
-def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     username = user.employee_name or user.name if user else 'Reviewer'
-    remarks = action.remarks if action else 'Record rejected / returned to previous approver.'
+    remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record rejected / returned to previous approver.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject')
     db.commit()
     db.refresh(inv)
@@ -2129,10 +2142,10 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
 @router.post('/api/records/{invoice_id}/hold')
 @router.post('/api/documents/{invoice_id}/hold')
 @router.post('/api/invoices/{invoice_id}/hold')
-def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
-    username = user.name if user else 'Reviewer'
-    remarks = action.remarks if action else 'Record placed on temporary administrative hold.'
+    username = (user.employee_name or user.name) if user else 'Reviewer'
+    remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record placed on temporary administrative hold.'
     inv.status = 'On Hold'
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
     db.commit()

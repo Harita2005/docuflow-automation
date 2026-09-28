@@ -31,7 +31,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
-import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay } from "../utils/formatters";
+import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
 import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
 import CustomerFeedbackDetails from "./CustomerFeedbackDetails";
 
@@ -245,6 +245,25 @@ export default function DocumentDetails({
   pendingDocIds,
 }: DocumentDetailsProps) {
   const [freshDocument, setFreshDocument] = useState<DbInvoice | null>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchAllUsers = async () => {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch("/api/users?include_inactive=false", { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setAllUsers(data);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch users list for role resolution:", e);
+      }
+    };
+    fetchAllUsers();
+  }, []);
 
   useEffect(() => {
     if (!document?.id) return;
@@ -299,6 +318,80 @@ export default function DocumentDetails({
   const [_poDate, setPoDate] = useState("");
   const [_indentNumber, setIndentNumber] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
+
+  // Action Selector & SLA Target Completion Date/Time State
+  const [selectedAction, setSelectedAction] = useState<string>("Awaiting Clarification / Hold");
+  const [targetCompletionDate, setTargetCompletionDate] = useState<string>("");
+
+  useEffect(() => {
+    if (!document?.id) return;
+    const slaKey = `docuflow_sla_${document.id}`;
+    try {
+      const saved = localStorage.getItem(slaKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.selectedAction) setSelectedAction(parsed.selectedAction);
+        if (parsed.targetCompletionDate) setTargetCompletionDate(parsed.targetCompletionDate);
+      } else {
+        const defaultDate = new Date(Date.now() + 24 * 3600 * 1000);
+        setTargetCompletionDate(defaultDate.toISOString().slice(0, 16));
+      }
+    } catch {}
+  }, [document?.id]);
+
+  useEffect(() => {
+    if (!document?.id) return;
+    const slaKey = `docuflow_sla_${document.id}`;
+    if (selectedAction || targetCompletionDate) {
+      try {
+        localStorage.setItem(slaKey, JSON.stringify({
+          selectedAction,
+          targetCompletionDate,
+          updatedAt: new Date().toISOString()
+        }));
+      } catch {}
+    }
+  }, [document?.id, selectedAction, targetCompletionDate]);
+
+  const handleTriggerEscalation = async () => {
+    if (!document?.id) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+      const res = await fetch(`/api/workflows/${encodeURIComponent(document.id)}/escalate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
+        body: JSON.stringify({
+          user: currentUserUsername || currentUserEmail || "Reviewer",
+          reason: `SLA Target Completion Date Exceeded (Target was: ${targetCompletionDate ? new Date(targetCompletionDate).toLocaleString() : 'Past Due'})`
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`✓ Document escalated successfully! ${data.message || ''}`, "amber");
+        await fetchWorkflowData();
+        onRefreshDocument();
+      } else {
+        const txt = await res.text();
+        let errDetail = "Escalation failed.";
+        try {
+          const err = JSON.parse(txt);
+          errDetail = err.detail || err.message || txt || errDetail;
+        } catch {
+          if (txt) errDetail = txt;
+        }
+        setActionError(errDetail);
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Escalation failed.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const [_itemsList, setItemsList] = useState<LocalLineItem[]>([]);
   const [_saveLoading, _setSaveLoading] = useState(false);
@@ -1468,6 +1561,11 @@ export default function DocumentDetails({
     setActionLoading(true);
     setActionError(null);
     try {
+      const formattedTarget = targetCompletionDate 
+        ? new Date(targetCompletionDate).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
+        : 'Not Specified';
+      const holdComment = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${comments}`;
+
       const response = await fetch(`/api/workflows/sendback`, {
         method: "POST",
         headers: {
@@ -1476,13 +1574,13 @@ export default function DocumentDetails({
         },
         body: JSON.stringify({
           invoiceId: document.id,
-          comments,
+          comments: holdComment,
         }),
       });
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
-        showToast("✓ Document Placed on Hold!", "info");
+        showToast(`✓ Document Placed on Hold! Action: ${selectedAction} (Target SLA: ${formattedTarget})`, "info");
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
@@ -2312,13 +2410,16 @@ export default function DocumentDetails({
                 return null;
               }
 
+              const docDivision = activeDoc?.division || (activeDoc as any)?.employee_division || document?.division || (document as any)?.employee_division || "";
               const rawApprover = 
                 currentStep?.approver_target || 
                 document?.assigned_approver || 
                 currentUserUsername || 
                 "Assigned Approver";
-              const approverName = rawApprover.split(",")[0].trim();
-              const approverInitial = approverName ? approverName.charAt(0).toUpperCase() : "A";
+              
+              const resolvedCurrentRoleInfo = resolvePersonsInRoleForDivision(rawApprover, docDivision, allUsers);
+              const approverDisplayName = resolvedCurrentRoleInfo.displayName !== "Unassigned" ? resolvedCurrentRoleInfo.displayName : rawApprover.split(",")[0].trim();
+              const approverInitial = approverDisplayName ? approverDisplayName.charAt(0).toUpperCase() : "A";
 
               // Clean role: Do not display mismatched stage names like 'FIRST APPROVAL' on Stage 2+
               let rawRole = currentStep?.stage_name || currentStep?.step_name || "";
@@ -2329,9 +2430,9 @@ export default function DocumentDetails({
                 rawRole = currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`;
               }
               const cleanRole = rawRole.replace(/^\(|\)$/g, "").trim();
-              const displayApproverWithRole = cleanRole && !approverName.toLowerCase().includes(cleanRole.toLowerCase())
-                ? `${approverName.toUpperCase()} (${cleanRole.toUpperCase()})`
-                : approverName.toUpperCase();
+              const displayApproverWithRole = cleanRole && !approverDisplayName.toLowerCase().includes(cleanRole.toLowerCase())
+                ? `${approverDisplayName.toUpperCase()} (${cleanRole.toUpperCase()})`
+                : approverDisplayName.toUpperCase();
 
               return (
                 <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-2 shrink-0">
@@ -2800,6 +2901,8 @@ export default function DocumentDetails({
                   const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
                   const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
 
+                  const docDivision = activeDoc?.division || (activeDoc as any)?.employee_division || document?.division || (document as any)?.employee_division || "";
+                  const resolvedStepRoleInfo = resolvePersonsInRoleForDivision(step.approver_target, docDivision, allUsers);
                   const poolMembers = (step.approver_target || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                   
                   // Specific approval log for this exact step
@@ -2893,37 +2996,69 @@ export default function DocumentDetails({
                         </div>
 
                         {/* Approver Details & Specific Sign-off Identity Card */}
-                        <div className="mt-1 text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200/80 space-y-1.5">
-                          {/* 1. Assigned Pool Breakdown */}
+                        <div className="mt-1 text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/90 space-y-2 shadow-3xs">
+                          {/* 1. Assigned Role & Division Approver Resolution */}
                           <div className="flex items-start justify-between text-[10px]">
-                            <div className="space-y-0.5">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
-                                Assigned Pool ({poolMembers.length > 0 ? poolMembers.length : 1}):
-                              </span>
-                              <div className="flex flex-wrap gap-1 pt-0.5">
-                                {poolMembers.length > 0 ? (
-                                  poolMembers.map((mem: string, mIdx: number) => {
-                                    const relevantLog = isTerminalCancelledStage ? terminalCancelLog : matchingApprovalLog;
-                                    const isTheSigner = relevantLog && (relevantLog.author || relevantLog.user_name || relevantLog.user || "").toLowerCase().includes(mem.toLowerCase());
-                                    return (
-                                      <span 
-                                        key={mIdx} 
-                                        className={`px-1.5 py-0.2 rounded text-[9.5px] font-mono ${
-                                          isTheSigner 
-                                            ? "bg-slate-100 text-slate-900 border border-slate-300 font-bold"
-                                            : "bg-slate-50 text-slate-600 border border-slate-200"
-                                        }`}
-                                      >
-                                        {mem}
-                                      </span>
-                                    );
-                                  })
-                                ) : (
-                                  <span className="font-mono text-slate-700">{step.approver_target || "Authorized Pool"}</span>
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] uppercase font-black text-slate-500 tracking-wider flex items-center gap-1">
+                                  <Users className="h-3 w-3 text-[#003F28]" />
+                                  <span>Assigned Role & Division Approvers:</span>
+                                </span>
+                                <span className="text-slate-500 font-mono text-[8.5px] bg-slate-100 px-1.5 py-0.5 rounded font-bold border border-slate-200">Stage {step.stage_number}</span>
+                              </div>
+
+                              {/* Role & Division badges */}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                                  Role: {resolvedStepRoleInfo.roleName}
+                                </span>
+                                {docDivision && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                    Division: {docDivision}
+                                  </span>
                                 )}
                               </div>
+
+                              {/* Resolved Persons in this Role for the Document's Division */}
+                              <div className="pt-1 space-y-0.5">
+                                <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block">
+                                  Person(s) in Role ({resolvedStepRoleInfo.users.length > 0 ? resolvedStepRoleInfo.users.length : poolMembers.length}):
+                                </span>
+                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                  {resolvedStepRoleInfo.users.length > 0 ? (
+                                    resolvedStepRoleInfo.users.map((memUser: any, mIdx: number) => {
+                                      const relevantLog = isTerminalCancelledStage ? terminalCancelLog : matchingApprovalLog;
+                                      const isTheSigner = relevantLog && (relevantLog.author || relevantLog.user_name || relevantLog.user || "").toLowerCase().includes((memUser.username || memUser.employee_name || "").toLowerCase());
+                                      const uName = memUser.employee_name || memUser.name || memUser.username;
+                                      return (
+                                        <span 
+                                          key={mIdx} 
+                                          className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold flex items-center gap-1.5 transition ${
+                                            isTheSigner 
+                                              ? "bg-emerald-100 text-emerald-950 border border-emerald-400 shadow-2xs"
+                                              : "bg-emerald-50 text-emerald-900 border border-emerald-300"
+                                          }`}
+                                          title={`User: ${uName} | Role: ${memUser.role || resolvedStepRoleInfo.roleName} | Division: ${memUser.division || docDivision || 'All'}`}
+                                        >
+                                          <span className={`h-1.5 w-1.5 rounded-full ${isTheSigner ? "bg-emerald-700 animate-pulse" : "bg-emerald-600"}`} />
+                                          <span>{uName}</span>
+                                          {(memUser.division || docDivision) && (
+                                            <span className="text-[8.5px] font-mono text-emerald-700 font-semibold">
+                                              ({memUser.division || docDivision})
+                                            </span>
+                                          )}
+                                        </span>
+                                      );
+                                    })
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                                      {resolvedStepRoleInfo.displayName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <span className="text-slate-400 font-mono text-[8.5px] bg-slate-100 px-1 py-0.2 rounded">Stage {step.stage_number}</span>
                           </div>
 
                           {/* 2. Exact Sign-Off / Status Attribution */}

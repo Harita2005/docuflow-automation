@@ -1,5 +1,6 @@
-import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown } from "lucide-react";
+import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, BookOpen } from "lucide-react";
 import { useState, useEffect } from "react";
+import UserManualModal from "./UserManualModal";
 
 interface HeaderProps {
   currentView: string;
@@ -13,6 +14,7 @@ interface HeaderProps {
   onLogout: () => void;
   onViewDocument?: (docId: string) => void;
   orgName?: string;
+  userPermissions?: string[];
 }
 
 export default function Header({
@@ -22,12 +24,14 @@ export default function Header({
   currentUserEmail,
   onRefreshStats,
   onLogout,
-  onViewDocument
+  onViewDocument,
+  userPermissions = []
 }: HeaderProps) {
   const [spinning, setSpinning] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const username = localStorage.getItem("currentUserUsername") || currentUserEmail.split("@")[0].replace(/[._]/g, ' ');
   const displayUsername = username ? username.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "Admin";
@@ -168,6 +172,17 @@ export default function Header({
           className="p-1.5 text-slate-500 hover:text-[#003F28] hover:bg-slate-100 rounded-md transition-all duration-200 cursor-pointer"
         >
           <RefreshCw className={`h-4 w-4 ${spinning ? "animate-spin text-[#003F28]" : ""}`} />
+        </button>
+
+        {/* User Manual Icon */}
+        <button
+          onClick={() => setManualOpen(true)}
+          title="System Operating Manual & User Guides"
+          aria-label="System Operating Manual & User Guides"
+          className="p-1.5 text-[#003F28] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-all duration-200 cursor-pointer flex items-center gap-1 font-bold text-xs px-2"
+        >
+          <BookOpen className="h-4 w-4 text-[#003F28]" />
+          <span className="hidden md:inline">User Manual</span>
         </button>
 
         {/* Settings Icon */}
@@ -314,6 +329,14 @@ export default function Header({
           )}
         </div>
       </div>
+
+      <UserManualModal 
+        isOpen={manualOpen} 
+        onClose={() => setManualOpen(false)} 
+        defaultSection={currentView === "customer-feedback" ? "feedback" : currentView === "admin" ? "admin" : "operations"}
+        currentUserRole={currentUserRole}
+        userPermissions={userPermissions}
+      />
     </header>
   );
 }

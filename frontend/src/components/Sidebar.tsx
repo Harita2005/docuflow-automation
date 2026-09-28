@@ -191,18 +191,32 @@ export default function Sidebar({
   const isExpanded = !collapsed;
 
   let permissions: string[] = [];
-  const rolePermObj = rolePermissions?.[currentUserRole];
-  if (Array.isArray(rolePermObj)) {
+  const rawRole = (currentUserRole || "").toLowerCase().trim();
+  const roleKey = rawRole.replace(/[^a-z0-9_]/g, "_");
+
+  // Check direct match or normalized alias keys
+  const rolePermObj = 
+    rolePermissions?.[currentUserRole] || 
+    rolePermissions?.[rawRole] || 
+    rolePermissions?.[roleKey] ||
+    (rawRole.includes("approver") || rawRole.includes("manager") || rawRole.includes("accounts") ? (rolePermissions?.["manager"] || rolePermissions?.["accounts_approver"] || rolePermissions?.["accounts.approver"]) : undefined) ||
+    (rawRole.includes("feedback") ? (rolePermissions?.["customer_feedback_agent"] || rolePermissions?.["employee"]) : undefined);
+
+  if (rawRole === "admin" || rawRole === "administrator" || rawRole === "settings_editor") {
+    permissions = ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"];
+  } else if (Array.isArray(rolePermObj)) {
     permissions = rolePermObj;
   } else if (rolePermObj && typeof rolePermObj === "object") {
     permissions = Object.keys(rolePermObj).filter(key => {
       const val = (rolePermObj as Record<string, any>)[key];
-      return val === true || (typeof val === "object" && val?.read !== false);
+      if (typeof val === "boolean") return val;
+      if (typeof val === "object" && val !== null) {
+        return val.read === true || (val.read !== false && (val.write === true || val.admin === true));
+      }
+      return false;
     });
   } else {
-    permissions = currentUserRole === "admin" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
-                  currentUserRole === "settings_editor" ? ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"] :
-                  ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
+    permissions = ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
   }
 
   const menuGroups = [
@@ -211,9 +225,14 @@ export default function Sidebar({
       items: [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
         { id: "work-tracker", label: "Work Tracker", icon: Layers },
-        { id: "customer-feedback", label: "Customer Feedback", icon: MessageSquare },
         { id: "approved-documents", label: "Approved Docs", icon: CheckCircle2 },
         { id: "upload", label: "Upload Document", icon: Upload },
+      ]
+    },
+    {
+      group: "FEEDBACK",
+      items: [
+        { id: "customer-feedback", label: "Customer Feedback", icon: MessageSquare },
       ]
     },
     {

@@ -47,7 +47,8 @@ def can_stage_escalate(inv: Invoice, db: Session) -> Tuple[bool, str]:
         if step and step.step_name:
             current_step_name = step.step_name
 
-    is_attachment_stage = is_stage_1 or 'attachment' in current_step_name.lower() or 'attachment' in (inv.status or '').lower()
+    is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+    is_attachment_stage = (is_stage_1 or 'attachment' in current_step_name.lower() or 'attachment' in (inv.status or '').lower()) and not is_feedback_doc
 
     if is_attachment_stage:
         has_file = is_physical_attachment_present(inv)

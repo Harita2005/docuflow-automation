@@ -18,11 +18,6 @@ def get_business_rules(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    if current_user and not check_permission(current_user, 'condition:read', db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access Denied: Missing required permission 'condition:read'."
-        )
     rules = db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
     return rules
 

@@ -45,7 +45,7 @@ export default function CustomerFeedbackPage({
   onRefreshDocs,
 }: CustomerFeedbackPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PROGRESS" | "CLEARED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED">("ALL");
   const [viewMode, setViewMode] = useState<"TRACKER" | "REGISTRY">("TRACKER");
   const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
 
@@ -88,16 +88,21 @@ export default function CustomerFeedbackPage({
     );
   }, [selectedDocId, feedbackDocs, documents]);
 
-  // Helper to categorize document status into Pending, Progress, Cleared
-  const getFeedbackCategory = (doc: DbInvoice): "PENDING" | "PROGRESS" | "CLEARED" => {
+  // Helper to categorize document status into Pending, Progress, Hold, Rejected, Cleared
+  const getFeedbackCategory = (doc: DbInvoice): "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED" => {
     const st = (doc.status || "").toLowerCase().trim();
+    if (st.includes("hold") || st.includes("pause") || st.includes("wait")) {
+      return "HOLD";
+    }
+    if (st.includes("reject") || st.includes("declin") || st.includes("cancel") || st.includes("refus")) {
+      return "REJECTED";
+    }
     if (st.includes("approved") || st.includes("cleared") || st.includes("settled") || st.includes("resolved") || st.includes("completed")) {
       return "CLEARED";
     }
     if (st.includes("progress") || st.includes("investigat") || st.includes("routing") || st.includes("processing") || st.includes("initiated") || st.includes("stage")) {
       return "PROGRESS";
     }
-    // Default to PENDING for new / initiated / unrouted / review items
     return "PENDING";
   };
 
@@ -108,12 +113,7 @@ export default function CustomerFeedbackPage({
 
       // 1. Status Filter
       if (statusFilter !== "ALL") {
-        if (statusFilter === "CLEARED" && category !== "CLEARED") {
-          return false;
-        }
-        if ((statusFilter === "PENDING" || statusFilter === "PROGRESS") && category === "CLEARED") {
-          return false;
-        }
+        if (statusFilter !== category) return false;
       }
 
       // 2. Search Term
@@ -134,8 +134,10 @@ export default function CustomerFeedbackPage({
 
   // KPI Calculations
   const totalCount = feedbackDocs.length;
-  const pendingCount = feedbackDocs.filter((d) => getFeedbackCategory(d) !== "CLEARED").length;
-  const progressCount = feedbackDocs.filter((d) => getFeedbackCategory(d) !== "CLEARED").length;
+  const pendingCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "PENDING").length;
+  const progressCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "PROGRESS").length;
+  const holdCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "HOLD").length;
+  const rejectedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "REJECTED").length;
   const clearedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "CLEARED").length;
   const withImagesCount = feedbackDocs.filter((d) => d.image_1 || d.image_2 || d.image_3 || d.image_4 || d.image_5).length;
 
@@ -220,8 +222,8 @@ export default function CustomerFeedbackPage({
         </div>
       </div>
 
-      {/* 2. FEEDBACK STAT STRIP (3 CARDS ONLY: PENDING REVIEW, IN PROGRESS, CLEARED / RESOLVED) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      {/* 2. FEEDBACK STAT STRIP (5 CARDS: PENDING REVIEW, IN PROGRESS, ON HOLD, REJECTED, CLEARED / RESOLVED) */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div 
           onClick={() => setStatusFilter("PENDING")}
           className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
@@ -253,6 +255,36 @@ export default function CustomerFeedbackPage({
         </div>
 
         <div 
+          onClick={() => setStatusFilter("HOLD")}
+          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+            statusFilter === "HOLD" ? "border-purple-500 ring-2 ring-purple-500/20 bg-purple-50/20" : "border-slate-200 hover:border-purple-400"
+          }`}
+        >
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-purple-800">ON HOLD</span>
+            <div className="text-xl font-black text-slate-900 mt-0.5">{holdCount}</div>
+          </div>
+          <div className="h-8 w-8 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center">
+            <AlertCircle className="h-4 w-4 text-purple-800" />
+          </div>
+        </div>
+
+        <div 
+          onClick={() => setStatusFilter("REJECTED")}
+          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+            statusFilter === "REJECTED" ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20" : "border-slate-200 hover:border-rose-400"
+          }`}
+        >
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-800">REJECTED</span>
+            <div className="text-xl font-black text-slate-900 mt-0.5">{rejectedCount}</div>
+          </div>
+          <div className="h-8 w-8 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center">
+            <XCircle className="h-4 w-4 text-rose-800" />
+          </div>
+        </div>
+
+        <div 
           onClick={() => setStatusFilter("CLEARED")}
           className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "CLEARED" ? "border-emerald-600 ring-2 ring-emerald-500/20 bg-emerald-50/20" : "border-slate-200 hover:border-emerald-400"
@@ -270,12 +302,14 @@ export default function CustomerFeedbackPage({
 
       {/* 3. WORK TRACKER FILTER BAR & SEARCH */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        {/* Dedicated Status Filters: ALL, PENDING, IN PROGRESS, CLEARED */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+        {/* Dedicated Status Filters: ALL, PENDING, IN PROGRESS, ON HOLD, REJECTED, CLEARED */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
           {[
             { id: "ALL", label: `All (${totalCount})` },
             { id: "PENDING", label: `Pending (${pendingCount})` },
             { id: "PROGRESS", label: `In Progress (${progressCount})` },
+            { id: "HOLD", label: `On Hold (${holdCount})` },
+            { id: "REJECTED", label: `Rejected (${rejectedCount})` },
             { id: "CLEARED", label: `Cleared (${clearedCount})` },
           ].map((tab) => (
             <button
@@ -382,6 +416,10 @@ export default function CustomerFeedbackPage({
                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                             : category === "PROGRESS"
                             ? "bg-blue-50 text-blue-800 border-blue-200"
+                            : category === "HOLD"
+                            ? "bg-purple-50 text-purple-800 border-purple-200"
+                            : category === "REJECTED"
+                            ? "bg-rose-50 text-rose-800 border-rose-200"
                             : "bg-amber-50 text-amber-900 border-amber-200"
                         }`}
                       >
@@ -389,10 +427,14 @@ export default function CustomerFeedbackPage({
                           <CheckCheck className="h-2.5 w-2.5 text-emerald-700" />
                         ) : category === "PROGRESS" ? (
                           <Activity className="h-2.5 w-2.5 text-blue-700" />
+                        ) : category === "HOLD" ? (
+                          <AlertCircle className="h-2.5 w-2.5 text-purple-700" />
+                        ) : category === "REJECTED" ? (
+                          <XCircle className="h-2.5 w-2.5 text-rose-700" />
                         ) : (
                           <Clock className="h-2.5 w-2.5 text-amber-700" />
                         )}
-                        <span>{category === "CLEARED" ? "CLEARED" : category === "PROGRESS" ? "IN PROGRESS" : "PENDING"}</span>
+                        <span>{category === "CLEARED" ? "CLEARED" : category === "PROGRESS" ? "IN PROGRESS" : category === "HOLD" ? "ON HOLD" : category === "REJECTED" ? "REJECTED" : "PENDING"}</span>
                       </span>
 
                       <button
@@ -496,6 +538,10 @@ export default function CustomerFeedbackPage({
                                 ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                 : category === "PROGRESS"
                                 ? "bg-blue-50 text-blue-800 border-blue-200"
+                                : category === "HOLD"
+                                ? "bg-purple-50 text-purple-800 border-purple-200"
+                                : category === "REJECTED"
+                                ? "bg-rose-50 text-rose-800 border-rose-200"
                                 : "bg-amber-50 text-amber-900 border-amber-200"
                             }`}
                           >
@@ -503,10 +549,14 @@ export default function CustomerFeedbackPage({
                               <CheckCircle2 className="h-3 w-3 text-emerald-700" />
                             ) : category === "PROGRESS" ? (
                               <Activity className="h-3 w-3 text-blue-700" />
+                            ) : category === "HOLD" ? (
+                              <AlertCircle className="h-3 w-3 text-purple-700" />
+                            ) : category === "REJECTED" ? (
+                              <XCircle className="h-3 w-3 text-rose-700" />
                             ) : (
                               <Clock className="h-3 w-3 text-amber-700" />
                             )}
-                            <span>{category === "CLEARED" ? "CLEARED" : category === "PROGRESS" ? "IN PROGRESS" : "PENDING"}</span>
+                            <span>{category === "CLEARED" ? "CLEARED" : category === "PROGRESS" ? "IN PROGRESS" : category === "HOLD" ? "ON HOLD" : category === "REJECTED" ? "REJECTED" : "PENDING"}</span>
                           </span>
                         </td>
 

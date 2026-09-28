@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Edit2, Trash2, X, ArrowRight, Search, 
   AlertTriangle, GitMerge, CheckCircle2, ChevronDown, Check, 
-  ArrowLeft, Layers, Sliders
+  ArrowLeft, Layers, Sliders, Clipboard
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -1456,13 +1456,13 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                     </button>
                                   )}
 
-                                  {/* Inline Type + Enter and Paste Input */}
+                                  {/* Inline Type + Enter, Search, and Paste Input */}
                                   <input
                                     type="text"
                                     onKeyDown={handleKeyDown}
                                     onPaste={handlePaste}
-                                    placeholder={selectedItems.length === 0 ? (masterOptions.length > 0 ? "Select or paste values..." : "Type value + Enter...") : "Add..."}
-                                    className="flex-1 min-w-[70px] bg-transparent outline-none text-[10px] font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal py-0.5"
+                                    placeholder={selectedItems.length === 0 ? "Search, type value + Enter, or paste list..." : "Search / Add..."}
+                                    className="flex-1 min-w-[90px] bg-transparent outline-none text-[10px] font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal py-0.5"
                                   />
 
                                   {/* Actions inside container */}
@@ -1472,6 +1472,21 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                         ({selectedItems.length})
                                       </span>
                                     )}
+
+                                    {/* Quick Bulk Paste Button */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setValueListModalIdx(idx);
+                                        setValueListSearch('');
+                                        setValueListBulkInput('');
+                                      }}
+                                      className="p-0.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition cursor-pointer"
+                                      title="Search, paste from Excel/CSV, or type multiple values"
+                                    >
+                                      <Clipboard className="h-3 w-3" />
+                                    </button>
 
                                     {/* Master options dropdown toggle */}
                                     {masterOptions.length > 0 && (
@@ -1483,7 +1498,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                           setMultiSelectSearch('');
                                         }}
                                         className="p-0.5 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
-                                        title="Open options dropdown"
+                                        title="Search and select options"
                                       >
                                         <ChevronDown className="h-3 w-3" />
                                       </button>

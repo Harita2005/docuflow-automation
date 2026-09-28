@@ -19,7 +19,8 @@ import {
   Info,
   UserX,
   UserCheck,
-  Edit2
+  Edit2,
+  Eye
 } from "lucide-react";
 
 // Standard Baseline Roles
@@ -31,134 +32,83 @@ export const INITIAL_ROLES = [
   { id: "employee", name: "General Employee", badge: "Employee", color: "bg-slate-100 text-slate-700 border-slate-200" }
 ];
 
-// Clean functional permission list categorized into Folders
+// Clean functional page-wise permission list categorized into 7 Main Pages
 const INITIAL_PERMISSIONS = [
   {
-    id: "cat_docs",
-    category: "Documents & OCR Extraction",
+    id: "cat_pages_ops",
+    category: "OPERATIONS PAGES",
     icon: "Folder",
     items: [
-      { id: "doc:upload", label: "Upload Documents", desc: "Upload and batch ingest vendor invoices", iconName: "FileText", iconColor: "bg-purple-50 text-purple-600 border-purple-100" },
-      { id: "doc:verify", label: "OCR Verification Desk", desc: "Verify extracted fields & line items", iconName: "BarChart3", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
-      { id: "doc:edit", label: "Edit & Field Overrides", desc: "Modify monetary values, HSN, and tax codes", iconName: "CheckSquare", iconColor: "bg-sky-50 text-sky-600 border-sky-100" },
-      { id: "doc:delete", label: "Delete / Purge Drafts", desc: "Remove draft records and recalled files", iconName: "Trash2", iconColor: "bg-rose-50 text-rose-600 border-rose-100" },
-      { id: "customer-feedback", label: "Customer Feedback Hub", desc: "Access customer complaints work tracker & registry", iconName: "MessageSquare", iconColor: "bg-purple-50 text-purple-600 border-purple-100" }
+      { id: "dashboard", label: "Dashboard Page", desc: "Overview dashboard, analytics counters, pending work alerts & system status", iconName: "BarChart3", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
+      { id: "work-tracker", label: "Work Tracker Page", desc: "Active document work tracker, stage progression & metadata verification", iconName: "Layers", iconColor: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+      { id: "approved-documents", label: "Approved Docs Page", desc: "Archived & settled documents, payment readiness & PDF download", iconName: "CheckSquare", iconColor: "bg-amber-50 text-amber-600 border-amber-100" },
+      { id: "upload", label: "Upload Document Page", desc: "Single & batch invoice file uploads & drag-and-drop file ingestion", iconName: "FileText", iconColor: "bg-purple-50 text-purple-600 border-purple-100" }
     ]
   },
   {
-    id: "cat_wf",
-    category: "Workflow & Approvals Routing",
+    id: "cat_pages_feedback",
+    category: "FEEDBACK PAGE",
     icon: "Folder",
     items: [
-      { id: "wf:view", label: "View Task Queue", desc: "Access pending task list and SLA timers", iconName: "Eye", iconColor: "bg-slate-50 text-slate-600 border-slate-200" },
-      { id: "customer-feedback", label: "Customer Feedback Hub", desc: "Access customer complaints work tracker & registry", iconName: "MessageSquare", iconColor: "bg-purple-50 text-purple-600 border-purple-100" },
-      { id: "wf:approve", label: "Approve / Reject Action", desc: "Sign off or return workflow approval stages", iconName: "ShieldCheck", iconColor: "bg-emerald-50 text-emerald-600 border-emerald-100" },
-      { id: "wf:delegate", label: "Delegate Signoff", desc: "Assign approval duties to backup peers", iconName: "Users", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
-      { id: "wf:force", label: "Fast-Track & Emergency Route", desc: "Emergency route bypass & manual escalation", iconName: "AlertTriangle", iconColor: "bg-amber-50 text-amber-600 border-amber-100" }
+      { id: "customer-feedback", label: "Customer Feedback Page", desc: "Customer complaints work tracker, SLA targets & stage review actions", iconName: "MessageSquare", iconColor: "bg-purple-50 text-purple-600 border-purple-100" }
     ]
   },
   {
-    id: "cat_audit",
-    category: "Financial System Audits & Tax",
+    id: "cat_pages_admin",
+    category: "ADMINISTRATION PAGES",
     icon: "Folder",
     items: [
-      { id: "audit:trail", label: "Audit Log Inspection", desc: "View system immutable event trail and IP logs", iconName: "Layers", iconColor: "bg-slate-50 text-slate-600 border-slate-200" },
-      { id: "audit:signoff", label: "Internal Audit (IA) Signoff", desc: "Final pre-posting audit verification", iconName: "DollarSign", iconColor: "bg-amber-50 text-amber-600 border-amber-100" },
-      { id: "audit:export", label: "Export Financial Reports", desc: "Download ledger CSV & tax data schedules", iconName: "FileSpreadsheet", iconColor: "bg-blue-50 text-blue-600 border-blue-100" }
-    ]
-  },
-  {
-    id: "cat_sys",
-    category: "IAM & System Governance",
-    icon: "Folder",
-    items: [
-      { id: "sys:flows", label: "Flow Builder Engine", desc: "Create and edit multi-stage workflow routes", iconName: "Sliders", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
-      { id: "sys:rules", label: "Routing Rule Matrix", desc: "Configure conditional AND/OR routing rules", iconName: "Filter", iconColor: "bg-slate-50 text-slate-600 border-slate-200" },
-      { id: "sys:rbac", label: "IAM Role & Access Matrix", desc: "Modify roles and user clearance permissions", iconName: "Shield", iconColor: "bg-blue-50 text-blue-600 border-blue-100" }
+      { id: "workflow-rules", label: "Workflow & Rules Page", desc: "Multi-stage workflow profile designer & business routing rules engine", iconName: "Sliders", iconColor: "bg-sky-50 text-sky-600 border-sky-100" },
+      { id: "admin", label: "Control Settings Page", desc: "User master, IAM role clearances, RACI matrix & system audit logs", iconName: "Shield", iconColor: "bg-rose-50 text-rose-600 border-rose-100" }
     ]
   }
 ];
 
 const INITIAL_ROLE_PERMS = {
   admin: {
-    "doc:upload": { read: true, write: true, admin: true },
-    "doc:verify": { read: true, write: true, admin: true },
-    "doc:edit": { read: true, write: true, admin: true },
-    "doc:delete": { read: true, write: true, admin: true },
-    "wf:view": { read: true, write: true, admin: true },
-    "wf:approve": { read: true, write: true, admin: true },
-    "wf:delegate": { read: true, write: true, admin: true },
-    "wf:force": { read: true, write: true, admin: true },
-    "audit:trail": { read: true, write: true, admin: true },
-    "audit:signoff": { read: true, write: true, admin: true },
-    "audit:export": { read: true, write: true, admin: true },
-    "sys:flows": { read: true, write: true, admin: true },
-    "sys:rules": { read: true, write: true, admin: true },
-    "sys:rbac": { read: true, write: true, admin: true }
+    "dashboard": { read: true, write: true, admin: true },
+    "work-tracker": { read: true, write: true, admin: true },
+    "approved-documents": { read: true, write: true, admin: true },
+    "upload": { read: true, write: true, admin: true },
+    "customer-feedback": { read: true, write: true, admin: true },
+    "workflow-rules": { read: true, write: true, admin: true },
+    "admin": { read: true, write: true, admin: true }
   },
   manager: {
-    "doc:upload": { read: true, write: true, admin: false },
-    "doc:verify": { read: true, write: true, admin: false },
-    "doc:edit": { read: true, write: false, admin: false },
-    "doc:delete": { read: false, write: false, admin: false },
-    "wf:view": { read: true, write: true, admin: false },
-    "wf:approve": { read: true, write: true, admin: true },
-    "wf:delegate": { read: true, write: true, admin: false },
-    "wf:force": { read: false, write: false, admin: false },
-    "audit:trail": { read: true, write: false, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "audit:export": { read: true, write: false, admin: false },
-    "sys:flows": { read: false, write: false, admin: false },
-    "sys:rules": { read: false, write: false, admin: false },
-    "sys:rbac": { read: false, write: false, admin: false }
+    "dashboard": { read: true, write: true, admin: false },
+    "work-tracker": { read: true, write: true, admin: true },
+    "approved-documents": { read: true, write: true, admin: false },
+    "upload": { read: true, write: true, admin: false },
+    "customer-feedback": { read: true, write: true, admin: true },
+    "workflow-rules": { read: true, write: false, admin: false },
+    "admin": { read: false, write: false, admin: false }
   },
   auditor: {
-    "doc:upload": { read: true, write: false, admin: false },
-    "doc:verify": { read: true, write: true, admin: false },
-    "doc:edit": { read: true, write: false, admin: false },
-    "doc:delete": { read: false, write: false, admin: false },
-    "wf:view": { read: true, write: false, admin: false },
-    "wf:approve": { read: true, write: false, admin: false },
-    "wf:delegate": { read: false, write: false, admin: false },
-    "wf:force": { read: false, write: false, admin: false },
-    "audit:trail": { read: true, write: true, admin: true },
-    "audit:signoff": { read: true, write: true, admin: true },
-    "audit:export": { read: true, write: true, admin: false },
-    "sys:flows": { read: true, write: false, admin: false },
-    "sys:rules": { read: true, write: false, admin: false },
-    "sys:rbac": { read: false, write: false, admin: false }
+    "dashboard": { read: true, write: false, admin: false },
+    "work-tracker": { read: true, write: false, admin: false },
+    "approved-documents": { read: true, write: true, admin: true },
+    "upload": { read: false, write: false, admin: false },
+    "customer-feedback": { read: true, write: false, admin: false },
+    "workflow-rules": { read: true, write: false, admin: false },
+    "admin": { read: false, write: false, admin: false }
   },
   ap_specialist: {
-    "doc:upload": { read: true, write: true, admin: false },
-    "doc:verify": { read: true, write: true, admin: true },
-    "doc:edit": { read: true, write: true, admin: false },
-    "doc:delete": { read: false, write: false, admin: false },
-    "wf:view": { read: true, write: true, admin: false },
-    "wf:approve": { read: false, write: false, admin: false },
-    "wf:delegate": { read: false, write: false, admin: false },
-    "wf:force": { read: false, write: false, admin: false },
-    "audit:trail": { read: true, write: false, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "audit:export": { read: true, write: true, admin: false },
-    "sys:flows": { read: false, write: false, admin: false },
-    "sys:rules": { read: false, write: false, admin: false },
-    "sys:rbac": { read: false, write: false, admin: false }
+    "dashboard": { read: true, write: true, admin: false },
+    "work-tracker": { read: true, write: true, admin: false },
+    "approved-documents": { read: true, write: true, admin: false },
+    "upload": { read: true, write: true, admin: true },
+    "customer-feedback": { read: true, write: true, admin: false },
+    "workflow-rules": { read: false, write: false, admin: false },
+    "admin": { read: false, write: false, admin: false }
   },
   employee: {
-    "doc:upload": { read: true, write: true, admin: false },
-    "doc:verify": { read: true, write: false, admin: false },
-    "doc:edit": { read: false, write: false, admin: false },
-    "doc:delete": { read: false, write: false, admin: false },
-    "wf:view": { read: true, write: false, admin: false },
-    "wf:approve": { read: false, write: false, admin: false },
-    "wf:delegate": { read: false, write: false, admin: false },
-    "wf:force": { read: false, write: false, admin: false },
-    "audit:trail": { read: false, write: false, admin: false },
-    "audit:signoff": { read: false, write: false, admin: false },
-    "audit:export": { read: false, write: false, admin: false },
-    "sys:flows": { read: false, write: false, admin: false },
-    "sys:rules": { read: false, write: false, admin: false },
-    "sys:rbac": { read: false, write: false, admin: false }
+    "dashboard": { read: true, write: false, admin: false },
+    "work-tracker": { read: true, write: true, admin: false },
+    "approved-documents": { read: true, write: false, admin: false },
+    "upload": { read: true, write: true, admin: false },
+    "customer-feedback": { read: true, write: true, admin: false },
+    "workflow-rules": { read: false, write: false, admin: false },
+    "admin": { read: false, write: false, admin: false }
   }
 };
 
@@ -458,12 +408,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
             const updated = { ...prev };
             rolesData.forEach(r => {
               const rCode = r.code;
+              const rId = String(r.id);
               if (!updated[rCode]) updated[rCode] = {};
               (r.permissions || []).forEach(pCode => {
                 if (!updated[rCode][pCode]) {
                   updated[rCode][pCode] = { read: true, write: true, admin: false };
                 }
               });
+              if (rId) updated[rId] = updated[rCode];
             });
             return updated;
           });
@@ -574,18 +526,25 @@ export default function AdminRBAC({ onRefreshSignal }) {
       setTimeout(() => setErrorMsg(""), 3500);
       return;
     }
+    const matchedRole = roles.find(r => r.id === roleId || r.code === roleId);
+    const roleCodeKey = matchedRole?.code || roleId;
+    const roleIdKey = matchedRole?.id ? String(matchedRole.id) : roleId;
+
     setRolePermissions(prev => {
-      const currentRole = prev[roleId] || {};
+      const currentRole = prev[roleCodeKey] || prev[roleIdKey] || {};
       const currentItem = currentRole[permId] || { read: false, write: false, admin: false };
       const updated = { ...currentItem, [level]: !currentItem[level] };
       
       if ((updated.write || updated.admin) && !updated.read) updated.read = true;
       if (!updated.read) { updated.write = false; updated.admin = false; }
 
-      return {
-        ...prev,
-        [roleId]: { ...currentRole, [permId]: updated }
-      };
+      const next = { ...prev };
+      next[roleCodeKey] = { ...(prev[roleCodeKey] || {}), [permId]: updated };
+      if (roleIdKey && roleIdKey !== roleCodeKey) {
+        next[roleIdKey] = { ...(prev[roleIdKey] || {}), [permId]: updated };
+      }
+
+      return next;
     });
   };
 
@@ -875,6 +834,27 @@ export default function AdminRBAC({ onRefreshSignal }) {
       });
 
       if (res.ok) {
+        await fetch("/api/admin/config", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            key: "RBAC_GRANULAR_MATRIX",
+            value: JSON.stringify(rolePermissions),
+            description: "Role permissions matrix"
+          })
+        }).catch(() => {});
+
+        await fetch("/api/admin/config", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            key: "ROLE_PERMISSIONS",
+            value: JSON.stringify(rolePermissions),
+            description: "Role permissions matrix"
+          })
+        }).catch(() => {});
+
+        window.dispatchEvent(new CustomEvent("role-permissions-updated"));
         setSuccessMsg(`✓ Permissions for role "${roleToSave.name}" updated in database!`);
         await loadData();
         setTimeout(() => setSuccessMsg(""), 3500);
@@ -934,6 +914,16 @@ export default function AdminRBAC({ onRefreshSignal }) {
         method: "POST",
         headers,
         body: JSON.stringify({
+          key: "ROLE_PERMISSIONS",
+          value: JSON.stringify(rolePermissions),
+          description: "Role permissions matrix"
+        })
+      });
+
+      await fetch("/api/admin/config", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
           key: "RBAC_FIELD_PERMISSIONS",
           value: JSON.stringify(fieldPermissionsByScope),
           description: "Hierarchical Field-level access control (FLAC) matrix by workflow scope"
@@ -970,6 +960,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         })
       });
 
+      window.dispatchEvent(new CustomEvent("role-permissions-updated"));
       setSuccessMsg("✓ All permissions & 50+ workflow policies saved successfully!");
       if (onRefreshSignal) onRefreshSignal();
       setTimeout(() => setSuccessMsg(""), 3500);
@@ -1098,22 +1089,24 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const handleAddPermission = (e) => {
     e.preventDefault();
-    if (!newPermId.trim() || !newPermLabel.trim()) return;
+    const cleanLabel = newPermLabel.trim();
+    if (!cleanLabel) return;
 
-    const formattedId = newPermId.trim().toLowerCase().replace(/\s+/g, ":");
+    const rawKey = newPermId.trim() || cleanLabel;
+    const formattedId = rawKey.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     
     // Check if duplicate
     const allItems = permissionsList.flatMap(c => c.items);
     if (allItems.some(item => item.id === formattedId)) {
-      alert("A permission with this ID already exists.");
+      alert("A permission with this name already exists.");
       return;
     }
 
     const newPermissionItem = {
       id: formattedId,
-      label: newPermLabel.trim(),
-      desc: newPermDesc.trim() || "No description provided",
-      iconName: newPermIcon || "Shield",
+      label: cleanLabel,
+      desc: newPermDesc.trim() || "Page access and action clearance",
+      iconName: "Shield",
       isCustom: true
     };
 
@@ -1539,81 +1532,118 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           </div>
                         </div>
 
-                        {/* Permissions List */}
+                        {/* Page-Wise Permissions Cards */}
                         {!isCollapsed && (
                           <div className="divide-y divide-slate-100 bg-white">
                             {cat.items.map(item => {
-                              const cell = rolePermissions[selectedRoleId]?.[item.id] || { read: false, write: false, admin: false };
+                              const activeRoleObj = roles.find(r => r.id === selectedRoleId || r.code === selectedRoleId);
+                              const targetRoleKey = activeRoleObj?.code || selectedRoleId;
+                              const targetRoleIdStr = activeRoleObj?.id ? String(activeRoleObj.id) : selectedRoleId;
+
+                              const cell = rolePermissions[targetRoleKey]?.[item.id] || rolePermissions[targetRoleIdStr]?.[item.id] || { read: false, write: false, admin: false };
+                              const isPageEnabled = Boolean(cell.read || cell.write || cell.admin);
+
                               return (
-                                <div key={item.id} className="p-3 hover:bg-slate-50/40 transition-colors flex items-center justify-between gap-3 text-left group">
-                                  <div className="space-y-0.5 min-w-0 pr-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <h4 className="font-bold text-slate-900 text-xs">{item.label}</h4>
-                                      {item.isCustom && (
-                                        <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 text-[8px] font-extrabold uppercase border border-blue-100 leading-none">
-                                          Custom
+                                <div key={item.id} className="p-3.5 hover:bg-slate-50/60 transition-colors space-y-2.5 text-left group border-b border-slate-100 last:border-b-0">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="space-y-0.5 min-w-0 pr-2">
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                                          <span>{item.label}</span>
+                                        </h4>
+                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase border ${
+                                          isPageEnabled
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                            : "bg-slate-100 text-slate-500 border-slate-300"
+                                        }`}>
+                                          {isPageEnabled ? "✓ Page Enabled" : "✕ Access Disabled"}
                                         </span>
-                                      )}
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-sm">{item.desc}</p>
                                     </div>
-                                    <p className="text-[11px] text-slate-400 font-medium leading-relaxed truncate max-w-xs">{item.desc}</p>
-                                  </div>
 
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {/* Delete Custom Permission */}
-                                    {isAdmin && item.isCustom && (
+                                    {/* Page Master Toggle Switch */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Page Access:</span>
                                       <button
                                         type="button"
-                                        onClick={() => handleDeletePermission(item.id, item.label)}
-                                        className="p-1 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer mr-1"
-                                        title={`Delete permission "${item.label}"`}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
-
-                                    {/* 3 Buttons View, Edit, Admin */}
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "read")}
                                         disabled={!isAdmin}
-                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                                          cell.read 
-                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
-                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
+                                        onClick={() => {
+                                          if (isPageEnabled) {
+                                            // Turn Page Access OFF (clear all sub-permissions)
+                                            toggleRolePerm(targetRoleKey, item.id, "read");
+                                            if (cell.write) toggleRolePerm(targetRoleKey, item.id, "write");
+                                            if (cell.admin) toggleRolePerm(targetRoleKey, item.id, "admin");
+                                          } else {
+                                            // Turn Page Access ON (enable view & write by default)
+                                            toggleRolePerm(targetRoleKey, item.id, "read");
+                                            toggleRolePerm(targetRoleKey, item.id, "write");
+                                          }
+                                        }}
+                                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                          isPageEnabled ? "bg-[#003F28]" : "bg-slate-300"
                                         } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Read-Only Clearance"
                                       >
-                                        View
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "write")}
-                                        disabled={!isAdmin}
-                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                                          cell.write 
-                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
-                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
-                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Write / Modify Clearance"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleRolePerm(selectedRoleId, item.id, "admin")}
-                                        disabled={!isAdmin}
-                                        className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                                          cell.admin 
-                                            ? "bg-slate-900 text-white shadow-xs font-bold" 
-                                            : "bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200"
-                                        } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title="Admin Signoff / Delete Clearance"
-                                      >
-                                        Admin
+                                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                                          isPageEnabled ? "translate-x-4" : "translate-x-0"
+                                        }`} />
                                       </button>
                                     </div>
                                   </div>
+
+                                  {/* Sub-Actions Clearances Toolbar (Active when Page Access is ON) */}
+                                  {isPageEnabled && (
+                                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-between text-xs animate-fadeIn">
+                                      <span className="text-[10px] uppercase font-black tracking-wider text-slate-500 flex items-center gap-1">
+                                        <span>Sub-Action Operations Allowed:</span>
+                                      </span>
+
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleRolePerm(targetRoleKey, item.id, "read")}
+                                          disabled={!isAdmin}
+                                          className={`px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                                            cell.read 
+                                              ? "bg-[#003F28] text-white shadow-xs font-bold" 
+                                              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                                          } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          title="View / Read Page Access"
+                                        >
+                                          <Eye className="h-3 w-3 shrink-0" />
+                                          <span>View</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleRolePerm(targetRoleKey, item.id, "write")}
+                                          disabled={!isAdmin}
+                                          className={`px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                                            cell.write 
+                                              ? "bg-[#003F28] text-white shadow-xs font-bold" 
+                                              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                                          } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          title="Edit / Action Operations Access (Approve, Hold, Edit Fields)"
+                                        >
+                                          <Edit2 className="h-3 w-3 shrink-0" />
+                                          <span>Edit / Action</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleRolePerm(targetRoleKey, item.id, "admin")}
+                                          disabled={!isAdmin}
+                                          className={`px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                                            cell.admin 
+                                              ? "bg-[#003F28] text-white shadow-xs font-bold" 
+                                              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                                          } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          title="Admin Full Control (Delete, Override & System Config)"
+                                        >
+                                          <Shield className="h-3 w-3 shrink-0" />
+                                          <span>Admin Control</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1951,107 +1981,87 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {/* MODAL: ADD CUSTOM PERMISSION */}
       {/* ========================================================= */}
+      {/* ========================================================= */}
+      {/* MODAL: ADD CUSTOM PERMISSION (SIMPLIFIED & PROFESSIONAL) */}
+      {/* ========================================================= */}
       {showAddPermissionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5 text-blue-650" />
-                <span>Add System Permission</span>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Plus className="h-3.5 w-3.5 text-[#003F28]" />
+                <span>Create System Permission</span>
               </h3>
               <button onClick={() => setShowAddPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddPermission} className="space-y-2.5">
+            <form onSubmit={handleAddPermission} className="space-y-3">
               <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Permission Key / ID</label>
+                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
+                  Permission / Page Name <span className="text-rose-500">*</span>
+                </label>
                 <input 
                   type="text"
                   required
-                  value={newPermId}
-                  onChange={e => setNewPermId(e.target.value)}
-                  placeholder="e.g. wf:escalate"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-                <span className="text-[8px] text-slate-400 block mt-0.5">Format: component:action (lowercase, spaces become colons)</span>
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Display Label</label>
-                <input 
-                  type="text"
-                  required
+                  autoFocus
                   value={newPermLabel}
-                  onChange={e => setNewPermLabel(e.target.value)}
-                  placeholder="e.g. Fast-Track Escalation"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  onChange={e => {
+                    setNewPermLabel(e.target.value);
+                    if (!newPermId) {
+                      setNewPermId(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+                    }
+                  }}
+                  placeholder="e.g. Customer Complaints Approval Portal"
+                  className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Description & Scope</label>
-                <textarea 
-                  value={newPermDesc}
-                  onChange={e => setNewPermDesc(e.target.value)}
-                  placeholder="Describe what action this permission clears..."
-                  rows={2}
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Category Group</label>
+                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
+                  Assign to Category Group
+                </label>
                 <select
                   value={newPermCategory}
                   onChange={e => setNewPermCategory(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
                 >
-                  <option value="Documents & OCR Extraction">Documents & OCR Extraction</option>
-                  <option value="Workflow & Approvals Routing">Workflow & Approvals Routing</option>
-                  <option value="Financial System Audits & Tax">Financial System Audits & Tax</option>
-                  <option value="IAM & System Governance">IAM & System Governance</option>
-                  <option value="NEW_CATEGORY">Create New Category...</option>
+                  <option value="OPERATIONS PAGES">OPERATIONS PAGES</option>
+                  <option value="FEEDBACK PAGE">FEEDBACK PAGE</option>
+                  <option value="ADMINISTRATION PAGES">ADMINISTRATION PAGES</option>
+                  <option value="NEW_CATEGORY">+ Create Custom Category...</option>
                 </select>
               </div>
 
               {newPermCategory === "NEW_CATEGORY" && (
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">New Category Title</label>
+                  <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">New Category Title</label>
                   <input 
                     type="text"
                     required
                     value={newCategoryName}
                     onChange={e => setNewCategoryName(e.target.value)}
-                    placeholder="e.g. System Configuration & Integrations"
-                    className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                    placeholder="e.g. Vendor Management & Approvals"
+                    className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Visual Icon</label>
-                <select
-                  value={newPermIcon}
-                  onChange={e => setNewPermIcon(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                >
-                  <option value="Shield">Shield (Security)</option>
-                  <option value="Lock">Lock (Access Control)</option>
-                  <option value="Eye">Eye (Audit/View)</option>
-                  <option value="Users">Users (Team)</option>
-                  <option value="DollarSign">Dollar Sign (Finance)</option>
-                  <option value="FileText">File (Docs)</option>
-                  <option value="Trash2">Trash (Delete)</option>
-                  <option value="CheckSquare">Checkmark (Verify)</option>
-                  <option value="Layers">Layers (Structure)</option>
-                  <option value="Sliders">Sliders (Settings)</option>
-                  <option value="AlertTriangle">Alert (Exceptions)</option>
-                </select>
+                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
+                  Description & Scope <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <textarea 
+                  value={newPermDesc}
+                  onChange={e => setNewPermDesc(e.target.value)}
+                  placeholder="Describe what action or page this permission clears..."
+                  rows={2}
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white resize-none"
+                />
               </div>
 
-              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddPermissionModal(false)}
@@ -2061,8 +2071,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newPermId.trim() || !newPermLabel.trim()}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
+                  disabled={!newPermLabel.trim()}
+                  className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   Create Permission
                 </button>

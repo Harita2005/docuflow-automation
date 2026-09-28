@@ -397,6 +397,18 @@ export function formatAssignedToDisplay(docOrAssigned?: any): string {
       finance_auditor: "Finance Auditor",
       auditor: "Finance Auditor",
       accounting: "Accounts Desk",
+      account_uploader: "Account Uploader",
+      account_uploader_test: "Account Uploader",
+      uploader: "Account Uploader",
+      ap_specialist: "AP Specialist",
+      dept_mgr: "Department Manager",
+      department_manager: "Department Manager",
+      div_hod: "Division HOD",
+      division_hod: "Division HOD",
+      safety_officer: "Safety Officer",
+      plant_head: "Plant Head",
+      quality_mgr: "Quality Manager",
+      quality_manager: "Quality Manager",
       cfo: "CFO Desk",
       employee: "Standard Employee"
     };
@@ -428,5 +440,159 @@ export function formatAssignedToDisplay(docOrAssigned?: any): string {
   const formattedItems = items.map(formatSingleHandle);
   return formattedItems.join(", ");
 }
+
+export interface ResolvedRolePersons {
+  displayName: string;
+  roleName: string;
+  rawTarget: string;
+  users: any[];
+  formattedListText: string;
+}
+
+/**
+ * Resolves the specific person(s) assigned to a role for a specific division.
+ * e.g., role: "ap_specialist", division: "VCC" -> Users matching role "ap_specialist" in "VCC".
+ */
+export function resolvePersonsInRoleForDivision(
+  approverTarget?: string,
+  docDivision?: string,
+  usersList: any[] = []
+): ResolvedRolePersons {
+  if (!approverTarget || typeof approverTarget !== "string" || !approverTarget.trim()) {
+    return {
+      displayName: "Unassigned",
+      roleName: "Unassigned",
+      rawTarget: "",
+      users: [],
+      formattedListText: "Unassigned",
+    };
+  }
+
+  const cleanTarget = approverTarget.trim();
+  const targetDivision = (docDivision || "").toString().trim().toUpperCase();
+
+  // Split comma-separated targets if multiple roles/users are assigned
+  const targets = cleanTarget.split(",").map((t) => t.trim()).filter(Boolean);
+
+  const matchedUsers: any[] = [];
+  const resolvedLabels: string[] = [];
+
+  targets.forEach((targetItem) => {
+    const targetLower = targetItem.toLowerCase();
+
+    // 1. Check if targetItem directly matches a specific user (by username, email, employee_id, or name)
+    const directUserMatch = (usersList || []).find((u) => {
+      if (!u) return false;
+      const uname = (u.username || "").toString().toLowerCase();
+      const uemail = (u.email || "").toString().toLowerCase();
+      const empid = (u.employee_id || "").toString().toLowerCase();
+      const name = (u.employee_name || u.name || "").toString().toLowerCase();
+      return (
+        uname === targetLower ||
+        uemail === targetLower ||
+        empid === targetLower ||
+        name === targetLower ||
+        (uemail && uemail.startsWith(`${targetLower}@`))
+      );
+    });
+
+    if (directUserMatch) {
+      const uName = directUserMatch.employee_name || directUserMatch.name || formatAssignedToDisplay(directUserMatch.username || targetItem);
+      matchedUsers.push(directUserMatch);
+      resolvedLabels.push(uName);
+      return;
+    }
+
+    // 2. Role-Based Resolution for targetItem
+    const roleMatchingUsers = (usersList || []).filter((u) => {
+      if (!u || u.is_active === false) return false;
+      const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
+      
+      const roleMatches =
+        uRole === targetLower ||
+        uRole.replace(/[^a-z0-9]/g, "_") === targetLower.replace(/[^a-z0-9]/g, "_") ||
+        (targetLower === "admin" && ["admin", "administrator", "system_admin", "superadmin"].includes(uRole)) ||
+        (targetLower === "manager" && ["manager", "operations_manager", "general_manager"].includes(uRole)) ||
+        (targetLower === "ap_specialist" && ["ap_specialist", "ap", "accounts"].includes(uRole)) ||
+        (targetLower === "auditor" && ["auditor", "finance_auditor"].includes(uRole));
+
+      if (!roleMatches) return false;
+
+      // Division scoping check:
+      if (!targetDivision || targetDivision === "ALL" || targetDivision === "GLOBAL") {
+        return true;
+      }
+
+      const uDiv = (u.division || u.employee_division || "").toString().trim().toUpperCase();
+      if (!uDiv || uDiv === "ALL" || uDiv === "GLOBAL") {
+        return true;
+      }
+
+      return uDiv === targetDivision || uDiv.includes(targetDivision) || targetDivision.includes(uDiv);
+    });
+
+    if (roleMatchingUsers.length > 0) {
+      roleMatchingUsers.forEach((u) => {
+        if (!matchedUsers.some((existing) => existing.id === u.id || existing.username === u.username)) {
+          matchedUsers.push(u);
+        }
+        const uName = u.employee_name || u.name || formatAssignedToDisplay(u.username);
+        if (!resolvedLabels.includes(uName)) {
+          resolvedLabels.push(uName);
+        }
+      });
+    } else {
+      // Fallback 1: Search users in that role across ANY division
+      const anyDivUsers = (usersList || []).filter((u) => {
+        if (!u || u.is_active === false) return false;
+        const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
+        return (
+          uRole === targetLower ||
+          uRole.replace(/[^a-z0-9]/g, "_") === targetLower.replace(/[^a-z0-9]/g, "_") ||
+          (targetLower === "admin" && ["admin", "administrator", "system_admin", "superadmin"].includes(uRole)) ||
+          (targetLower === "manager" && ["manager", "operations_manager", "general_manager"].includes(uRole))
+        );
+      });
+
+      if (anyDivUsers.length > 0) {
+        anyDivUsers.forEach((u) => {
+          if (!matchedUsers.some((existing) => existing.id === u.id || existing.username === u.username)) {
+            matchedUsers.push(u);
+          }
+          const uName = u.employee_name || u.name || formatAssignedToDisplay(u.username);
+          if (!resolvedLabels.includes(uName)) {
+            resolvedLabels.push(uName);
+          }
+        });
+      } else {
+        // Fallback 2: Formatted role code display name (e.g., "AP Specialist")
+        resolvedLabels.push(formatAssignedToDisplay(targetItem));
+      }
+    }
+  });
+
+  let detectedRole = cleanTarget;
+  if (matchedUsers.length > 0) {
+    const firstUser = matchedUsers[0];
+    const uRole = firstUser.role || firstUser.role_code || firstUser.user_role || firstUser.designation || firstUser.title;
+    if (uRole && typeof uRole === "string" && uRole.trim()) {
+      detectedRole = uRole.trim();
+    }
+  }
+
+  const formattedRoleName = formatAssignedToDisplay(detectedRole);
+  const formattedListText = resolvedLabels.join(", ");
+
+  return {
+    displayName: formattedListText,
+    roleName: formattedRoleName,
+    rawTarget: cleanTarget,
+    users: matchedUsers,
+    formattedListText: formattedListText !== formattedRoleName 
+      ? `${formattedListText} (${formattedRoleName})` 
+      : formattedListText,
+  };
+}
+
 
 
