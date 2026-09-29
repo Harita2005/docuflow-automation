@@ -440,12 +440,41 @@ export function formatAssignedToDisplay(docOrAssigned?: any): string {
   return formattedItems.join(", ");
 }
 
+let globalUserMasterCache: any[] = [];
+
+export function setGlobalUserMasterCache(users: any[]) {
+  if (Array.isArray(users) && users.length > 0) {
+    globalUserMasterCache = users;
+  }
+}
+
+export function loadUserMasterCacheAsync() {
+  try {
+    const token = localStorage.getItem("authToken");
+    fetch("/api/users", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          globalUserMasterCache = data;
+        }
+      })
+      .catch(() => {});
+  } catch (_e) {}
+}
+
+// Auto-trigger cache load once when formatters module is imported
+loadUserMasterCacheAsync();
+
 export interface ResolvedRolePersons {
   displayName: string;
   roleName: string;
   rawTarget: string;
   users: any[];
   formattedListText: string;
+  tooltipText: string;
+  isUnassigned: boolean;
 }
 
 /**
@@ -453,24 +482,62 @@ export interface ResolvedRolePersons {
  * e.g., role: "ap_specialist", division: "VCC" -> Users matching role "ap_specialist" in "VCC".
  */
 export function resolvePersonsInRoleForDivision(
-  approverTarget?: string,
+  approverTarget?: any,
   docDivision?: string,
   usersList: any[] = []
 ): ResolvedRolePersons {
-  if (!approverTarget || typeof approverTarget !== "string" || !approverTarget.trim()) {
+  const activeUsersList =
+    Array.isArray(usersList) && usersList.length > 0
+      ? usersList
+      : globalUserMasterCache;
+
+  let rawTargetStr = "";
+  if (typeof approverTarget === "string") {
+    rawTargetStr = approverTarget;
+  } else if (typeof approverTarget === "object" && approverTarget !== null) {
+    rawTargetStr =
+      approverTarget.assigned_approver ||
+      approverTarget.assigned_user ||
+      approverTarget.assigned_to ||
+      approverTarget.approver_name ||
+      approverTarget.assigned_approver_name ||
+      approverTarget.assigned_user_name ||
+      approverTarget.approver ||
+      approverTarget.assigned_person ||
+      approverTarget.activeApprovalLog?.assigned_approver ||
+      approverTarget.activeApprovalLog?.approver_target ||
+      approverTarget.custom_data?.assigned_approver ||
+      approverTarget.custom_data?.assigned_user ||
+      approverTarget.custom_data?.assigned_to ||
+      "";
+  }
+
+  if (!rawTargetStr || typeof rawTargetStr !== "string" || !rawTargetStr.trim()) {
     return {
       displayName: "Unassigned",
       roleName: "Unassigned",
       rawTarget: "",
       users: [],
       formattedListText: "Unassigned",
+      tooltipText: "No user or role assigned",
+      isUnassigned: true,
     };
   }
 
-  const cleanTarget = approverTarget.trim();
-  const targetDivision = (docDivision || "").toString().trim().toUpperCase();
+  const cleanTarget = rawTargetStr.trim();
+  if (["null", "undefined", "none", "unassigned"].includes(cleanTarget.toLowerCase())) {
+    return {
+      displayName: "Unassigned",
+      roleName: "Unassigned",
+      rawTarget: cleanTarget,
+      users: [],
+      formattedListText: "Unassigned",
+      tooltipText: "No user or role assigned",
+      isUnassigned: true,
+    };
+  }
 
-  // Split comma-separated targets if multiple roles/users are assigned
+  const targetDivision = (docDivision || "").toString().trim().toUpperCase();
   const targets = cleanTarget.split(",").map((t) => t.trim()).filter(Boolean);
 
   const matchedUsers: any[] = [];
@@ -478,10 +545,11 @@ export function resolvePersonsInRoleForDivision(
 
   targets.forEach((targetItem) => {
     const targetLower = targetItem.toLowerCase();
+    const targetNorm = targetLower.replace(/[^a-z0-9]/g, "");
 
     // 1. Check if targetItem directly matches a specific user (by username, email, employee_id, or name)
-    const directUserMatch = (usersList || []).find((u) => {
-      if (!u) return false;
+    const directUserMatch = (activeUsersList || []).find((u) => {
+      if (!u || u.is_active === false || u.is_deleted) return false;
       const uname = (u.username || "").toString().toLowerCase();
       const uemail = (u.email || "").toString().toLowerCase();
       const empid = (u.employee_id || "").toString().toLowerCase();
@@ -496,24 +564,45 @@ export function resolvePersonsInRoleForDivision(
     });
 
     if (directUserMatch) {
-      const uName = directUserMatch.employee_name || directUserMatch.name || formatAssignedToDisplay(directUserMatch.username || targetItem);
-      matchedUsers.push(directUserMatch);
-      resolvedLabels.push(uName);
+      const uName =
+        directUserMatch.employee_name ||
+        directUserMatch.name ||
+        formatAssignedToDisplay(directUserMatch.username || targetItem);
+      if (!matchedUsers.some((e) => e.id === directUserMatch.id || e.username === directUserMatch.username)) {
+        matchedUsers.push(directUserMatch);
+      }
+      if (!resolvedLabels.includes(uName)) {
+        resolvedLabels.push(uName);
+      }
       return;
     }
 
     // 2. Role-Based Resolution for targetItem
-    const roleMatchingUsers = (usersList || []).filter((u) => {
-      if (!u || u.is_active === false) return false;
+    const roleMatchingUsers = (activeUsersList || []).filter((u) => {
+      if (!u || u.is_active === false || u.is_deleted) return false;
       const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
-      
-      const roleMatches =
+      const uRoleNorm = uRole.replace(/[^a-z0-9]/g, "");
+
+      let roleMatches =
         uRole === targetLower ||
-        uRole.replace(/[^a-z0-9]/g, "_") === targetLower.replace(/[^a-z0-9]/g, "_") ||
+        uRoleNorm === targetNorm ||
         (targetLower === "admin" && ["admin", "administrator", "system_admin", "superadmin"].includes(uRole)) ||
         (targetLower === "manager" && ["manager", "operations_manager", "general_manager"].includes(uRole)) ||
         (targetLower === "ap_specialist" && ["ap_specialist", "ap", "accounts"].includes(uRole)) ||
         (targetLower === "auditor" && ["auditor", "finance_auditor"].includes(uRole));
+
+      if (!roleMatches && uRoleNorm.length >= 4 && targetNorm.length >= 4) {
+        if (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)) {
+          roleMatches = true;
+        } else {
+          const uTokens = uRole.split(/[^a-z0-9]+/);
+          const targetTokens = targetLower.split(/[^a-z0-9]+/);
+          const commonTokens = uTokens.filter((tok) => tok.length >= 3 && targetTokens.includes(tok));
+          if (commonTokens.length >= 2) {
+            roleMatches = true;
+          }
+        }
+      }
 
       if (!roleMatches) return false;
 
@@ -542,14 +631,14 @@ export function resolvePersonsInRoleForDivision(
       });
     } else {
       // Fallback 1: Search users in that role across ANY division
-      const anyDivUsers = (usersList || []).filter((u) => {
-        if (!u || u.is_active === false) return false;
+      const anyDivUsers = (activeUsersList || []).filter((u) => {
+        if (!u || u.is_active === false || u.is_deleted) return false;
         const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
+        const uRoleNorm = uRole.replace(/[^a-z0-9]/g, "");
         return (
           uRole === targetLower ||
-          uRole.replace(/[^a-z0-9]/g, "_") === targetLower.replace(/[^a-z0-9]/g, "_") ||
-          (targetLower === "admin" && ["admin", "administrator", "system_admin", "superadmin"].includes(uRole)) ||
-          (targetLower === "manager" && ["manager", "operations_manager", "general_manager"].includes(uRole))
+          uRoleNorm === targetNorm ||
+          (uRoleNorm.length >= 4 && targetNorm.length >= 4 && (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)))
         );
       });
 
@@ -570,26 +659,40 @@ export function resolvePersonsInRoleForDivision(
     }
   });
 
-  let detectedRole = cleanTarget;
-  if (matchedUsers.length > 0) {
-    const firstUser = matchedUsers[0];
-    const uRole = firstUser.role || firstUser.role_code || firstUser.user_role || firstUser.designation || firstUser.title;
-    if (uRole && typeof uRole === "string" && uRole.trim()) {
-      detectedRole = uRole.trim();
-    }
-  }
-
-  const formattedRoleName = formatAssignedToDisplay(detectedRole);
+  const formattedRoleName = formatAssignedToDisplay(cleanTarget);
   const formattedListText = resolvedLabels.join(", ");
 
+  let displayName = formattedListText;
+  if (matchedUsers.length > 1) {
+    displayName = `${matchedUsers[0].employee_name || matchedUsers[0].name || resolvedLabels[0]} (+${matchedUsers.length - 1})`;
+  } else if (matchedUsers.length === 1) {
+    displayName = matchedUsers[0].employee_name || matchedUsers[0].name || resolvedLabels[0];
+  }
+
+  // Construct hover tooltip
+  let tooltipText = "";
+  if (matchedUsers.length > 0) {
+    if (matchedUsers.length === 1) {
+      const u = matchedUsers[0];
+      tooltipText = `Assigned Member: ${u.employee_name || u.name || u.username} (${u.email || u.username})\nRole: ${formattedRoleName}`;
+    } else {
+      const memberLines = matchedUsers
+        .map((u) => `• ${u.employee_name || u.name || u.username} (${u.email || u.username})`)
+        .join("\n");
+      tooltipText = `Role: ${formattedRoleName} (${matchedUsers.length} Members):\n${memberLines}`;
+    }
+  } else {
+    tooltipText = `Role: ${formattedRoleName} (No active users in role)`;
+  }
+
   return {
-    displayName: formattedListText,
+    displayName,
     roleName: formattedRoleName,
     rawTarget: cleanTarget,
     users: matchedUsers,
-    formattedListText: formattedListText !== formattedRoleName 
-      ? `${formattedListText} (${formattedRoleName})` 
-      : formattedListText,
+    formattedListText,
+    tooltipText,
+    isUnassigned: false,
   };
 }
 

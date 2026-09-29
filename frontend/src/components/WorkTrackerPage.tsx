@@ -7,7 +7,7 @@ import {
   Eye 
 } from "lucide-react";
 import { DbInvoice } from "../types";
-import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, formatAssignedToDisplay } from "../utils/formatters";
+import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, resolvePersonsInRoleForDivision } from "../utils/formatters";
 
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
@@ -39,6 +39,19 @@ export default function WorkTrackerPage({
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [trackerDocs, setTrackerDocs] = useState<DbInvoice[]>([]);
   const [hasLoadedApi, setHasLoadedApi] = useState(false);
+  const [usersList, setUsersList] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    fetch("/api/users", {
+      headers: token ? { "Authorization": `Bearer ${token}` } : {}
+    })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        if (Array.isArray(data)) setUsersList(data);
+      })
+      .catch(() => {});
+  }, []);
 
   // Server-side fetching from dedicated /api/documents/work-tracker endpoint
   const fetchTrackerDocs = React.useCallback(async () => {
@@ -535,19 +548,23 @@ export default function WorkTrackerPage({
 
                 // Helper for Assigned To Badge
                 const renderAssignedToBadge = () => {
-                  const assignedName = formatAssignedToDisplay(doc);
-                  const isUnassigned = assignedName === "Unassigned";
+                  const resolved = resolvePersonsInRoleForDivision(
+                    doc.assigned_approver || (doc as any).assigned_user || (doc as any).assigned_to,
+                    doc.division || (doc as any).branch,
+                    usersList
+                  );
+                  const isUnassigned = resolved.isUnassigned || resolved.displayName === "Unassigned";
 
                   return (
                     <span 
-                      className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium max-w-full truncate ${
+                      className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium max-w-full truncate cursor-help ${
                         isUnassigned 
                           ? "bg-slate-100 text-slate-500 border border-slate-200" 
-                          : "bg-blue-50 text-blue-700 border border-blue-200"
+                          : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
                       }`}
-                      title={assignedName}
+                      title={resolved.tooltipText}
                     >
-                      <span className="truncate">{assignedName}</span>
+                      <span className="truncate">{resolved.displayName}</span>
                     </span>
                   );
                 };
