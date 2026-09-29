@@ -11,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, Request, Body
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, and_, func, extract
 from sqlalchemy.orm import Session
@@ -3251,6 +3251,7 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=D
         raise HTTPException(status_code=400, detail=f"SMTP Error: {str(e)}")
 
 @router.get('/api/admin/notifications/inapp-config')
+@router.get('/api/admin/notifications/inapp-config/')
 def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
     configs = load_app_configs()
     for c in configs:
@@ -3262,7 +3263,18 @@ def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
     return [{'trigger_event': 'PENDING_APPROVAL', 'enabled': True, 'title_template': 'Action Required: {{document_number}}', 'message_template': 'Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.'}, {'trigger_event': 'ASSIGNED', 'enabled': True, 'title_template': 'Task Assigned: {{document_number}}', 'message_template': 'You have been assigned as the reviewer for {{document_number}}.'}, {'trigger_event': 'REJECTED', 'enabled': True, 'title_template': 'Document Rejected: {{document_number}}', 'message_template': 'Document {{document_number}} was rejected during workflow approval.'}, {'trigger_event': 'SENT_BACK', 'enabled': True, 'title_template': 'Document Sent Back: {{document_number}}', 'message_template': 'Document {{document_number}} was returned for clarification.'}, {'trigger_event': 'COMPLETED', 'enabled': True, 'title_template': 'Workflow Completed: {{document_number}}', 'message_template': 'Document {{document_number}} has passed final approval and is ready for payment.'}, {'trigger_event': 'CLARIFICATION', 'enabled': True, 'title_template': 'Clarification Needed: {{document_number}}', 'message_template': 'Please provide clarification for document {{document_number}}.'}]
 
 @router.post('/api/admin/notifications/inapp-config')
-def save_admin_notifications_inapp_config(payload: list, db: Session=Depends(get_db)):
+@router.post('/api/admin/notifications/inapp-config/')
+async def save_admin_notifications_inapp_config(request: Request, db: Session=Depends(get_db)):
+    try:
+        body = await request.json()
+    except Exception:
+        body = []
+    if isinstance(body, dict):
+        payload = body.get('payload', body)
+    else:
+        payload = body
+    if not isinstance(payload, list):
+        payload = [payload] if payload else []
     save_app_config('INAPP_NOTIFICATIONS_CONFIG', json.dumps(payload, ensure_ascii=False), 'In-App Bell Notification Trigger Templates')
     return {'success': True, 'message': 'In-App Notification Configurations saved successfully'}
 
