@@ -49,9 +49,7 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
         return 'ADVANCE VOUCHER'
     elif 'JRNL' in n or 'JOURNAL' in n:
         return 'JOURNAL VOUCHER'
-    elif category and category.strip():
-        return category.strip()
-    return 'General Records'
+    return 'AP INVOICE'
 def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', wf_name: str='') -> str:
     combined = f"{doc_type or ''} {category or ''} {trans_type or ''} {wf_name or ''}".strip().upper()
     if 'CASH VOUCHER' in combined or 'CASH' in combined or 'PETTY' in combined:
@@ -283,20 +281,40 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
     clean_rule_items = [sanitize_text(it) for it in rule_items]
     rule_items_lower = [it.lower() for it in rule_items]
 
+    def _token_words_match(r_items: list, d_val: Any) -> bool:
+        doc_components = [c.strip() for c in str(d_val or '').split(',') if c.strip()]
+        stop_words = {'and', 'or', 'the', 'of', 'in', 'to', 'a', 'an', '&'}
+        for r_item in r_items:
+            r_words = set(re.findall(r'[a-zA-Z0-9]+', str(r_item).lower())) - stop_words
+            for d_item in doc_components:
+                d_words = set(re.findall(r'[a-zA-Z0-9]+', str(d_item).lower())) - stop_words
+                if r_words and d_words:
+                    if d_words.issubset(r_words) or r_words.issubset(d_words) or len(r_words & d_words) >= 2:
+                        return True
+        return False
+
     if op_str in ['equals', '==', '=', 'eq']:
-        return str_doc in rule_items_lower or clean_doc in clean_rule_items or any(clean_doc == cit for cit in clean_rule_items if cit)
+        direct_match = (
+            str_doc in rule_items_lower or 
+            clean_doc in clean_rule_items or 
+            any(clean_doc == cit for cit in clean_rule_items if cit) or
+            any(cit and (cit in clean_doc or clean_doc in cit) for cit in clean_rule_items if cit)
+        )
+        if direct_match:
+            return True
+        return _token_words_match(rule_items, doc_val)
 
     if op_str in ['not equals', '!=', '!==', 'neq', 'not equal']:
-        return str_doc not in rule_items_lower and clean_doc not in clean_rule_items and not any(clean_doc == cit for cit in clean_rule_items if cit)
+        return str_doc not in rule_items_lower and clean_doc not in clean_rule_items and not any(clean_doc == cit for cit in clean_rule_items if cit) and not _token_words_match(rule_items, doc_val)
 
-    if op_str in ['contains', 'contains any of', 'contains any of (or)', 'is one of', 'in', 'in (comma-separated)']:
+    if op_str in ['contains', 'contains any of', 'contains any of (or)', 'is one of', 'in', 'in (comma-separated)', 'like']:
         # Multiple values belonging to ONE field are OR/membership values:
         # Category Contains [A, B, C] -> Category=A OR Category=B OR Category=C
         return any(
             (it and (it in str_doc or str_doc in it)) or
             (cit and (cit in clean_doc or clean_doc in cit))
             for it, cit in zip(rule_items_lower, clean_rule_items)
-        )
+        ) or _token_words_match(rule_items, doc_val)
 
     if op_str in ['does not contain', 'not contains', 'is not one of', 'not in']:
         # True only if NONE of the items match
@@ -334,12 +352,12 @@ def match_condition(rule: Any, document: Any) -> bool:
         clean_field_key = sanitize_text(field)
         if clean_field_key in ['division', 'company', 'companycode', 'div']:
             field_val = get_val(document, 'division') or ''
-        elif clean_field_key in ['costcenter', 'cost_center', 'cc', 'cost_centre', 'costcentre']:
+        elif clean_field_key in ['costcenter', 'cost_center', 'cc', 'cost_centre', 'costcentre', 'cost_center_code', 'cost_center_name']:
             field_val = get_val(document, 'cost_center') or ''
         elif clean_field_key in ['plant', 'branch', 'location', 'plantcode']:
             field_val = get_val(document, 'branch') or get_val(document, 'plant') or ''
-        elif clean_field_key in ['category', 'cat', 'dept', 'department']:
-            field_val = cat_val or inferred_doc_type
+        elif clean_field_key in ['category', 'cat', 'dept', 'department', 'categoryname', 'category_name', 'itemcategory']:
+            field_val = cat_val or get_val(document, 'document_type') or inferred_doc_type
         elif clean_field_key in ['vendorname', 'vendor', 'vendor_name']:
             field_val = get_val(document, 'vendor_name') or ''
         elif clean_field_key in ['documenttype', 'doctype', 'type']:
@@ -362,7 +380,7 @@ def match_condition(rule: Any, document: Any) -> bool:
             field_val = float(get_val(document, 'tax_amount') or 0.0)
         elif clean_field_key in ['invoicedate', 'invoice_date', 'date', 'documentdate', 'docdate']:
             field_val = get_val(document, 'invoice_date') or get_val(document, 'created_at') or ''
-        elif clean_field_key in ['paymentmode', 'paymode', 'payment_mode', 'pay_mode']:
+        elif clean_field_key in ['paymentmode', 'paymode', 'payment_mode', 'pay_mode', 'paymentterms', 'payment_terms', 'payterms', 'paybod', 'paymentbod', 'paymentmethod', 'payment_method']:
             field_val = get_val(document, 'payment_mode') or get_val(document, 'payment_terms') or ''
         elif clean_field_key in ['gstin', 'vendorgstin', 'vendor_gstin']:
             field_val = get_val(document, 'vendor_gstin') or ''

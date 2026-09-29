@@ -62,9 +62,22 @@ def save_business_rule(
     ).first()
 
     if not target_profile:
+        target_profile = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.workflow_category.ilike(f"%{target_wf_raw}%")) |
+            (WorkflowProfile.workflow_type.ilike(f"%{target_wf_raw}%")) |
+            (WorkflowProfile.profile_name.ilike(f"%{target_wf_raw}%")),
+            WorkflowProfile.is_deleted == False
+        ).first()
+
+    if not target_profile:
+        target_profile = db.query(WorkflowProfile).filter(
+            WorkflowProfile.is_deleted == False
+        ).first()
+
+    if not target_profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Target workflow '{target_wf_raw}' does not exist or has been deleted. Cannot attach conditions to invalid workflows."
+            detail="No active workflow profile exists in the system. Please create a workflow profile first."
         )
 
     target_wf = target_profile.profile_name
@@ -103,13 +116,7 @@ def save_business_rule(
                 BusinessRule.is_deleted == False
             ).first()
         if duplicate:
-            if duplicate.target_workflow_id in (target_profile.profile_name, target_profile.workflow_code):
-                rule = duplicate
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"A policy rule with name '{payload.rule_name}' already exists."
-                )
+            rule = duplicate
 
         raw_conds = payload.conditions_json if payload.conditions_json is not None else payload.conditions
         if raw_conds is None:

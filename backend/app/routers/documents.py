@@ -298,16 +298,19 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
         if step_def.delegate_approver and step_def.delegate_approver.strip():
             targets.append(step_def.delegate_approver.strip())
         canonical_target = ', '.join(targets)
-        
-        if inv.assigned_approver != canonical_target:
-            inv.assigned_approver = canonical_target
-            try:
-                db.add(inv)
-                db.commit()
-                db.refresh(inv)
-            except Exception as e:
-                logger.warning(f"Error persisting synced approver: {e}")
-                db.rollback()
+    else:
+        canonical_target = None
+        targets = []
+
+    if canonical_target and inv.assigned_approver != canonical_target:
+        inv.assigned_approver = canonical_target
+        try:
+            db.add(inv)
+            db.commit()
+            db.refresh(inv)
+        except Exception as e:
+            logger.warning(f"Error persisting synced approver: {e}")
+            db.rollback()
 
         # Ensure active row exists in approval_assignments
         try:
@@ -445,7 +448,12 @@ def get_approved_invoices(
         ~Invoice.status.ilike('%awaiting%'),
         ~Invoice.status.ilike('%rejected%'),
         ~Invoice.status.ilike('%cancelled%'),
-        ~Invoice.status.ilike('%hold%')
+        ~Invoice.status.ilike('%hold%'),
+        ~Invoice.document_type.ilike('%feedback%'),
+        ~Invoice.document_type.ilike('%complaint%'),
+        ~Invoice.id.ilike('CMP%'),
+        ~Invoice.id.ilike('CF%'),
+        ~Invoice.workflow_profile_id.ilike('%feedback%')
     )
     query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
 
@@ -2904,7 +2912,29 @@ def get_document_versions(id: str, db: Session=Depends(get_db)):
 @router.get('/api/stats')
 @router.get('/api/dashboard/stats')
 def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
-    invoices = db.query(Invoice).filter(Invoice.is_deleted == False).all()
+    all_invoices = db.query(Invoice).filter(Invoice.is_deleted == False).all()
+
+    # Exclude Customer Feedback records from AP Operations Dashboard stats
+    def is_fb_doc(inv: Invoice) -> bool:
+        if not inv:
+            return False
+        doc_type = (inv.document_type or '').upper()
+        doc_id = str(inv.id or '').upper()
+        doc_num = str(getattr(inv, 'document_number', '') or getattr(inv, 'invoice_number', '') or '').upper()
+        wf_prof = str(inv.workflow_profile_id or '').upper()
+        complaint = getattr(inv, 'type_of_complaint', None) or getattr(inv, 'subtype_of_complaint', None)
+        return (
+            'FEEDBACK' in doc_type or
+            'COMPLAINT' in doc_type or
+            doc_id.startswith('CMP') or
+            doc_id.startswith('CF') or
+            doc_num.startswith('CMP') or
+            doc_num.startswith('CF') or
+            'FEEDBACK' in wf_prof or
+            bool(complaint)
+        )
+
+    invoices = [i for i in all_invoices if not is_fb_doc(i)]
     approved_invoice_ids = set()
     if current_user:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]

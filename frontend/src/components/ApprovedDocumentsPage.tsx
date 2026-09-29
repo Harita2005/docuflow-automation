@@ -217,8 +217,27 @@ export default function ApprovedDocumentsPage({
     setDraftToDate(formatDateForInput(now));
   };
 
+  const isCustomerFeedbackDoc = (d: any) => {
+    if (!d) return false;
+    const rawType = (d.document_type || d.subtype_of_complaint || d.type_of_complaint || d.category || "").toUpperCase();
+    const docIdUpper = String(d.id || "").toUpperCase();
+    const docNumUpper = String(d.document_number || d.invoice_number || "").toUpperCase();
+    const wfProf = String(d.workflow_profile_id || d.workflow_profile || "").toUpperCase();
+    return (
+      rawType.includes("FEEDBACK") ||
+      rawType.includes("COMPLAINT") ||
+      docIdUpper.startsWith("CMP") ||
+      docIdUpper.startsWith("CF") ||
+      docNumUpper.startsWith("CMP") ||
+      docNumUpper.startsWith("CF") ||
+      Boolean(d.type_of_complaint) ||
+      wfProf.includes("FEEDBACK")
+    );
+  };
+
   // Base list helper for in-memory fallback (strictly completely approved documents)
   const isApproved = (doc: DbInvoice): boolean => {
+    if (isCustomerFeedbackDoc(doc)) return false;
     const s = (doc.status || "").toLowerCase().trim();
     if (!s) return false;
     if (s.includes("in progress") || s.includes("pending") || s.includes("rejected") || s.includes("cancelled") || s.includes("hold") || s.includes("stage")) {

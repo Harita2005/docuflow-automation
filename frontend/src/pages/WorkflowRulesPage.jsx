@@ -217,8 +217,9 @@ export default function WorkflowRulesPage() {
         const payload = { ...rule, id: String(rule.id).startsWith('tmp-') ? undefined : rule.id };
         const res = await fetch('/api/admin/routing-rules', { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!res.ok) {
-          const errData = await res.json();
-          alert('Error saving rule ' + rule.rule_name + ': ' + (errData.error || res.statusText));
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.detail || errData.error || res.statusText;
+          alert('Error saving rule ' + rule.rule_name + ': ' + errMsg);
         }
       }
 

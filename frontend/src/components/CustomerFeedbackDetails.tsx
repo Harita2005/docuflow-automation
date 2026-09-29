@@ -589,17 +589,48 @@ export default function CustomerFeedbackDetails({
   const currentStage = activeDoc?.current_stage || 1;
 
   const effectiveSteps = useMemo(() => {
-    if (stepDefinitions.length > 0) return stepDefinitions;
-    const total = activeDoc?.total_stages || Math.max(currentStage, 3);
-    const steps: any[] = [];
-    for (let i = 1; i <= total; i++) {
-      steps.push({
-        stage_number: i,
-        stage_name: `Stage ${i}`,
-      });
+    return stepDefinitions;
+  }, [stepDefinitions]);
+
+  // Extract Hold Action Details & Reviewer Remarks
+  const getHoldDetails = useMemo(() => {
+    if (!activeDoc) return null;
+    const rawReason = (activeDoc as any).hold_reason || activeDoc.remarks || (activeDoc as any).additional_comments;
+    
+    const rawTrail = (activeDoc as any)?.audit_trail;
+    let parsedTrail: any[] = Array.isArray(rawTrail) ? rawTrail : [];
+    if (typeof rawTrail === "string") {
+      try {
+        const parsed = JSON.parse(rawTrail);
+        if (Array.isArray(parsed)) parsedTrail = parsed;
+      } catch {}
     }
-    return steps;
-  }, [stepDefinitions, activeDoc?.total_stages, currentStage]);
+
+    const holdLog = parsedTrail.slice().reverse().find((item: any) => {
+      const act = (item.action || item.event || "").toLowerCase();
+      return act.includes("hold") || act.includes("pause") || act.includes("clarification") || act.includes("sendback");
+    });
+
+    if (rawReason && rawReason !== "Not available" && rawReason !== "null") {
+      return {
+        reason: rawReason,
+        actor: holdLog?.actor || holdLog?.user || "Reviewer",
+        action: holdLog?.action || "Placed on Hold",
+        timestamp: holdLog?.created_at || holdLog?.timestamp || null,
+      };
+    }
+
+    if (holdLog) {
+      return {
+        reason: holdLog.comments || holdLog.details || "Awaiting customer/internal clarification.",
+        actor: holdLog.actor || holdLog.user || "Reviewer",
+        action: holdLog.action || "Placed on Hold",
+        timestamp: holdLog.created_at || holdLog.timestamp || null,
+      };
+    }
+
+    return null;
+  }, [activeDoc]);
 
   // Workflow Handlers: Approve, Hold, Reject
   const handleWorkflowApprove = async () => {
@@ -608,6 +639,31 @@ export default function CustomerFeedbackDetails({
       setActionError("Record is fully approved and locked. No further actions permitted.");
       setTimeout(() => setActionError(null), 4000);
       return;
+    }
+
+    // Auto-verify all checklist items on approval sign-off (e.g. 3/3 Verified)
+    if (checklistItems.length > 0) {
+      const autoCheckedMap: Record<string, boolean> = {};
+      checklistItems.forEach((item) => {
+        autoCheckedMap[item.item_text] = true;
+      });
+      setCheckedStates(autoCheckedMap);
+      setChecklistItems((prev) => prev.map((item) => ({ ...item, is_checked: true })));
+
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        fetch(`/api/invoices/${encodeURIComponent(String(activeDoc.id))}/checklist`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            stage_num: activeDoc?.current_stage || 1,
+            checked_items: Object.keys(autoCheckedMap),
+            username: currentUserUsername || currentUserEmail,
+          }),
+        }).catch(() => {});
+      } catch (e) {}
     }
 
     setActionLoading(true);
@@ -871,7 +927,7 @@ export default function CustomerFeedbackDetails({
     const rawVal = val.trim();
     const isJpgPngJpeg =
       /\.(jpg|jpeg|png)($|\?)/i.test(rawVal) ||
-      /^(https?:\/\/|\/|data:image\/|blob:|[a-z0-9_\-\/.]+\.(jpg|jpeg|png))/i.test(rawVal) ||
+      /^(https?:\/\/|\/|data:image\/|blob:|[a-z0-9_\-/.]+\.(jpg|jpeg|png))/i.test(rawVal) ||
       rawVal.includes("images") ||
       rawVal.includes("photo") ||
       rawVal.startsWith("data:image/");
@@ -1059,6 +1115,26 @@ export default function CustomerFeedbackDetails({
         </button>
       </div>
 
+      {/* 2.5 HOLD REASON & ACTION CALLOUT BANNER */}
+      {getHoldDetails && (statusDisplay.toLowerCase().includes("hold") || (activeDoc?.status || "").toLowerCase().includes("hold") || (activeDoc?.status || "").toLowerCase().includes("pause")) && (
+        <div className="bg-purple-50/90 border-2 border-purple-300 rounded-xl p-2.5 shadow-2xs flex items-start gap-2.5 text-purple-950 animate-fadeIn">
+          <AlertCircle className="h-4.5 w-4.5 text-purple-700 shrink-0 mt-0.5" />
+          <div className="space-y-0.5 flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-900 bg-purple-200/80 px-2 py-0.5 rounded border border-purple-300">
+                HOLD ACTION: {getHoldDetails.action}
+              </span>
+              <span className="text-[10px] font-bold text-purple-800">
+                Logged By: {getHoldDetails.actor}
+              </span>
+            </div>
+            <p className="text-xs font-bold text-purple-950 leading-snug mt-1">
+              Reviewer Hold Remark: <span className="font-semibold text-purple-900">{getHoldDetails.reason}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 3. COMPACT 2-COLUMN SINGLE PAGE FIT GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-stretch">
         
@@ -1171,21 +1247,40 @@ export default function CustomerFeedbackDetails({
             </div>
 
             <div className="pt-0.5">
-              <div className="text-[8.5px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1">
-                <ImageIcon className="h-2.5 w-2.5 text-emerald-700" />
-                <span>Feedback Image Attachments</span>
+              <div className="text-[8.5px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1 justify-between">
+                <div className="flex items-center gap-1">
+                  <ImageIcon className="h-2.5 w-2.5 text-emerald-700" />
+                  <span>Feedback Image Attachments</span>
+                </div>
+                {activeImageFields.length > 0 && (
+                  <span className="text-[8px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                    {activeImageFields.length} {activeImageFields.length === 1 ? "Attachment" : "Attachments"}
+                  </span>
+                )}
               </div>
-              <div className="grid grid-cols-5 gap-1">
-                {imageFields.map((img) => (
-                  <div
-                    key={img.key}
-                    className="bg-slate-50/80 px-1.5 py-1 rounded-lg border border-slate-200/70 flex flex-col items-center text-center justify-center"
-                  >
-                    <span className="text-[8px] font-extrabold uppercase text-slate-500 mb-0.5">{img.label}</span>
-                    {renderImageFieldContent(img.key, img.value)}
-                  </div>
-                ))}
-              </div>
+              {activeImageFields.length > 0 ? (
+                <div className={`grid gap-1.5 ${
+                  activeImageFields.length === 1 ? "grid-cols-1" :
+                  activeImageFields.length === 2 ? "grid-cols-2" :
+                  activeImageFields.length === 3 ? "grid-cols-3" :
+                  activeImageFields.length === 4 ? "grid-cols-4" : "grid-cols-5"
+                }`}>
+                  {activeImageFields.map((img) => (
+                    <div
+                      key={img.key}
+                      className="bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-200/70 flex items-center justify-between gap-2"
+                    >
+                      <span className="text-[9px] font-extrabold uppercase text-slate-600">{img.label}</span>
+                      {renderImageFieldContent(img.key, img.value)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-200/70 text-slate-400 text-[10px] font-normal italic flex items-center gap-1.5">
+                  <ImageIcon className="h-3 w-3 text-slate-400" />
+                  <span>No image attachments provided for this ticket.</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1227,11 +1322,11 @@ export default function CustomerFeedbackDetails({
                   </span>
                   {checklistItems.length > 0 && (
                     <span className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded-full border ${
-                      checklistItems.every(i => checkedStates[i.item_text])
+                      isDocApproved || checklistItems.every(i => checkedStates[i.item_text])
                         ? "bg-emerald-100 text-emerald-900 border-emerald-300"
                         : "bg-amber-100 text-amber-900 border-amber-300"
                     }`}>
-                      {checklistItems.filter(i => checkedStates[i.item_text]).length} / {checklistItems.length} Verified
+                      {isDocApproved ? checklistItems.length : checklistItems.filter(i => checkedStates[i.item_text]).length} / {checklistItems.length} Verified
                     </span>
                   )}
                 </div>
@@ -1259,7 +1354,7 @@ export default function CustomerFeedbackDetails({
                 <div className="space-y-1 max-h-[150px] overflow-y-auto custom-scrollbar pr-0.5">
                   {checklistItems.map((item, idx) => {
                     const itemText = item.item_text;
-                    const isChecked = !!checkedStates[itemText];
+                    const isChecked = isDocApproved || !!checkedStates[itemText];
                     return (
                       <div
                         key={item.id || idx}
@@ -1637,16 +1732,16 @@ export default function CustomerFeedbackDetails({
       {/* ========================================================= */}
       {previewImageModal && (
         <div
-          className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn overflow-hidden"
           onClick={() => setPreviewImageModal(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-fit max-w-[90vw] max-h-[82vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-[#003F28] text-white px-4 py-2.5 flex items-center justify-between shadow-sm shrink-0">
-              <div className="flex items-center gap-2 min-w-0 pr-2">
+            <div className="bg-[#003F28] text-white px-3.5 py-2 flex items-center justify-between gap-4 shadow-sm shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="p-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
                   <ImageIcon className="h-4 w-4" />
                 </div>
@@ -1654,9 +1749,6 @@ export default function CustomerFeedbackDetails({
                   <h3 className="font-extrabold text-xs text-white flex items-center gap-2 truncate">
                     <span>{previewImageModal.title ? previewImageModal.title.toUpperCase().replace(/_/g, " ") : "IMAGE PREVIEW"}</span>
                   </h3>
-                  <p className="text-[9.5px] text-emerald-200 font-mono truncate max-w-sm" title={previewImageModal.url}>
-                    {previewImageModal.url}
-                  </p>
                 </div>
               </div>
 
@@ -1671,7 +1763,7 @@ export default function CustomerFeedbackDetails({
                   >
                     <ZoomOut className="h-3 w-3" />
                   </button>
-                  <span className="px-1.5 font-mono text-[10px] text-emerald-200 min-w-[36px] text-center font-bold">
+                  <span className="px-1 font-mono text-[10px] text-emerald-200 min-w-[32px] text-center font-bold">
                     {Math.round(imageZoom * 100)}%
                   </span>
                   <button
@@ -1723,8 +1815,8 @@ export default function CustomerFeedbackDetails({
               </div>
             </div>
 
-            {/* Modal Content - Display Image */}
-            <div className="flex-1 bg-slate-950/90 p-3 flex items-center justify-center overflow-auto min-h-[320px] relative select-none">
+            {/* Modal Content - Dynamic Aspect-Ratio Fitted Display Image */}
+            <div className="flex-1 min-h-0 bg-slate-950/95 p-2 flex items-center justify-center overflow-hidden relative select-none">
               {imageLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-10 text-slate-300 gap-2">
                   <RotateCw className="h-4 w-4 animate-spin text-emerald-400" />
@@ -1749,7 +1841,7 @@ export default function CustomerFeedbackDetails({
                 </div>
               ) : (
                 <div
-                  className="transition-transform duration-150 ease-out flex items-center justify-center"
+                  className="transition-transform duration-150 ease-out flex items-center justify-center max-h-full max-w-full"
                   style={{
                     transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
                     transformOrigin: "center center",
@@ -1763,21 +1855,21 @@ export default function CustomerFeedbackDetails({
                       setImageLoading(false);
                       setImageError(true);
                     }}
-                    className="max-h-[60vh] max-w-full object-contain rounded shadow-lg border border-slate-800/80 bg-slate-900/50"
+                    className="max-h-[60vh] max-w-[80vw] object-contain rounded shadow-lg border border-slate-800/80 bg-slate-900/50 block"
                   />
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
-              <span className="text-[10px] text-slate-500 font-medium">
-                Use controls to zoom/rotate image &bull; Press <kbd className="px-1 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[9px] border border-slate-300">Esc</kbd> or click outside to close
+            <div className="bg-slate-50 border-t border-slate-200 px-3.5 py-1.5 flex items-center justify-between gap-4 shrink-0">
+              <span className="text-[9.5px] text-slate-500 font-medium truncate">
+                Press <kbd className="px-1 py-0.2 rounded bg-slate-200 text-slate-700 font-mono text-[8.5px] border border-slate-300">Esc</kbd> to close
               </span>
               <button
                 type="button"
                 onClick={() => setPreviewImageModal(null)}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-800 text-white rounded-md text-xs font-semibold transition cursor-pointer"
+                className="px-3 py-1 bg-slate-700 hover:bg-slate-800 text-white rounded-md text-xs font-semibold transition cursor-pointer shrink-0"
               >
                 Close
               </button>

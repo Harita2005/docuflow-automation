@@ -3,7 +3,7 @@ import datetime
 import json
 import re
 import urllib.parse
-from typing import List
+from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.auth import get_current_active_user
@@ -40,12 +40,32 @@ def format_step_with_checklist(db: Session, step: WorkflowStepDefinition, profil
     return {'stage_number': step.stage_number, 'step_name': step.step_name, 'approver_type': step.approver_type, 'approver_target': step.approver_target, 'delegate_approver': step.delegate_approver, 'document_type': step.document_type, 'action_required': step.action_required, 'permissions': step.permissions, 'sla_hours': step.sla_hours, 'checklist_items': items, 'checklist_json': json.dumps(items)}
 
 def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
-    """Ensures every workflow profile has a standardized WF-XXX numeric code (e.g. WF-001, WF-002)."""
+    """Ensures every workflow profile has a standardized, unique WF-XXX numeric code (e.g. WF-001, WF-002)."""
     if p.workflow_code and str(p.workflow_code).strip() and re.match('^(WF|CAPEX|PUR|SRV|FRT|UTL|EXP|GRN|ADV|CSH|EV|JRNL|CN|DN)-\\d{3,5}$', str(p.workflow_code).strip(), re.IGNORECASE):
-        return str(p.workflow_code).strip()
+        if db:
+            dup = db.query(WorkflowProfile).filter(
+                WorkflowProfile.workflow_code == str(p.workflow_code).strip(),
+                WorkflowProfile.profile_name != p.profile_name,
+                WorkflowProfile.is_deleted == False
+            ).first()
+            if not dup:
+                return str(p.workflow_code).strip()
+        else:
+            return str(p.workflow_code).strip()
+
     if db:
-        total = db.query(WorkflowProfile).count()
-        code = f'WF-{str(total + 1).zfill(3)}'
+        existing_codes = db.query(WorkflowProfile.workflow_code).filter(WorkflowProfile.workflow_code.isnot(None)).all()
+        nums = []
+        for (c,) in existing_codes:
+            if c:
+                m = re.search(r'(\d+)', str(c))
+                if m:
+                    try:
+                        nums.append(int(m.group(1)))
+                    except ValueError:
+                        pass
+        next_num = (max(nums) + 1) if nums else 1
+        code = f'WF-{str(next_num).zfill(3)}'
     else:
         code_id = p.id if p.id else abs(hash(p.profile_name or 'WF'))
         code = f'WF-{str(code_id % 999 + 1).zfill(3)}'
@@ -125,10 +145,51 @@ def save_workflow_profile(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access Denied: Missing required permission 'workflow:write'."
         )
+    if not payload.profile_name or not str(payload.profile_name).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workflow profile name is required."
+        )
+
+    prof_name = str(payload.profile_name).strip()
     try:
-        existing = db.query(WorkflowProfile).filter(WorkflowProfile.profile_name == payload.profile_name).filter(WorkflowProfile.is_deleted == False).first()
+        existing = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.profile_name == prof_name) | (WorkflowProfile.profile_name.ilike(prof_name))
+        ).first()
+
+        wf_code = str(payload.workflow_code or '').strip()
+        if not wf_code:
+            existing_codes = db.query(WorkflowProfile.workflow_code).filter(WorkflowProfile.workflow_code.isnot(None)).all()
+            nums = []
+            for (c,) in existing_codes:
+                if c:
+                    m = re.search(r'(\d+)', str(c))
+                    if m:
+                        try:
+                            nums.append(int(m.group(1)))
+                        except ValueError:
+                            pass
+            next_num = (max(nums) + 1) if nums else 1
+            wf_code = f'WF-{str(next_num).zfill(3)}'
+
+        def _stringify_cond(val: Any) -> Optional[str]:
+            if val is None:
+                return None
+            if isinstance(val, (dict, list)):
+                return json.dumps(val)
+            s = str(val).strip()
+            return s if s else None
+
+        auto_app_cond = _stringify_cond(payload.auto_approve_condition)
+        auto_can_cond = _stringify_cond(payload.auto_cancel_condition)
+        auto_app_flag = bool(payload.auto_approve_enabled)
+        auto_can_flag = bool(payload.auto_cancel_enabled)
+        auto_esc_flag = bool(payload.auto_escalation)
+
         if existing:
-            existing.workflow_code = payload.workflow_code
+            existing.is_deleted = False
+            existing.deleted_at = None
+            existing.workflow_code = wf_code
             existing.workflow_category = payload.workflow_category
             existing.workflow_type = payload.workflow_type
             existing.description = payload.description
@@ -137,48 +198,107 @@ def save_workflow_profile(
             existing.rejection_handling = payload.rejection_handling
             existing.reminder_interval_hours = payload.reminder_interval_hours
             existing.escalation_after_hours = payload.escalation_after_hours
-            existing.auto_escalation = payload.auto_escalation
+            existing.auto_escalation = auto_esc_flag
             existing.rule_action = payload.rule_action or 'WORKFLOW_ROUTE'
             existing.cancel_reason = payload.cancel_reason
-            existing.auto_approve_enabled = payload.auto_approve_enabled or False
-            existing.auto_approve_condition = payload.auto_approve_condition
-            existing.auto_cancel_enabled = payload.auto_cancel_enabled or False
-            existing.auto_cancel_condition = payload.auto_cancel_condition
+            existing.auto_approve_enabled = auto_app_flag
+            existing.auto_approve_condition = auto_app_cond
+            existing.auto_cancel_enabled = auto_can_flag
+            existing.auto_cancel_condition = auto_can_cond
             db.flush()
         else:
-            existing = WorkflowProfile(profile_name=payload.profile_name, workflow_code=payload.workflow_code, workflow_category=payload.workflow_category, workflow_type=payload.workflow_type, description=payload.description, status=payload.status, approval_threshold=payload.approval_threshold, rejection_handling=payload.rejection_handling, reminder_interval_hours=payload.reminder_interval_hours, escalation_after_hours=payload.escalation_after_hours, auto_escalation=payload.auto_escalation, rule_action=payload.rule_action or 'WORKFLOW_ROUTE', cancel_reason=payload.cancel_reason, auto_approve_enabled=payload.auto_approve_enabled or False, auto_approve_condition=payload.auto_approve_condition, auto_cancel_enabled=payload.auto_cancel_enabled or False, auto_cancel_condition=payload.auto_cancel_condition)
+            existing = WorkflowProfile(
+                profile_name=prof_name,
+                workflow_code=wf_code,
+                workflow_category=payload.workflow_category,
+                workflow_type=payload.workflow_type,
+                description=payload.description,
+                status=payload.status,
+                approval_threshold=payload.approval_threshold,
+                rejection_handling=payload.rejection_handling,
+                reminder_interval_hours=payload.reminder_interval_hours,
+                escalation_after_hours=payload.escalation_after_hours,
+                auto_escalation=auto_esc_flag,
+                rule_action=payload.rule_action or 'WORKFLOW_ROUTE',
+                cancel_reason=payload.cancel_reason,
+                auto_approve_enabled=auto_app_flag,
+                auto_approve_condition=auto_app_cond,
+                auto_cancel_enabled=auto_can_flag,
+                auto_cancel_condition=auto_can_cond
+            )
             db.add(existing)
             db.flush()
-        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == payload.profile_name).delete(synchronize_session='fetch')
-        db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == payload.profile_name).delete(synchronize_session='fetch')
-        for step in payload.steps:
-            new_step = WorkflowStepDefinition(profile_name=payload.profile_name, stage_number=step.stage_number, step_name=step.step_name, approver_type=step.approver_type, approver_target=step.approver_target, delegate_approver=step.delegate_approver, document_type=step.document_type, action_required=step.action_required, permissions=step.permissions, sla_hours=step.sla_hours, checklist_json=json.dumps(step.checklist_items) if step.checklist_items else None)
+
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == prof_name).delete(synchronize_session=False)
+        db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == prof_name).delete(synchronize_session=False)
+        
+        for idx, step in enumerate(payload.steps):
+            chk_items = getattr(step, 'checklist_items', None)
+            chk_json = getattr(step, 'checklist_json', None)
+            if isinstance(chk_items, (list, dict)):
+                final_chk_str = json.dumps(chk_items)
+            elif isinstance(chk_json, (list, dict)):
+                final_chk_str = json.dumps(chk_json)
+            elif chk_items:
+                final_chk_str = str(chk_items)
+            elif chk_json:
+                final_chk_str = str(chk_json)
+            else:
+                final_chk_str = None
+
+            stg_num = int(step.stage_number) if step.stage_number is not None else (idx + 1)
+            new_step = WorkflowStepDefinition(
+                profile_name=prof_name,
+                stage_number=stg_num,
+                step_name=step.step_name or f'Stage {stg_num}',
+                approver_type=step.approver_type or 'Role',
+                approver_target=step.approver_target,
+                delegate_approver=step.delegate_approver,
+                document_type=step.document_type or payload.workflow_type or 'AP INVOICE',
+                action_required=step.action_required or 'Approve / Reject',
+                permissions=step.permissions or 'Standard',
+                sla_hours=int(step.sla_hours or 24),
+                checklist_json=final_chk_str
+            )
             db.add(new_step)
-            if step.checklist_items:
-                for item_text in step.checklist_items:
-                    chk = ChecklistTemplate(workflow_profile=payload.profile_name, stage_name=step.step_name or f'Stage {step.stage_number}', item_text=item_text, is_mandatory=True)
-                    db.add(chk)
+            
+            if isinstance(chk_items, list) and chk_items:
+                for item_text in chk_items:
+                    if item_text and str(item_text).strip():
+                        chk = ChecklistTemplate(
+                            workflow_profile=prof_name,
+                            stage_name=step.step_name or f'Stage {stg_num}',
+                            item_text=str(item_text).strip(),
+                            is_mandatory=True
+                        )
+                        db.add(chk)
+
             # Immediately synchronize all active documents assigned to this workflow at this stage
-            if step.approver_target and step.approver_target.strip():
-                targets = [step.approver_target.strip()]
-                if step.delegate_approver and step.delegate_approver.strip():
-                    targets.append(step.delegate_approver.strip())
-                target_str = ', '.join(targets)
-                db.query(Invoice).filter(
-                    (Invoice.workflow_profile_id == payload.profile_name) |
-                    (Invoice.workflow_profile_id.ilike(payload.profile_name.strip())),
-                    Invoice.current_stage == step.stage_number,
-                    Invoice.status.notin_(['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed'])
-                ).update({
-                    Invoice.assigned_approver: target_str,
-                    Invoice.updated_at: datetime.datetime.utcnow()
-                }, synchronize_session=False)
+            try:
+                if step.approver_target and str(step.approver_target).strip():
+                    targets = [str(step.approver_target).strip()]
+                    if step.delegate_approver and str(step.delegate_approver).strip():
+                        targets.append(str(step.delegate_approver).strip())
+                    target_str = ', '.join(targets)
+                    db.query(Invoice).filter(
+                        (Invoice.workflow_profile_id == prof_name) |
+                        (Invoice.workflow_profile_id.ilike(prof_name)),
+                        Invoice.current_stage == stg_num,
+                        Invoice.status.notin_(['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed'])
+                    ).update({
+                        Invoice.assigned_approver: target_str,
+                        Invoice.updated_at: datetime.datetime.utcnow()
+                    }, synchronize_session=False)
+            except Exception as sync_exc:
+                logger.warning("[save_workflow_profile] Active invoice sync skipped: %s", sync_exc)
+
         db.commit()
         db.refresh(existing)
         wf_code = ensure_workflow_code(existing, db)
-        return {'success': True, 'id': existing.id, 'profile_name': payload.profile_name, 'workflow_code': wf_code}
+        return {'success': True, 'id': existing.id, 'profile_name': existing.profile_name, 'workflow_code': wf_code}
     except Exception as e:
-        logger.debug('Handled exception: %s', e)
+        db.rollback()
+        logger.exception("[save_workflow_profile] Exception saving workflow profile: %s", e)
         raise HTTPException(status_code=500, detail=f'Database error while saving workflow: {str(e)}')
 
 @router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
@@ -214,15 +334,31 @@ def delete_category_endpoint(
         )
     raw_name = category_name.strip()
     decoded = urllib.parse.unquote(raw_name)
-    profiles = db.query(WorkflowProfile).filter((WorkflowProfile.workflow_category == raw_name) | (WorkflowProfile.workflow_category == decoded) | WorkflowProfile.workflow_category.ilike(raw_name) | WorkflowProfile.workflow_category.ilike(decoded)).filter(WorkflowProfile.is_deleted == False).all()
+    profiles = db.query(WorkflowProfile).filter(
+        (WorkflowProfile.workflow_category == raw_name) |
+        (WorkflowProfile.workflow_category == decoded) |
+        (WorkflowProfile.workflow_category.ilike(raw_name)) |
+        (WorkflowProfile.workflow_category.ilike(decoded))
+    ).all()
+    
     for p in profiles:
-        p.is_deleted = True
-        p.deleted_at = datetime.datetime.utcnow()
+        prof_name = p.profile_name
+        wf_code = p.workflow_code
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == prof_name).delete(synchronize_session=False)
+        db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == prof_name).delete(synchronize_session=False)
         db.query(BusinessRule).filter(
-            (BusinessRule.target_workflow_id == p.profile_name) |
-            (BusinessRule.target_workflow_id == p.workflow_code)
-        ).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
-    db.query(BusinessRule).filter((BusinessRule.rule_category == raw_name) | (BusinessRule.rule_category == decoded) | BusinessRule.rule_category.ilike(raw_name) | BusinessRule.rule_category.ilike(decoded)).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
+            (BusinessRule.target_workflow_id == prof_name) |
+            (BusinessRule.target_workflow_id == wf_code)
+        ).delete(synchronize_session=False)
+        db.delete(p)
+
+    db.query(BusinessRule).filter(
+        (BusinessRule.rule_category == raw_name) |
+        (BusinessRule.rule_category == decoded) |
+        (BusinessRule.rule_category.ilike(raw_name)) |
+        (BusinessRule.rule_category.ilike(decoded))
+    ).delete(synchronize_session=False)
+
     db.commit()
     return {'success': True, 'category': decoded, 'deleted_workflows': len(profiles)}
 
@@ -249,13 +385,18 @@ def delete_workflow_profile(
         (WorkflowProfile.workflow_code == raw_name) |
         (WorkflowProfile.workflow_code == decoded)
     ).all()
+
     for p in profiles:
-        p.is_deleted = True
-        p.deleted_at = datetime.datetime.utcnow()
+        prof_name = p.profile_name
+        wf_code = p.workflow_code
+        db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == prof_name).delete(synchronize_session=False)
+        db.query(ChecklistTemplate).filter(ChecklistTemplate.workflow_profile == prof_name).delete(synchronize_session=False)
         db.query(BusinessRule).filter(
-            (BusinessRule.target_workflow_id == p.profile_name) |
-            (BusinessRule.target_workflow_id == p.workflow_code)
-        ).update({'is_deleted': True, 'deleted_at': datetime.datetime.utcnow()}, synchronize_session='fetch')
+            (BusinessRule.target_workflow_id == prof_name) |
+            (BusinessRule.target_workflow_id == wf_code)
+        ).delete(synchronize_session=False)
+        db.delete(p)
+
     db.commit()
     return {'success': True, 'deleted': profile_name}
 

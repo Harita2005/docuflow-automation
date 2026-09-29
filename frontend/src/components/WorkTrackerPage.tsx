@@ -167,6 +167,7 @@ export default function WorkTrackerPage({
 
   // Terminal / Approved check: Work Tracker must NEVER display approved or terminal documents
   const isTerminalOrApproved = (doc: DbInvoice) => {
+    if (!doc) return true;
     const st = (doc.status || "").toLowerCase().trim();
     const cs = (String(doc.current_stage || "")).toLowerCase().trim();
     return (
@@ -175,8 +176,11 @@ export default function WorkTrackerPage({
       st.includes("settled") ||
       st.includes("paid") ||
       st.includes("ready for payment") ||
+      st.includes("ready_for_payment") ||
       st.includes("cancelled") ||
       st.includes("failed") ||
+      st.includes("rejected") ||
+      st.includes("completed") ||
       cs.includes("approved")
     );
   };
@@ -189,9 +193,27 @@ export default function WorkTrackerPage({
 
   const sourceDocs = hasLoadedApi ? trackerDocs : documents;
 
+  const isCustomerFeedbackDoc = (d: any) => {
+    if (!d) return false;
+    const rawType = (d.document_type || d.subtype_of_complaint || d.type_of_complaint || d.category || "").toUpperCase();
+    const docIdUpper = String(d.id || "").toUpperCase();
+    const docNumUpper = String(d.document_number || d.invoice_number || "").toUpperCase();
+    const wfProf = String(d.workflow_profile_id || d.workflow_profile || "").toUpperCase();
+    return (
+      rawType.includes("FEEDBACK") ||
+      rawType.includes("COMPLAINT") ||
+      docIdUpper.startsWith("CMP") ||
+      docIdUpper.startsWith("CF") ||
+      docNumUpper.startsWith("CMP") ||
+      docNumUpper.startsWith("CF") ||
+      Boolean(d.type_of_complaint) ||
+      wfProf.includes("FEEDBACK")
+    );
+  };
+
   // Work Tracker strictly scopes documents: only active, in-progress documents (non-terminal)
   const visibleDocs = useMemo(() => {
-    const activeDocs = sourceDocs.filter(doc => !isTerminalOrApproved(doc));
+    const activeDocs = sourceDocs.filter(doc => !isTerminalOrApproved(doc) && !isCustomerFeedbackDoc(doc));
     const isAdmin = currentUserRole === "admin" || currentUserRole === "system_admin" || currentUserRole === "superadmin";
     if (isAdmin) return activeDocs;
     if (hasLoadedApi) return activeDocs;
@@ -300,7 +322,7 @@ export default function WorkTrackerPage({
       // Time / Date filter
       if (!matchesTimeFilter(doc)) return false;
 
-      // Search filter
+      // Comprehensive Search filter across all visible document fields
       const search = searchTerm.toLowerCase().trim();
       if (!search) return true;
 
@@ -309,8 +331,28 @@ export default function WorkTrackerPage({
       const trackId = (doc.tracking_id || "").toLowerCase();
       const id = String(doc.id || "").toLowerCase();
       const po = (doc.po_number || "").toLowerCase();
+      const cat = (doc.category || "").toLowerCase();
+      const cc = (doc.cost_center || "").toLowerCase();
+      const plant = (doc.plant || doc.branch || "").toLowerCase();
+      const div = (doc.division || "").toLowerCase();
+      const dt = (doc.document_type || "").toLowerCase();
+      const appr = (doc.assigned_approver || "").toLowerCase();
+      const amt = String(doc.amount || "");
 
-      return vendor.includes(search) || invNum.includes(search) || trackId.includes(search) || id.includes(search) || po.includes(search);
+      return (
+        vendor.includes(search) ||
+        invNum.includes(search) ||
+        trackId.includes(search) ||
+        id.includes(search) ||
+        po.includes(search) ||
+        cat.includes(search) ||
+        cc.includes(search) ||
+        plant.includes(search) ||
+        div.includes(search) ||
+        dt.includes(search) ||
+        appr.includes(search) ||
+        amt.includes(search)
+      );
     });
 
     // Sorting

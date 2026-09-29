@@ -301,7 +301,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
 
-  // Helper functions for the redesigned Users and Roles lists
   const filteredUsers = users.filter(u => {
     const matchesSearch = 
       (u.name || "").toLowerCase().includes(search.toLowerCase()) || 
@@ -312,6 +311,16 @@ export default function AdminRBAC({ onRefreshSignal }) {
     const uRole = (u.role || "").toLowerCase();
     const filterRole = roleFilter.toLowerCase();
     return uRole === filterRole && matchesSearch;
+  });
+
+  const filteredRoles = roles.filter(r => {
+    if (!search || !search.trim()) return true;
+    const term = search.toLowerCase().trim();
+    const rName = (r.name || "").toLowerCase();
+    const rBadge = (r.badge || "").toLowerCase();
+    const rCode = (r.code || "").toLowerCase();
+    const rId = (r.id || "").toLowerCase();
+    return rName.includes(term) || rBadge.includes(term) || rCode.includes(term) || rId.includes(term);
   });
 
   const getAvatarColor = (name = "") => {
@@ -1263,7 +1272,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
               }`}
             >
               <Shield className="h-3.5 w-3.5" />
-              <span>By Roles ({roles.length})</span>
+              <span>By Roles ({filteredRoles.length})</span>
             </button>
             <button
               type="button"
@@ -1273,7 +1282,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
               }`}
             >
               <Users className="h-3.5 w-3.5" />
-              <span>By Users ({users.length})</span>
+              <span>By Users ({filteredUsers.length})</span>
             </button>
           </div>
 
@@ -1388,7 +1397,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
-                  {roles.map(r => {
+                  {filteredRoles.map(r => {
                     const rIdStr = String(r.id || '').trim().toLowerCase();
                     const rCodeStr = String(r.code || '').trim().toLowerCase();
                     const rNameStr = String(r.name || '').trim().toLowerCase();

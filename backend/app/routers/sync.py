@@ -262,7 +262,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
             db.execute(text("\n                INSERT INTO integration.source_records (source_system_id, sync_run_id, external_record_key, payload_json, status, ingested_at)\n                VALUES (:sys_id, :run_id, :key, :payload, 'RECEIVED', SYSUTCDATETIME())\n            "), {'sys_id': sys_id, 'run_id': run_id, 'key': idempotency_key, 'payload': raw_payload})
             rec_row_new = db.execute(text('SELECT source_record_id FROM integration.source_records WHERE source_system_id = :sys_id AND external_record_key = :key'), {'sys_id': sys_id, 'key': idempotency_key}).fetchone()
             source_rec_id = rec_row_new[0] if rec_row_new else 1
-        doc_type_code = req.document_type or req.category or 'General Records'
+        doc_type_code = req.document_type or 'AP INVOICE'
         db.execute(text('\n            IF NOT EXISTS (SELECT 1 FROM core.document_types WHERE type_code = :code)\n            BEGIN\n                INSERT INTO core.document_types (type_code, type_name, is_active, created_at)\n                VALUES (:code, :name, 1, SYSUTCDATETIME())\n            END\n        '), {'code': doc_type_code, 'name': f'Document Type {doc_type_code}'})
         type_row = db.execute(text('SELECT document_type_id FROM core.document_types WHERE type_code = :code'), {'code': doc_type_code}).fetchone()
         doc_type_id = type_row[0] if type_row else 1
@@ -431,7 +431,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         doc_type_pref = get_doc_type_prefix(doc_type=req.document_type or '', category=req.category or '')
         doc_id = generate_document_id(db, doc_type=req.document_type or '', category=req.category or '')
         timestamp = int(datetime.datetime.utcnow().timestamp())
-        effective_doc_type = req.document_type or req.category or 'General Records'
+        effective_doc_type = req.document_type or 'AP INVOICE'
         new_inv = Invoice(
             id=doc_id,
             doc_key=str(req.doc_key) if req.doc_key is not None else None,

@@ -20,6 +20,7 @@ import {
   Layers,
   ShieldCheck,
   CheckCheck,
+  X,
 } from "lucide-react";
 import { DbInvoice } from "../types";
 import { formatDocNumber, formatDate, formatDateTime, getCanonicalDocumentType } from "../utils/formatters";
@@ -45,7 +46,7 @@ export default function CustomerFeedbackPage({
   onRefreshDocs,
 }: CustomerFeedbackPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED">("PENDING");
   const [viewMode, setViewMode] = useState<"TRACKER" | "REGISTRY">("TRACKER");
   const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
 
@@ -160,50 +161,72 @@ export default function CustomerFeedbackPage({
   return (
     <div className="w-full space-y-3 pb-8 animate-fadeIn font-sans text-slate-800">
       
-      {/* 1. TOP HEADER & VIEW MODE SWITCHER */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-[#003F28] text-white flex items-center justify-center shadow-md shrink-0">
-            <MessageSquare className="h-5 w-5 text-emerald-300" />
+      {/* 1. TOP HEADER WITH INTEGRATED SEARCH & VIEW MODE SWITCHER */}
+      <div className="bg-white rounded-xl border border-slate-200/80 px-3 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-[#003F28] text-white flex items-center justify-center shadow-xs shrink-0">
+            <MessageSquare className="h-4 w-4 text-emerald-300" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5 leading-tight">
               <span>Customer Feedback Hub</span>
-              <span className="text-xs bg-emerald-100 text-emerald-900 font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">
+              <span className="text-[10px] bg-emerald-100 text-emerald-900 font-extrabold px-1.5 py-0.25 rounded-full border border-emerald-200">
                 {totalCount} RECORDS
               </span>
             </h1>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-[11px] text-slate-500 font-medium leading-tight">
               Track customer complaint lifecycle, workflow stages, and physical document evidence.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[240px]">
+          {/* Top Search Input */}
+          <div className="relative flex-1 max-w-xs min-w-[180px]">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search complaint ID, account, dealer..."
+              className="w-full pl-8 pr-7 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                title="Clear Search"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
           {/* View Mode Toggle: Work Tracker vs Registry */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
             <button
               type="button"
               onClick={() => setViewMode("TRACKER")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-extrabold transition cursor-pointer ${
                 viewMode === "TRACKER"
-                  ? "bg-[#003F28] text-white shadow-xs"
+                  ? "bg-[#003F28] text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
               }`}
             >
-              <Kanban className="h-3.5 w-3.5" />
+              <Kanban className="h-3 w-3" />
               <span>Work Tracker</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("REGISTRY")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-extrabold transition cursor-pointer ${
                 viewMode === "REGISTRY"
-                  ? "bg-[#003F28] text-white shadow-xs"
+                  ? "bg-[#003F28] text-white shadow-2xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
               }`}
             >
-              <ListFilter className="h-3.5 w-3.5" />
+              <ListFilter className="h-3 w-3" />
               <span>Registry Table</span>
             </button>
           </div>
@@ -212,10 +235,10 @@ export default function CustomerFeedbackPage({
             <button
               type="button"
               onClick={onRefreshDocs}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-extrabold transition cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-extrabold transition cursor-pointer shadow-2xs"
               title="Refresh Records"
             >
-              <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
+              <RefreshCw className="h-3 w-3 text-slate-500" />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           )}
@@ -223,120 +246,80 @@ export default function CustomerFeedbackPage({
       </div>
 
       {/* 2. FEEDBACK STAT STRIP (5 CARDS: PENDING REVIEW, IN PROGRESS, ON HOLD, REJECTED, CLEARED / RESOLVED) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <div 
-          onClick={() => setStatusFilter("PENDING")}
-          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          onClick={() => setStatusFilter(statusFilter === "PENDING" ? "ALL" : "PENDING")}
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "PENDING" ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20" : "border-slate-200 hover:border-amber-400"
           }`}
         >
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800">PENDING REVIEW</span>
-            <div className="text-xl font-black text-slate-900 mt-0.5">{pendingCount}</div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-800">PENDING REVIEW</span>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{pendingCount}</div>
           </div>
-          <div className="h-8 w-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
-            <Clock className="h-4 w-4" />
+          <div className="h-7 w-7 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center">
+            <Clock className="h-3.5 w-3.5" />
           </div>
         </div>
 
         <div 
-          onClick={() => setStatusFilter("PROGRESS")}
-          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          onClick={() => setStatusFilter(statusFilter === "PROGRESS" ? "ALL" : "PROGRESS")}
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "PROGRESS" ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20" : "border-slate-200 hover:border-blue-400"
           }`}
         >
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">IN PROGRESS</span>
-            <div className="text-xl font-black text-slate-900 mt-0.5">{progressCount}</div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-blue-800">IN PROGRESS</span>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{progressCount}</div>
           </div>
-          <div className="h-8 w-8 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center">
-            <Activity className="h-4 w-4" />
+          <div className="h-7 w-7 rounded-md bg-blue-100 text-blue-800 flex items-center justify-center">
+            <Activity className="h-3.5 w-3.5" />
           </div>
         </div>
 
         <div 
-          onClick={() => setStatusFilter("HOLD")}
-          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          onClick={() => setStatusFilter(statusFilter === "HOLD" ? "ALL" : "HOLD")}
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "HOLD" ? "border-purple-500 ring-2 ring-purple-500/20 bg-purple-50/20" : "border-slate-200 hover:border-purple-400"
           }`}
         >
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-purple-800">ON HOLD</span>
-            <div className="text-xl font-black text-slate-900 mt-0.5">{holdCount}</div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-purple-800">ON HOLD</span>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{holdCount}</div>
           </div>
-          <div className="h-8 w-8 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center">
-            <AlertCircle className="h-4 w-4 text-purple-800" />
+          <div className="h-7 w-7 rounded-md bg-purple-100 text-purple-800 flex items-center justify-center">
+            <AlertCircle className="h-3.5 w-3.5 text-purple-800" />
           </div>
         </div>
 
         <div 
-          onClick={() => setStatusFilter("REJECTED")}
-          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          onClick={() => setStatusFilter(statusFilter === "REJECTED" ? "ALL" : "REJECTED")}
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "REJECTED" ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20" : "border-slate-200 hover:border-rose-400"
           }`}
         >
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-rose-800">REJECTED</span>
-            <div className="text-xl font-black text-slate-900 mt-0.5">{rejectedCount}</div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-rose-800">REJECTED</span>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{rejectedCount}</div>
           </div>
-          <div className="h-8 w-8 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center">
-            <XCircle className="h-4 w-4 text-rose-800" />
+          <div className="h-7 w-7 rounded-md bg-rose-100 text-rose-800 flex items-center justify-center">
+            <XCircle className="h-3.5 w-3.5 text-rose-800" />
           </div>
         </div>
 
         <div 
-          onClick={() => setStatusFilter("CLEARED")}
-          className={`bg-white border rounded-xl p-3 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          onClick={() => setStatusFilter(statusFilter === "CLEARED" ? "ALL" : "CLEARED")}
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
             statusFilter === "CLEARED" ? "border-emerald-600 ring-2 ring-emerald-500/20 bg-emerald-50/20" : "border-slate-200 hover:border-emerald-400"
           }`}
         >
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">CLEARED / RESOLVED</span>
-            <div className="text-xl font-black text-slate-900 mt-0.5">{clearedCount}</div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800">CLEARED / RESOLVED</span>
+            <div className="text-lg font-black text-slate-900 mt-0.5">{clearedCount}</div>
           </div>
-          <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
-            <CheckCheck className="h-4 w-4 text-emerald-800" />
+          <div className="h-7 w-7 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center">
+            <CheckCheck className="h-3.5 w-3.5 text-emerald-800" />
           </div>
-        </div>
-      </div>
-
-      {/* 3. WORK TRACKER FILTER BAR & SEARCH */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        {/* Dedicated Status Filters: ALL, PENDING, IN PROGRESS, ON HOLD, REJECTED, CLEARED */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {[
-            { id: "ALL", label: `All (${totalCount})` },
-            { id: "PENDING", label: `Pending (${pendingCount})` },
-            { id: "PROGRESS", label: `In Progress (${progressCount})` },
-            { id: "HOLD", label: `On Hold (${holdCount})` },
-            { id: "REJECTED", label: `Rejected (${rejectedCount})` },
-            { id: "CLEARED", label: `Cleared (${clearedCount})` },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setStatusFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
-                statusFilter === tab.id
-                  ? "bg-[#003F28] text-white shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative flex-1 max-w-md min-w-[240px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search complaint ID, account, dealer, employee..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
-          />
         </div>
       </div>
 
@@ -449,6 +432,22 @@ export default function CustomerFeedbackPage({
                         <ArrowRight className="h-2.5 w-2.5" />
                       </button>
                     </div>
+
+                    {/* Hold Reason & Remark Strip */}
+                    {category === "HOLD" && (
+                      <div className="w-full bg-purple-50/90 border border-purple-200/90 rounded-lg px-2.5 py-1 text-[10.5px] flex items-center justify-between gap-2 mt-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <AlertCircle className="h-3 w-3 text-purple-700 shrink-0" />
+                          <span className="font-extrabold text-purple-900 shrink-0">HOLD REASON & ACTION:</span>
+                          <span className="truncate font-medium text-purple-950">
+                            {(doc as any).hold_reason || doc.remarks || (doc as any).additional_comments || "Awaiting customer/internal clarification"}
+                          </span>
+                        </div>
+                        <span className="text-[8.5px] font-bold text-purple-800 bg-purple-100 px-1.5 py-0.2 rounded border border-purple-200 shrink-0">
+                          ON HOLD
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -72,9 +72,12 @@ export default function UserManualModal({
   const [activeSection, setActiveSection] = useState<"operations" | "feedback" | "admin">(computeInitialSection);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Only initialize active section when the modal is freshly opened
   useEffect(() => {
-    setActiveSection(computeInitialSection());
-  }, [defaultSection, currentUserRole, userPermissions]);
+    if (isOpen) {
+      setActiveSection(computeInitialSection());
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -332,7 +332,25 @@ def normalize_doc_type(doc_type: Optional[str]) -> str:
     if not doc_type:
         return "AP INVOICE"
     cleaned = doc_type.strip().upper()
-    return cleaned if cleaned else "AP INVOICE"
+    if not cleaned or cleaned == "NULL" or cleaned == "UNDEFINED":
+        return "AP INVOICE"
+    if cleaned in DOCUMENT_TYPE_ALLOWED_FIELDS:
+        return cleaned
+    if "," in cleaned or "HARDWARE" in cleaned or "ACCESSORIES" in cleaned or "SUPPLIES" in cleaned:
+        return "AP INVOICE"
+    if "FEEDBACK" in cleaned or "COMPLAINT" in cleaned or "CMP" in cleaned or "CF" in cleaned:
+        return "CUSTOMER FEEDBACK"
+    if "INVOICE" in cleaned or "TAX" in cleaned or "BILL" in cleaned or "INV" in cleaned:
+        return "AP INVOICE"
+    if "PO" in cleaned or "PURCHASE" in cleaned:
+        return "PURCHASE ORDER"
+    if "EXPENSE" in cleaned or "HR" in cleaned or "STAFF" in cleaned:
+        return "HR EXPENSE"
+    if "CREDIT" in cleaned:
+        return "CREDIT NOTE"
+    if "DEBIT" in cleaned:
+        return "DEBIT NOTE"
+    return "AP INVOICE"
 
 
 def extract_custom_data_dict(doc: Invoice) -> Dict[str, Any]:

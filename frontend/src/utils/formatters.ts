@@ -88,7 +88,7 @@ export function formatTimeOnly(dateStr: string | Date | null | undefined): strin
  * Normalizes case and spacing so "AP INVOICE", "AP Invoice", and "ap invoice" resolve to the same canonical type ("AP INVOICE").
  */
 export function getCanonicalDocumentType(docOrType?: any): string {
-  if (!docOrType) return "GENERAL RECORDS";
+  if (!docOrType) return "AP INVOICE";
 
   let candidates: (string | undefined | null)[] = [];
 
@@ -106,7 +106,6 @@ export function getCanonicalDocumentType(docOrType?: any): string {
       docOrType.custom_data?.trans_type,
       docOrType.custom_data?.doc_type,
       docOrType.custom_data?.type,
-      docOrType.category,
       docOrType.type_of_complaint,
       docOrType.subtype_of_complaint,
       docOrType.custom_data?.type_of_complaint,

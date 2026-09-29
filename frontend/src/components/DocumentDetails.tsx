@@ -837,7 +837,7 @@ export default function DocumentDetails({
     const s = valStr.trim().toLowerCase();
     return (
       /\.(jpg|jpeg|png)($|\?)/i.test(s) ||
-      /^(https?:\/\/|\/|data:image\/|blob:|[a-z0-9_\-\/.]+\.(jpg|jpeg|png))/i.test(s) ||
+      /^(https?:\/\/|\/|data:image\/|blob:|[a-z0-9_\-/.]+\.(jpg|jpeg|png))/i.test(s) ||
       s.includes("unsplash.com") ||
       s.includes("images") ||
       s.includes("photo") ||
