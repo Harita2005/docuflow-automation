@@ -7,23 +7,16 @@ import {
   XCircle,
   ImageIcon,
   ArrowRight,
-  Filter,
   RefreshCw,
-  User,
-  Building,
-  Calendar,
   AlertCircle,
-  FileText,
   Activity,
   Kanban,
   ListFilter,
-  Layers,
-  ShieldCheck,
   CheckCheck,
   X,
 } from "lucide-react";
 import { DbInvoice } from "../types";
-import { formatDocNumber, formatDate, formatDateTime, getCanonicalDocumentType } from "../utils/formatters";
+import { formatDate, getCanonicalDocumentType } from "../utils/formatters";
 import CustomerFeedbackDetails from "./CustomerFeedbackDetails";
 
 interface CustomerFeedbackPageProps {
@@ -140,7 +133,6 @@ export default function CustomerFeedbackPage({
   const holdCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "HOLD").length;
   const rejectedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "REJECTED").length;
   const clearedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "CLEARED").length;
-  const withImagesCount = feedbackDocs.filter((d) => d.image_1 || d.image_2 || d.image_3 || d.image_4 || d.image_5).length;
 
   // Render Details view if a record is selected
   if (selectedDocId) {

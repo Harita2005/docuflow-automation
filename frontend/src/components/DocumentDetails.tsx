@@ -27,13 +27,11 @@ import {
   Upload,
   Settings,
   Activity,
-  ExternalLink,
   Image as ImageIcon,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
 import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
-import CustomerFeedbackDetails from "./CustomerFeedbackDetails";
 
 
 interface DocumentDetailsProps {
@@ -353,7 +351,7 @@ export default function DocumentDetails({
     }
   }, [document?.id, selectedAction, targetCompletionDate]);
 
-  const handleTriggerEscalation = async () => {
+  const _handleTriggerEscalation = async () => {
     if (!document?.id) return;
     setActionLoading(true);
     setActionError(null);

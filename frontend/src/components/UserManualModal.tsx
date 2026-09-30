@@ -15,7 +15,6 @@ import {
   Printer,
   GitFork,
   CheckSquare,
-  History,
   Check,
   Users,
   Database

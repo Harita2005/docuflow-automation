@@ -16,18 +16,11 @@ import {
   MessageSquare,
   Image as ImageIcon,
   History,
-  Calendar,
   ShieldCheck,
-  Tag,
-  Briefcase,
-  MapPin,
   RefreshCw,
   Upload,
   Printer,
   Paperclip,
-  FileCheck,
-  Eye,
-  Plus,
   PauseCircle,
   XCircle,
   Activity,
@@ -424,7 +417,7 @@ export default function CustomerFeedbackDetails({
   const [pdfZoomLevel, setPdfZoomLevel] = useState<number>(100);
   const [pdfRotation, setPdfRotation] = useState<number>(0);
   const [localPdfBlobUrl, setLocalPdfBlobUrl] = useState<string | null>(null);
-  const [isUploadingPdf, setIsUploadingPdf] = useState<boolean>(false);
+  const [_isUploadingPdf, setIsUploadingPdf] = useState<boolean>(false);
   const [uploadPdfError, setUploadPdfError] = useState<string | null>(null);
   const [uploadPdfSuccess, setUploadPdfSuccess] = useState<string | null>(null);
   const [isDragOverPdf, setIsDragOverPdf] = useState<boolean>(false);

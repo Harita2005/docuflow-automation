@@ -14,13 +14,12 @@ import GettingStartedPage from "./components/GettingStartedPage.tsx";
 import AdminPage from "./pages/Admin.jsx";
 import WorkflowRulesPage from "./pages/WorkflowRulesPage.jsx";
 
-import CustomerFeedbackDetails from "./components/CustomerFeedbackDetails.tsx";
 import CustomerFeedbackPage from "./components/CustomerFeedbackPage.tsx";
 import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
 import { DbInvoice } from "./types";
-import { ClipboardCheck, ArrowRight, X, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
-import { formatCurrencyINR, getCanonicalDocumentType } from "./utils/formatters.ts";
+import { getCanonicalDocumentType } from "./utils/formatters.ts";
 
 export default function App() {
   const getInitialRoute = () => {
@@ -195,7 +194,7 @@ export default function App() {
   const [stats, setStats] = useState<any | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [_showPendingModal, setShowPendingModal] = useState(false);
 
   const isDocumentPendingForUser = (doc: DbInvoice) => {
     if (!doc) return false;

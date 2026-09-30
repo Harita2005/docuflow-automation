@@ -293,7 +293,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newPermLabel, setNewPermLabel] = useState("");
   const [newPermDesc, setNewPermDesc] = useState("");
   const [newPermCategory, setNewPermCategory] = useState("Documents & OCR Extraction");
-  const [newPermIcon, setNewPermIcon] = useState("Shield");
+  const [_newPermIcon, setNewPermIcon] = useState("Shield");
   const [newCategoryName, setNewCategoryName] = useState("");
 
   const [_selectedUserIds, setSelectedUserIds] = useState(new Set());
@@ -1180,7 +1180,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setTimeout(() => setSuccessMsg(""), 3500);
   };
 
-  const handleDeletePermission = (permId, permLabel) => {
+  const _handleDeletePermission = (permId, permLabel) => {
     if (!isAdmin) return;
     if (!window.confirm(`Are you sure you want to permanently delete the permission "${permLabel}" (${permId})? This will remove all role clearances and user overrides associated with it.`)) {
       return;
