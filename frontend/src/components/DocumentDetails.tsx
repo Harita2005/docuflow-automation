@@ -875,7 +875,6 @@ export default function DocumentDetails({
   };
 
   const handleUploadVersion = async (file: File) => {
-
     if (!document) return;
     if (!canReplacePdf) {
       setActionError("⚠️ PDF replacement is restricted: You can only replace or attach the physical PDF during Attachment Status (Stage 1).");
@@ -887,10 +886,39 @@ export default function DocumentDetails({
     }
     setIsUploadingVersion(true);
     setActionError(null);
+
+    let fileToUpload = file;
+    const FIFTEEN_MB = 15 * 1024 * 1024;
+    
+    // Auto-compress PDF if file size exceeds 15 MB
+    if (file.size > FIFTEEN_MB) {
+      const origMb = (file.size / (1024 * 1024)).toFixed(1);
+      showToast(`⚡ File size is ${origMb} MB (exceeds 15MB). Auto-compressing PDF...`, "info");
+      try {
+        const token = localStorage.getItem("authToken");
+        const compFormData = new FormData();
+        compFormData.append("file", file);
+        const compRes = await fetch('/api/documents/compress-pdf', {
+          method: "POST",
+          headers: token ? { "Authorization": `Bearer ${token}` } : {},
+          body: compFormData,
+        });
+
+        if (compRes.ok) {
+          const compBlob = await compRes.blob();
+          const compMb = (compBlob.size / (1024 * 1024)).toFixed(1);
+          fileToUpload = new File([compBlob], file.name, { type: "application/pdf" });
+          showToast(`✓ Auto-compressed PDF (${origMb} MB ➔ ${compMb} MB). Attaching...`, "amber");
+        }
+      } catch (compErr) {
+        console.warn("Auto-compression attempt warning, proceeding with upload:", compErr);
+      }
+    }
+
     try {
       const token = localStorage.getItem("authToken");
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToUpload);
 
       const res = await fetch(`/api/invoices/${document.id}/version`, {
         method: "POST",

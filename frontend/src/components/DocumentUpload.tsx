@@ -348,7 +348,7 @@ export default function DocumentUpload({
   };
 
   const handleExtractPreview = async (fileToProcess?: File) => {
-    const file = fileToProcess || pendingFile;
+    let file = fileToProcess || pendingFile;
     if (!file) {
       triggerFileInput();
       return;
@@ -356,6 +356,27 @@ export default function DocumentUpload({
 
     setExtracting(true);
     setErrorMsg(null);
+
+    const FIFTEEN_MB = 15 * 1024 * 1024;
+    if (file.size > FIFTEEN_MB) {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const compFormData = new FormData();
+        compFormData.append("file", file);
+        const compRes = await fetch("/api/documents/compress-pdf", {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: compFormData
+        });
+
+        if (compRes.ok) {
+          const compBlob = await compRes.blob();
+          file = new File([compBlob], file.name, { type: "application/pdf" });
+        }
+      } catch (compErr) {
+        console.warn("Auto-compression prior to extraction warning:", compErr);
+      }
+    }
 
     try {
       const formData = new FormData();

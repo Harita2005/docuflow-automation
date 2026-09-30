@@ -2799,7 +2799,44 @@ async def upload_and_route(
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'invoice': inv}
+
+@router.post('/api/records/compress-pdf')
+@router.post('/api/documents/compress-pdf')
+@router.post('/api/invoices/compress-pdf')
+async def compress_pdf_standalone(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Standalone PDF Auto-Compress Endpoint:
+    Accepts any PDF file > 15MB, runs PyMuPDF + Pillow image resampling and stream deflation down to < 10MB,
+    and returns the compressed PDF binary stream directly.
+    """
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files can be compressed.")
+    
+    content = await file.read()
+    orig_size = len(content)
+    unique_filename, detected_type = validate_uploaded_file(file, content)
+    file_path = settings.UPLOAD_DIR / f"auto_comp_{unique_filename}"
+    with open(file_path, 'wb') as buffer:
+        buffer.write(content)
+    
+    was_compressed, o_size, new_size = compress_pdf(file_path)
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=file_path,
+        filename=f"compressed_{file.filename}",
+        media_type="application/pdf",
+        headers={
+            "X-Original-Size": str(orig_size),
+            "X-Compressed-Size": str(new_size),
+            "X-Was-Compressed": str(was_compressed),
+            "Access-Control-Expose-Headers": "X-Original-Size, X-Compressed-Size, X-Was-Compressed"
+        }
+    )
 
 @router.post('/api/records/{invoice_id}/version')
 @router.post('/api/documents/{invoice_id}/version')
