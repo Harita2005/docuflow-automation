@@ -63,6 +63,7 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
                     try:
                         nums.append(int(m.group(1)))
                     except ValueError:
+                        # Ignore non-integer matches when calculating workflow code suffix
                         pass
         next_num = (max(nums) + 1) if nums else 1
         code = f'WF-{str(next_num).zfill(3)}'
@@ -168,6 +169,7 @@ def save_workflow_profile(
                         try:
                             nums.append(int(m.group(1)))
                         except ValueError:
+                            # Ignore non-integer matches when calculating workflow code suffix
                             pass
             next_num = (max(nums) + 1) if nums else 1
             wf_code = f'WF-{str(next_num).zfill(3)}'
