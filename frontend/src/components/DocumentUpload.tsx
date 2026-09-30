@@ -272,8 +272,8 @@ export default function DocumentUpload({
         setErrorMsg("Please upload document assets as PDF files only.");
         return;
       }
-      if (file.size > 15 * 1024 * 1024) {
-        setErrorMsg("File size exceeds the 15MB limit.");
+      if (file.size > 100 * 1024 * 1024) {
+        setErrorMsg("File size exceeds 100MB limit. Please compress the file before uploading.");
         return;
       }
       setPendingFile(file);
@@ -289,8 +289,8 @@ export default function DocumentUpload({
         setErrorMsg("Please upload document assets as PDF files only.");
         return;
       }
-      if (file.size > 15 * 1024 * 1024) {
-        setErrorMsg("File size exceeds the 15MB limit.");
+      if (file.size > 100 * 1024 * 1024) {
+        setErrorMsg("File size exceeds 100MB limit. Please compress the file before uploading.");
         return;
       }
       setPendingFile(file);

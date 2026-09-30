@@ -25,6 +25,7 @@ import {
   Download,
   Printer,
   Upload,
+  Sparkles,
   Settings,
   Activity,
   Image as ImageIcon,
@@ -1826,9 +1827,27 @@ export default function DocumentDetails({
 
       {/* Action Error Alert */}
       {actionError && (
-        <div className="w-full mb-2 flex items-center px-4 py-2 bg-red-50 border border-red-200 text-red-700 font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm">
-          <AlertCircle className="h-4 w-4 mr-2 text-red-600" />
-          <span>{actionError}</span>
+        <div className="w-full mb-2 flex flex-col md:flex-row md:items-center justify-between gap-2 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 font-bold text-xs rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+            <span className="uppercase tracking-wider">{actionError}</span>
+          </div>
+          {(actionError.includes("413") || actionError.toLowerCase().includes("too large") || actionError.toLowerCase().includes("limit") || actionError.toLowerCase().includes("exceeds")) && (
+            <label className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs cursor-pointer shadow-sm transition-all font-semibold uppercase tracking-wider active:scale-95">
+              <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+              <span>Compress PDF & Attach</span>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={isUploadingVersion}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUploadVersion(f);
+                }}
+              />
+            </label>
+          )}
         </div>
       )}
 
