@@ -208,7 +208,7 @@ export default function WorkTrackerPage({
     return Boolean(doc.is_current_approver) || isAssignedToUser(doc) || Boolean(doc.has_approved);
   };
 
-  const sourceDocs = hasLoadedApi ? trackerDocs : documents;
+  const sourceDocs = hasLoadedApi ? trackerDocs : (trackerDocs.length > 0 ? trackerDocs : documents.filter(doc => Boolean(doc.is_current_approver) || isAssignedToUser(doc) || Boolean(doc.has_approved)));
 
   const isCustomerFeedbackDoc = (d: any) => {
     if (!d) return false;
