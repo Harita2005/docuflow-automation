@@ -1566,16 +1566,17 @@ export default function DocumentDetails({
         : 'Not Specified';
       const holdComment = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${comments}`;
 
-      const response = await fetch(`/api/workflows/sendback`, {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const isReturn = selectedAction.toLowerCase().includes("return") || selectedAction.toLowerCase().includes("revision") || selectedAction.toLowerCase().includes("sendback");
+      const targetEndpoint = isReturn ? `/api/workflows/sendback` : `/api/documents/${encodeURIComponent(document.id)}/hold`;
+
+      const response = await fetch(targetEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+          "Authorization": token ? `Bearer ${token}` : ""
         },
-        body: JSON.stringify({
-          invoiceId: document.id,
-          comments: holdComment,
-        }),
+        body: JSON.stringify(isReturn ? { invoiceId: document.id, comments: holdComment } : { remarks: holdComment }),
       });
       if (response.ok) {
         clearDraft();

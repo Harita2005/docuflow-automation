@@ -1088,7 +1088,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 act = (row[1] or '').lower()
                 if 'approve' in act:
                     has_appr = True
-                if 'reject' in act or 'return' in act or 'cancel' in act:
+                if 'reject' in act or 'return' in act or 'cancel' in act or 'hold' in act:
                     has_rej = True
     is_curr = False
     if current_user and inv.assigned_approver and not has_appr:
@@ -1137,9 +1137,9 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         if is_terminal:
             is_approved = inv.status in ['Approved', 'Settled', 'Paid']
             if is_approved:
-                if not has_appr:
+                if not has_appr and not is_feedback_doc:
                     raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view approved document '{invoice_id}'. Only users who personally approved this document and administrators may view it.")
-            elif not has_appr and not has_rej and not completed_by_peer and not authorize_document_access(current_user, inv):
+            elif not has_appr and not has_rej and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
                 raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
         else:
             # Active document: allowed if current approver, prior approver who approved, or peer from completed prior stage
@@ -1491,6 +1491,11 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         trigger_async_integration_push(str(inv.id), decision='REJECTED')
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': f'Document returned to Stage {prev_stage} ({prev_step_name}) for previous approver review.'}
+    elif 'hold' in (action_type or '').lower() or 'send back' in (action_type or '').lower() or 'return' in (action_type or '').lower():
+        inv.status = 'On Hold'
+        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Placed on Hold', stage=f'Stage {current_stage}', notes=f'Placed on hold / returned for clarification: {remarks}'))
+        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
     else:
         inv.status = 'Cancelled'
         inv.assigned_approver = None
@@ -2098,7 +2103,6 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
 
 @router.post('/api/records/{invoice_id}/reject')
-@router.post('/api/records/{invoice_id}/reject')
 @router.post('/api/documents/{invoice_id}/reject')
 @router.post('/api/invoices/{invoice_id}/reject')
 def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
@@ -2113,12 +2117,27 @@ def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=N
 
 @router.post('/api/workflows/hold')
 @router.post('/api/workflow/hold')
-@router.post('/api/workflows/sendback')
-@router.post('/api/workflow/sendback')
 def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
-        raise HTTPException(status_code=400, detail='Missing invoiceId in hold/sendback payload')
+        raise HTTPException(status_code=400, detail='Missing invoiceId in hold payload')
+    inv = find_invoice_by_identifier(db, doc_id)
+    check_approval_authorization(inv, user, db=db, require_compliance=False)
+    username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
+    remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record placed on temporary hold.'
+    inv.status = 'On Hold'
+    db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
+    db.commit()
+    db.refresh(inv)
+    safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+    return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv}
+
+@router.post('/api/workflows/sendback')
+@router.post('/api/workflow/sendback')
+def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
+    if not doc_id:
+        raise HTTPException(status_code=400, detail='Missing invoiceId in sendback payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
@@ -2152,6 +2171,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
 @router.post('/api/invoices/{invoice_id}/hold')
 def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
+    check_approval_authorization(inv, user, db=db, require_compliance=False)
     username = (user.employee_name or user.name) if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record placed on temporary administrative hold.'
     inv.status = 'On Hold'

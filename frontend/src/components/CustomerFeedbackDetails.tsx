@@ -208,7 +208,7 @@ export default function CustomerFeedbackDetails({
     fetchChecklist();
   }, [activeDoc?.id, document?.id, activeDoc?.current_stage]);
 
-  // Check if document is in a terminal approved/cleared/settled state
+  // Check if document is in a terminal approved/cleared/settled/cancelled/rejected state
   const statusLower = (activeDoc?.status || "").toLowerCase().trim();
   const isDocApproved =
     statusLower === "approved" ||
@@ -217,10 +217,14 @@ export default function CustomerFeedbackDetails({
     statusLower === "settled" ||
     statusLower === "completed" ||
     statusLower === "paid" ||
+    statusLower === "cancelled" ||
+    statusLower === "rejected" ||
     statusLower.includes("approved") ||
     statusLower.includes("cleared") ||
     statusLower.includes("settled") ||
     statusLower.includes("completed") ||
+    statusLower.includes("cancelled") ||
+    statusLower.includes("rejected") ||
     Boolean(activeDoc?.has_approved);
 
   // Toggle single checklist item check state
@@ -762,23 +766,22 @@ export default function CustomerFeedbackDetails({
       });
 
       if (res.ok) {
-        setActionSuccess(`Record placed on hold. Action: ${selectedAction} (Target SLA: ${formattedTarget})`);
+        setActionSuccess(`✓ Record placed on hold. Action: ${selectedAction} (Target SLA: ${formattedTarget})`);
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
         const txt = await res.text();
-        let msg = "Action processed.";
+        let msg = "Failed to place record on hold.";
         try {
           const json = JSON.parse(txt);
           msg = json.detail || json.message || msg;
         } catch {
           if (txt) msg = txt;
         }
-        setActionSuccess(`Record updated: ${msg}`);
-        if (onRefreshDocument) onRefreshDocument();
+        setActionError(msg);
       }
     } catch (err: any) {
-      setActionSuccess("Record placed on hold.");
+      setActionError(err.message || "Network error placing record on hold.");
     } finally {
       setActionLoading(false);
       setTimeout(() => {
@@ -821,11 +824,18 @@ export default function CustomerFeedbackDetails({
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
-        setActionSuccess("✓ Complaint Record Rejected.");
-        if (onRefreshDocument) onRefreshDocument();
+        const txt = await res.text();
+        let msg = "Failed to reject record.";
+        try {
+          const json = JSON.parse(txt);
+          msg = json.detail || json.message || msg;
+        } catch {
+          if (txt) msg = txt;
+        }
+        setActionError(msg);
       }
     } catch (err: any) {
-      setActionSuccess("✓ Complaint Record Rejected.");
+      setActionError(err.message || "Network error rejecting record.");
     } finally {
       setActionLoading(false);
       setTimeout(() => {

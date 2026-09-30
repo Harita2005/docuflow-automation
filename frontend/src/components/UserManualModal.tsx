@@ -12,14 +12,13 @@ import {
   Shield,
   Clock,
   UserCheck,
-  FileText,
   Printer,
-  ChevronRight,
-  Sparkles,
   GitFork,
   CheckSquare,
   History,
-  Check
+  Check,
+  Users,
+  Database
 } from "lucide-react";
 
 interface UserManualModalProps {
@@ -44,7 +43,7 @@ export default function UserManualModal({
   // Strict Role-Based Visibility Checks:
   // Admin: gets all 3 manuals (Operations, Feedback, Admin)
   // Feedback Agent: gets Feedback manual (and Ops manual ONLY if they have explicit ops permissions)
-  // Ops Users (approvers, managers, ap_executive, employee): get Ops manual
+  // Ops Users: get Ops manual
   // Admin Manual: strictly Admin only!
   const hasFeedbackAccess = isAdmin || isFeedbackRole || userPermissions.includes("customer-feedback");
   const hasAdminAccess = isAdmin;
@@ -89,61 +88,73 @@ export default function UserManualModal({
     sections: [
       {
         id: "ops_dashboard",
-        title: "1. Dashboard Page & KPI Counters",
+        title: "1. Dashboard Page & Workload Analytics",
         icon: LayoutDashboard,
-        badge: "Overview & Analytics",
+        badge: "Overview & Workload",
         color: "bg-[#FFF7E2] text-[#D97706] border-[#FDE68A]",
-        summary: "Monitor active workload, pending approval alerts, and filter documents by date and status.",
+        summary: "Monitor real-time active workload, pending approval alerts, and filter documents by date or category.",
         steps: [
-          "Understanding KPI Cards: Click any KPI card (PENDING, HOLD, REJECTED, PROGRESS, APPROVED) to filter your view.",
-          "Date Range Filtering: Filter documents by 'Today', 'This Week', 'This Month', 'All Time', or 'Custom Date Range'.",
-          "Doc Type Pills: Click document type pills to filter by AP Invoice, Freight, Capex, etc.",
-          "Quick Inspection: Click any document row to open the full Document Inspection Panel."
+          "Understanding KPI Cards: Click any KPI card (TOTAL INGESTED, PENDING APPROVAL, ON HOLD, REJECTED, APPROVED & SETTLED) to filter your document list.",
+          "Date Range Filtering: Filter documents using preset buttons ('Today', 'This Week', 'This Month', 'All Time', or 'Custom Date Range').",
+          "Document Type Pills: Filter by specific invoice categories such as AP Invoice, Freight Invoice, Utility Bill, or Capex Expense.",
+          "Quick Inspection: Click any invoice row in the table list to open the full Document Inspection Panel."
         ]
       },
       {
         id: "ops_upload",
-        title: "2. Document Upload Page & Extraction",
+        title: "2. Document Upload & Automated Extraction",
         icon: Upload,
-        badge: "Intake & Extraction",
+        badge: "Intake & Parsing",
         color: "bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]",
-        summary: "Ingest single or batch supplier invoice files and run automated OCR extraction.",
+        summary: "Ingest supplier invoice files and review automated OCR field extraction.",
         steps: [
-          "Select Division: Choose target enterprise division (e.g. VCC, ENES, ACM).",
-          "Select Category: Choose expense category (e.g. Standard AP Invoice, Freight, Utilities).",
-          "File Upload: Drag & drop PDF/image invoice files.",
-          "OCR Parsing: System reads Vendor Name, Invoice Number, Gross Amount, Base Amount, and 18% GST splits.",
-          "GRN Check: If physical verification is needed, document is placed in 'Waiting for GRN' state."
+          "Select Division: Choose the target enterprise division (e.g., VCC, ENES, ACM) from the dropdown.",
+          "Select Category: Choose the expense category (e.g., Standard AP Invoice, Freight Bill).",
+          "File Selection: Drag and drop your PDF or image invoice file into the box or click 'Browse Files'.",
+          "Automated Extraction: Click 'Run Automated Extraction' to parse Vendor Name, Invoice Number, Date, Gross Amount, Base Amount, and GST splits.",
+          "Submit Document: Review extracted fields for accuracy, make corrections if needed, and click 'Submit & Queue Document'."
         ]
       },
       {
         id: "ops_work_tracker",
-        title: "3. Work Tracker & Stage Approval Actions",
+        title: "3. Work Tracker Queue & Pending Items",
         icon: Layers,
-        badge: "Action & Clearance",
+        badge: "Work Queue",
         color: "bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]",
-        summary: "Review document metadata, verify checklist items, and execute workflow actions.",
+        summary: "Access invoices assigned to your active approval stage and monitor priority deadlines.",
         steps: [
-          "Inspecting Data: Review supplier details, PO reference numbers, cost centers, and line items.",
-          "Mandatory Checklist: Verify required stage checklist items before approving.",
-          "APPROVE ACTION: Click 'Approve & Pass Stage', write sign-off remarks, and confirm.",
-          "HOLD ACTION: Click 'Hold / Pause' if details are missing. MANDATORY clarification comments are required.",
-          "REJECT ACTION: Click 'Reject' if invoice is invalid. MANDATORY rejection command notes are required.",
-          "SLA Countdown: Monitor target SLA deadlines. Overdue items trigger automated escalation warnings."
+          "Assigned Queue View: Work Tracker displays invoices currently pending action at your active workflow stage.",
+          "Search & Filters: Use the search bar to find documents by Vendor Name, Invoice Number, or PO Reference.",
+          "Priority Alerts: Red priority badges highlight urgent or near-overdue invoices requiring prompt review."
+        ]
+      },
+      {
+        id: "ops_actions",
+        title: "4. Document Inspection & Workflow Actions",
+        icon: UserCheck,
+        badge: "Verification & Sign-Off",
+        color: "bg-emerald-50 text-emerald-900 border-emerald-200",
+        summary: "Inspect original document PDFs, verify mandatory checklists, and sign off on approvals.",
+        steps: [
+          "Document Viewer: Review the original invoice PDF/image on screen with zoom, rotate, and full-page controls.",
+          "Mandatory Checklist: Check all required verification items (e.g., 'Tax ID Validated', 'PO Quantities Match') before approving.",
+          "APPROVE ACTION: Click 'Approve & Pass Stage', enter optional sign-off remarks, and confirm.",
+          "HOLD ACTION: Click 'Hold / Pause' if information is missing. Type MANDATORY clarification comments before submitting.",
+          "SEND BACK ACTION: Click 'Send Back' to return the invoice to a previous stage with mandatory return instructions.",
+          "REJECT ACTION: Click 'Reject Document' if invalid. Type MANDATORY rejection reason notes in the popup box."
         ]
       },
       {
         id: "ops_approved",
-        title: "4. Approved Documents Page & Archival",
+        title: "5. Approved Documents Archive & Signed Downloads",
         icon: CheckCircle2,
-        badge: "Settlement & Audit",
+        badge: "Settlement & Archive",
         color: "bg-[#E7F9F1] text-[#059669] border-[#A7F3D0]",
-        summary: "Search, filter, and export fully settled and approved invoice records.",
+        summary: "Search, inspect, and download fully cleared invoices stamped with digital approval signatures.",
         steps: [
-          "Searching Approved Records: Search by Vendor Name, Invoice Number, or Approval Date.",
-          "Filtering: Filter settled bills by Division or Expense Category.",
-          "Download Signed PDF: Click 'Download PDF' to obtain physical invoice file stamped with digital signatures.",
-          "ERP Sync: Verify SAP/ERP sync status keys and settlement reference codes."
+          "Search Archive: Filter settled invoices by Vendor Name, Invoice Number, PO Reference, or Date Range.",
+          "Audit Trail History: View the complete chronological audit docket showing every approval step and sign-off comment.",
+          "Download Signed PDF: Click 'Download Signed PDF' to save an official invoice PDF stamped with digital signatures."
         ]
       }
     ]
@@ -159,54 +170,53 @@ export default function UserManualModal({
         id: "fb_tracker",
         title: "1. Customer Feedback Hub & Status Filters",
         icon: MessageSquare,
-        badge: "Complaints Tracker",
+        badge: "Complaints Hub",
         color: "bg-purple-50 text-purple-900 border-purple-200",
         summary: "Track customer complaints, quality defect notices, and service feedback tickets.",
         steps: [
-          "Status Filter Tabs: Filter complaints by 'All', 'Pending Review', 'In Progress', 'On Hold', 'Rejected', and 'Cleared'.",
-          "KPI Cards: View counters for Pending (Yellow), In Progress (Blue), On Hold (Purple), Rejected (Red), and Cleared (Green).",
-          "Complaint Search: Search by Complaint ID, Dealer Name, Account Code, or Customer Name."
+          "Status Tabs: Filter tickets by 'All', 'Pending Review', 'In Progress', 'On Hold', 'Rejected', and 'Cleared'.",
+          "KPI Summary Cards: Monitor real-time counts for Pending Review, In Progress, On Hold, Rejected, and Cleared.",
+          "Search Tools: Search instantly by Complaint ID, Customer Name, BP Code, Dealer Name, or Complaint Type."
         ]
       },
       {
         id: "fb_inspection",
-        title: "2. Inspecting Complaints & Evidence Files",
+        title: "2. Inspecting Complaint Fields & Defect Photographs",
         icon: Search,
-        badge: "Evidence Verification",
+        badge: "Evidence Inspection",
         color: "bg-indigo-50 text-indigo-900 border-indigo-200",
-        summary: "Review complaint details, attached evidence photos, and packaging defect reports.",
+        summary: "Review customer metadata, complaint details, and attached defect inspection photographs.",
         steps: [
-          "Inspect Row: Click 'Inspect' on any complaint row to open full inspection drawer.",
-          "Evidence Photos & PDF: Click evidence thumbnails (Image 1 - Image 5) to inspect physical defect evidence with zoom/rotate controls.",
-          "Customer Details: Review Account Name, BP Code, Dealer Name, Employee ID, and Type of Complaint."
+          "Open Ticket: Click any ticket row to open the complete Customer Feedback inspection panel.",
+          "Review Details: Check Account Name, Customer Name, BP Code, Dealer Name, Employee Name, Survey Date, and Complaint Description.",
+          "Inspect Evidence Gallery: Click photo thumbnails to launch the interactive viewer with zoom, rotate, and fullscreen inspection controls."
+        ]
+      },
+      {
+        id: "fb_actions",
+        title: "3. Processing Actions & Officer Handover Modal",
+        icon: UserCheck,
+        badge: "Resolution & Handover",
+        color: "bg-emerald-50 text-emerald-900 border-emerald-200",
+        summary: "Execute resolution sign-offs, assign next resolution officers, or pause/reject tickets.",
+        steps: [
+          "APPROVE / CLEAR: Click 'Approve / Clear' to open the Next Person Handover Modal.",
+          "Officer Handover: Type stage resolution remarks, select the Next Assigned Officer and Designation, then click 'Confirm & Handover'.",
+          "HOLD ACTION: Click 'Hold' to pause processing for customer/dealer clarification. MANDATORY clarification remarks are required.",
+          "REJECT ACTION: Click 'Reject' for invalid or duplicate complaints. MANDATORY rejection command notes are required."
         ]
       },
       {
         id: "fb_sla",
-        title: "3. SLA Target Completion & Auto-Escalation",
+        title: "4. SLA Target Deadlines & Management Escalations",
         icon: Clock,
         badge: "SLA Control",
         color: "bg-amber-50 text-amber-900 border-amber-200",
-        summary: "Set target SLA completion deadlines and manage automated escalation triggers.",
+        summary: "Monitor target resolution countdown timers and trigger manual escalations when urgent.",
         steps: [
-          "Setting Target Date/Time: Select Target SLA Completion Date and Time for ticket resolution.",
-          "Auto-Escalation: If target date/time expires without sign-off, DocuFlow automatically escalates ticket to higher management!",
-          "Manual Escalation: Click 'Trigger Manual Escalation' for immediate senior management review."
-        ]
-      },
-      {
-        id: "fb_transition",
-        title: "4. Approval Sign-Off & Next Person Transition Modal",
-        icon: UserCheck,
-        badge: "Stage Handover",
-        color: "bg-emerald-50 text-emerald-900 border-emerald-200",
-        summary: "Sign off on complaint stages and hand over ownership to next assigned person.",
-        steps: [
-          "APPROVE / PASS STAGE: Click 'Approve / Pass Stage' when review is complete.",
-          "Transition Popup: Confirm approval remarks and select Next Assigned Person (Name & Designation) for Stage 2.",
-          "Confirm & Handover: Click 'Confirm & Handover' — ownership transfers strictly to selected person!",
-          "HOLD ACTION: Click 'Hold' to pause for customer clarification (MANDATORY hold comments required).",
-          "REJECT ACTION: Click 'Reject' for invalid complaints (MANDATORY command notes required)."
+          "SLA Countdown Clock: Monitor the target resolution timer displayed on each ticket ('14h 30m remaining').",
+          "Overdue Alerts: Tickets exceeding target resolution time display a prominent red overdue badge.",
+          "Manual Escalation: Click 'Trigger Manual Escalation' to immediately dispatch escalation alerts to senior quality managers."
         ]
       }
     ]
@@ -214,78 +224,90 @@ export default function UserManualModal({
 
   // 3. ADMIN GOVERNANCE MANUAL
   const adminManual = {
-    title: "ADMINISTRATOR & GOVERNANCE USER MANUAL",
-    subtitle: "Guide for System Administrators on permissions, flows, rules, and audit logs",
+    title: "CONTROL & ADMINISTRATION USER MANUAL",
+    subtitle: "Frontend administration guide for user setup, access matrix, flow builders, and rules",
     color: "from-[#003F28] to-[#005638]",
     sections: [
       {
-        id: "adm_rbac",
-        title: "1. 1-Click Page Access Clearance (RBAC)",
-        icon: Shield,
-        badge: "Access Controls",
-        color: "bg-rose-50 text-rose-900 border-rose-200",
-        summary: "Configure role clearances and page visibility across system pages.",
+        id: "adm_users",
+        title: "1. User Account Management",
+        icon: Users,
+        badge: "Employee Governance",
+        color: "bg-blue-50 text-blue-900 border-blue-200",
+        summary: "Create new employee accounts, assign operating roles, map departments, and toggle active status.",
         steps: [
-          "Role Clearance Matrix: Go to Control Settings -> Access Control & RBAC -> Role Clearance Matrix.",
-          "Selecting Roles: Pick any role (Feedback Agent, Approver Manager, AP Staff, Employee).",
-          "Master Page Access Switches: Toggle Master Switch ON/OFF for Operations Pages, Feedback Page, or Admin Pages.",
-          "Sub-Actions: Set access level: 'View Only', 'Edit / Action' (Approve/Reject), or 'Admin Control'.",
-          "Custom Permissions: Click '+ Add System Permission', type Permission Name, pick Category Group, click Create!",
-          "User Master: Click '+ Add New Employee' to manage user logins and roles."
+          "Create User: Open Control Settings -> User Management and click 'Create User' (+ Add New Employee).",
+          "Employee Fields: Enter Full Name, Employee ID, Corporate Email Address, Division, and Department.",
+          "Assign Role: Select the employee's operating role profile (e.g., Accounts Approver, Manager, Admin).",
+          "Account Toggle: Use the Status Toggle switch to instantly activate or deactivate user account access."
+        ]
+      },
+      {
+        id: "adm_rbac",
+        title: "2. Roles & Access Control Matrix",
+        icon: Shield,
+        badge: "Access Matrix",
+        color: "bg-rose-50 text-rose-900 border-rose-200",
+        summary: "Configure role clearances and set granular permissions across system pages.",
+        steps: [
+          "Access Control Matrix: Go to Control Settings -> Access Control & Roles to select target role profiles.",
+          "Permission Catalog: View permission controls for Dashboard, Work Tracker, Upload, Customer Feedback, Approved Docs, Workflow Rules, and Control Settings.",
+          "Action Scope Switches: Toggle specific capabilities ('View', 'Create', 'Edit', 'Delete', 'Approve', 'Export') for each role."
         ]
       },
       {
         id: "adm_flow",
-        title: "2. Flow Builder (Creating & Editing Workflows)",
+        title: "3. Workflow Flow Builder",
         icon: GitFork,
-        badge: "Workflow Profiles",
+        badge: "Approval Paths",
         color: "bg-sky-50 text-sky-900 border-sky-200",
-        summary: "Design multi-stage approval workflow profiles and stage approver pools.",
+        summary: "Design multi-stage approval workflow profiles and configure assigned role pools.",
         steps: [
-          "Create Workflow Profile: Go to Workflow & Rules Page -> Flow Builder -> click '+ Create New Workflow Profile'.",
-          "Define Approval Stages: Add Stage 1, Stage 2, Stage 3, etc.",
-          "Assign Approver Targets: Assign approvers by role name or employee IDs.",
-          "Delegate Approvers: Set backup/delegate approvers for out-of-office coverage."
+          "Create Profile: Go to Workflow & Rules -> Flow Builder and click 'Create New Workflow Profile'.",
+          "Add Sequential Stages: Add Stage 1, Stage 2, Stage 3, assigning each step to a specific role or user pool.",
+          "Target SLA Hours: Define expected SLA duration hours for each approval stage.",
+          "Save & Publish: Save the workflow profile to activate it for incoming document routing."
         ]
       },
       {
         id: "adm_condition",
-        title: "3. Condition Builder (Routing Rules Engine)",
+        title: "4. Business Routing Rules (Condition Builder)",
         icon: Sliders,
-        badge: "Routing Logic",
+        badge: "Routing Engine",
         color: "bg-amber-50 text-amber-900 border-amber-200",
-        summary: "Set up conditional routing rules using Search, Type, and Paste options.",
+        summary: "Set up conditional rules to route incoming invoices based on amount, division, or category.",
         steps: [
-          "Select Condition Fields: Pick target document fields (Division, Category, Amount, Vendor Name).",
-          "Enter Values: Use SEARCH options, TYPE value + Enter, or PASTE from Excel (auto-deduplicated!).",
-          "Save & Publish: Link rule to Workflow Profile and click 'Save & Publish Condition'."
+          "Add Routing Rule: Go to Workflow & Rules -> Condition Builder and click 'Add Routing Rule'.",
+          "Define Conditions: Select Field (Gross Amount, Division, Category), Operator (Greater Than, Equals), and Threshold Value.",
+          "Link Target Profile: Connect the rule to its target Workflow Profile and click 'Save & Publish Rule'."
         ]
       },
       {
         id: "adm_checklist",
-        title: "4. Universal Checklist Builder",
+        title: "5. Universal Checklist Builder",
         icon: CheckSquare,
-        badge: "Checklist Verification",
+        badge: "Checklist Matrix",
         color: "bg-emerald-50 text-emerald-900 border-emerald-200",
-        summary: "Set up stage-wise verification checklists across divisions and categories.",
+        summary: "Configure stage-wise verification checklists across divisions and expense categories.",
         steps: [
-          "Create Checklist Rule: Go to Workflow & Rules Page -> Universal Checklist Matrix -> click '+ New Rule'.",
-          "Target Mapping: Select Division, Category, Branch, and Stage Name.",
-          "Checklist Items: Type verification requirements or pick from Master Library.",
-          "Mandatory Flag: Enforce mandatory check before approvers can pass stage."
+          "Add Checklist Rule: Go to Workflow & Rules -> Universal Checklist Matrix and click '+ Add Checklist Rule'.",
+          "Target Mapping: Select target Division, Category, and Workflow Stage Name.",
+          "Checklist Item Title: Type the verification item text (e.g., 'Verify Tax Registration Number').",
+          "Mandatory Switch: Toggle the Mandatory switch ON to enforce completion before stage sign-off."
         ]
       },
       {
-        id: "adm_audit",
-        title: "5. Signed Audit Trail & Admin Log History",
-        icon: History,
-        badge: "Audit & Security",
+        id: "adm_master_backup",
+        title: "6. Master Data, RACI, & System Backups",
+        icon: Database,
+        badge: "System Governance",
         color: "bg-slate-100 text-slate-900 border-slate-300",
-        summary: "Inspect tamper-evident audit logs and action dockets for complete compliance.",
+        summary: "Manage vendor master tables, RACI notification triggers, recycle bin, and backup logs.",
         steps: [
-          "Tamper-Evident Audit Trail: Every approval, hold, rejection, escalation, and permission update is cryptographically timestamped.",
-          "Viewing Audit History: Click 'Signed Audit Trail' on any document or feedback record.",
-          "System Audit Logs: Inspect overall IAM login history, permission modifications, and ERP sync logs."
+          "Master Data: Manage Vendors, PO Master, GL Accounts, and Cost Center references.",
+          "RACI Notifications: Configure event alerts for Responsible, Accountable, Consulted, and Informed recipients.",
+          "Recycle Bin: Search deleted records and restore accidentally removed items.",
+          "Backup History: View timestamped backup logs and check system status indicators."
         ]
       }
     ]
@@ -339,7 +361,7 @@ export default function UserManualModal({
           </div>
         </div>
 
-        {/* MANUAL SELECTOR BAR (ONLY RENDERED IF MULTIPLE MANUALS ALLOWED) */}
+        {/* MANUAL SELECTOR BAR */}
         <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             {allowedManualsCount > 1 ? (
@@ -391,7 +413,7 @@ export default function UserManualModal({
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>
                   {activeSection === "admin"
-                    ? "Administrator Manual (Admin Exclusive)"
+                    ? "Administrator Manual (Admin Access)"
                     : activeSection === "feedback"
                     ? "Customer Feedback Operating Manual"
                     : "Operations Operating Manual"}

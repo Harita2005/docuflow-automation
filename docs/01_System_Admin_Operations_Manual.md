@@ -1,341 +1,266 @@
-# DOCUFLOW AUTOMATION SYSTEM — SYSTEM & ADMIN OPERATIONS MANUAL
+# DOCUFLOW AUTOMATION SYSTEM — CONTROL & ADMINISTRATION MANUAL
 **Document Version:** 2.4.0  
-**Target Audience:** System Administrators, IT Governance, Operations Leads, System Auditors  
-**Classification:** Enterprise Operational Documentation  
+**Target Audience:** System Administrators, Control Team, IT Operations Leads, Compliance Officers  
+**Classification:** System Control & Administrative End-User Guide  
 
 ---
 
 ## TABLE OF CONTENTS
-1. [Introduction & Architectural Overview](#1-introduction--architectural-overview)
-2. [Login and Authentication](#2-login-and-authentication)
-3. [Dashboard & Analytical Counters](#3-dashboard--analytical-counters)
-4. [Navigation & Sidebar Reference](#4-navigation--sidebar-reference)
-5. [Document Management & Repository](#5-document-management--repository)
-6. [Document Upload & Automated Extraction](#6-document-upload--automated-extraction)
-7. [Document Inspection & Field Verification](#7-document-inspection--field-verification)
-8. [Work Tracker & Assigned Workflows](#8-work-tracker--assigned-workflows)
-9. [Stage Approval & Clearance Procedures](#9-stage-approval--clearance-procedures)
-10. [Workflow Flow Builder](#10-workflow-flow-builder)
-11. [Routing Condition Builder](#11-routing-condition-builder)
-12. [Universal Checklist Management](#12-universal-checklist-management)
-13. [Department & Division Governance](#13-department--division-governance)
-14. [User Account Management](#14-user-account-management)
-15. [Role Management & Access Control](#15-role-management--access-control)
-16. [Permission Management Catalogue](#16-permission-management-catalogue)
-17. [Role-Permission-User Architecture](#17-role-permission-user-architecture)
-18. [Customer Feedback Governance](#18-customer-feedback-governance)
-19. [Error Handling & Troubleshooting Guide](#19-error-handling--troubleshooting-guide)
-20. [End-to-End Administrator Journey](#20-end-to-end-administrator-journey)
+1. [Introduction to System Administration](#1-introduction-to-system-administration)
+2. [User Account Management](#2-user-account-management)
+3. [Roles & Permissions Matrix](#3-roles--permissions-matrix)
+4. [Workflow Flow Builder](#4-workflow-flow-builder)
+5. [Business Routing Rules (Condition Builder)](#5-business-routing-rules-condition-builder)
+6. [Checklist Builder (Universal Checklist Matrix)](#6-checklist-builder-universal-checklist-matrix)
+7. [RACI & Notification Settings](#7-raci--notification-settings)
+8. [Master Data Governance](#8-master-data-governance)
+9. [Recycle Bin & Data Recovery](#9-recycle-bin--data-recovery)
+10. [System Backups & Maintenance (Frontend View)](#10-system-backups--maintenance-frontend-view)
+11. [Admin Troubleshooting & FAQs](#11-admin-troubleshooting--faqs)
 
 ---
 
-## 1. INTRODUCTION & ARCHITECTURAL OVERVIEW
+## 1. INTRODUCTION TO SYSTEM ADMINISTRATION
 
-### 1.1 What is DocuFlow?
-DocuFlow is an enterprise-grade Document Approval & Automation System (DAAS). It orchestrates supplier invoice intake, automated OCR extraction, multi-stage approval routing, universal checklist verification, customer feedback resolution, and cryptographic audit logging.
+The Control & Administration screens in DocuFlow provide authorized administrators with complete control over user access, approval workflows, routing rules, verification checklists, and audit governance.
 
-### 1.2 Purpose & Business Goals
-- **Automated Intake & Extraction:** Convert raw PDF/Image invoices into structured data (Gross Amount, Base Amount, 18% GST splits, PO Numbers).
-- **Sequential Approval Enforcements:** Route documents through multi-stage approval pools with strict role/user assignment.
-- **Role-Based Access Control (RBAC):** Enforce strict page-level and action-level clearances across operations, feedback, and admin settings.
-- **Audit Compliance:** Maintain tamper-evident, cryptographically timestamped audit dockets for every approval, hold, rejection, or permission update.
+### Purpose of This Manual
+This manual explains how administrators and control team members interact with the administrative screens in DocuFlow.
 
-### 1.3 Application Journey Overview
-```
-           +-------------------------------------------------------+
-           |                     LOGIN PAGE                        |
-           +-------------------------------------------------------+
-                                       |
-                                       v
-           +-------------------------------------------------------+
-           |                 MAIN SYSTEM DASHBOARD                 |
-           +-------------------------------------------------------+
-                                       |
-    +------------------+---------------+------------------+------------------+
-    |                  |                                  |                  |
-    v                  v                                  v                  v
-+-------+      +---------------+                  +---------------+  +---------------+
-|UPLOAD |      | WORK TRACKER  |                  | CUSTOMER FB   |  | CONTROL SETTINGS|
-|INTAKE |      | (MY PENDING)  |                  | (COMPLAINTS)  |  | (ADMIN & RBAC)  |
-+-------+      +---------------+                  +---------------+  +---------------+
-    |                  |                                  |                  |
-    +--------+---------+                                  |                  |
-             |                                            |                  |
-             v                                            v                  v
-+-------------------------------+                +------------------+ +------------------+
-| DOCUMENT DETAILS & CHECKLIST  |                | INSPECT EVIDENCE | | BUILD FLOWS &    |
-| APPROVE / HOLD / REJECT       |                | HANDOVER STAGE   | | PERMISSION MATRIX|
-+-------------------------------+                +------------------+ +------------------+
-             |                                            |                  |
-             +--------------------+-----------------------+------------------+
-                                  |
-                                  v
-           +-------------------------------------------------------+
-           |           SETTLEMENT & SIGNED AUDIT TRAIL             |
-           +-------------------------------------------------------+
-```
+> [!IMPORTANT]
+> **Frontend Governance:** All administrative tasks described in this guide are performed through the DocuFlow graphical user interface. No technical system access or coding is required.
 
 ---
 
-## 2. LOGIN AND AUTHENTICATION
+## 2. USER ACCOUNT MANAGEMENT
 
-### 2.1 Purpose
-Secure user verification and session token generation via OAuth2 Password Bearer / JWT protocol.
+### 2.1 What is User Management?
+User Management is the screen where administrators create new employee user accounts, edit employee profiles, assign operating roles, map departments, and activate or deactivate system access.
 
-### 2.2 Fields & Credentials
-- **Username / Email Address:** Standard corporate email (e.g. `admin@docuflow.com`, `approver@docuflow.com`).
-- **Password:** User authentication secret.
-- **Select Operating Role:** Optional fast-switch role selector for multi-role profiles.
+### 2.2 Who Uses It?
+System Administrators and HR Control Officers.
 
-### 2.3 Procedure & Validation
-1. Open browser and navigate to `http://<server-ip>:5173`.
-2. Enter email/username and password.
-3. Click **Sign In to DocuFlow**.
-4. **Validation:** System checks credentials against database (`users` table).
-   - If invalid: Displays red alert banner *"Invalid username or password"*.
-   - If inactive: Displays *"User account is deactivated. Contact system administrator."*
-5. **Success:** Generates JWT bearer token, stores token in browser `localStorage`, and redirects user to `Dashboard` or `Work Tracker`.
-
-### 2.4 Multi-Tab Synchronization & Kick-Out Protection
-- **Single-Active Session:** DocuFlow enforces real-time Server-Sent Events (SSE) session monitoring. If the same account logs in from another browser or device, the existing active session receives a `SESSION_KICKED` notification and is logged out immediately with the message: *"Your session was terminated because your account was logged in from another device/browser."*
-
----
-
-## 3. DASHBOARD & ANALYTICAL COUNTERS
-
-### 3.1 Overview
-The Dashboard provides real-time workload KPIs, category distribution charts, date filtering, and quick navigation shortcuts.
-
-### 3.2 Key Counters & Widgets
-| Widget Name | Field / Status | Data Displayed | Click Action |
-| :--- | :--- | :--- | :--- |
-| **TOTAL INGESTED** | All Documents | Total volume of ingested invoices | Clears filters to show all records |
-| **PENDING APPROVAL** | `Pending Approval`, `In Progress` | Workload awaiting active stage sign-off | Filters list to active pending bills |
-| **ON HOLD / PAUSED** | `On Hold`, `Paused` | Invoices paused for clarification | Filters list to documents on hold |
-| **REJECTED** | `Rejected` | Invalid or rejected invoices | Filters list to rejected bills |
-| **APPROVED & SETTLED** | `Approved`, `Settled` | Completed bills stamped with signatures | Opens Approved Documents View |
-
-### 3.3 Date & Filter Controls
-- **Date Presets:** `Today`, `This Week`, `This Month`, `All Time`, `Custom Date Range`.
-- **Document Type Filter:** AP Invoice, Freight Invoice, Utility Bill, Capex Expense.
-
----
-
-## 4. NAVIGATION & SIDEBAR REFERENCE
-
-### 4.1 Overview
-Navigation is dynamically controlled by the user's role permissions (`rolePermissions`). Unpermitted items are hidden.
-
-| Menu Item | Required Permission | Allowed Roles | Description |
-| :--- | :--- | :--- | :--- |
-| **Dashboard** | `dashboard` | All Active Roles | Overview KPIs & analytics |
-| **Work Tracker** | `work-tracker` | Approvers, Managers, Admin | Pending stage action queue |
-| **Approved Docs** | `approved-documents` | All Active Roles | Historical archive of settled bills |
-| **Upload Document** | `upload` | AP Executive, Admin | Single & batch PDF invoice intake |
-| **Customer Feedback**| `customer-feedback` | Feedback Agent, Admin | Complaints & defect tickets hub |
-| **Workflow & Rules** | `workflow-rules` | Admin, Settings Editor | Flow Builder, Condition Builder |
-| **Control Settings** | `admin` | Admin, Settings Editor | RBAC, User Master, RACI, Backups |
-
----
-
-## 5. DOCUMENT MANAGEMENT & REPOSITORY
-
-### 5.1 Repository Controls
-- **Global Search:** Instant text search across Supplier Name, Invoice Number, PO Reference, and Document ID.
-- **Filters:** Filter by Division (VCC, ENES, ACM), Category, Status, and Date Range.
-- **Row Inspection:** Click any row to open the complete **Document Inspection Drawer**.
-
----
-
-## 6. DOCUMENT UPLOAD & AUTOMATED EXTRACTION
-
-### 6.1 Upload Procedure
-1. Navigate to **Upload Document** (`/upload`).
-2. Select target **Division** (e.g. `VCC`, `ENES`).
-3. Select **Expense Category** (e.g. `Standard AP Invoice`, `Freight Bill`).
-4. Drag & drop PDF/image file or click **Browse Files**.
-5. Click **Run Automated OCR Extraction**.
-6. System parses:
-   - Vendor Name
-   - Invoice Number & Invoice Date
-   - Gross Amount, Base Amount, and 18% GST split
-   - PO Reference Number
-7. Click **Submit & Queue Document** to launch workflow routing.
-
----
-
-## 7. DOCUMENT INSPECTION & FIELD VERIFICATION
-
-### 7.1 Field Structure & Verification
-- **Supplier & Document Header:** Vendor Name, Invoice #, Invoice Date, Expense Category.
-- **Financial Breakdown:** Gross Amount, Base Amount, CGST (9%), SGST (9%), IGST (18%).
-- **Verification Checklist:** Stage-specific mandatory checkboxes (e.g., *"GSTIN Validated"*, *"PO Line Items Match"*).
-- **Audit History Docket:** Chronological log of all prior approval actions, hold comments, and timestamps.
-
----
-
-## 8. WORK TRACKER & ASSIGNED WORKFLOWS
-
-### 8.1 Work Tracker Scoping
-- **Non-Admin Users:** Displays ONLY documents assigned to the logged-in user at their current workflow stage.
-- **Admin Users:** Displays overall enterprise work queues with search and filter capabilities.
-
----
-
-## 9. STAGE APPROVAL & CLEARANCE PROCEDURES
-
-### 9.1 Executing Actions
-1. **APPROVE & PASS STAGE:**
-   - Click `Approve & Pass Stage`.
-   - Enter optional approval notes.
-   - Click `Confirm Approval`. Ownership passes strictly to Stage 2 approver pool.
-2. **HOLD / PAUSE WORKFLOW:**
-   - Click `Hold / Pause`.
-   - **Mandatory:** Enter hold reason/clarification details.
-   - Document status updates to `On Hold`.
-3. **REJECT INVOICE:**
-   - Click `Reject Document`.
-   - **Mandatory:** Enter rejection command notes.
-   - Document moves to `Rejected` state.
-
----
-
-## 10. WORKFLOW FLOW BUILDER
-
-### 10.1 Purpose
-Build multi-stage approval profiles defining sequential approval pools.
-
-### 10.2 Procedure
-1. Go to **Workflow & Rules** (`/workflow-rules`) -> **Flow Builder** tab.
-2. Click **+ Create New Workflow Profile**.
-3. Enter Profile Name (e.g. `Capex Approval Profile > 5L`).
-4. Add Stages:
-   - **Stage 1:** Assigned Role: `AP Executive` | SLA: 24 Hours
-   - **Stage 2:** Assigned Role: `Finance Manager` | SLA: 48 Hours
-   - **Stage 3:** Assigned User: `Executive Approver`
-5. Click **Save Workflow Profile**.
-
----
-
-## 11. ROUTING CONDITION BUILDER
-
-### 11.1 Purpose
-Route incoming invoices to target Workflow Profiles based on rules (Division, Category, Amount).
-
-### 11.2 Procedure
-1. Go to **Workflow & Rules** -> **Condition Builder** tab.
-2. Click **+ Add Routing Rule**.
-3. Select Field (e.g., `Gross Amount`), Operator (`Greater Than`), Value (`500000`).
-4. Select Target Workflow Profile.
-5. Click **Save & Publish Rule**.
-
----
-
-## 12. UNIVERSAL CHECKLIST MANAGEMENT
-
-### 12.1 Purpose
-Define mandatory check items required before stage sign-off.
-
-### 12.2 Procedure
-1. Go to **Workflow & Rules** -> **Universal Checklist Matrix**.
-2. Click **+ Add Checklist Rule**.
-3. Map Division + Category + Stage Name.
-4. Add items (e.g., *"Physical Goods Received"*, *"Tax Invoice Stamped"*).
-5. Mark items as **Mandatory**. Click **Save Checklist**.
-
----
-
-## 13. DEPARTMENT & DIVISION GOVERNANCE
-
-### 13.1 Governance Structure
-- Enterprise Divisions (`VCC`, `ENES`, `ACM`).
-- Department mapping for document access boundaries.
-
----
-
-## 14. USER ACCOUNT MANAGEMENT
-
-### 14.1 Procedure
-1. Go to **Control Settings** (`/admin`) -> **User Management** tab.
-2. Click **+ Add New Employee**.
-3. Enter Full Name, Email, Employee Code, Department, and Assigned Role.
-4. Click **Create User**.
-5. **Deactivate User:** Click status toggle switch to disable access instantly.
-
----
-
-## 15. ROLE MANAGEMENT & ACCESS CONTROL
-
-### 15.1 Procedure
-1. Go to **Control Settings** -> **Access Control & RBAC** tab.
-2. Click **+ Add System Permission**.
-3. Enter Permission Name, Module Group, Subpage, Action Scope.
-4. Click **Create Permission**.
-5. **Role Clearance Matrix:** Toggle page switches (`View`, `Edit/Action`, `Admin`) for each role row.
-
----
-
-## 16. PERMISSION MANAGEMENT CATALOGUE
-
-### 16.1 System Permission Keys
-- `dashboard`: View dashboard KPIs.
-- `work-tracker`: View and process assigned work tracker items.
-- `upload`: Ingest single/batch invoices.
-- `customer-feedback`: Manage defect and complaint tickets.
-- `approved-documents`: Access settled invoice archives.
-- `workflow-rules`: Access Flow Builder & Condition Builder.
-- `admin`: Access Control Settings & RBAC matrix.
-
----
-
-## 17. ROLE-PERMISSION-USER ARCHITECTURE
-
-```
-+-------------------+       +-------------------+       +-----------------------+
-|    USER MASTER    | ----> |    ROLE MASTER    | ----> | PERMISSION CATALOGUE  |
-| (e.g. John Doe)   |       | (e.g. Manager)    |       | (e.g. work-tracker)   |
-+-------------------+       +-------------------+       +-----------------------+
-```
-
----
-
-## 18. CUSTOMER FEEDBACK GOVERNANCE
-
-### 18.1 Customer Feedback Hub
-1. Navigate to **Customer Feedback** (`/customer-feedback`).
-2. Inspect complaint tickets, evidence photos, dealer details, and SLA countdowns.
-3. Click **Approve / Pass Stage** to hand over complaint to Stage 2 resolution manager with assigned designation.
-
----
-
-## 19. ERROR HANDLING & TROUBLESHOOTING GUIDE
-
-| Error Scenario | Root Cause | Resolution Step |
+### 2.3 User Creation Field Reference Table
+| Field Name | Explanation | Example Value |
 | :--- | :--- | :--- |
-| **Invalid Credentials** | Incorrect password or unregistered email | Verify email spelling or reset password |
-| **Session Terminated** | Account logged in from another device | Re-login; ensure single-active session |
-| **403 Forbidden Page** | Role lacks required page permission | Request administrator to update Role Clearance Matrix |
-| **Checklist Incomplete** | Mandatory checklist item not checked | Check all required verification items before sign-off |
-| **Mandatory Comment Required**| Hold/Reject clicked without notes | Enter explicit clarification/rejection remarks in comment box |
+| **Full Name** | Employee's official first and last name | `Anish Sharma` |
+| **Employee ID** | Corporate employee identification code | `EMP-04921` |
+| **Email Address** | Corporate email address used for login and notifications | `anish.sharma@company.com` |
+| **Assigned Role** | Primary role controlling user access level | `Accounts Approver`, `Manager` |
+| **Division** | Primary business division assigned to the user | `VCC`, `ENES`, `ACM` |
+| **Department** | Employee's organizational department | `Accounts Payable`, `Finance` |
+
+### 2.4 How to Create a New User
+#### Before You Start
+Ensure you have the employee's correct corporate email, Employee ID, assigned department, and role requirements.
+
+#### Steps
+1. Navigate to **Control Settings** from the left navigation menu.
+2. Select the **User Management** tab.
+3. Click **Create User** (`+ Add New Employee`).
+4. Enter the employee's **Full Name**, **Employee ID**, and **Email Address**.
+5. Select the appropriate **Assigned Role** from the dropdown list.
+6. Select the assigned **Division** and **Department**.
+7. Review the entered information.
+8. Click **Save User Account**.
+
+#### What Happens Next?
+The user account is created immediately. The employee can now sign in using their corporate email and access features according to their assigned role.
+
+### 2.5 Deactivating or Enabling a User Account
+1. Open **User Management**.
+2. Locate the employee using the search bar.
+3. Toggle the **Account Status** switch (`Active / Inactive`).
+4. Confirm the prompt. Deactivated users are immediately prevented from logging into DocuFlow.
+
+### 2.6 Button Reference Table
+| Button | What It Does |
+| :--- | :--- |
+| **Create User** | Opens the new employee setup modal |
+| **Save User Account** | Saves the user details and activates account creation |
+| **Edit Profile** | Opens existing user details for modifications |
+| **Status Toggle Switch** | Instantly toggles access between Active and Deactivated states |
 
 ---
 
-## 20. END-TO-END ADMINISTRATOR JOURNEY
+## 3. ROLES & PERMISSIONS MATRIX
 
-```
-1. Login with Admin Credentials
-   ↓
-2. Review Dashboard Analytical Counters
-   ↓
-3. Navigate to Control Settings -> RBAC Matrix
-   ↓
-4. Configure Role Clearances & Add New Employee
-   ↓
-5. Open Workflow & Rules -> Design Flow Builder Profile
-   ↓
-6. Link Condition Builder Routing Rules
-   ↓
-7. Inspect Audit Trail Logs for Compliance
-   ↓
-8. Secure Logout
-```
+### 3.1 What is the Roles & Permissions Matrix?
+The Roles & Permissions screen allows administrators to define user roles and set feature permissions for each role.
+
+### 3.2 Key System Permissions
+| Permission Name | What It Controls in the Interface |
+| :--- | :--- |
+| **Dashboard** | Grants access to view the main dashboard and workload KPI cards |
+| **Work Tracker** | Grants access to view assigned pending document queues and execute stage approvals |
+| **Upload Document** | Grants access to upload single/batch invoice files and run automated OCR extraction |
+| **Customer Feedback** | Grants access to the Customer Feedback Hub, complaint tickets, and evidence viewer |
+| **Approved Documents** | Grants access to search historical settled invoices and download signed PDFs |
+| **Workflow Rules** | Grants access to the Workflow Flow Builder, Condition Builder, and Checklist Matrix |
+| **Control Settings / Admin** | Grants access to User Management, Role Matrix, RACI settings, and Backup history |
+
+### 3.3 Permission Action Types
+For each permission, administrators can enable specific action capabilities:
+- **View:** User can view the screen and records.
+- **Create:** User can upload or create new records.
+- **Edit:** User can edit editable fields and configuration data.
+- **Delete:** User can remove or archive records.
+- **Approve:** User can execute workflow approvals and stage sign-offs.
+- **Export:** User can download files, reports, and signed documents.
+
+### 3.4 Step-by-Step: How to Configure Role Access
+1. Open **Control Settings** -> **Access Control & Roles**.
+2. Select the role you wish to configure (e.g., `Accounts Approver`).
+3. In the permission matrix grid, toggle the switches (`View`, `Create`, `Edit`, `Approve`) for each module row.
+4. Click **Save Permission Matrix**.
+
+> [!WARNING]
+> Restrict **Control Settings / Admin** permission exclusively to authorized system administrators.
+
+---
+
+## 4. WORKFLOW FLOW BUILDER
+
+### 4.1 What is the Workflow Flow Builder?
+The Flow Builder allows administrators to design multi-stage approval paths defining which roles or users must approve a document step-by-step.
+
+### 4.2 Flow Builder Field Table
+| Field Name | Explanation | Example Value |
+| :--- | :--- | :--- |
+| **Profile Name** | Name of the workflow approval path | `Capex Approval > 5 Lakhs` |
+| **Category** | Expense classification linked to this workflow | `Capex Expense`, `Standard AP` |
+| **Stage Name** | Title of the specific approval step | `Stage 1: AP Verification`, `Stage 2: Finance Manager` |
+| **Assigned Role / User** | Role profile or user pool responsible for this stage | `Finance Manager` |
+| **Target SLA (Hours)** | Expected maximum duration for stage sign-off | `24 Hours`, `48 Hours` |
+
+### 4.3 Step-by-Step: How to Create a Workflow Profile
+1. Navigate to **Workflow & Rules** from the left menu.
+2. Select the **Flow Builder** tab.
+3. Click **Create New Workflow Profile**.
+4. Enter the **Profile Name** and select the target **Category**.
+5. Click **+ Add Stage**:
+   - Enter **Stage Name** (e.g., `Stage 1 Review`).
+   - Select **Assigned Role** (e.g., `AP Executive`).
+   - Enter **Target SLA Hours** (e.g., `24`).
+6. Click **+ Add Stage** to add additional sequential approval levels as needed.
+7. Review stage order and click **Save & Publish Profile**.
+
+### 4.4 Button Reference Table
+| Button | What It Does |
+| :--- | :--- |
+| **Create New Profile** | Starts a new workflow profile builder canvas |
+| **+ Add Stage** | Inserts a new sequential approval stage |
+| **Reorder Stages** | Shifts stage order up or down in the sequence |
+| **Save & Publish** | Activates the workflow profile for incoming documents |
+
+---
+
+## 5. BUSINESS ROUTING RULES (CONDITION BUILDER)
+
+### 5.1 What is the Condition Builder?
+The Condition Builder automatically routes incoming documents to specific Workflow Profiles based on invoice attributes such as Invoice Amount, Division, or Expense Category.
+
+### 5.2 Routing Rule Field Reference
+| Field Name | Explanation | Selection Options |
+| :--- | :--- | :--- |
+| **Rule Name** | Name identifying the routing rule | `High-Value Invoices Rule` |
+| **Field Selection** | Invoice property evaluated by the rule | `Gross Amount`, `Division`, `Category` |
+| **Condition Operator** | Comparison logic applied | `Greater Than`, `Equals`, `Less Than` |
+| **Threshold Value** | Value compared against the invoice field | `500000` |
+| **Target Workflow Profile** | Workflow profile assigned if rule conditions match | `Executive Approval Profile` |
+
+### 5.3 Step-by-Step: How to Create a Business Routing Rule
+1. Open **Workflow & Rules** -> **Condition Builder** tab.
+2. Click **Add Routing Rule**.
+3. Type a descriptive **Rule Name**.
+4. Set the condition:
+   - Select **Field** (e.g., `Gross Amount`).
+   - Select **Operator** (e.g., `Greater Than`).
+   - Enter **Threshold Value** (e.g., `500000`).
+5. Select the **Target Workflow Profile** (e.g., `High Value Profile`).
+6. Click **Save & Publish Rule**.
+
+---
+
+## 6. CHECKLIST BUILDER (UNIVERSAL CHECKLIST MATRIX)
+
+### 6.1 What is the Checklist Builder?
+The Checklist Builder allows administrators to configure mandatory verification items that approvers must check off before they can sign off on a document stage.
+
+### 6.2 Step-by-Step: How to Add Mandatory Checklist Items
+1. Open **Workflow & Rules** -> **Checklist Matrix**.
+2. Click **+ Add Checklist Rule**.
+3. Select **Division**, **Expense Category**, and **Target Workflow Stage**.
+4. Type the **Checklist Item Title** (e.g., *"Verify GSTIN Tax Registration"*).
+5. Toggle the **Mandatory** switch to **ON**.
+6. Click **Save Checklist Item**.
+
+---
+
+## 7. RACI & NOTIFICATION SETTINGS
+
+### 7.1 Understanding RACI Roles in DocuFlow
+- **Responsible (R):** The active user assigned to complete the current stage approval.
+- **Accountable (A):** The manager responsible for overall department clearance.
+- **Consulted (C):** Specialists or reviewers notified during Hold or Clarification requests.
+- **Informed (I):** Users who receive automated email or dashboard alerts upon stage completion.
+
+### 7.2 How to Configure Event Notifications
+1. Open **Control Settings** -> **RACI & Notifications**.
+2. Select the event trigger (e.g., `Document Placed On Hold`, `Overdue SLA Warning`).
+3. Select recipient roles for email and in-app alerts.
+4. Click **Save Notification Matrix**.
+
+---
+
+## 8. MASTER DATA GOVERNANCE
+
+### 8.1 Master Data Screens
+DocuFlow provides screens to manage foundational enterprise reference data:
+- **Vendor Master:** View and search approved supplier records and tax numbers.
+- **Purchase Orders (PO Master):** View active PO numbers and linked line items.
+- **GL Accounts:** General Ledger cost codes for invoice categorization.
+- **Cost Centers & Divisions:** Enterprise division structure mappings.
+
+### 8.2 How to Update Master Data Records
+1. Open **Control Settings** -> **Master Data Management**.
+2. Select the tab for **Vendors**, **Purchase Orders**, or **GL Accounts**.
+3. Use the search bar to locate an item or click **Add New Record**.
+4. Update the record details and click **Save Changes**.
+
+---
+
+## 9. RECYCLE BIN & DATA RECOVERY
+
+### 9.1 What is the Recycle Bin?
+The Recycle Bin holds deleted documents, archived rules, or deactivated templates, preventing accidental loss.
+
+### 9.2 How to Restore a Deleted Item
+1. Open **Control Settings** -> **Recycle Bin**.
+2. Locate the deleted item in the list.
+3. Click **Restore Item**. The item is restored to its original active location.
+
+> [!CAUTION]
+> **Permanent Deletion:** Clicking **Permanently Delete** removes the item permanently and cannot be undone.
+
+---
+
+## 10. SYSTEM BACKUPS & MAINTENANCE (FRONTEND VIEW)
+
+### 10.1 Monitoring Backup Status
+Administrators can check the system backup status directly from the interface:
+1. Open **Control Settings** -> **System Backups**.
+2. View the **Backup History Log** displaying recent backup timestamp, size, and status (`Success`, `In Progress`, `Failed`).
+3. Click **Start Manual Backup** (if available) to generate an immediate configuration backup.
+
+---
+
+## 11. ADMIN TROUBLESHOOTING & FAQS
+
+| Issue | Possible Cause | Recommended Action |
+| :--- | :--- | :--- |
+| **New user cannot log in** | Account status set to Inactive or password typed incorrectly | Check User Management to ensure account status is Active. |
+| **User cannot access page** | Role permissions do not include page access | Open Role Clearance Matrix and toggle View permission for the role. |
+| **Document routed to wrong workflow** | Routing rule threshold or division condition is misconfigured | Open Condition Builder and verify the rule field, operator, and threshold value. |
+| **Approver cannot click Approve button** | Mandatory checklist item added in Checklist Builder is unchecked | Instruct approver to check all mandatory verification boxes. |
+| **Overdue SLA alerts not firing** | Stage SLA hours set to 0 or notification rule disabled | Open Flow Builder to set target SLA hours and check RACI notification settings. |

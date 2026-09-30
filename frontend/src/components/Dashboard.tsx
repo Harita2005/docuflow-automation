@@ -160,7 +160,7 @@ export default function Dashboard({
   };
 
   const pendingCount = baseDocs.filter(isPendingActionForUser).length;
-  const holdCount = baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status)).length;
+  const holdCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
   const rejectedCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
   const progressCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
   const approvedCount = _stats?.approvedDocuments !== undefined
@@ -180,7 +180,7 @@ export default function Dashboard({
 
   // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected)
   const currentStatusDocs = kpiFilter === 'hold'
-    ? baseDocs.filter(d => isAssignedToUser(d) && isHoldStatus(d.status))
+    ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
       ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status))
       : baseDocs.filter(isPendingActionForUser);
