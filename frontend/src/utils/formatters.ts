@@ -400,6 +400,10 @@ export function formatAssignedToDisplay(docOrAssigned?: any): string {
       account_uploader_test: "Account Uploader",
       uploader: "Account Uploader",
       ap_specialist: "AP Specialist",
+      ap_executive: "AP Executive",
+      accounts_approver: "Accounts Approver",
+      finance_manager: "Finance Manager",
+      executive: "Executive Approver",
       dept_mgr: "Department Manager",
       department_manager: "Department Manager",
       div_hod: "Division HOD",
@@ -583,13 +587,20 @@ export function resolvePersonsInRoleForDivision(
       const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
       const uRoleNorm = uRole.replace(/[^a-z0-9]/g, "");
 
+      const isApGroup = (r: string) => ["ap_specialist", "ap_executive", "accounts_approver", "ap", "accounts", "accounting"].includes(r);
+      const isMgrGroup = (r: string) => ["manager", "operations_manager", "finance_manager", "general_manager", "dept_mgr", "department_manager"].includes(r);
+      const isAdminGroup = (r: string) => ["admin", "administrator", "system_admin", "superadmin"].includes(r);
+      const isExecGroup = (r: string) => ["executive", "jmd", "md", "cfo", "ceo", "director"].includes(r);
+      const isAuditGroup = (r: string) => ["auditor", "finance_auditor", "internal_auditor"].includes(r);
+
       let roleMatches =
         uRole === targetLower ||
         uRoleNorm === targetNorm ||
-        (targetLower === "admin" && ["admin", "administrator", "system_admin", "superadmin"].includes(uRole)) ||
-        (targetLower === "manager" && ["manager", "operations_manager", "general_manager"].includes(uRole)) ||
-        (targetLower === "ap_specialist" && ["ap_specialist", "ap", "accounts"].includes(uRole)) ||
-        (targetLower === "auditor" && ["auditor", "finance_auditor"].includes(uRole));
+        (isAdminGroup(targetLower) && isAdminGroup(uRole)) ||
+        (isMgrGroup(targetLower) && isMgrGroup(uRole)) ||
+        (isApGroup(targetLower) && isApGroup(uRole)) ||
+        (isExecGroup(targetLower) && isExecGroup(uRole)) ||
+        (isAuditGroup(targetLower) && isAuditGroup(uRole));
 
       if (!roleMatches && uRoleNorm.length >= 4 && targetNorm.length >= 4) {
         if (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)) {

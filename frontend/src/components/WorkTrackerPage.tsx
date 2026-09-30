@@ -42,7 +42,7 @@ export default function WorkTrackerPage({
   const [usersList, setUsersList] = useState<any[]>([]);
 
   React.useEffect(() => {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
     fetch("/api/users", {
       headers: token ? { "Authorization": `Bearer ${token}` } : {}
     })
@@ -56,7 +56,7 @@ export default function WorkTrackerPage({
   // Server-side fetching from dedicated /api/documents/work-tracker endpoint
   const fetchTrackerDocs = React.useCallback(async () => {
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const res = await fetch("/api/documents/work-tracker", {
         headers: token ? { "Authorization": `Bearer ${token}` } : {}
       });
@@ -163,11 +163,15 @@ export default function WorkTrackerPage({
     // Role mapping for common designations
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
-      manager: ["manager", "operations manager", "operations_manager"],
+      manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
       gm: ["gm", "general manager", "general_manager"],
       jmd: ["jmd", "joint managing director", "joint_managing_director"],
       md: ["md", "managing director", "managing_director"],
       finance_auditor: ["finance auditor", "auditor", "internal auditor", "finance & internal auditor", "finance and internal auditor"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
+      ap_specialist: ["ap_specialist", "ap specialist", "ap_executive", "ap executive", "accounts_approver", "accounts approver", "ap", "accounts"],
+      finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
       employee: ["employee", "standard employee", "standard_employee"]
     };
     const activeAliases = roleAliases[rHandle] || [rHandle];
