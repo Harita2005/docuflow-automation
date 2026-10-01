@@ -142,16 +142,29 @@ def parse_invoice_heuristics(text_content: str) -> Dict[str, Any]:
             except Exception as exc:
                 logger.debug("Failed parsing regex %s match: %s", tax_name, exc)
 
-    # Vendor extraction heuristics: look for company indicators in first 12 lines
-    lines = [l.strip() for l in text_content.split('\n') if l.strip()]
-    for line in lines[:12]:
-        if any(keyword in line.upper() for keyword in ["PVT", "LTD", "LIMITED", "ENTERPRISES", "CORP", "INDUSTRIES", "TRADERS", "SUPPLIERS", "M/S"]):
-            # Filter out generic document labels
-            if not any(k in line.upper() for k in ["TAX INVOICE", "ORIGINAL", "DUPLICATE", "BUYER", "CONSIGNEE", "CUSTOMER"]):
-                clean_vendor = re.sub(r'^(?:M/s\.?|To:?|From:?|Vendor:?|Supplier:?)\s*', '', line, flags=re.IGNORECASE).strip()
-                if len(clean_vendor) > 3:
-                    extracted["vendor_name"] = clean_vendor
-                    break
+    # Vendor extraction: explicit label match ("Vendor: PRECISE TECH" or "Supplier: ...")
+    vendor_label_match = re.search(
+        r'(?:Vendor|Supplier|Seller|Issued By)[ \t]*[:\-]?[ \t]*([^\n\r]+)',
+        text_content,
+        re.IGNORECASE
+    )
+    if vendor_label_match:
+        cand = vendor_label_match.group(1).strip()
+        cand_clean = re.sub(r'^(?:M/s\.?|To:?|From:?)\s*', '', cand, flags=re.IGNORECASE).strip()
+        if len(cand_clean) > 2 and not any(k in cand_clean.upper() for k in ["TAX INVOICE", "ORIGINAL", "DUPLICATE", "BUYER", "CONSIGNEE", "CUSTOMER"]):
+            extracted["vendor_name"] = cand_clean
+
+    # Fallback vendor extraction heuristics: look for company indicators in first 12 lines
+    if not extracted["vendor_name"]:
+        lines = [l.strip() for l in text_content.split('\n') if l.strip()]
+        for line in lines[:12]:
+            if any(keyword in line.upper() for keyword in ["PVT", "LTD", "LIMITED", "ENTERPRISES", "CORP", "INDUSTRIES", "TRADERS", "SUPPLIERS", "M/S"]):
+                # Filter out generic document labels
+                if not any(k in line.upper() for k in ["TAX INVOICE", "ORIGINAL", "DUPLICATE", "BUYER", "CONSIGNEE", "CUSTOMER"]):
+                    clean_vendor = re.sub(r'^(?:M/s\.?|To:?|From:?|Vendor:?|Supplier:?)\s*', '', line, flags=re.IGNORECASE).strip()
+                    if len(clean_vendor) > 3:
+                        extracted["vendor_name"] = clean_vendor
+                        break
 
 
     return extracted
