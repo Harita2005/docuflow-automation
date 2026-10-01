@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bac
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import requests
-SYNC_API_URL = "http://localhost:8000/api/sync/record"
+SYNC_API_URL = "http://localhost:3000/api/sync/record"
 SERVICE_API_KEY = "DocuFlow-M2M-Integration-Secret-2026"
 
 timestamp_id = int(time.time())
@@ -70,7 +70,7 @@ try:
             print(f"[SYNCED HTTP] Doc ID: {data.get('document_id')} | Status: {data.get('status')} | Profile: {data.get('workflow_profile_id')}")
             synced = True
 except Exception as e:
-    print(f"HTTP Server not available on port 8000: {e}")
+    print(f"HTTP Server not available on port 3000: {e}")
 
 if not synced:
     print("Connecting directly to Database ORM...")
