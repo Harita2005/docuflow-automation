@@ -46,6 +46,9 @@ export default function Header({
   };
   const displayRole = roleMapping[currentUserRole] || currentUserRole || "System Administrator";
 
+  const roleKey = (currentUserRole || "").toLowerCase().trim();
+  const isAdmin = roleKey.includes("admin") || roleKey.includes("settings") || roleKey === "administrator" || userPermissions.includes("admin");
+
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem("authToken");
@@ -185,15 +188,17 @@ export default function Header({
           <span className="hidden md:inline">User Manual</span>
         </button>
 
-        {/* Settings Icon */}
-        <button
-          onClick={() => setCurrentView('admin')}
-          title="Control Settings"
-          aria-label="Control Settings"
-          className="p-1.5 text-slate-500 hover:text-[#003F28] hover:bg-slate-100 rounded-md transition-all duration-200 cursor-pointer"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        {/* Settings Icon (Admin only) */}
+        {isAdmin && (
+          <button
+            onClick={() => setCurrentView('admin')}
+            title="Control Settings"
+            aria-label="Control Settings"
+            className="p-1.5 text-slate-500 hover:text-[#003F28] hover:bg-slate-100 rounded-md transition-all duration-200 cursor-pointer"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Notification Bell Icon */}
         <div className="relative">
