@@ -707,5 +707,92 @@ export function resolvePersonsInRoleForDivision(
   };
 }
 
+export interface DynamicTableHeaders {
+  docIdLabel: string;
+  partyLabel: string;
+  docTypeLabel: string;
+  amountLabel: string;
+}
+
+/**
+ * Returns dynamic table header column titles based on document type.
+ */
+export function getDynamicTableHeaders(docTypeInput?: string | null): DynamicTableHeaders {
+  const norm = (docTypeInput || "").toUpperCase().trim();
+
+  if (norm.includes("FEEDBACK") || norm.includes("CUSTOMER")) {
+    return {
+      docIdLabel: "TICKET ID",
+      partyLabel: "CUSTOMER / CLIENT",
+      docTypeLabel: "FEEDBACK TYPE",
+      amountLabel: "PRIORITY / VALUE"
+    };
+  }
+  if (norm.includes("UTILITY") || norm.includes("RENT")) {
+    return {
+      docIdLabel: "BILL / REF NO",
+      partyLabel: "SERVICE PROVIDER / LANDLORD",
+      docTypeLabel: "UTILITY TYPE",
+      amountLabel: "BILL AMOUNT (₹)"
+    };
+  }
+  if (norm.includes("VOUCHER") || norm.includes("E_VOUCHER")) {
+    return {
+      docIdLabel: "VOUCHER NO",
+      partyLabel: "BENEFICIARY / PAYEE",
+      docTypeLabel: "VOUCHER TYPE",
+      amountLabel: "VOUCHER AMOUNT (₹)"
+    };
+  }
+  if (norm.includes("EXPENSE") || norm.includes("TRAVEL")) {
+    return {
+      docIdLabel: "CLAIM ID",
+      partyLabel: "EMPLOYEE / CLAIMANT",
+      docTypeLabel: "EXPENSE TYPE",
+      amountLabel: "CLAIM AMOUNT (₹)"
+    };
+  }
+  if (norm.includes("CAPEX")) {
+    return {
+      docIdLabel: "CAPEX ID",
+      partyLabel: "VENDOR / PROJECT",
+      docTypeLabel: "DOCUMENT TYPE",
+      amountLabel: "BUDGET (₹)"
+    };
+  }
+  if (norm.includes("GOODS") || norm.includes("GRN")) {
+    return {
+      docIdLabel: "GRN NUMBER",
+      partyLabel: "SUPPLIER / VENDOR",
+      docTypeLabel: "DOCUMENT TYPE",
+      amountLabel: "ORDER AMOUNT (₹)"
+    };
+  }
+  if (norm.includes("PURCHASE") || norm.includes("PO")) {
+    return {
+      docIdLabel: "PO NUMBER",
+      partyLabel: "SUPPLIER / VENDOR",
+      docTypeLabel: "DOCUMENT TYPE",
+      amountLabel: "PO AMOUNT (₹)"
+    };
+  }
+  if (norm.includes("INVOICE") || norm.includes("AP")) {
+    return {
+      docIdLabel: "DOCUMENT ID",
+      partyLabel: "SUPPLIER / VENDOR",
+      docTypeLabel: "DOCUMENT TYPE",
+      amountLabel: "AMOUNT (₹)"
+    };
+  }
+
+  // Default header titles
+  return {
+    docIdLabel: "DOCUMENT ID",
+    partyLabel: "SUPPLIER / VENDOR",
+    docTypeLabel: "DOCUMENT TYPE",
+    amountLabel: "AMOUNT (₹)"
+  };
+}
+
 
 

@@ -7,7 +7,7 @@ import {
   Eye 
 } from "lucide-react";
 import { DbInvoice } from "../types";
-import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, resolvePersonsInRoleForDivision } from "../utils/formatters";
+import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, getDynamicTableHeaders, resolvePersonsInRoleForDivision } from "../utils/formatters";
 
 interface WorkTrackerPageProps {
   documents: DbInvoice[];
@@ -388,6 +388,20 @@ export default function WorkTrackerPage({
     });
   }, [visibleDocs, activeTab, statusFilter, searchTerm, sortBy, timeFilter, customStartDate, customEndDate]);
 
+  // Dynamic Table Headers based on selected document type tab or visible records
+  const effectiveDocType = useMemo(() => {
+    if (activeTab && activeTab !== "ALL") {
+      return activeTab;
+    }
+    const typesInView = Array.from(new Set(filteredAndSortedDocs.map(d => getCanonicalDocumentType(d)).filter(Boolean)));
+    if (typesInView.length === 1) {
+      return typesInView[0];
+    }
+    return "ALL";
+  }, [activeTab, filteredAndSortedDocs]);
+
+  const tableHeaders = useMemo(() => getDynamicTableHeaders(effectiveDocType), [effectiveDocType]);
+
   return (
     <div className="space-y-2 animate-fadeIn pb-8 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0 text-slate-800">
       
@@ -531,10 +545,10 @@ export default function WorkTrackerPage({
             <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
                <tr>
                  <th className="py-1.5 px-2.5 w-10 text-center">#</th>
-                 <th className="py-1.5 px-2.5 w-[15%]">Document ID</th>
-                 <th className="py-1.5 px-2.5 w-[26%]">Supplier / Vendor</th>
-                 <th className="py-1.5 px-2.5 w-[14%]">Document Type</th>
-                 <th className="py-1.5 px-2.5 w-[15%] text-right">Amount (₹)</th>
+                 <th className="py-1.5 px-2.5 w-[15%]">{tableHeaders.docIdLabel}</th>
+                 <th className="py-1.5 px-2.5 w-[26%]">{tableHeaders.partyLabel}</th>
+                 <th className="py-1.5 px-2.5 w-[14%]">{tableHeaders.docTypeLabel}</th>
+                 <th className="py-1.5 px-2.5 w-[15%] text-right">{tableHeaders.amountLabel}</th>
                  <th className="py-1.5 px-2.5 w-[11%] text-center">ASSIGNED TO</th>
                  <th className="py-1.5 px-2.5 w-[10%] text-center">Status</th>
                  <th className="py-1.5 px-2.5 w-[9%] text-center">Action</th>
