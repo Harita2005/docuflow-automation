@@ -30,7 +30,7 @@ import {
   Check,
 } from "lucide-react";
 import { DbInvoice } from "../types";
-import { formatDocNumber, formatDate, formatTimeOnly, formatDateTime, getCanonicalDocumentType, resolvePersonsInRoleForDivision } from "../utils/formatters";
+import { formatDocNumber, formatDate, formatTimeOnly, formatDateTime, getCanonicalDocumentType, resolvePersonsInRoleForDivision, formatAssignedToDisplay } from "../utils/formatters";
 
 export interface CustomerFeedbackDetailsProps {
   document: DbInvoice | null;
@@ -608,26 +608,79 @@ export default function CustomerFeedbackDetails({
       return act.includes("hold") || act.includes("pause") || act.includes("clarification") || act.includes("sendback");
     });
 
+    const docDivision = (activeDoc as any)?.division || (activeDoc as any)?.branch;
+
+    const resolveActorName = (rawActor?: string, rawItem?: any) => {
+      const candidateStr = (rawActor || rawItem?.actor || rawItem?.user || (activeDoc as any)?.assigned_approver || (activeDoc as any)?.assigned_user || "").toString().trim();
+      if (!candidateStr || candidateStr === "Not available" || candidateStr === "null" || candidateStr === "System") {
+        return "Reviewer";
+      }
+
+      // 1. Direct match by username, email, employee code, or display name in allUsers
+      const directUser = (allUsers || []).find((u: any) => {
+        if (!u) return false;
+        const uName = (u.username || "").toString().toLowerCase().trim();
+        const uEmail = (u.email || "").toString().toLowerCase().trim();
+        const uEmpCode = (u.employee_code || u.code || "").toString().toLowerCase().trim();
+        const uEmpName = (u.employee_name || u.name || "").toString().toLowerCase().trim();
+        const target = candidateStr.toLowerCase();
+
+        return (
+          (uName && uName === target) ||
+          (uEmail && uEmail === target) ||
+          (uEmpCode && uEmpCode === target) ||
+          (uEmpName && uEmpName === target) ||
+          (uName && target.includes(uName)) ||
+          (uEmpCode && target.includes(uEmpCode))
+        );
+      });
+
+      if (directUser) {
+        const personName = directUser.employee_name || directUser.name || formatAssignedToDisplay(directUser.username);
+        const roleTitle = formatAssignedToDisplay(directUser.role || directUser.role_code || candidateStr);
+        if (personName && roleTitle && personName.toLowerCase() !== roleTitle.toLowerCase()) {
+          return `${personName} (${roleTitle})`;
+        }
+        return personName;
+      }
+
+      // 2. Try role-based resolution if candidate string is a role title (e.g. "Warehouse Manager")
+      const resolvedRole = resolvePersonsInRoleForDivision(candidateStr, docDivision, allUsers);
+      if (resolvedRole && resolvedRole.displayName && !resolvedRole.isUnassigned) {
+        const personName = resolvedRole.displayName;
+        const roleTitle = resolvedRole.roleName || formatAssignedToDisplay(candidateStr);
+        if (personName && roleTitle && personName.toLowerCase() !== roleTitle.toLowerCase()) {
+          return `${roleTitle} (${personName})`;
+        }
+        return personName;
+      }
+
+      // 3. Fallback: Format display title
+      return formatAssignedToDisplay(candidateStr);
+    };
+
     if (rawReason && rawReason !== "Not available" && rawReason !== "null") {
+      const rawActorStr = holdLog?.actor || holdLog?.user || (activeDoc as any)?.assigned_approver || (activeDoc as any)?.assigned_user || "Reviewer";
       return {
         reason: rawReason,
-        actor: holdLog?.actor || holdLog?.user || "Reviewer",
+        actor: resolveActorName(rawActorStr, holdLog),
         action: holdLog?.action || "Placed on Hold",
         timestamp: holdLog?.created_at || holdLog?.timestamp || null,
       };
     }
 
     if (holdLog) {
+      const rawActorStr = holdLog.actor || holdLog.user || "Reviewer";
       return {
         reason: holdLog.comments || holdLog.details || "Awaiting customer/internal clarification.",
-        actor: holdLog.actor || holdLog.user || "Reviewer",
+        actor: resolveActorName(rawActorStr, holdLog),
         action: holdLog.action || "Placed on Hold",
         timestamp: holdLog.created_at || holdLog.timestamp || null,
       };
     }
 
     return null;
-  }, [activeDoc]);
+  }, [activeDoc, allUsers]);
 
   // Workflow Handlers: Approve, Hold, Reject
   const handleWorkflowApprove = async () => {
