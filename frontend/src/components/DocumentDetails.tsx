@@ -170,6 +170,132 @@ const getCleanAuditRemarks = (text: string | null | undefined, steps: any[] = []
 };
 
 export const CANONICAL_KEY_MAP: Record<string, string> = {
+  // Financial & Amount fields
+  "amount": "amount",
+  "total_amount": "amount",
+  "total amount": "amount",
+  "total_gross": "amount",
+  "total gross": "amount",
+  "gross_amount": "amount",
+  "gross amount": "amount",
+  "doc_total": "amount",
+  "doc total": "amount",
+  "doctotal": "amount",
+  "total_gross_(₹)": "amount",
+  "total_gross_₹": "amount",
+  
+  // Base Taxable Amount
+  "base_amount": "base_amount",
+  "base amount": "base_amount",
+  "base_taxable": "base_amount",
+  "base taxable": "base_amount",
+  "base_taxable_amount": "base_amount",
+  "taxable_amount": "base_amount",
+  "taxable amount": "base_amount",
+
+  // GST / Tax Amount
+  "tax_amount": "tax_amount",
+  "tax amount": "tax_amount",
+  "gst_tax": "tax_amount",
+  "gst tax": "tax_amount",
+  "gst_amount": "tax_amount",
+  "gst amount": "tax_amount",
+  "total_tax": "tax_amount",
+  "total tax": "tax_amount",
+  "tax_amount_(gst)": "tax_amount",
+  "tax_amount_gst": "tax_amount",
+  "tax amount (gst)": "tax_amount",
+
+  "cgst": "cgst",
+  "sgst": "sgst",
+  "igst": "igst",
+
+  // Category fields
+  "category": "category",
+  "category_name": "category",
+  "categoryname": "category",
+  "category name": "category",
+  "category_code": "category",
+
+  // Vendor & Party fields
+  "vendor_name": "vendor_name",
+  "vendor name": "vendor_name",
+  "supplier": "vendor_name",
+  "supplier_name": "vendor_name",
+  "supplier name": "vendor_name",
+  "card_name": "vendor_name",
+  "card name": "vendor_name",
+  "cardname": "vendor_name",
+  "party_name": "vendor_name",
+  "party name": "vendor_name",
+
+  "vendor_code": "vendor_code",
+  "vendor code": "vendor_code",
+  "card_code": "vendor_code",
+  "card code": "vendor_code",
+  "cardcode": "vendor_code",
+
+  "vendor_gstin": "vendor_gstin",
+  "vendor gstin": "vendor_gstin",
+  "gstin": "vendor_gstin",
+  "party_tax_id": "vendor_gstin",
+
+  // Invoice & Document reference fields
+  "invoice_number": "invoice_number",
+  "invoice number": "invoice_number",
+  "doc_ref_no": "invoice_number",
+  "docrefno": "invoice_number",
+  "bill_number": "invoice_number",
+  "bill number": "invoice_number",
+  "doc_num": "invoice_number",
+  "docnum": "invoice_number",
+  "document_number": "invoice_number",
+  "document number": "invoice_number",
+  "invoice_num": "invoice_number",
+  "invoice_num_date": "invoice_number",
+
+  "po_number": "po_number",
+  "po number": "po_number",
+  "po_reference": "po_number",
+  "po reference": "po_number",
+  "ponumber": "po_number",
+
+  // Division / Branch / Plant
+  "division": "division",
+  "branch": "division",
+  "plant": "plant",
+  "division_branch": "division",
+  "division / branch": "division",
+  "division_/_branch": "division",
+  "division branch": "division",
+  "company_code": "division",
+  "company code": "division",
+
+  // Cost Center
+  "cost_center": "cost_center",
+  "cost center": "cost_center",
+  "costcenter": "cost_center",
+
+  // Payment terms & Pay mode
+  "payment_terms": "payment_terms",
+  "payment terms": "payment_terms",
+  "pay_mode": "payment_terms",
+  "pay mode": "payment_terms",
+  "payment_mode": "payment_terms",
+  "payment mode": "payment_terms",
+
+  // Credit note fields
+  "credit_note_number": "credit_note_number",
+  "credit note number": "credit_note_number",
+  "credit_note_num": "credit_note_number",
+  "reason_for_credit": "reason_for_credit",
+  "reason for credit": "reason_for_credit",
+  "original_invoice_ref": "original_invoice_ref",
+  "original invoice ref": "original_invoice_ref",
+  "credit_note_date": "credit_note_date",
+  "credit note date": "credit_note_date",
+
+  // Customer Complaint & HR fields
   "account_name": "account_name",
   "account name": "account_name",
   "bp_code": "bp_code",
@@ -202,8 +328,6 @@ export const CANONICAL_KEY_MAP: Record<string, string> = {
   "type of complaint": "type_of_complaint",
   "customer_code": "customer_code",
   "customer code": "customer_code",
-  "invoice_number": "invoice_number",
-  "invoice number": "invoice_number",
   "image_1": "image_1",
   "image 1": "image_1",
   "image_2": "image_2",
@@ -223,7 +347,7 @@ export const getCanonicalKey = (rawKey: string): string => {
     return CANONICAL_KEY_MAP[cleaned];
   }
   const snake = cleaned
-    .replace(/[\s\-./]+/g, "_")
+    .replace(/[\s\-./()]+/g, "_")
     .replace(/[^a-z0-9_]/g, "")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
@@ -670,7 +794,10 @@ export default function DocumentDetails({
       if (grossAmt > 0) {
         const formattedGross = `₹${grossAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         map.set("total_gross", formattedGross);
-        if (!map.has("amount")) map.set("amount", formattedGross);
+        map.set("total_amount", formattedGross);
+        map.set("gross_amount", formattedGross);
+        map.set("doc_total", formattedGross);
+        map.set("amount", formattedGross);
       }
 
       const baseTaxableAmt = target.base_amount || (grossAmt > 0 ? grossAmt / 1.18 : 0);
@@ -686,6 +813,24 @@ export default function DocumentDetails({
         map.set("gst_amount", formattedGst);
         map.set("gst_tax", formattedGst);
         map.set("tax_amount", formattedGst);
+      }
+      if (target.category) {
+        const catStr = String(target.category);
+        map.set("category", catStr);
+        map.set("category_name", catStr);
+        map.set("categoryname", catStr);
+      }
+      if (target.division) {
+        const divStr = String(target.division);
+        map.set("division", divStr);
+        map.set("company_code", divStr);
+        map.set("branch", divStr);
+      }
+      if (target.payment_terms) {
+        const payStr = String(target.payment_terms);
+        map.set("payment_terms", payStr);
+        map.set("pay_mode", payStr);
+        map.set("payment_mode", payStr);
       }
     }
 
@@ -758,14 +903,29 @@ export default function DocumentDetails({
         ...f,
         field_key: getCanonicalKey(f.field_key),
       }))
-      .filter((field) => !adminTop3Keys.has(field.field_key) && !isFixedSummaryField(field.field_key));
+      .filter((field) => !adminTop3Keys.has(field.field_key));
   }, [moreInfoConfig, dynamicSyncPayload, adminTop3Keys]);
 
   const getFieldValueByKey = (key: string, sampleValue?: string): string => {
     const canonicalKey = getCanonicalKey(key);
+    const fk = key.toLowerCase().trim();
     const target = activeDoc;
 
-    // 1. Direct property check on target (activeDoc)
+    // 1. Check currentDocValuesMap first (populated with formatted currency, aliases & document properties)
+    if (currentDocValuesMap.has(canonicalKey)) {
+      const val = currentDocValuesMap.get(canonicalKey);
+      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
+        return String(val);
+      }
+    }
+    if (currentDocValuesMap.has(fk)) {
+      const val = currentDocValuesMap.get(fk);
+      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
+        return String(val);
+      }
+    }
+
+    // 2. Direct property check on target (activeDoc)
     if (target) {
       const docVal = (target as any)[canonicalKey] ?? (target as any)[key];
       if (docVal !== undefined && docVal !== null && String(docVal).trim() !== "" && String(docVal).trim() !== "null") {
@@ -780,21 +940,6 @@ export default function DocumentDetails({
         if (docValFuzzy !== undefined && docValFuzzy !== null && String(docValFuzzy).trim() !== "" && String(docValFuzzy).trim() !== "null") {
           return String(docValFuzzy);
         }
-      }
-    }
-
-    // 2. Check currentDocValuesMap (populated from target properties & moreInfoConfig field values)
-    const fk = key.toLowerCase();
-    if (currentDocValuesMap.has(canonicalKey)) {
-      const val = currentDocValuesMap.get(canonicalKey);
-      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
-        return String(val);
-      }
-    }
-    if (currentDocValuesMap.has(fk)) {
-      const val = currentDocValuesMap.get(fk);
-      if (val !== undefined && val !== null && String(val).trim() !== "" && String(val).trim() !== "null") {
-        return String(val);
       }
     }
 

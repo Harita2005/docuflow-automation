@@ -59,7 +59,6 @@ EXCLUDED_COLUMNS: Set[str] = {
     "updated_at",
     "status",
     "link_column",
-    "category",           # internal workflow category, not user-facing field
 }
 
 # ---------------------------------------------------------------------------
@@ -86,9 +85,15 @@ ALL_COLUMN_LABELS: Dict[str, Dict[str, str]] = {
     "invoice_date":       {"label": "Invoice Date",          "category": "INVOICE INFORMATION",   "source": "Document"},
     "po_number":          {"label": "PO Number",             "category": "PURCHASE ORDER",        "source": "ERP"},
     "doc_due_date":       {"label": "Due Date",              "category": "INVOICE INFORMATION",   "source": "ERP"},
+    "due_date":           {"label": "Due Date",              "category": "INVOICE INFORMATION",   "source": "ERP"},
+    "document_number":    {"label": "Document Number",       "category": "DOCUMENT REFERENCE",    "source": "ERP"},
     "pi_indicator":       {"label": "PI Indicator",          "category": "INVOICE INFORMATION",   "source": "ERP"},
     "trans_type":         {"label": "Transaction Type",      "category": "INVOICE INFORMATION",   "source": "ERP"},
     "contact_person":     {"label": "Contact Person",        "category": "INVOICE INFORMATION",   "source": "ERP"},
+    "status":             {"label": "Status",                "category": "DOCUMENT METADATA",     "source": "ERP"},
+    "assigned_approver":  {"label": "Assigned Approver",     "category": "WORKFLOW STATUS",       "source": "ERP"},
+    "current_stage":      {"label": "Current Stage",         "category": "WORKFLOW STATUS",       "source": "ERP"},
+    "total_stages":       {"label": "Total Stages",          "category": "WORKFLOW STATUS",       "source": "ERP"},
 
     # --- Financial ---
     "amount":             {"label": "Total Gross (₹)",       "category": "FINANCIAL INFORMATION", "source": "Calculated"},
@@ -103,6 +108,7 @@ ALL_COLUMN_LABELS: Dict[str, Dict[str, str]] = {
     "division":           {"label": "Division / Company",    "category": "ORGANIZATION",          "source": "ERP"},
     "cost_center":        {"label": "Cost Center",           "category": "ORGANIZATION",          "source": "ERP"},
     "plant":              {"label": "Plant / Branch",        "category": "ORGANIZATION",          "source": "ERP"},
+    "category":           {"label": "Category Name",         "category": "ORGANIZATION",          "source": "ERP"},
 
     # --- Payment ---
     "payment_terms":      {"label": "Payment Terms",         "category": "PAYMENT",               "source": "ERP"},
@@ -154,13 +160,14 @@ ALL_COLUMN_LABELS: Dict[str, Dict[str, str]] = {
 
 # Universal columns that belong to ALL document types (no affinity restriction)
 UNIVERSAL_COLUMNS: Set[str] = {
-    "doc_key", "doc_num", "doc_date", "document_type",
+    "doc_key", "doc_num", "doc_date", "document_type", "document_number",
     "amount", "base_amount", "tax_amount", "cgst", "sgst", "igst", "currency",
-    "division", "cost_center", "plant", "payment_terms", "pay_mode",
-    "invoice_number", "invoice_date", "po_number", "doc_due_date",
+    "division", "cost_center", "plant", "category", "payment_terms", "pay_mode",
+    "invoice_number", "invoice_date", "po_number", "doc_due_date", "due_date",
     "vendor_name", "vendor_code", "vendor_gstin",
     "party_name", "party_code", "party_tax_id", "gstin",
     "pi_indicator", "trans_type", "contact_person",
+    "status", "assigned_approver", "current_stage", "total_stages",
 }
 
 # Columns that belong ONLY to specific document types (type-restricted)
@@ -418,8 +425,14 @@ def get_field_value_from_document(doc: Optional[Invoice], field_key: str, custom
 def _is_column_allowed_for_doc_type(col_name: str, norm_type: str) -> bool:
     """
     Returns True if the column is visible for the given document type.
-    All real database columns and configured columns are allowed for any document type.
+    Enforces strict affinity: fields exclusive to HR EXPENSE, CUSTOMER FEEDBACK,
+    or CREDIT NOTE are NOT returned for AP INVOICE documents.
     """
+    col_norm = col_name.lower().strip()
+    if col_norm in COLUMN_DOC_TYPE_AFFINITY:
+        allowed_types = COLUMN_DOC_TYPE_AFFINITY[col_norm]
+        norm_type_clean = norm_type.upper().strip()
+        return any(t in norm_type_clean or norm_type_clean in t for t in allowed_types)
     return True
 
 
@@ -521,7 +534,7 @@ def discover_available_fields_for_doc(
     seen_raw_keys: Set[str] = set()   # original-case keys for dedup
 
     # -------------------------------------------------------------------
-    # LAYER 1: Configured catalog — always included, order preserved
+    # LAYER 1: Configured catalog — always included for doc's type
     # -------------------------------------------------------------------
     configured_catalog = DOCUMENT_TYPE_ALLOWED_FIELDS.get(
         norm_type,
@@ -544,7 +557,7 @@ def discover_available_fields_for_doc(
         ))
 
     # -------------------------------------------------------------------
-    # LAYER 2: ORM model SQL columns with non-null values on this doc
+    # LAYER 2: ORM model SQL columns matching document type affinity
     # -------------------------------------------------------------------
     try:
         orm_columns = [col.name for col in Invoice.__table__.columns]
@@ -559,23 +572,18 @@ def discover_available_fields_for_doc(
             continue
         if not _is_column_allowed_for_doc_type(col_norm, norm_type):
             continue
+
         raw_val = getattr(doc, col_name, None)
-        if raw_val is None:
+        has_val = raw_val is not None and str(raw_val).strip() not in ("", "null", "None")
+        if not has_val and col_norm not in UNIVERSAL_COLUMNS:
             continue
-        str_val = str(raw_val).strip()
-        if not str_val or str_val.lower() == "null":
-            continue
-        # Skip bare zeros for non-financial fields
-        if str_val in ("0", "0.0", "0.00"):
-            meta_chk = ALL_COLUMN_LABELS.get(col_norm, {})
-            if meta_chk.get("category") != "FINANCIAL INFORMATION":
-                continue
+
+        formatted_val = format_field_value(raw_val, col_name) if has_val else None
 
         meta = ALL_COLUMN_LABELS.get(col_norm, ALL_COLUMN_LABELS.get(col_name, {}))
         label = meta.get("label") or col_name.replace("_", " ").title()
         col_category = meta.get("category") or "ADDITIONAL INFORMATION"
         source = meta.get("source") or "ERP"
-        formatted_val = format_field_value(raw_val, col_name)
         seen_keys.add(col_norm)
         seen_raw_keys.add(col_name)
         fields_result.append(_make_field_item(col_name, label, col_category, source, formatted_val))

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getCanonicalDocumentType, formatDocumentTypeDisplay, getDocTypePrefix, formatDocNumber } from './formatters';
+import { getCanonicalDocumentType, formatDocumentTypeDisplay, getDocTypePrefix, formatDocNumber, resolvePersonsInRoleForDivision } from './formatters';
 
 describe('Document Type Resolution & Formatting', () => {
   it('resolves AP INVOICE canonical document type from various payload fields', () => {
@@ -29,9 +29,9 @@ describe('Document Type Resolution & Formatting', () => {
     expect(getCanonicalDocumentType(doc4)).toBe("AP INVOICE");
   });
 
-  it('falls back to GENERAL RECORDS only when no valid document type exists', () => {
-    expect(getCanonicalDocumentType(null)).toBe("GENERAL RECORDS");
-    expect(formatDocumentTypeDisplay(null)).toBe("General Records");
+  it('falls back to AP INVOICE when no valid document type exists', () => {
+    expect(getCanonicalDocumentType(null)).toBe("AP INVOICE");
+    expect(formatDocumentTypeDisplay(null)).toBe("AP Invoice");
 
     const docEmpty = { document_type: "GENERAL RECORDS", category: "GENERAL RECORDS" };
     expect(getCanonicalDocumentType(docEmpty)).toBe("GENERAL RECORDS");
@@ -55,3 +55,19 @@ describe('Document Type Resolution & Formatting', () => {
     expect(getDocTypePrefix(doc)).toBe("INV");
   });
 });
+
+describe('Role Resolution Scoping (resolvePersonsInRoleForDivision)', () => {
+  it('does not cross-assign accounts_approver and accounts_approver2 roles', () => {
+    const mockUsers = [
+      { id: 1, username: 'initha', employee_name: 'Initha', role: 'accounts_approver', division: 'VCC', is_active: true },
+      { id: 2, username: 'titus', employee_name: 'Titus', role: 'accounts_approver2', division: 'VCC', is_active: true }
+    ];
+
+    const stage2Resolved = resolvePersonsInRoleForDivision('accounts_approver', 'VCC', mockUsers);
+    const stage3Resolved = resolvePersonsInRoleForDivision('accounts_approver2', 'VCC', mockUsers);
+
+    expect(stage2Resolved.users.map((u: any) => u.employee_name)).toEqual(['Initha']);
+    expect(stage3Resolved.users.map((u: any) => u.employee_name)).toEqual(['Titus']);
+  });
+});
+

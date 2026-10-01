@@ -93,9 +93,9 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   const [isResetting, setIsResetting] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  // Available fields strictly excluding fixed summary fields
+  // All ERP synced master data fields available for selection
   const selectableAvailableFields = useMemo(() => {
-    return availableFields.filter((f) => !isFixedSummaryField(f.field_key));
+    return availableFields;
   }, [availableFields]);
 
   // Track previous isOpen state to only initialize when drawer transitions to open
@@ -104,10 +104,9 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   // Initialize or reset drawer state from props ONLY when drawer transitions from closed to open
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      const validSelected = selectedFields.filter((f) => !isFixedSummaryField(f.field_key));
-      const keys = new Set(validSelected.map((f) => f.field_key));
+      const keys = new Set(selectedFields.map((f) => f.field_key));
       setSelectedKeys(keys);
-      setOrderedFieldKeys(validSelected.map((f) => f.field_key));
+      setOrderedFieldKeys(selectedFields.map((f) => f.field_key));
       setSaveAsDefault(false);
       setSearchQuery("");
       setActiveTab("fields");

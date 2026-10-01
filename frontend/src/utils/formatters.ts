@@ -603,13 +603,15 @@ export function resolvePersonsInRoleForDivision(
         (isAuditGroup(targetLower) && isAuditGroup(uRole));
 
       if (!roleMatches && uRoleNorm.length >= 4 && targetNorm.length >= 4) {
-        if (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)) {
+        const uDigits = (uRoleNorm.match(/\d+$/) || [""])[0];
+        const targetDigits = (targetNorm.match(/\d+$/) || [""])[0];
+        if (uDigits === targetDigits && (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm))) {
           roleMatches = true;
         } else {
           const uTokens = uRole.split(/[^a-z0-9]+/);
           const targetTokens = targetLower.split(/[^a-z0-9]+/);
           const commonTokens = uTokens.filter((tok) => tok.length >= 3 && targetTokens.includes(tok));
-          if (commonTokens.length >= 2) {
+          if (commonTokens.length >= 2 && uDigits === targetDigits) {
             roleMatches = true;
           }
         }
@@ -646,10 +648,12 @@ export function resolvePersonsInRoleForDivision(
         if (!u || u.is_active === false || u.is_deleted) return false;
         const uRole = (u.role || u.role_code || "").toString().toLowerCase().trim();
         const uRoleNorm = uRole.replace(/[^a-z0-9]/g, "");
+        const uDigits = (uRoleNorm.match(/\d+$/) || [""])[0];
+        const targetDigits = (targetNorm.match(/\d+$/) || [""])[0];
         return (
           uRole === targetLower ||
           uRoleNorm === targetNorm ||
-          (uRoleNorm.length >= 4 && targetNorm.length >= 4 && (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)))
+          (uRoleNorm.length >= 4 && targetNorm.length >= 4 && uDigits === targetDigits && (uRoleNorm.includes(targetNorm) || targetNorm.includes(uRoleNorm)))
         );
       });
 
