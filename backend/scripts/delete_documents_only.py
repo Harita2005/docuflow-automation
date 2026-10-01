@@ -10,6 +10,15 @@ print('>>> DELETING ALL DOCUMENTS & DOCUMENT LOGS ONLY')
 print('=' * 80)
 db = SessionLocal()
 try:
+    try:
+        db.execute(text("DELETE FROM callback_attempts;"))
+        db.execute(text("DELETE FROM callback_events;"))
+        db.execute(text("DELETE FROM integration_sync_logs;"))
+        db.execute(text("DELETE FROM system_engine_logs;"))
+        db.execute(text("DELETE FROM approval_assignments;"))
+        db.execute(text("DELETE FROM document_locks;"))
+    except Exception as e:
+        pass
     deleted_states = db.query(DocumentChecklistState).delete(synchronize_session=False)
     deleted_logs = db.query(DocumentApprovalLog).delete(synchronize_session=False)
     deleted_items = db.query(DocumentLineItem).delete(synchronize_session=False)
