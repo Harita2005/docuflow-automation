@@ -13,6 +13,7 @@ import {
   Clock,
   UserCheck,
   Printer,
+  Download,
   GitFork,
   CheckSquare,
   Check,
@@ -319,12 +320,142 @@ export default function UserManualModal({
       ? adminManual
       : operationsManual;
 
-  // Count allowed manuals for tab selector rendering
   const allowedManualsCount = (hasOpsAccess ? 1 : 0) + (hasFeedbackAccess ? 1 : 0) + (hasAdminAccess ? 1 : 0);
 
+  const handleDownloadManual = () => {
+    const manualContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${currentManual.title}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 30px; color: #0f172a; background: #ffffff; }
+    .header { background: #003F28; color: white; padding: 20px 24px; border-radius: 12px; margin-bottom: 24px; }
+    .header h1 { margin: 0 0 6px 0; font-size: 20px; text-transform: uppercase; font-weight: 900; letter-spacing: -0.02em; }
+    .header p { margin: 0; opacity: 0.85; font-size: 13px; font-weight: 500; }
+    .section-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin-bottom: 20px; break-inside: avoid; page-break-inside: avoid; }
+    .section-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px; }
+    .section-title { font-size: 15px; font-weight: 900; color: #0f172a; margin: 0 0 4px 0; }
+    .section-summary { font-size: 12px; color: #64748b; margin: 0; font-weight: 500; }
+    .badge { font-size: 10px; font-weight: 900; text-transform: uppercase; padding: 3px 10px; border-radius: 9999px; background: #f1f5f9; color: #003F28; border: 1px solid #cbd5e1; }
+    .step-item { display: flex; gap: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; align-items: flex-start; }
+    .step-num { width: 20px; height: 20px; background: #003F28; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
+    .step-text { font-size: 12px; line-height: 1.5; color: #334155; }
+    .step-title { font-weight: 800; color: #0f172a; }
+    .footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; font-weight: 600; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${currentManual.title}</h1>
+    <p>${currentManual.subtitle}</p>
+  </div>
+  ${currentManual.sections.map(sec => `
+    <div class="section-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">${sec.title}</h2>
+          <p class="section-summary">${sec.summary}</p>
+        </div>
+        <span class="badge">${sec.badge}</span>
+      </div>
+      <div>
+        ${sec.steps.map((stepText, idx) => {
+          const parts = stepText.split(":");
+          return `
+            <div class="step-item">
+              <div class="step-num">${idx + 1}</div>
+              <div class="step-text"><span class="step-title">${parts[0]}:</span>${parts.slice(1).join(":")}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `).join('')}
+  <div class="footer">
+    DocuFlow Automation System — ${currentManual.title} — Role-scoped Operating Guide
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([manualContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentManual.title.replace(/\s+/g, "_")}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn font-sans select-none">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn font-sans select-none user-manual-modal-overlay">
+      <style>{`
+        @media print {
+          /* Hide full application body, sidebar, header, and non-printable modal elements */
+          body > *:not(.user-manual-modal-overlay),
+          #root,
+          .no-print {
+            display: none !important;
+          }
+
+          /* Reset backdrop overlay styling for print flow */
+          .user-manual-modal-overlay {
+            position: absolute !important;
+            inset: 0 !important;
+            background: #ffffff !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            z-index: 999999 !important;
+            overflow: visible !important;
+          }
+
+          /* Expand modal content container to full printed page */
+          .user-manual-modal-content {
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+
+          /* Expand cards container without scrollbars or cutoffs */
+          .user-manual-scroll-area {
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+            padding: 15px !important;
+            background: #ffffff !important;
+          }
+
+          /* Prevent step cards from breaking across page splits */
+          .user-manual-section-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 20px !important;
+            border: 1px solid #cbd5e1 !important;
+            box-shadow: none !important;
+          }
+
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
+
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden user-manual-modal-content">
         
         {/* DYNAMIC HEADER */}
         <div className={`px-6 py-4 bg-gradient-to-r ${currentManual.color} text-white flex items-center justify-between shrink-0 shadow-sm`}>
@@ -342,14 +473,22 @@ export default function UserManualModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 no-print">
             <button
               onClick={() => window.print()}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-              title="Print Manual"
+              title="Print Manual / Save as PDF"
             >
               <Printer className="h-4 w-4" />
-              <span className="hidden sm:inline">Print</span>
+              <span className="hidden sm:inline">Print / PDF</span>
+            </button>
+            <button
+              onClick={handleDownloadManual}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              title="Download Standalone Manual File"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Download</span>
             </button>
             <button
               onClick={onClose}
@@ -361,7 +500,7 @@ export default function UserManualModal({
         </div>
 
         {/* MANUAL SELECTOR BAR */}
-        <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print">
           <div className="flex items-center gap-2">
             {allowedManualsCount > 1 ? (
               <>
@@ -435,7 +574,7 @@ export default function UserManualModal({
         </div>
 
         {/* STEP-BY-STEP CARDS CONTAINER */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar bg-slate-50/50">
+        <div className="p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar bg-slate-50/50 user-manual-scroll-area">
           {currentManual.sections
             .filter(
               (sec) =>
@@ -447,7 +586,7 @@ export default function UserManualModal({
             .map((sec) => {
               const Icon = sec.icon;
               return (
-                <div key={sec.id} className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs space-y-3.5 animate-fadeIn">
+                <div key={sec.id} className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs space-y-3.5 animate-fadeIn user-manual-section-card">
                   
                   {/* Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -498,7 +637,7 @@ export default function UserManualModal({
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0 no-print">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
             <Check className="h-4 w-4 text-emerald-600" />
             <span>Role-scoped operating manual for {roleKey || "active user"}</span>
