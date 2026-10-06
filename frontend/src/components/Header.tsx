@@ -112,7 +112,7 @@ export default function Header({
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
-  const displayBadgeCount = unreadCount > 0 ? unreadCount : (notifications.length === 0 ? 24 : 0);
+  const displayBadgeCount = unreadCount;
 
   const getViewTitle = () => {
     switch (currentView) {
@@ -244,8 +244,8 @@ export default function Header({
                   {notifications.length === 0 ? (
                     <div className="p-5 text-center text-slate-400">
                       <ShieldAlert className="h-6 w-6 text-slate-350 mx-auto mb-1 opacity-50" />
-                      <p className="font-bold text-[9px] uppercase tracking-wider text-slate-500">24 System Notifications Active</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">Showing recent workflow notification logs.</p>
+                      <p className="font-bold text-[9px] uppercase tracking-wider text-slate-500">No Notifications</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">You're all caught up! Document notifications assigned to you will appear here.</p>
                     </div>
                   ) : (
                     notifications.map((n) => {

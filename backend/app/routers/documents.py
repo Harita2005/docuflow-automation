@@ -1401,8 +1401,31 @@ def archive_rejected_pdf(inv: Invoice):
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
+def dispatch_assignment_inapp_notification(db: Session, inv: Invoice, assigned_target: Optional[str] = None):
+    """Generates real-time in-app notification when a document is ingested and assigned to Stage 1."""
+    try:
+        target_str = assigned_target or inv.assigned_approver
+        if not target_str or target_str.startswith('Unassigned') or target_str.startswith('System'):
+            return
+        inv_title = inv.invoice_number or inv.id or 'Document'
+        vendor_info = inv.vendor_name or 'Vendor'
+        amt_str = f'INR {inv.amount:,.2f}' if inv.amount else ''
+        targets = [t.strip() for t in target_str.split(',') if t.strip()]
+        for target in targets:
+            db.add(InAppNotification(
+                document_id=str(inv.id),
+                recipient_handle=target,
+                notification_type='PENDING_APPROVAL',
+                title=f'Action Required: {inv_title} Assigned to You (Stage 1)',
+                message=f"New document '{inv_title}' ({vendor_info} {amt_str}) uploaded and assigned to you for verification at Stage 1.",
+                is_read=False
+            ))
+        db.flush()
+    except Exception as e:
+        logger.debug('Handled exception in assignment notification: %s', e)
+
 def dispatch_approval_inapp_notifications(db: Session, inv: Invoice, approver_name: str, prev_stage: int, new_stage: int, next_approver_target: Optional[str]=None, is_completed: bool=False):
-    """Generates real-time in-app notifications when a document is approved and routed."""
+    """Generates real-time targeted in-app notifications when a document is approved and routed."""
     try:
         inv_title = inv.invoice_number or inv.id or 'Document'
         vendor_info = inv.vendor_name or 'Vendor'
@@ -1413,19 +1436,17 @@ def dispatch_approval_inapp_notifications(db: Session, inv: Invoice, approver_na
                 notif = InAppNotification(document_id=str(inv.id), recipient_handle=target, notification_type='PENDING_APPROVAL', title=f'Action Required: {inv_title} Assigned to You (Stage {new_stage})', message=f"Document '{inv_title}' ({vendor_info} {amt_str}) was verified and signed off by {approver_name} at Stage {prev_stage}. It is now pending your sign-off at Stage {new_stage}.", is_read=False)
                 db.add(notif)
         db.add(InAppNotification(document_id=str(inv.id), recipient_handle=approver_name, notification_type='COMPLETED' if is_completed else 'PENDING_APPROVAL', title=f'Approval Confirmed: Stage {prev_stage} Completed' if not is_completed else f'Document {inv_title} Fully Settled', message=f'You successfully signed off on Stage {prev_stage}. Document routed to Stage {new_stage} ({next_approver_target}).' if not is_completed else f"You provided final sign-off for '{inv_title}'. Document is settled and archived.", is_read=False))
-        db.add(InAppNotification(document_id=str(inv.id), recipient_handle='admin', notification_type='COMPLETED' if is_completed else 'PENDING_APPROVAL', title=f'Workflow Progress: {inv_title} ➔ Stage {new_stage}' if not is_completed else f'Workflow Settled: {inv_title}', message=f"Stage {prev_stage} signed off by {approver_name}. Assigned to: {next_approver_target or 'Final Settlement'}." if not is_completed else f"Document '{inv_title}' completed all approval stages.", is_read=False))
         db.flush()
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
 def dispatch_rejection_inapp_notifications(db: Session, inv: Invoice, approver_name: str, from_stage: int, to_stage: int, remarks: str, target_approver: Optional[str]=None, is_cancelled: bool=False):
-    """Generates real-time in-app notifications when a document is rejected / sent back or cancelled."""
+    """Generates real-time targeted in-app notifications when a document is rejected / sent back or cancelled."""
     try:
         inv_title = inv.invoice_number or inv.id or 'Document'
         vendor_info = inv.vendor_name or 'Vendor'
         amt_str = f'INR {inv.amount:,.2f}' if inv.amount else ''
         if is_cancelled:
-            db.add(InAppNotification(document_id=str(inv.id), recipient_handle='admin', notification_type='REJECTED', title=f'Process Cancelled: {inv_title}', message=f"Document '{inv_title}' ({vendor_info}) was cancelled/voided at Stage 1 by {approver_name}. Reason: {remarks}", is_read=False))
             req_email = getattr(inv, 'requestor_email', None) or getattr(inv, 'created_by', None)
             if req_email:
                 db.add(InAppNotification(document_id=str(inv.id), recipient_handle=str(req_email), notification_type='REJECTED', title=f'Document Process Cancelled: {inv_title}', message=f"Document '{inv_title}' has been cancelled by {approver_name}. Reason: {remarks}", is_read=False))
@@ -2504,6 +2525,7 @@ async def confirm_and_ingest_document(
             else:
                 new_inv.assigned_approver = 'Unassigned (No Step Approvers)'
                 new_inv.status = 'Initiated (Stage 1)'
+            dispatch_assignment_inapp_notification(db, new_inv)
             
             db.add(AuditLog(
                 invoice_id=new_inv.id,
@@ -2669,6 +2691,7 @@ async def upload_document(
             else:
                 new_inv.assigned_approver = 'Unassigned (No Step Approvers)'
                 new_inv.status = 'Initiated (Stage 1)'
+            dispatch_assignment_inapp_notification(db, new_inv)
             db.add(AuditLog(invoice_id=new_inv.id, user='Document Uploader', action='Created & Uploaded', stage='Stage 1', notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."))
         first_stage = 'Attachment Status'
         if steps and len(steps) > 0 and steps[0].step_name:
@@ -3054,21 +3077,63 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         'autoRoutedPercentage': 100.0 if total_docs > 0 else 0.0
     }
 
+def get_user_notification_handles(user: User) -> list[str]:
+    handles = set()
+    if user.username:
+        handles.add(user.username.lower().strip())
+    if user.employee_id:
+        handles.add(user.employee_id.lower().strip())
+    if user.employee_name:
+        handles.add(user.employee_name.lower().strip())
+    if user.email:
+        handles.add(user.email.lower().strip())
+    if user.role:
+        role_str = user.role.lower().strip()
+        handles.add(role_str)
+        if role_str == 'ap_executive':
+            handles.update(['ap_executive', 'reviewer', 'ap_reviewer', 'l1_approver', 'stage 1', 'stage 1 approver'])
+        elif role_str == 'manager':
+            handles.update(['manager', 'l2_approver', 'finance_manager', 'finance manager', 'stage 2', 'stage 2 approver'])
+        elif role_str == 'executive':
+            handles.update(['executive', 'l3_approver', 'executive_approver', 'executive approver', 'stage 3', 'stage 3 approver'])
+        elif role_str == 'admin':
+            handles.update(['admin', 'administrator', 'system administrator'])
+    return [h for h in handles if h]
+
+def is_notification_for_user_handles(n: InAppNotification, user_handles: list[str]) -> bool:
+    if not n.recipient_handle:
+        return False
+    recip = n.recipient_handle.lower().strip()
+    recip_tokens = [r.strip() for r in recip.replace(',', ' ').split() if r.strip()]
+    for r in recip_tokens:
+        for uh in user_handles:
+            if uh == r:
+                return True
+            if '@' in uh and uh.split('@')[0] == r:
+                return True
+            if '@' in r and r.split('@')[0] == uh:
+                return True
+    return False
+
 @router.get('/api/notifications')
-def get_notifications(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
-    query = db.query(InAppNotification)
-    if current_user and current_user.role != 'admin':
-        user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
-        user_handles = [h for h in user_handles if h]
-        all_notifs = query.order_by(InAppNotification.created_at.desc()).limit(100).all()
-        filtered = []
-        for n in all_notifs:
-            handle = (n.recipient_handle or '').lower()
-            if any((uh == handle or uh in handle or handle in uh for uh in user_handles)):
-                filtered.append({'notification_id': n.notification_id, 'document_id': n.document_id, 'notification_type': n.notification_type, 'title': n.title, 'message': n.message, 'is_read': n.is_read, 'created_at': n.created_at.isoformat() if n.created_at else datetime.datetime.utcnow().isoformat()})
-        return filtered
-    all_notifs = query.order_by(InAppNotification.created_at.desc()).limit(50).all()
-    return [{'notification_id': n.notification_id, 'document_id': n.document_id, 'notification_type': n.notification_type, 'title': n.title, 'message': n.message, 'is_read': n.is_read, 'created_at': n.created_at.isoformat() if n.created_at else datetime.datetime.utcnow().isoformat()} for n in all_notifs]
+def get_notifications(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user_optional)):
+    if not current_user:
+        return []
+    user_handles = get_user_notification_handles(current_user)
+    all_notifs = db.query(InAppNotification).order_by(InAppNotification.created_at.desc()).limit(150).all()
+    filtered = []
+    for n in all_notifs:
+        if is_notification_for_user_handles(n, user_handles):
+            filtered.append({
+                'notification_id': n.notification_id,
+                'document_id': n.document_id,
+                'notification_type': n.notification_type,
+                'title': n.title,
+                'message': n.message,
+                'is_read': n.is_read,
+                'created_at': n.created_at.isoformat() if n.created_at else datetime.datetime.utcnow().isoformat()
+            })
+    return filtered
 
 @router.put('/api/notifications/{notification_id}/read')
 def mark_notification_read(notification_id: str, db: Session=Depends(get_db)):
@@ -3081,18 +3146,14 @@ def mark_notification_read(notification_id: str, db: Session=Depends(get_db)):
     return {'success': True}
 
 @router.put('/api/notifications/read-all')
-def mark_all_notifications_read(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
-    query = db.query(InAppNotification)
-    if current_user and current_user.role != 'admin':
-        user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
-        user_handles = [h for h in user_handles if h]
-        all_notifs = query.filter(InAppNotification.is_read == False).all()
-        for n in all_notifs:
-            handle = (n.recipient_handle or '').lower()
-            if any((uh == handle or uh in handle or handle in uh for uh in user_handles)):
-                n.is_read = True
-    else:
-        query.update({InAppNotification.is_read: True})
+def mark_all_notifications_read(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user_optional)):
+    if not current_user:
+        return {'success': True}
+    user_handles = get_user_notification_handles(current_user)
+    unread_notifs = db.query(InAppNotification).filter(InAppNotification.is_read == False).all()
+    for n in unread_notifs:
+        if is_notification_for_user_handles(n, user_handles):
+            n.is_read = True
     db.commit()
     return {'success': True}
 
