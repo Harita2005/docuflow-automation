@@ -322,27 +322,31 @@ export default function UserManualModal({
 
   const allowedManualsCount = (hasOpsAccess ? 1 : 0) + (hasFeedbackAccess ? 1 : 0) + (hasAdminAccess ? 1 : 0);
 
-  const handleDownloadManual = () => {
-    const manualContent = `<!DOCTYPE html>
+  const generateManualHtml = () => {
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>${currentManual.title}</title>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 30px; color: #0f172a; background: #ffffff; }
-    .header { background: #003F28; color: white; padding: 20px 24px; border-radius: 12px; margin-bottom: 24px; }
-    .header h1 { margin: 0 0 6px 0; font-size: 20px; text-transform: uppercase; font-weight: 900; letter-spacing: -0.02em; }
-    .header p { margin: 0; opacity: 0.85; font-size: 13px; font-weight: 500; }
-    .section-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin-bottom: 20px; break-inside: avoid; page-break-inside: avoid; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 25px; color: #0f172a; background: #ffffff; line-height: 1.5; }
+    .header { background: #003F28; color: white; padding: 22px 24px; border-radius: 12px; margin-bottom: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .header h1 { margin: 0 0 6px 0; font-size: 22px; text-transform: uppercase; font-weight: 900; letter-spacing: -0.02em; }
+    .header p { margin: 0; opacity: 0.88; font-size: 13px; font-weight: 500; }
+    .section-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 20px; break-inside: avoid; page-break-inside: avoid; }
     .section-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px; }
-    .section-title { font-size: 15px; font-weight: 900; color: #0f172a; margin: 0 0 4px 0; }
+    .section-title { font-size: 16px; font-weight: 900; color: #0f172a; margin: 0 0 4px 0; }
     .section-summary { font-size: 12px; color: #64748b; margin: 0; font-weight: 500; }
-    .badge { font-size: 10px; font-weight: 900; text-transform: uppercase; padding: 3px 10px; border-radius: 9999px; background: #f1f5f9; color: #003F28; border: 1px solid #cbd5e1; }
-    .step-item { display: flex; gap: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; align-items: flex-start; }
-    .step-num { width: 20px; height: 20px; background: #003F28; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
-    .step-text { font-size: 12px; line-height: 1.5; color: #334155; }
+    .badge { font-size: 10px; font-weight: 900; text-transform: uppercase; padding: 4px 10px; border-radius: 9999px; background: #f1f5f9; color: #003F28; border: 1px solid #cbd5e1; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .step-item { display: flex; gap: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; align-items: flex-start; }
+    .step-num { width: 22px; height: 22px; background: #003F28; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; flex-shrink: 0; margin-top: 1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .step-text { font-size: 12.5px; color: #334155; }
     .step-title { font-weight: 800; color: #0f172a; }
     .footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; font-weight: 600; text-align: center; }
+    @media print {
+      body { margin: 0; padding: 15px; }
+      .section-card { break-inside: avoid; page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -377,8 +381,25 @@ export default function UserManualModal({
   </div>
 </body>
 </html>`;
+  };
 
-    const blob = new Blob([manualContent], { type: "text/html" });
+  const handlePrintManual = () => {
+    const printWin = window.open("", "_blank");
+    if (!printWin) {
+      window.print();
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(generateManualHtml());
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+      printWin.print();
+    }, 250);
+  };
+
+  const handleDownloadManual = () => {
+    const blob = new Blob([generateManualHtml()], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -393,9 +414,11 @@ export default function UserManualModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn font-sans select-none user-manual-modal-overlay">
       <style>{`
         @media print {
-          /* Hide full application body, sidebar, header, and non-printable modal elements */
-          body > *:not(.user-manual-modal-overlay),
-          #root,
+          /* Keep root visible and hide siblings of modal overlay */
+          #root {
+            display: block !important;
+          }
+          #root > *:not(.user-manual-modal-overlay),
           .no-print {
             display: none !important;
           }
@@ -411,6 +434,7 @@ export default function UserManualModal({
             display: block !important;
             z-index: 999999 !important;
             overflow: visible !important;
+            width: 100% !important;
           }
 
           /* Expand modal content container to full printed page */
@@ -475,7 +499,7 @@ export default function UserManualModal({
 
           <div className="flex items-center gap-2 no-print">
             <button
-              onClick={() => window.print()}
+              onClick={handlePrintManual}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
               title="Print Manual / Save as PDF"
             >
