@@ -702,7 +702,7 @@ export default function CustomerFeedbackDetails({
 
       // 2. Try role-based resolution if candidate string is a role title (e.g. "Warehouse Manager")
       const resolvedRole = resolvePersonsInRoleForDivision(candidateStr, docDivision, allUsers);
-      if (resolvedRole && resolvedRole.displayName && !resolvedRole.isUnassigned) {
+      if (!resolvedRole.isUnassigned) {
         const personName = resolvedRole.displayName;
         const roleTitle = resolvedRole.roleName || formatAssignedToDisplay(candidateStr);
         if (personName && roleTitle && personName.toLowerCase() !== roleTitle.toLowerCase()) {
