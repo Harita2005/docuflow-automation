@@ -233,8 +233,19 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
     workflow step definition. If the member was changed in between, this ensures the newly 
     assigned member is persisted in the database and authorized for approval.
     """
-    if not inv or not inv.workflow_profile_id:
-        return inv.assigned_approver or ''
+    if not inv or not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'None']:
+        if inv and inv.status not in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
+            if not inv.status or not inv.status.startswith('Unrouted'):
+                inv.status = 'Unrouted (No Rule Matched)'
+                inv.assigned_approver = 'Unassigned (No Rule Matched)'
+                inv.current_stage = 0
+                inv.total_stages = 0
+                try:
+                    db.add(inv)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+        return (inv.assigned_approver if inv else '') or 'Unassigned (No Rule Matched)'
     
     # Completed terminal documents retain their final audit state
     if inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
@@ -2459,18 +2470,6 @@ async def confirm_and_ingest_document(
         rule_name = rule_eval.get('rule_name', 'Default Policy') if rule_eval else 'Default Policy'
 
     if not matched_wf:
-        # Fallback: Auto-start workflow matching doc_type / division or default workflow profile
-        fallback_profile = db.query(WorkflowProfile).filter(
-            (WorkflowProfile.profile_name.ilike(f"%{document_type}%")) |
-            (WorkflowProfile.profile_name.ilike(f"%{user_div}%"))
-        ).filter(WorkflowProfile.is_deleted == False).first()
-        if not fallback_profile:
-            fallback_profile = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
-        if fallback_profile:
-            matched_wf = fallback_profile.profile_name
-            rule_act = 'WORKFLOW_ROUTE'
-
-    if not matched_wf:
         new_inv.workflow_profile_id = None
         new_inv.assigned_approver = 'Unassigned (No Rule Matched)'
         new_inv.status = 'Unrouted (No Rule Matched)'
@@ -2645,18 +2644,6 @@ async def upload_document(
         rule_act = rule_eval.get('rule_action', 'WORKFLOW_ROUTE') if rule_eval else 'WORKFLOW_ROUTE'
         cancel_res = rule_eval.get('cancel_reason', 'Auto-cancelled by policy') if rule_eval else None
         rule_name = rule_eval.get('rule_name', 'Default Policy') if rule_eval else 'Default Policy'
-
-    if not matched_wf:
-        # Fallback: Auto-start workflow matching doc_type / division or default workflow profile
-        fallback_profile = db.query(WorkflowProfile).filter(
-            (WorkflowProfile.profile_name.ilike(f"%{final_doc_type}%")) |
-            (WorkflowProfile.profile_name.ilike(f"%{user_div}%"))
-        ).filter(WorkflowProfile.is_deleted == False).first()
-        if not fallback_profile:
-            fallback_profile = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
-        if fallback_profile:
-            matched_wf = fallback_profile.profile_name
-            rule_act = 'WORKFLOW_ROUTE'
 
     if not matched_wf:
         new_inv.workflow_profile_id = None
