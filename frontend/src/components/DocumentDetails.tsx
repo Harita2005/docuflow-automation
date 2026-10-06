@@ -1810,31 +1810,6 @@ export default function DocumentDetails({
     }
   };
 
-  const handleToggleAllChecklist = async () => {
-    if (isDocumentLocked) return;
-    const allChecked = effectiveChecklist.every((item) => checkedStates[item]);
-    const updatedStates: Record<string, boolean> = { ...checkedStates };
-    effectiveChecklist.forEach((item) => {
-      updatedStates[item] = !allChecked;
-    });
-    setCheckedStates(updatedStates);
-    
-    try {
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      
-      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
-      await fetch(`/api/invoices/${document.id}/checklist`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ checked_items })
-      });
-    } catch (e) {
-      console.error("Failed to batch update checklist state on server:", e);
-    }
-  };
-
   const isDocUnrouted = !document?.workflow_profile_id || 
                         document?.workflow_profile_id === 'UNROUTED' || 
                         (document?.status || '').toLowerCase().includes('unrouted') ||

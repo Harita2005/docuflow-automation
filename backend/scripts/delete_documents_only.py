@@ -32,7 +32,6 @@ try:
         db.execute(text("IF OBJECT_ID('integration.source_records', 'U') IS NOT NULL DELETE FROM integration.source_records;"))
         db.execute(text("IF OBJECT_ID('rules.rule_evaluation_runs', 'U') IS NOT NULL DELETE FROM rules.rule_evaluation_runs;"))
     except Exception as sql_err:
-        import logging
         logging.getLogger(__name__).debug('Handled exception: %s', sql_err)
     db.commit()
     print(f'\nSUCCESSFULLY DELETED:')
@@ -43,7 +42,6 @@ try:
     print('\nAll Business Rules, Workflow Profiles, Checklists, and Users remain untouched.')
     print('=' * 80)
 except Exception as e:
-    import logging
     logging.getLogger(__name__).debug('Handled exception: %s', e)
 finally:
     db.close()

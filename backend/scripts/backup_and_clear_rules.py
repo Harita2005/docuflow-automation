@@ -1,6 +1,7 @@
 import sys
 import json
 import os
+import logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.database import SessionLocal
 from sqlalchemy import text
@@ -18,7 +19,6 @@ for table in tables:
         backup_data[table] = rows
         print(f"[Backup] Exported {len(rows)} rows from '{table}'")
     except Exception as e:
-        import logging
         logging.getLogger(__name__).debug('Handled exception: %s', e)
 scratch_dir = 'C:\\Users\\TempAdmin\\.gemini\\antigravity\\brain\\8f555b68-5137-47e1-92f1-947706665c31\\scratch'
 os.makedirs(scratch_dir, exist_ok=True)
@@ -31,7 +31,6 @@ for table in tables:
         res = db.execute(text(f'DELETE FROM {table}'))
         print(f"[Clear Success] Deleted all rows from '{table}'")
     except Exception as e:
-        import logging
         logging.getLogger(__name__).debug('Handled exception: %s', e)
 db.commit()
 db.close()

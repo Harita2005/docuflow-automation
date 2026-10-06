@@ -61,7 +61,7 @@ export const getCustomerFeedbackPermissions = (
   const isManager = userRole === "manager" || userRole === "auditor";
 
   return {
-    canView: hasSpecificPerm("customer_feedback.view") || true,
+    canView: true,
     canEdit: hasSpecificPerm("customer_feedback.edit") || isAdmin,
     canDelete: hasSpecificPerm("customer_feedback.delete") || isAdmin,
     canAudit: hasSpecificPerm("customer_feedback.audit") || isAdmin || isManager,
@@ -255,45 +255,6 @@ export default function CustomerFeedbackDetails({
       });
     } catch (e) {
       console.error("Failed to update checklist item:", e);
-    }
-  };
-
-  // Batch toggle all checklist items (Verify All / Deselect All)
-  const handleBatchToggleChecklist = async () => {
-    if (isDocApproved) return;
-    const allChecked = checklistItems.every((item) => checkedStates[item.item_text]);
-    const targetState = !allChecked;
-
-    const newCheckedMap: Record<string, boolean> = {};
-    checklistItems.forEach((item) => {
-      newCheckedMap[item.item_text] = targetState;
-    });
-
-    setCheckedStates(newCheckedMap);
-    setChecklistItems((prev) =>
-      prev.map((item) => ({ ...item, is_checked: targetState }))
-    );
-
-    const docId = activeDoc?.id || document?.id;
-    if (!docId) return;
-
-    try {
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const activeCheckedList = targetState ? checklistItems.map((i) => i.item_text) : [];
-      await fetch(`/api/invoices/${encodeURIComponent(String(docId))}/checklist`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          stage_num: activeDoc?.current_stage || 1,
-          checked_items: activeCheckedList,
-          username: currentUserUsername || currentUserEmail
-        })
-      });
-    } catch (e) {
-      console.error("Failed to batch update checklist items:", e);
     }
   };
 
