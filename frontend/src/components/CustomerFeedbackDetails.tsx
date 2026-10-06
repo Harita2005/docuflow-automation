@@ -28,6 +28,8 @@ import {
   Users,
   CheckSquare,
   Check,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { DbInvoice } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, formatDateTime, getCanonicalDocumentType, resolvePersonsInRoleForDivision, formatAssignedToDisplay } from "../utils/formatters";
@@ -296,6 +298,99 @@ export default function CustomerFeedbackDetails({
   };
 
   // Action Selector & SLA Target Completion Date/Time State
+  const DEFAULT_FEEDBACK_ACTIONS = useMemo(() => [
+    "Awaiting Customer Clarification / Hold",
+    "Field Inspection Pending",
+    "Distributor Verification",
+    "Technical Subtype Audit",
+    "Resolution Signoff & Close"
+  ], []);
+
+  const [actionOptions, setActionOptions] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("docuflow_custom_feedback_actions");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return Array.from(new Set(["Awaiting Customer Clarification / Hold", "Field Inspection Pending", "Distributor Verification", "Technical Subtype Audit", "Resolution Signoff & Close", ...parsed]));
+        }
+      }
+    } catch {}
+    return [
+      "Awaiting Customer Clarification / Hold",
+      "Field Inspection Pending",
+      "Distributor Verification",
+      "Technical Subtype Audit",
+      "Resolution Signoff & Close"
+    ];
+  });
+  const [showAddActionModal, setShowAddActionModal] = useState<boolean>(false);
+  const [newActionInput, setNewActionInput] = useState<string>("");
+
+  useEffect(() => {
+    const fetchConfigActions = async () => {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch("/api/admin/config", { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.config && Array.isArray(data.config.CUSTOM_FEEDBACK_ACTIONS)) {
+            const backendActions = data.config.CUSTOM_FEEDBACK_ACTIONS;
+            const merged = Array.from(new Set([...DEFAULT_FEEDBACK_ACTIONS, ...backendActions]));
+            setActionOptions(merged);
+            localStorage.setItem("docuflow_custom_feedback_actions", JSON.stringify(merged));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load custom feedback actions from config:", e);
+      }
+    };
+    fetchConfigActions();
+  }, [DEFAULT_FEEDBACK_ACTIONS]);
+
+  const saveCustomActionsList = async (newList: string[]) => {
+    setActionOptions(newList);
+    try {
+      localStorage.setItem("docuflow_custom_feedback_actions", JSON.stringify(newList));
+      const customOnly = newList.filter((act) => !DEFAULT_FEEDBACK_ACTIONS.includes(act));
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      await fetch("/api/admin/config", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ CUSTOM_FEEDBACK_ACTIONS: customOnly }),
+      });
+    } catch (e) {
+      console.error("Failed to save custom feedback actions:", e);
+    }
+  };
+
+  const handleAddCustomAction = () => {
+    const trimmed = newActionInput.trim();
+    if (!trimmed) return;
+    if (!actionOptions.includes(trimmed)) {
+      const updated = [...actionOptions, trimmed];
+      saveCustomActionsList(updated);
+      setSelectedAction(trimmed);
+    } else {
+      setSelectedAction(trimmed);
+    }
+    setNewActionInput("");
+    setShowAddActionModal(false);
+  };
+
+  const handleRemoveCustomAction = (actionToRemove: string) => {
+    if (DEFAULT_FEEDBACK_ACTIONS.includes(actionToRemove)) return;
+    const updated = actionOptions.filter((a) => a !== actionToRemove);
+    saveCustomActionsList(updated);
+    if (selectedAction === actionToRemove) {
+      setSelectedAction(updated[0] || DEFAULT_FEEDBACK_ACTIONS[0]);
+    }
+  };
+
   const [selectedAction, setSelectedAction] = useState<string>("Awaiting Customer Clarification / Hold");
   const [targetCompletionDate, setTargetCompletionDate] = useState<string>("");
   const [autoEscalated, setAutoEscalated] = useState<boolean>(false);
@@ -1493,19 +1588,38 @@ export default function CustomerFeedbackDetails({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
                     {/* Action Selector */}
                     <div>
-                      <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
-                        Select Action:
-                      </label>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[8.5px] uppercase font-bold text-slate-600 block">
+                          Select Action:
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddActionModal(true)}
+                          className="text-[9px] font-bold text-[#003F28] hover:underline flex items-center gap-0.5 cursor-pointer"
+                          title="Add new action option"
+                        >
+                          <Plus className="w-3 h-3" /> Add Action
+                        </button>
+                      </div>
                       <select
                         value={selectedAction}
-                        onChange={(e) => setSelectedAction(e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value === "__ADD_NEW_ACTION__") {
+                            setShowAddActionModal(true);
+                          } else {
+                            setSelectedAction(e.target.value);
+                          }
+                        }}
                         className="w-full text-[10px] font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
                       >
-                        <option value="Awaiting Customer Clarification / Hold">Awaiting Customer Clarification / Hold</option>
-                        <option value="Field Inspection Pending">Field Inspection Pending</option>
-                        <option value="Distributor Verification">Distributor Verification</option>
-                        <option value="Technical Subtype Audit">Technical Subtype Audit</option>
-                        <option value="Resolution Signoff & Close">Resolution Signoff & Close</option>
+                        {actionOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                        <option value="__ADD_NEW_ACTION__" className="font-bold text-[#003F28]">
+                          + Add New Custom Action...
+                        </option>
                       </select>
                     </div>
 
@@ -2270,6 +2384,101 @@ export default function CustomerFeedbackDetails({
             >
               OK, Continue
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Custom Feedback Action Modal */}
+      {showAddActionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-[#003F28]">
+                <Plus className="w-5 h-5" />
+                <h3 className="font-extrabold text-sm text-slate-800">Configure Action Dropdown Options</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddActionModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Add New Custom Action Option:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newActionInput}
+                    onChange={(e) => setNewActionInput(e.target.value)}
+                    placeholder="e.g. Quality Assurance Review, Legal Hold..."
+                    className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomAction();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomAction}
+                    disabled={!newActionInput.trim()}
+                    className="px-3 py-2 bg-[#003F28] text-white font-bold text-xs rounded-lg hover:bg-[#002d1d] disabled:opacity-50 transition cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                  Current Action Options ({actionOptions.length}):
+                </label>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                  {actionOptions.map((act) => {
+                    const isDefault = DEFAULT_FEEDBACK_ACTIONS.includes(act);
+                    return (
+                      <div
+                        key={act}
+                        className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs"
+                      >
+                        <span className="font-semibold text-slate-700 truncate mr-2">{act}</span>
+                        {isDefault ? (
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded">
+                            Default
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomAction(act)}
+                            className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 rounded transition cursor-pointer"
+                            title="Remove custom action option"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowAddActionModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
