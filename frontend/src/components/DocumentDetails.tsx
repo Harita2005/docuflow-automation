@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
-import { MoreInfoConfigDrawer, ConfigFieldItem, isFixedSummaryField } from "./MoreInfoConfigDrawer";
+import { MoreInfoConfigDrawer, ConfigFieldItem } from "./MoreInfoConfigDrawer";
 
 
 interface DocumentDetailsProps {
