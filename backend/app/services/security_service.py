@@ -2,7 +2,6 @@ import logging
 import socket
 import ipaddress
 import re
-import urllib.parse
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)

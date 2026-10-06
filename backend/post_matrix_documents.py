@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bac
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.database.connection import SessionLocal
-from app.database.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule, Invoice
+from app.database.models import WorkflowProfile, WorkflowStepDefinition, BusinessRule
 from app.schemas.schemas import DocumentSyncRequest
 from app.routers.sync import _upsert_single_document
 

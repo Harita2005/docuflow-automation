@@ -1475,7 +1475,9 @@ export default function DocumentDetails({
         setAvailableWorkflows(wfs);
         if (wfs.length > 0) setSelectedWorkflowId(wfs[0].id);
       }
-    } catch {}
+    } catch (err) {
+      console.debug("Failed to fetch available workflows:", err);
+    }
   };
 
   const fetchComments = async () => {
@@ -1517,7 +1519,9 @@ export default function DocumentDetails({
       if (typeof document.items === "string") {
         try {
           parsedItems = JSON.parse(document.items);
-        } catch {}
+        } catch (err) {
+          console.debug("Failed to parse document items json:", err);
+        }
       } else if (Array.isArray(document.items)) {
         parsedItems = document.items;
       }
@@ -1588,7 +1592,9 @@ export default function DocumentDetails({
         if (parsed.invoiceNumber) setInvoiceNumber(parsed.invoiceNumber);
         if (parsed.poNumber) setPoNumber(parsed.poNumber);
       }
-    } catch {}
+    } catch (err) {
+      console.debug("Failed to parse draft from localStorage:", err);
+    }
   }, [document?.id]);
 
   // Auto-Save Draft Verification Inputs on Changes
@@ -1604,7 +1610,9 @@ export default function DocumentDetails({
           poNumber,
           updatedAt: new Date().toISOString()
         }));
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to save draft to localStorage:", err);
+      }
     }
   }, [document?.id, approvalComment, vendorName, invoiceNumber, poNumber]);
 
@@ -1612,7 +1620,9 @@ export default function DocumentDetails({
     if (document?.id) {
       try {
         localStorage.removeItem(`docuflow_draft_${document.id}`);
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to clear draft from localStorage:", err);
+      }
     }
   };
 

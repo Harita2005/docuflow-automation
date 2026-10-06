@@ -685,7 +685,7 @@ export function resolvePersonsInRoleForDivision(
   }
 
   // Construct hover tooltip
-  let tooltipText = "";
+  let tooltipText: string;
   if (matchedUsers.length > 0) {
     if (matchedUsers.length === 1) {
       const u = matchedUsers[0];

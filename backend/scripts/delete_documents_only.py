@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,7 +19,7 @@ try:
         db.execute(text("DELETE FROM approval_assignments;"))
         db.execute(text("DELETE FROM document_locks;"))
     except Exception as e:
-        pass
+        logging.getLogger(__name__).debug("Handled pre-cleanup exception: %s", e)
     deleted_states = db.query(DocumentChecklistState).delete(synchronize_session=False)
     deleted_logs = db.query(DocumentApprovalLog).delete(synchronize_session=False)
     deleted_items = db.query(DocumentLineItem).delete(synchronize_session=False)

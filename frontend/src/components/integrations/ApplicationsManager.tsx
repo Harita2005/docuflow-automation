@@ -122,7 +122,9 @@ export default function ApplicationsManager({ onConfigureRules }: ApplicationsMa
     if (app.auth_config_json) {
       try {
         parsedAuth = JSON.parse(app.auth_config_json);
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to parse app auth_config_json:", err);
+      }
     }
 
     setFormData({

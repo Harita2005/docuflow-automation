@@ -2,7 +2,6 @@ import logging
 import datetime
 import json
 import re
-import urllib.parse
 from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -62,9 +61,8 @@ def ensure_workflow_code(p: WorkflowProfile, db: Session=None) -> str:
                 if m:
                     try:
                         nums.append(int(m.group(1)))
-                    except ValueError:
-                        # Ignore non-integer matches when calculating workflow code suffix
-                        pass
+                    except ValueError as exc:
+                        logger.debug('Ignored non-integer workflow code suffix: %s', exc)
         next_num = (max(nums) + 1) if nums else 1
         code = f'WF-{str(next_num).zfill(3)}'
     else:
@@ -168,9 +166,8 @@ def save_workflow_profile(
                     if m:
                         try:
                             nums.append(int(m.group(1)))
-                        except ValueError:
-                            # Ignore non-integer matches when calculating workflow code suffix
-                            pass
+                        except ValueError as exc:
+                            logger.debug('Ignored non-integer workflow code suffix: %s', exc)
             next_num = (max(nums) + 1) if nums else 1
             wf_code = f'WF-{str(next_num).zfill(3)}'
 

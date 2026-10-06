@@ -72,7 +72,9 @@ export default function CallbackRuleBuilder({
           if (parsed.logicalOperator) setLogicalOperator(parsed.logicalOperator);
           return parsed.conditions;
         }
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to parse conditions_json:", err);
+      }
     }
     return [
       { field: "company", operator: "Equals", value: "VCC" }
@@ -91,7 +93,9 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.query_params_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to parse query_params_json:", err);
+      }
     }
     return [
       { key: "source", value: "DOCUFLOW", type: "Static" }
@@ -103,7 +107,9 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.headers_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to parse headers_json:", err);
+      }
     }
     return [
       { key: "Content-Type", value: "application/json", type: "Static" }
@@ -121,7 +127,9 @@ export default function CallbackRuleBuilder({
       try {
         const parsed = JSON.parse(initialRule.payload_mapping_json);
         if (Array.isArray(parsed)) return parsed;
-      } catch {}
+      } catch (err) {
+        console.debug("Failed to parse payload_mapping_json:", err);
+      }
     }
     return [
       { thirdPartyField: "primaryKey", sourceField: "primaryKey" },
