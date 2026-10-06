@@ -1577,13 +1577,19 @@ export default function CustomerFeedbackDetails({
                   </div>
                 </div>
 
-                <textarea
-                  value={approvalComment}
-                  onChange={(e) => setApprovalComment(e.target.value)}
-                  placeholder="Enter reviewer notes, approval comments, or hold/rejection reason..."
-                  rows={2}
-                  className="w-full text-[11px] font-medium p-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50 resize-none"
-                />
+                <div>
+                  <label className="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 mb-1">
+                    <MessageSquare className="h-3 w-3 text-[#003F28]" />
+                    <span>Reviewer Comments & Remarks:</span>
+                  </label>
+                  <textarea
+                    value={approvalComment}
+                    onChange={(e) => setApprovalComment(e.target.value)}
+                    placeholder="Enter reviewer notes, approval comments, or hold/rejection reason..."
+                    rows={2}
+                    className="w-full text-[11px] font-medium p-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50 resize-none"
+                  />
+                </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {/* Hold Button */}
