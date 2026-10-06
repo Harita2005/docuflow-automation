@@ -786,29 +786,14 @@ export default function CustomerFeedbackDetails({
       return;
     }
 
-    // Auto-verify all checklist items on approval sign-off (e.g. 3/3 Verified)
+    // Require all checklist items to be manually verified before approval sign-off
     if (checklistItems.length > 0) {
-      const autoCheckedMap: Record<string, boolean> = {};
-      checklistItems.forEach((item) => {
-        autoCheckedMap[item.item_text] = true;
-      });
-      setCheckedStates(autoCheckedMap);
-      setChecklistItems((prev) => prev.map((item) => ({ ...item, is_checked: true })));
-
-      try {
-        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        fetch(`/api/invoices/${encodeURIComponent(String(activeDoc.id))}/checklist`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            stage_num: activeDoc?.current_stage || 1,
-            checked_items: Object.keys(autoCheckedMap),
-            username: currentUserUsername || currentUserEmail,
-          }),
-        }).catch(() => {});
-      } catch (e) {}
+      const allChecked = checklistItems.every((item) => Boolean(checkedStates[item.item_text]));
+      if (!allChecked) {
+        setActionError("Please manually check and verify all checklist items one by one before approving.");
+        setTimeout(() => setActionError(null), 4000);
+        return;
+      }
     }
 
     setActionLoading(true);
@@ -1481,16 +1466,6 @@ export default function CustomerFeedbackDetails({
                     </span>
                   )}
                 </div>
-
-                {checklistItems.length > 0 && !isDocApproved && (
-                  <button
-                    type="button"
-                    onClick={handleBatchToggleChecklist}
-                    className="text-[9px] font-bold text-emerald-800 hover:text-emerald-950 bg-white hover:bg-emerald-100/50 px-2 py-0.5 rounded border border-emerald-300 transition cursor-pointer"
-                  >
-                    {checklistItems.every(i => checkedStates[i.item_text]) ? "Deselect All" : "Verify All"}
-                  </button>
-                )}
               </div>
 
               {loadingChecklist ? (

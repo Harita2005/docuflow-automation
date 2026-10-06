@@ -2502,15 +2502,7 @@ export default function DocumentDetails({
                   <span className="text-[8.5px] uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-extrabold flex items-center gap-1">
                     <Lock className="h-2 w-2" /> Locked
                   </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleToggleAllChecklist}
-                    className="text-[9px] font-bold text-[#003F28] hover:text-[#005333] underline cursor-pointer"
-                  >
-                    {effectiveChecklist.every((item) => checkedStates[item]) ? "Deselect All" : "Verify All"}
-                  </button>
-                )}
+                ) : null}
               </div>
 
               {/* Checklist Items Matrix */}
