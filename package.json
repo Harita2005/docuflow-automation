@@ -48,5 +48,8 @@
   },
   "optionalDependencies": {
     "lightningcss-win32-x64-msvc": "^1.33.0"
+  },
+  "overrides": {
+    "shell-quote": "^1.10.1"
   }
 }

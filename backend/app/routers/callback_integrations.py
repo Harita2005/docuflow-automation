@@ -4,15 +4,34 @@ import time
 import datetime
 import requests
 from typing import Optional, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
-from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, IntegrationAuditHistory, ThirdPartyApplication
+from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, IntegrationAuditHistory, ThirdPartyApplication, User
 from app.schemas import ThirdPartyApplicationCreate, ThirdPartyApplicationUpdate, CallbackRuleCreate, CallbackRuleUpdate, TestCallbackRequest
 from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers
+from app.auth import get_current_active_user
+from app.services.rbac_service import check_permission
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix='/api/integrations/v2', tags=['Approval Callback Integrations Engine'])
+
+async def _require_callback_admin(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> User:
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'integration:manage', db)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Administrator or Integration Manager authorization required."
+        )
+    return current_user
+
+router = APIRouter(
+    prefix='/api/integrations/v2',
+    tags=['Approval Callback Integrations Engine'],
+    dependencies=[Depends(_require_callback_admin)]
+)
 
 def helper_serialize_json_field(val: Any) -> Optional[str]:
     if val is None:

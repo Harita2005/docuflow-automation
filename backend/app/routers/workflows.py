@@ -400,7 +400,16 @@ def delete_workflow_profile(
     return {'success': True, 'deleted': profile_name}
 
 @router.post('/api/admin/workflow-steps')
-def save_workflow_step(payload: dict, db: Session=Depends(get_db)):
+def save_workflow_step(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     step_id = payload.get('id')
     profile_name = payload.get('profile_name')
     if not profile_name:
@@ -440,7 +449,16 @@ def save_workflow_step(payload: dict, db: Session=Depends(get_db)):
     return {'success': True, 'step': step_obj}
 
 @router.delete('/api/admin/workflow-steps/{step_id}')
-def delete_workflow_step(step_id: int, db: Session=Depends(get_db)):
+def delete_workflow_step(
+    step_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.id == step_id).first()
     if not step:
         raise HTTPException(status_code=404, detail='Workflow step not found')
@@ -449,15 +467,29 @@ def delete_workflow_step(step_id: int, db: Session=Depends(get_db)):
     return {'success': True, 'deleted_id': step_id}
 
 @router.post('/api/admin/publish')
-def publish_configurations(payload: dict, db: Session=Depends(get_db)):
+def publish_configurations(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not check_permission(current_user, 'workflow:write', db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Missing required permission 'workflow:write'."
+        )
     changes = payload.get('changes') or 0
-    db.add(AuditLog(invoice_id=None, user='Administrator', action='Config Published', stage='All Rules & Steps', notes=f'Successfully published {changes} policy drafts to production.'))
-    db.add(SystemLog(invoice_id=None, action='Publish Drafts', user='Admin Engine', details=f'System configurations updated. Published {changes} items.'))
+    author = current_user.employee_name or current_user.name or current_user.username or 'Administrator'
+    db.add(AuditLog(invoice_id=None, user=author, action='Config Published', stage='All Rules & Steps', notes=f'Successfully published {changes} policy drafts to production.'))
+    db.add(SystemLog(invoice_id=None, action='Publish Drafts', user=author, details=f'System configurations updated. Published {changes} items.'))
     db.commit()
     return {'success': True, 'message': f'Successfully published {changes} config changes.'}
 
 @router.get('/api/workflows/{invoice_id}/escalate-check')
-def check_invoice_escalation_status(invoice_id: str, db: Session=Depends(get_db)):
+def check_invoice_escalation_status(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import can_stage_escalate
     inv = find_invoice_by_identifier(db, invoice_id)
@@ -465,10 +497,15 @@ def check_invoice_escalation_status(invoice_id: str, db: Session=Depends(get_db)
     return {'document_id': inv.id, 'can_escalate': can_esc, 'current_stage': inv.current_stage or 1, 'reason': reason}
 
 @router.post('/api/workflows/{invoice_id}/escalate')
-def execute_invoice_escalation(invoice_id: str, payload: dict = {}, db: Session=Depends(get_db)):
+def execute_invoice_escalation(
+    invoice_id: str,
+    payload: dict = {},
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import escalate_invoice_stage
     inv = find_invoice_by_identifier(db, invoice_id)
-    user_name = payload.get('user') or 'Escalation Engine'
+    user_name = current_user.employee_name or current_user.name or current_user.username or 'Escalation Engine'
     reason = payload.get('reason') or 'SLA Threshold Exceeded'
     return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)

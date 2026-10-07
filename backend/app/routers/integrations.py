@@ -4,20 +4,30 @@ import requests
 import datetime
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.config.settings import settings
 from app.database.connection import get_db
-from app.database.models import AuditLog, Document, IntegrationSyncLog, ThirdPartyWebhookConfig
+from app.database.models import AuditLog, Document, IntegrationSyncLog, ThirdPartyWebhookConfig, User
 from app.schemas import ThirdPartyWebhookConfigCreate, ThirdPartyWebhookConfigResponse, ThirdPartyWebhookTestRequest, IntegrationAcknowledgmentRequest, IntegrationAcknowledgmentResponse
 from app.services.integration_service import build_universal_export_payload, dispatch_outgoing_webhook, compute_hmac_signature
+from app.auth import get_current_active_user, verify_service_api_key
+from app.services.rbac_service import check_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/integrations/v1', tags=['Third-Party & SAP Integrations'])
 
+def _require_integration_admin(user: User, db: Session):
+    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(user, 'admin:rbac', db) or check_permission(user, 'integration:manage', db)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Administrator authorization required to manage integrations."
+        )
+
 @router.get('/approved-documents')
-def get_approved_documents(division: Optional[str]=Query(None, description='Filter by Company Division (e.g. VCC, SD, ACC)'), plant: Optional[str]=Query(None, description='Filter by Plant / Branch location'), sync_status: Optional[str]=Query('UNSYNCED', description='Filter by sync state: UNSYNCED, SYNCED, ALL, FAILED'), since: Optional[datetime.datetime]=Query(None, description='Filter documents approved/settled since ISO timestamp'), limit: int=Query(50, ge=1, le=200, description='Max records to return'), request: Request=None, db: Session=Depends(get_db)):
+def get_approved_documents(division: Optional[str]=Query(None, description='Filter by Company Division (e.g. VCC, SD, ACC)'), plant: Optional[str]=Query(None, description='Filter by Plant / Branch location'), sync_status: Optional[str]=Query('UNSYNCED', description='Filter by sync state: UNSYNCED, SYNCED, ALL, FAILED'), since: Optional[datetime.datetime]=Query(None, description='Filter documents approved/settled since ISO timestamp'), limit: int=Query(50, ge=1, le=200, description='Max records to return'), request: Request=None, db: Session=Depends(get_db), _auth: bool=Depends(verify_service_api_key)):
     """
     [PULL API] Polling endpoint for SAP, Oracle, Tally, or external ERPs to query newly approved documents.
     Returns standard serialized payloads including line items, GL / cost center tags, and PDF download links.
@@ -40,7 +50,7 @@ def get_approved_documents(division: Optional[str]=Query(None, description='Filt
     return {'success': True, 'count': len(results), 'filter': {'division': division, 'plant': plant, 'sync_status': sync_status, 'since': since.isoformat() if since else None}, 'data': results}
 
 @router.get('/documents/{document_id}')
-def get_single_document_export(document_id: str, request: Request=None, db: Session=Depends(get_db)):
+def get_single_document_export(document_id: str, request: Request=None, db: Session=Depends(get_db), _auth: bool=Depends(verify_service_api_key)):
     """
     [PULL API] Fetches full serialized export details for a single document.
     """
@@ -51,7 +61,7 @@ def get_single_document_export(document_id: str, request: Request=None, db: Sess
     return {'success': True, 'data': build_universal_export_payload(doc, base_url=base_url)}
 
 @router.post('/documents/{document_id}/acknowledge', response_model=IntegrationAcknowledgmentResponse)
-def acknowledge_document_sync(document_id: str, body: IntegrationAcknowledgmentRequest, db: Session=Depends(get_db)):
+def acknowledge_document_sync(document_id: str, body: IntegrationAcknowledgmentRequest, db: Session=Depends(get_db), _auth: bool=Depends(verify_service_api_key)):
     """
     [PULL API] Called by 3rd-party ERP after successfully ingesting the document.
     Saves external reference number (e.g. SAP Doc #), updates sync timestamp, and adds an audit log entry.
@@ -70,7 +80,7 @@ def acknowledge_document_sync(document_id: str, body: IntegrationAcknowledgmentR
     return IntegrationAcknowledgmentResponse(success=True, document_id=doc.id, external_sync_status=doc.external_sync_status, external_sync_ref=doc.external_sync_ref, external_synced_at=doc.external_synced_at, message=f'Sync status successfully recorded for document {doc.id}')
 
 @router.get('/documents/{document_id}/download-pdf')
-def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)):
+def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db), _auth: bool=Depends(verify_service_api_key)):
     """
     [PULL API] Streams the physical or stamped PDF of the approved document directly to 3rd-party systems.
     """
@@ -81,7 +91,25 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
     from app.routers.documents import get_archived_pdf_path
     structured_path = get_archived_pdf_path(doc)
     candidate_paths = [structured_path, Path(file_url), settings.UPLOAD_DIR / Path(file_url).name if file_url else None, settings.PDF_STORAGE_DIR / Path(file_url).name if file_url else None, Path('uploads') / file_url.lstrip('/uploads/').lstrip('uploads/'), Path('stored_pdfs/approved') / f'{doc.id}_approved.pdf', Path('stored_pdfs/approved') / f'{doc.id}.pdf', Path('stored_pdfs') / f'{doc.id}.pdf', Path('backend/uploads') / file_url.lstrip('/uploads/').lstrip('uploads/')]
-    valid_candidates = [p for p in candidate_paths if p is not None]
+    
+    allowed_roots = [
+        settings.UPLOAD_DIR.resolve(),
+        settings.PDF_STORAGE_DIR.resolve(),
+        settings.APPROVED_PDF_DIR.resolve(),
+        Path('uploads').resolve(),
+        Path('stored_pdfs').resolve(),
+        Path('backend/uploads').resolve(),
+    ]
+    valid_candidates = []
+    for p in candidate_paths:
+        if p is not None:
+            try:
+                res_p = p.resolve()
+                if any(res_p.is_relative_to(root) for root in allowed_roots):
+                    valid_candidates.append(res_p)
+            except Exception:
+                pass
+                
     found_path = next((p for p in valid_candidates if p.is_file()), None)
     if not found_path and settings.APPROVED_PDF_DIR.exists():
         matches = list(settings.APPROVED_PDF_DIR.glob(f'**/*{doc.id}*.pdf'))
@@ -93,18 +121,26 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
     return FileResponse(path=str(found_path), media_type='application/pdf', filename=filename)
 
 @router.get('/webhook-config', response_model=Optional[ThirdPartyWebhookConfigResponse])
-def get_webhook_config(db: Session=Depends(get_db)):
+def get_webhook_config(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Returns current outbound webhook configuration.
     """
+    _require_integration_admin(current_user, db)
     config = db.query(ThirdPartyWebhookConfig).first()
     return config
 
 @router.post('/webhook-config', response_model=ThirdPartyWebhookConfigResponse)
-def save_webhook_config(body: ThirdPartyWebhookConfigCreate, db: Session=Depends(get_db)):
+def save_webhook_config(body: ThirdPartyWebhookConfigCreate, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Creates or updates the outbound webhook endpoint for real-time pushing.
     """
+    _require_integration_admin(current_user, db)
+    if body.target_url:
+        from app.services.security_service import validate_and_reconstruct_url
+        try:
+            body.target_url = validate_and_reconstruct_url(body.target_url)
+        except Exception as url_err:
+            raise HTTPException(status_code=400, detail=f"Invalid webhook target URL: {getattr(url_err, 'detail', str(url_err))}")
     config = db.query(ThirdPartyWebhookConfig).first()
     if not config:
         config = ThirdPartyWebhookConfig()
@@ -122,10 +158,11 @@ def save_webhook_config(body: ThirdPartyWebhookConfigCreate, db: Session=Depends
     return config
 
 @router.post('/webhook-test')
-def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depends(get_db)):
+def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Sends a test ping event to the target webhook URL to verify network connectivity and authentication.
     """
+    _require_integration_admin(current_user, db)
     target_url = body.target_url
     auth_header_name = body.auth_header_name or 'Authorization'
     auth_token = body.auth_token
@@ -160,10 +197,11 @@ def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depe
         return {'success': False, 'target_url': safe_target_url, 'error': f'Request dispatch failed: {type(e).__name__}'}
 
 @router.post('/documents/{document_id}/retry-push')
-def retry_document_push(document_id: str, background_tasks: BackgroundTasks, request: Request=None, db: Session=Depends(get_db)):
+def retry_document_push(document_id: str, background_tasks: BackgroundTasks, request: Request=None, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Manually re-triggers outgoing webhook push for a specific document.
     """
+    _require_integration_admin(current_user, db)
     doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
@@ -172,9 +210,10 @@ def retry_document_push(document_id: str, background_tasks: BackgroundTasks, req
     return {'success': True, 'document_id': doc.id, 'message': f'Push event queued in background for document {doc.id}'}
 
 @router.get('/sync-logs')
-def get_integration_sync_logs(limit: int=50, db: Session=Depends(get_db)):
+def get_integration_sync_logs(limit: int=50, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Returns recent integration sync logs (both PUSH and PULL) for system auditing.
     """
+    _require_integration_admin(current_user, db)
     logs = db.query(IntegrationSyncLog).order_by(IntegrationSyncLog.timestamp.desc()).limit(limit).all()
     return {'success': True, 'count': len(logs), 'data': [{'id': l.id, 'document_id': l.document_id, 'sync_direction': l.sync_direction, 'target_system': l.target_system, 'status': l.status, 'status_code': l.status_code, 'external_reference': l.external_reference, 'error_message': l.error_message, 'timestamp': l.timestamp.isoformat() if l.timestamp else None} for l in logs]}

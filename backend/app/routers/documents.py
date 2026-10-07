@@ -11,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List, Optional, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, and_, func, extract
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ from app.auth import get_current_user, get_current_user_optional, get_current_ac
 from app.services.rules_engine import evaluate_business_rules, generate_document_id
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
-from app.services.rbac_service import authorize_document_access
+from app.services.rbac_service import authorize_document_access, check_permission
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
 
 logger = logging.getLogger(__name__)
@@ -3188,12 +3188,22 @@ def save_app_config(key: str, value: str, description: str=''):
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
+def _require_docs_admin(user: User, db: Session):
+    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(user, 'admin:rbac', db) or check_permission(user, 'admin:system', db)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Administrator authorization required."
+        )
+
 @router.get('/api/admin/config')
-def get_admin_config(db: Session=Depends(get_db)):
+def get_admin_config(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     return load_app_configs()
 
 @router.post('/api/admin/config')
-def post_admin_config(payload: dict, db: Session=Depends(get_db)):
+def post_admin_config(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     key = payload.get('key')
     value = payload.get('value')
     desc = payload.get('description') or ''
@@ -3217,11 +3227,13 @@ def save_erp_master_data(items: list):
     save_app_config('ERP_MASTER_DATA', json.dumps(items, ensure_ascii=False), 'Synchronized ERP Master PO Registry')
 
 @router.get('/api/admin/erp-master')
-def get_admin_erp_master(db: Session=Depends(get_db)):
+def get_admin_erp_master(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     return load_erp_master_data()
 
 @router.post('/api/admin/erp-master')
-def post_admin_erp_master(payload: dict, db: Session=Depends(get_db)):
+def post_admin_erp_master(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     items = load_erp_master_data()
     po = payload.get('po_number')
     if not po:
@@ -3238,7 +3250,8 @@ def post_admin_erp_master(payload: dict, db: Session=Depends(get_db)):
     return {'success': True, 'item': payload}
 
 @router.post('/api/admin/erp-master/bulk')
-def post_admin_erp_master_bulk(payload: dict, db: Session=Depends(get_db)):
+def post_admin_erp_master_bulk(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     new_items = payload.get('items', [])
     items = load_erp_master_data()
     existing_pos = {itm.get('po_number'): i for i, itm in enumerate(items)}
@@ -3253,45 +3266,56 @@ def post_admin_erp_master_bulk(payload: dict, db: Session=Depends(get_db)):
     return {'success': True, 'count': len(new_items)}
 
 @router.delete('/api/admin/erp-master/{po}')
-def delete_admin_erp_master(po: str, db: Session=Depends(get_db)):
+def delete_admin_erp_master(po: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     filtered_items = [itm for itm in load_erp_master_data() if itm.get('po_number') != po]
     save_erp_master_data(filtered_items)
     return {'success': True, 'deleted': po}
 
 @router.get('/api/admin/recycle-bin')
-def get_admin_recycle_bin(db: Session=Depends(get_db)):
+def get_admin_recycle_bin(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     return []
 
 @router.get('/api/admin/notifications/provider')
-def get_admin_notifications_provider(db: Session=Depends(get_db)):
+def get_admin_notifications_provider(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
     if config:
-        return {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': config.encrypted_password, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
+        masked_pwd = '••••••••' if config.encrypted_password else ''
+        return {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': masked_pwd, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
     return {'smtp_server': 'smtp.office365.com', 'port': 587, 'username': 'Sqlalerts@ramrajcotton.net', 'encrypted_password': '', 'sender_email': 'Sqlalerts@ramrajcotton.net', 'sender_name': 'DocuFlow Alerts'}
 
 @router.post('/api/admin/notifications/provider')
-def save_admin_notifications_provider(payload: NotificationProviderSchema, db: Session=Depends(get_db)):
+def save_admin_notifications_provider(payload: NotificationProviderSchema, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
+    new_pwd = payload.encrypted_password
+    if config and new_pwd == '••••••••':
+        new_pwd = config.encrypted_password
     if not config:
-        config = NotificationProviderConfig(smtp_server=payload.smtp_server, port=payload.port, username=payload.username, encrypted_password=payload.encrypted_password, sender_email=payload.sender_email, sender_name=payload.sender_name)
+        config = NotificationProviderConfig(smtp_server=payload.smtp_server, port=payload.port, username=payload.username, encrypted_password=new_pwd, sender_email=payload.sender_email, sender_name=payload.sender_name)
         db.add(config)
     else:
         config.smtp_server = payload.smtp_server
         config.port = payload.port
         config.username = payload.username
-        config.encrypted_password = payload.encrypted_password
+        if new_pwd != '••••••••':
+            config.encrypted_password = new_pwd
         config.sender_email = payload.sender_email
         config.sender_name = payload.sender_name
     db.commit()
     return {'success': True, 'message': 'SMTP provider configuration saved successfully'}
 
 @router.get('/api/admin/notifications/raci')
-def get_admin_notifications_raci(db: Session=Depends(get_db)):
+def get_admin_notifications_raci(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     items = db.query(NotificationRaciMatrix).all()
     return [{'workflow_profile': item.workflow_profile, 'event_name': item.event_name, 'responsible_emails': item.responsible_emails, 'accountable_emails': item.accountable_emails, 'consulted_emails': item.consulted_emails, 'informed_emails': item.informed_emails, 'title_template': item.title_template, 'message_template': item.message_template} for item in items]
 
 @router.post('/api/admin/notifications/raci')
-def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session=Depends(get_db)):
+def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     item = db.query(NotificationRaciMatrix).filter(NotificationRaciMatrix.workflow_profile == payload.workflow_profile, NotificationRaciMatrix.event_name == payload.event_name).first()
     if not item:
         item = NotificationRaciMatrix(workflow_profile=payload.workflow_profile, event_name=payload.event_name)
@@ -3306,7 +3330,8 @@ def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session=D
     return {'success': True, 'message': f'RACI configuration saved for {payload.event_name}'}
 
 @router.post('/api/admin/notifications/test')
-def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=Depends(get_db)):
+def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
     recipient = (payload.to if payload and payload.to else '').strip()
     if not recipient:
@@ -3369,7 +3394,8 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=D
 
 @router.get('/api/admin/notifications/inapp-config')
 @router.get('/api/admin/notifications/inapp-config/')
-def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
+def get_admin_notifications_inapp_config(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     configs = load_app_configs()
     for c in configs:
         if c.get('key') == 'INAPP_NOTIFICATIONS_CONFIG':
@@ -3381,7 +3407,8 @@ def get_admin_notifications_inapp_config(db: Session=Depends(get_db)):
 
 @router.post('/api/admin/notifications/inapp-config')
 @router.post('/api/admin/notifications/inapp-config/')
-async def save_admin_notifications_inapp_config(request: Request, db: Session=Depends(get_db)):
+async def save_admin_notifications_inapp_config(request: Request, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     try:
         body = await request.json()
     except Exception:
@@ -3396,11 +3423,13 @@ async def save_admin_notifications_inapp_config(request: Request, db: Session=De
     return {'success': True, 'message': 'In-App Notification Configurations saved successfully'}
 
 @router.get('/api/admin/backup/history')
-def get_admin_backup_history(db: Session=Depends(get_db)):
+def get_admin_backup_history(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     return []
 
 @router.post('/api/admin/backup/trigger')
-def trigger_admin_backup(db: Session=Depends(get_db)):
+def trigger_admin_backup(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     return {'success': True, 'message': 'Database and uploads backup ran successfully!'}
 
 @router.get('/api/erp/{po_number}')
@@ -3611,13 +3640,14 @@ def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends
 
 @router.get('/api/admin/checklist-rules')
 @router.get('/api/checklist-templates')
-def get_checklist_templates(db: Session=Depends(get_db)):
+def get_checklist_templates(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     rules = db.query(ChecklistRule).order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.rule_name.asc()).all()
     return [{'id': r.id, 'rule_name': r.rule_name, 'division': r.division or 'ALL', 'category': r.category or 'ALL', 'branch': r.branch or 'ALL', 'workflow_profile': r.workflow_profile or 'ALL', 'stage_name': r.stage_name or 'Attachment Status', 'item_text': r.item_text or '', 'is_mandatory': r.is_mandatory, 'is_active': r.is_active, 'sequence_order': r.sequence_order} for r in rules]
 
 @router.post('/api/admin/checklist-rules')
 @router.post('/api/checklist-templates')
-def save_checklist_template(payload: dict, db: Session=Depends(get_db)):
+def save_checklist_template(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     tid = payload.get('id')
     if tid and (not str(tid).startswith('tmp-')):
         rule = db.query(ChecklistRule).filter(ChecklistRule.id == int(tid)).first()
@@ -3654,7 +3684,8 @@ def save_checklist_template(payload: dict, db: Session=Depends(get_db)):
 
 @router.delete('/api/admin/checklist-rules/{rule_id}')
 @router.delete('/api/checklist-templates/{rule_id}')
-def delete_checklist_template(rule_id: int, db: Session=Depends(get_db)):
+def delete_checklist_template(rule_id: int, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
     rule = db.query(ChecklistRule).filter(ChecklistRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail='Checklist rule not found')
@@ -3664,7 +3695,7 @@ def delete_checklist_template(rule_id: int, db: Session=Depends(get_db)):
 
 @router.get('/api/v1/approved-documents')
 @router.get('/api/admin/approved-documents')
-def get_approved_documents(db: Session=Depends(get_db)):
+def get_approved_documents(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Dedicated endpoint for demo & 3rd-party integration reading:
     Returns all fully approved & settled documents with document numbers,

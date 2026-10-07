@@ -3084,11 +3084,17 @@ export default function DocumentDetails({
       {/* 2. APPROVAL TIMELINE & AUDIT TRAIL MODAL */}
       {/* ========================================================= */}
       {showTimelineModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+        <div 
+          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn"
+          onClick={() => setShowTimelineModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh] my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Modal Header */}
-            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
                   <Clock className="h-4 w-4" />
@@ -3120,7 +3126,7 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Body: Chronological Audit Trail */}
-            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
+            <div className="p-5 overflow-y-auto min-h-0 flex-1 space-y-4 custom-scrollbar text-xs">
               
               {/* Dynamic Approval Workflow Stages */}
               {workflowStepDefinitions && workflowStepDefinitions.length > 0 ? (
@@ -3379,7 +3385,7 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between">
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0">
               <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
               <button
                 type="button"
@@ -3398,11 +3404,17 @@ export default function DocumentDetails({
       {/* 2. AUDIT HISTORY & TRAIL MODAL (LOGS ONLY) */}
       {/* ========================================================= */}
       {showAuditHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+        <div 
+          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn"
+          onClick={() => setShowAuditHistoryModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh] my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Modal Header */}
-            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
                   <FileText className="h-4 w-4" />
@@ -3429,7 +3441,7 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Body: Signed Audit Trail & Remarks */}
-            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
+            <div className="p-5 overflow-y-auto min-h-0 flex-1 space-y-4 custom-scrollbar text-xs">
               {commentsList && commentsList.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2.5 flex items-center justify-between">
@@ -3480,7 +3492,7 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between">
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0">
               <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Enterprise Audit Log</span>
               <button
                 type="button"

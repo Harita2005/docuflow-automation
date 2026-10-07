@@ -37,9 +37,11 @@ def verify_m2m_token(credentials: HTTPAuthorizationCredentials=Depends(bearer_sc
         logger.debug('Handled exception: %s', exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
 
+import hmac
+
 @router.post('/auth/login')
 def m2m_login(body: LoginRequest):
-    if body.username != SERVICE_API_USER or body.password != SERVICE_API_PASS:
+    if not (hmac.compare_digest(body.username, SERVICE_API_USER) and hmac.compare_digest(body.password, SERVICE_API_PASS)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid credentials')
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token = jwt.encode({'sub': body.username, 'scope': 'data:sync', 'exp': expire}, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)

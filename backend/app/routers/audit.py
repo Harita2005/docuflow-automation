@@ -2,18 +2,28 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config.settings import settings
 from app.database.connection import get_db
-from app.database.models import AuditLog, SystemLog
+from app.database.models import AuditLog, SystemLog, User
 from app.routers.documents import load_app_configs, save_app_config
 from app.schemas import AuditLogResponse
+from app.auth import get_current_active_user
+from app.services.rbac_service import check_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Audit Logs"])
+
+def _require_audit_admin(user: User, db: Session):
+    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(user, 'admin:rbac', db)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Administrator authorization required."
+        )
 
 
 def get_audit_retention_days() -> int:
@@ -60,7 +70,11 @@ def prune_expired_audit_logs(db: Session, retention_days: Optional[int] = None) 
 
 
 @router.get("/admin/audit-logs/retention")
-def get_retention_status(db: Session = Depends(get_db)):
+def get_retention_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    _require_audit_admin(current_user, db)
     days = get_audit_retention_days()
     total_logs = db.query(func.count(AuditLog.id)).scalar() or 0
     oldest_log = db.query(func.min(AuditLog.timestamp)).scalar()
@@ -88,8 +102,11 @@ def get_retention_status(db: Session = Depends(get_db)):
 
 @router.post("/admin/audit-logs/retention")
 def update_retention_status(
-    payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
+    _require_audit_admin(current_user, db)
     retention_days = payload.get("retention_days")
     if retention_days is None:
         raise HTTPException(
@@ -127,7 +144,11 @@ def update_retention_status(
 
 
 @router.post("/admin/audit-logs/cleanup")
-def manual_cleanup_logs(db: Session = Depends(get_db)):
+def manual_cleanup_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    _require_audit_admin(current_user, db)
     days = get_audit_retention_days()
     deleted = prune_expired_audit_logs(db, days)
     remaining = db.query(func.count(AuditLog.id)).scalar() or 0
@@ -149,6 +170,7 @@ def get_audit_logs(
     invoice_id: Optional[str] = Query(None),
     include_expired: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     days = get_audit_retention_days()
     query = db.query(AuditLog)
@@ -163,8 +185,11 @@ def get_audit_logs(
 
 @router.get("/system-logs")
 def get_system_logs(
-    invoice_id: Optional[str] = Query(None), db: Session = Depends(get_db)
+    invoice_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
+    _require_audit_admin(current_user, db)
     query = db.query(SystemLog)
     if invoice_id:
         query = query.filter(SystemLog.invoice_id == invoice_id)
