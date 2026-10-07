@@ -27,3 +27,4 @@ __pycache__/
 frontend/tsconfig.tsbuildinfo
 stored_pdfs/
 uploads/
+scratch/

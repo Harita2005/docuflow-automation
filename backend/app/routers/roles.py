@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_active_user
+from app.auth import get_current_active_user, get_current_user_optional
 from app.database.connection import get_db
 from app.database.models import Role, Permission, RolePermission, User, AuditLog
 from app.services.rbac_service import check_permission
@@ -430,11 +430,10 @@ def delete_custom_permission(
 # ---------------------------------------------------------------------------
 @router.get("", response_model=List[RoleResponse])
 def get_all_roles(
-    current_user: User = Depends(get_current_active_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """List all roles and their assigned permissions."""
-    _require_rbac_admin(current_user, db)
+    """List all roles and their assigned permissions for application RBAC mapping."""
     roles = db.query(Role).order_by(Role.id.asc()).all()
     result = []
     for r in roles:

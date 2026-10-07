@@ -684,18 +684,27 @@ export default function DocumentDetails({
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
+    const seenKeys = new Set<string>();
+    const uniqueFields: any[] = [];
+    fields.forEach((f) => {
+      const canonicalKey = getCanonicalKey(f.field_key);
+      if (!canonicalKey || seenKeys.has(canonicalKey)) return;
+      seenKeys.add(canonicalKey);
+      uniqueFields.push({
+        field_key: canonicalKey,
+        label: f.label,
+        category: f.category,
+        source: f.source,
+        display_order: uniqueFields.length + 1,
+        is_visible: true,
+      });
+    });
+
     const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/more-info/config`, {
       method: "PUT",
       headers,
       body: JSON.stringify({
-        fields: fields.map((f, idx) => ({
-          field_key: getCanonicalKey(f.field_key),
-          label: f.label,
-          category: f.category,
-          source: f.source,
-          display_order: idx + 1,
-          is_visible: true,
-        })),
+        fields: uniqueFields,
         save_as_default: saveAsDefault,
         reset_to_default: false,
       }),
@@ -963,6 +972,33 @@ export default function DocumentDetails({
 
   const getFieldValue = (field: ConfigFieldItem): string => {
     return getFieldValueByKey(field.field_key, field.sample_value !== undefined && field.sample_value !== null ? String(field.sample_value) : undefined);
+  };
+
+  // Dynamically calculate card min-width and proportional flex-grow based on data length, label, and badge
+  const getDynamicFieldStyle = (label: string, value: string, hasSourceBadge: boolean = false, sourceText: string = "") => {
+    const valStr = String(value || "").trim();
+    const labelStr = String(label || "").trim();
+
+    // Width required for value (11px bold text @ ~8.5px/char + 26px padding)
+    const valWidth = valStr.length * 8.5 + 26;
+
+    // Width required for header (7.5px uppercase @ ~6.2px/char + badge if any + 26px padding)
+    const badgeWidth = hasSourceBadge ? (sourceText.length * 6.5 + 22) : 0;
+    const labelWidth = labelStr.length * 6.2 + badgeWidth + 26;
+
+    // Optimal width to comfortably display content without truncation
+    const neededWidth = Math.max(valWidth, labelWidth);
+
+    // Dynamic min-width clamped between 90px (compact values like 9000 or VCC) and 380px (longer text)
+    const clampedMinWidth = Math.max(90, Math.min(Math.round(neededWidth), 380));
+
+    // Proportional flex-grow so fields with longer data get more expansion room
+    const flexGrow = Math.max(1, Math.min(Math.round((clampedMinWidth / 90) * 10) / 10, 4));
+
+    return {
+      minWidth: `${clampedMinWidth}px`,
+      flex: `${flexGrow} 1 auto`,
+    };
   };
 
   const isImageFieldKey = (key: string): boolean => {
@@ -1318,6 +1354,7 @@ export default function DocumentDetails({
   const [activeApprovalLog, setActiveApprovalLog] = useState<any>(null);
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
+  const [showAuditHistoryModal, setShowAuditHistoryModal] = useState<boolean>(false);
   const [iframeSrc, setIframeSrc] = useState<string>("");
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -2097,17 +2134,19 @@ export default function DocumentDetails({
             {/* Primary Metrics Group */}
               {adminTop3Fields.map((field) => {
                 const val = getFieldValueByKey(field.field_key, field.sample_value !== undefined && field.sample_value !== null ? String(field.sample_value) : undefined);
+                const dynamicStyle = getDynamicFieldStyle(field.label, val);
                 return (
                   <div
                     key={field.field_key}
-                    className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[150px]"
+                    style={dynamicStyle}
+                    className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs transition-all"
                   >
                     <div className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 flex items-center gap-1">
-                      <Check className="h-2 w-2 text-emerald-600 stroke-[3]" />
-                      <span>{field.label}</span>
+                      <Check className="h-2 w-2 text-emerald-600 stroke-[3] shrink-0" />
+                      <span className="truncate" title={field.label}>{field.label}</span>
                     </div>
                     <div
-                      className="text-[11px] font-bold truncate text-slate-900"
+                      className="text-[11px] font-bold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis"
                       title={val}
                     >
                       {renderFieldValueContent(field.field_key, val)}
@@ -2149,12 +2188,14 @@ export default function DocumentDetails({
               <div className="flex flex-wrap items-center gap-2.5">
                 {effectiveMoreInfoFields.map((field) => {
                   const val = getFieldValue(field);
+                  const dynamicStyle = getDynamicFieldStyle(field.label, val, Boolean(field.source), field.source || "");
                   return (
                     <div
                       key={field.field_key}
-                      className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex-1 min-w-[125px]"
+                      style={dynamicStyle}
+                      className="bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs transition-all"
                     >
-                      <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5">
+                      <div className="flex items-center justify-between text-[7.5px] font-extrabold uppercase tracking-wider text-slate-600 mb-0.5 gap-1.5">
                         <span className="truncate" title={field.label}>
                           {field.label}
                         </span>
@@ -2173,7 +2214,7 @@ export default function DocumentDetails({
                         )}
                       </div>
                       <div
-                        className="text-[11px] font-bold truncate text-slate-900"
+                        className="text-[11px] font-bold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis"
                         title={val}
                       >
                         {renderFieldValueContent(field.field_key, val)}
@@ -2432,9 +2473,9 @@ export default function DocumentDetails({
                   {isStage1Attachment && !hasDocAttachment ? (
                     <div className="p-1.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-[9.5px] font-bold flex items-center gap-1.5 shadow-2xs">
                       <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
-                      <span>Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval.</span>
+                      <span>{totalCount > 0 ? "Stage 1 Requirement: Attach physical PDF & verify checklist to unlock approval." : "Stage 1 Requirement: Attach physical PDF document to unlock approval."}</span>
                     </div>
-                  ) : isStage1Attachment && hasDocAttachment && !allItemsChecked ? (
+                  ) : totalCount > 0 && isStage1Attachment && hasDocAttachment && !allItemsChecked ? (
                     <div className="p-1.5 bg-amber-50/70 border border-amber-200 text-amber-900 rounded-lg text-[9.5px] font-bold flex items-center justify-between shadow-2xs">
                       <div className="flex items-center gap-1.5">
                         <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
@@ -2442,7 +2483,7 @@ export default function DocumentDetails({
                       </div>
                       <span className="text-[8.5px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-extrabold">Stage 1</span>
                     </div>
-                  ) : !allItemsChecked ? (
+                  ) : totalCount > 0 && !allItemsChecked ? (
                     <div className="p-1.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-[9.5px] font-bold flex items-center justify-between shadow-2xs">
                       <div className="flex items-center gap-1.5">
                         <Shield className="h-3 w-3 text-blue-600 shrink-0" />
@@ -2460,38 +2501,26 @@ export default function DocumentDetails({
               );
             })()}
 
-            {/* 4. COMPLIANCE CHECKLIST */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-1.5 shrink-0">
-              
-              {/* Checklist Header Controls */}
-              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <Shield className="h-3 w-3 text-[#003F28]" />
-                  <span>Checklist {isDocUnrouted ? "(Unrouted)" : `(${effectiveChecklist.filter(item => Boolean(checkedStates[item])).length}/${effectiveChecklist.length})`}</span>
-                </span>
-                {isDocUnrouted ? (
-                  <span className="text-[8.5px] uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                    Unrouted
+            {/* 3. COMPLIANCE CHECKLIST (Shown ONLY if checklist items are configured for this stage) */}
+            {effectiveChecklist.length > 0 && !isDocUnrouted && (
+              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-1.5 shrink-0">
+                
+                {/* Checklist Header Controls */}
+                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                  <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <Shield className="h-3 w-3 text-[#003F28]" />
+                    <span>Checklist ({effectiveChecklist.filter(item => Boolean(checkedStates[item])).length}/{effectiveChecklist.length})</span>
                   </span>
-                ) : isDocumentLocked ? (
-                  <span className="text-[8.5px] uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-extrabold flex items-center gap-1">
-                    <Lock className="h-2 w-2" /> Locked
-                  </span>
-                ) : null}
-              </div>
+                  {isDocumentLocked && (
+                    <span className="text-[8.5px] uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-extrabold flex items-center gap-1">
+                      <Lock className="h-2 w-2" /> Locked
+                    </span>
+                  )}
+                </div>
 
-              {/* Checklist Items Matrix */}
-              <div className="space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar pr-0.5">
-                {isDocUnrouted ? (
-                  <div className="p-2 bg-amber-50/60 border border-amber-200/80 text-amber-900 rounded-lg text-center text-[9.5px] font-medium">
-                    Document is unrouted (no workflow matched). No checklist items apply.
-                  </div>
-                ) : effectiveChecklist.length === 0 ? (
-                  <div className="p-2 bg-slate-50 border border-slate-200/80 text-slate-500 rounded-lg text-center text-[9.5px] font-medium italic">
-                    No checklist requirements for this workflow stage.
-                  </div>
-                ) : (
-                  effectiveChecklist.map((item, idx) => {
+                {/* Checklist Items Matrix */}
+                <div className="space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar pr-0.5">
+                  {effectiveChecklist.map((item, idx) => {
                     const isChecked = !!checkedStates[item];
                     return (
                       <div
@@ -2519,88 +2548,120 @@ export default function DocumentDetails({
                         <span className="text-[10.5px] leading-tight font-bold" title={item}>{item}</span>
                       </div>
                     );
-                  })
-                )}
+                  })}
+                </div>
+
               </div>
+            )}
 
-            </div>
-
-            {/* 4. COMMENT (Shown ONLY if an explicit comment exists) */}
+            {/* 4. COMMENT (Shown ONLY if a real previous member provided an explicit comment) */}
             {(() => {
               const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
-              const currentStep = (workflowStepDefinitions || []).find(
-                (s: any) => s.stage_number === currentStageNum
-              );
+              const isReturned = (document?.status || '').toLowerCase().includes('return');
 
-              // Find real user comments from commentsList
-              const userComments = (commentsList || []).filter((c: any) => {
-                const author = (c.author || c.user_name || c.user || "").toLowerCase();
-                const action = (c.action || "").toLowerCase();
-                const notes = (c.text || c.comment || c.remarks || c.notes || c.message || "").toLowerCase();
-                const isSync = author.includes("sync") || author.includes("erp") || action.includes("sync");
-                const isConfig = action.includes("config") || notes.includes("updated user more info configuration") || notes.includes("data sync");
-                return !isSync && !isConfig;
-              });
-
-              const prevStageNum = currentStageNum - 1;
-              let prevStageLog = (userComments || []).find((c: any) => {
-                const stageStr = String(c.stage || c.action || "");
-                return stageStr.includes(String(prevStageNum)) || stageStr.toLowerCase().includes(`stage ${prevStageNum}`);
-              });
-
-              // Fallback to the latest user comment if specific stage match isn't found
-              if (!prevStageLog && userComments.length > 0) {
-                prevStageLog = userComments[0];
-              }
-
-              const prevApproverName = prevStageLog 
-                ? (prevStageLog.author || prevStageLog.user_name || prevStageLog.user || "").split("(")[0].trim().toUpperCase() 
-                : null;
-
-              const explicitStepCmd = 
-                currentStep?.instruction || 
-                currentStep?.command || 
-                (currentStep?.action_required && !['Approve', 'Approved'].includes(currentStep.action_required) ? currentStep.action_required : null);
-
-              const rawCommentText = prevStageLog 
-                ? (prevStageLog.text || prevStageLog.comment || prevStageLog.remarks || prevStageLog.notes || prevStageLog.message || "").trim() 
-                : "";
-
-              // Clean up standard auto-generated signoff string if no custom remark was written
-              const prevStageComment = rawCommentText && !rawCommentText.startsWith("Approved Stage ") && !rawCommentText.startsWith("Advanced to ")
-                ? rawCommentText 
-                : null;
-
-              const instruction = prevStageComment || explicitStepCmd;
-
-              // Hide entire COMMENT card if no explicit instruction/comment was passed
-              if (!instruction || !instruction.trim()) {
+              // At Stage 1 without rejection/return: there is NO previous stage member
+              if (currentStageNum <= 1 && !isReturned) {
                 return null;
               }
 
-              const docDivision = activeDoc?.division || (activeDoc as any)?.employee_division || document?.division || (document as any)?.employee_division || "";
-              const rawApprover = 
-                currentStep?.approver_target || 
-                document?.assigned_approver || 
-                currentUserUsername || 
-                "Assigned Approver";
-              
-              const resolvedCurrentRoleInfo = resolvePersonsInRoleForDivision(rawApprover, docDivision, allUsers);
-              const approverDisplayName = resolvedCurrentRoleInfo.displayName !== "Unassigned" ? resolvedCurrentRoleInfo.displayName : rawApprover.split(",")[0].trim();
-              const approverInitial = approverDisplayName ? approverDisplayName.charAt(0).toUpperCase() : "A";
+              // Filter for genuine comments entered by real human members (NOT system, engine, sync, or default boilerplates)
+              const realMemberComments = (commentsList || []).filter((c: any) => {
+                if (!c) return false;
+                const author = (c.author || c.user_name || c.user || "").trim();
+                const authorLower = author.toLowerCase();
+                const action = (c.action || "").toLowerCase();
+                const rawText = (c.text || c.comment || c.remarks || c.notes || c.message || "").trim();
+                const textLower = rawText.toLowerCase();
 
-              // Clean role: Do not display mismatched stage names like 'FIRST APPROVAL' on Stage 2+
-              let rawRole = currentStep?.stage_name || currentStep?.step_name || "";
-              if (currentStageNum > 1 && rawRole.toLowerCase().includes("first")) {
-                rawRole = `Stage ${currentStageNum} Approver`;
+                // Must have actual text
+                if (!rawText) return false;
+
+                // Filter out non-human authors
+                if (
+                  authorLower.includes("policy engine") ||
+                  authorLower.includes("engine") ||
+                  authorLower.includes("system") ||
+                  authorLower.includes("sync") ||
+                  authorLower.includes("erp") ||
+                  authorLower.includes("scheduler") ||
+                  authorLower.includes("uploader") ||
+                  authorLower.includes("rule") ||
+                  authorLower.includes("bot") ||
+                  authorLower.includes("auto")
+                ) {
+                  return false;
+                }
+
+                // Filter out system actions
+                if (
+                  action.includes("unrouted") ||
+                  action.includes("sync") ||
+                  action.includes("data ingested") ||
+                  action.includes("escalat") ||
+                  action.includes("config") ||
+                  action.includes("intake") ||
+                  action.includes("rule evaluation")
+                ) {
+                  return false;
+                }
+
+                // Filter out system notes and automated/default signoff boilerplate
+                if (
+                  textLower.includes("no active business rule matched") ||
+                  textLower.includes("pending rule creation") ||
+                  textLower.includes("document ingested") ||
+                  textLower.includes("invoice metadata ingested") ||
+                  textLower.includes("escalation executed") ||
+                  textLower.includes("sla target completion date exceeded") ||
+                  textLower.includes("manual document verified and confirmed") ||
+                  textLower.includes("passed from stage 0") ||
+                  textLower.startsWith("approved stage ") ||
+                  textLower.startsWith("advanced to ") ||
+                  textLower.startsWith("initiated") ||
+                  textLower === "compliance items verified and signed off." ||
+                  textLower.includes("compliance checklist verified")
+                ) {
+                  return false;
+                }
+
+                return true;
+              });
+
+              if (realMemberComments.length === 0) {
+                return null;
               }
-              if (!rawRole) {
-                rawRole = currentStageNum === 1 ? "Manager" : `Stage ${currentStageNum} Approver`;
+
+              const prevStageNum = Math.max(1, currentStageNum - 1);
+              
+              // Find comment explicitly matching the previous stage
+              let previousMemberLog = realMemberComments.find((c: any) => {
+                const stageStr = String(c.stage || c.action || "").toLowerCase();
+                return stageStr.includes(`stage ${prevStageNum}`) || stageStr.includes(`stage${prevStageNum}`);
+              });
+
+              // Fallback to the latest member comment (e.g. from return or previous approval)
+              if (!previousMemberLog && realMemberComments.length > 0) {
+                previousMemberLog = realMemberComments[0];
               }
-              const cleanRole = rawRole.replace(/^\(|\)$/g, "").trim();
-              const displayApproverWithRole = cleanRole && !approverDisplayName.toLowerCase().includes(cleanRole.toLowerCase())
-                ? `${approverDisplayName.toUpperCase()} (${cleanRole.toUpperCase()})`
-                : approverDisplayName.toUpperCase();
+
+              if (!previousMemberLog) {
+                return null;
+              }
+
+              const memberCommentText = (previousMemberLog.text || previousMemberLog.comment || previousMemberLog.remarks || previousMemberLog.notes || previousMemberLog.message || "").trim();
+              if (!memberCommentText) {
+                return null;
+              }
+
+              const rawAuthor = (previousMemberLog.author || previousMemberLog.user_name || previousMemberLog.user || "Previous Member").trim();
+              const authorName = rawAuthor.split("(")[0].trim().toUpperCase();
+              const authorInitial = authorName ? authorName.charAt(0).toUpperCase() : "M";
+
+              const stageBadgeText = isReturned 
+                ? "RETURN REASON" 
+                : previousMemberLog.stage && !previousMemberLog.stage.toLowerCase().includes("rule")
+                ? previousMemberLog.stage.toUpperCase()
+                : `STAGE ${prevStageNum}`;
 
               return (
                 <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-2.5 space-y-2 shrink-0">
@@ -2611,31 +2672,31 @@ export default function DocumentDetails({
                       <span>COMMENT</span>
                     </span>
                     <span className="text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-3xs">
-                      STAGE {currentStageNum}
+                      {stageBadgeText}
                     </span>
                   </div>
 
                   {/* Approver Avatar Initial + Name & Role */}
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-6 rounded-full bg-[#003F28] text-white flex items-center justify-center font-black text-[10.5px] shrink-0 shadow-3xs">
-                      {approverInitial}
+                      {authorInitial}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[10.5px] font-extrabold text-slate-900 leading-tight truncate">
-                        {displayApproverWithRole}
+                        {authorName}
                       </div>
                       <div className="text-[9px] font-medium text-slate-500 leading-tight mt-0.5">
-                        {prevApproverName 
-                          ? `Passed from Stage ${prevStageNum} by ${prevApproverName}. Your approval is required.` 
-                          : "Your approval is required at this stage."}
+                        {isReturned 
+                          ? `Document returned by ${authorName}. Please review remarks.` 
+                          : `Passed from Stage ${prevStageNum} by ${authorName}.`}
                       </div>
                     </div>
                   </div>
 
-                  {/* Command Callout Box */}
+                  {/* Comment Box */}
                   <div className="p-2 bg-emerald-50/70 border border-emerald-200/90 rounded-lg flex items-start gap-1.5 text-[9.5px] font-medium text-emerald-950 leading-relaxed shadow-3xs">
                     <span className="text-xs shrink-0 select-none leading-none mt-0.5">💬</span>
-                    <span className="flex-1 font-medium">{instruction}</span>
+                    <span className="flex-1 font-medium">{memberCommentText}</span>
                   </div>
                 </div>
               );
@@ -2848,7 +2909,7 @@ export default function DocumentDetails({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowTimelineModal(true)}
+              onClick={() => setShowAuditHistoryModal(true)}
               className="text-[#003F28] hover:text-[#005333] text-[10px] font-bold underline cursor-pointer"
             >
               View Audit History
@@ -3315,48 +3376,107 @@ export default function DocumentDetails({
                 </div>
               )}
 
-              {/* Audit Remarks Log */}
-              {commentsList && commentsList.length > 0 && (
-                <div className="pt-3 border-t border-slate-200">
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between">
+              <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
+              <button
+                type="button"
+                onClick={() => setShowTimelineModal(false)}
+                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 2. AUDIT HISTORY & TRAIL MODAL (LOGS ONLY) */}
+      {/* ========================================================= */}
+      {showAuditHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
+                    <span>Audit History & Trail</span>
+                    <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
+                      {formatDocNumber(document.id, canonicalDocType, (document as any).category)}
+                    </span>
+                  </h3>
+                  <p className="text-[10.5px] text-emerald-100/80 font-medium">
+                    {vendorName || document.vendor_name || "Vendor"} • Tamper-Evident Chronological Audit Log
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuditHistoryModal(false)}
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Signed Audit Trail & Remarks */}
+            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
+              {commentsList && commentsList.length > 0 ? (
+                <div className="space-y-2">
                   <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2.5 flex items-center justify-between">
                     <span>Signed Audit Trail & Remarks ({commentsList.length})</span>
                     <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Tamper-Evident</span>
                   </h4>
-                  <div className="space-y-2">
-                    {commentsList.map((comm: any, cIdx: number) => {
-                      const authorName = comm.author || comm.user_name || "System Administrator";
-                      const actionLabel = comm.action || "Compliance Sign-off";
+                  {commentsList.map((comm: any, cIdx: number) => {
+                    const authorName = comm.author || comm.user_name || "System Administrator";
+                    const actionLabel = comm.action || "Compliance Sign-off";
 
-                      return (
-                        <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
-                          <div className="flex items-center justify-between font-bold text-slate-800">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-5 w-5 rounded-full bg-slate-200 text-slate-700 font-black text-[9px] flex items-center justify-center">
-                                {authorName.charAt(0).toUpperCase()}
-                              </span>
-                              <span className="text-slate-900 text-xs">{authorName}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {comm.ip_address && (
-                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[8px] font-mono font-medium">
-                                  IP: {comm.ip_address}
-                                </span>
-                              )}
-                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-bold uppercase tracking-wider">
-                                {actionLabel}
-                              </span>
-                            </div>
+                    return (
+                      <div key={cIdx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between font-bold text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-5 w-5 rounded-full bg-slate-200 text-slate-700 font-black text-[9px] flex items-center justify-center">
+                              {authorName.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="text-slate-900 text-xs">{authorName}</span>
                           </div>
-                          <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
-                            {getCleanAuditRemarks(comm.text || comm.comment, workflowStepDefinitions) || "Signed off and verified."}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            {comm.ip_address && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[8px] font-mono font-medium">
+                                IP: {comm.ip_address}
+                              </span>
+                            )}
+                            <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-bold uppercase tracking-wider">
+                              {actionLabel}
+                            </span>
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                        {comm.created_at && (
+                          <div className="text-[9px] font-mono text-slate-400 pl-6">
+                            {formatDate(comm.created_at)} • {formatTimeOnly(comm.created_at)}
+                          </div>
+                        )}
+                        <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed bg-white/60 p-1.5 rounded-lg border border-slate-150">
+                          {getCleanAuditRemarks(comm.text || comm.comment, workflowStepDefinitions) || "Signed off and verified."}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 text-xs italic">
+                  No audit history records available for this document yet.
                 </div>
               )}
-
             </div>
 
             {/* Modal Footer */}
@@ -3364,7 +3484,7 @@ export default function DocumentDetails({
               <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Enterprise Audit Log</span>
               <button
                 type="button"
-                onClick={() => setShowTimelineModal(false)}
+                onClick={() => setShowAuditHistoryModal(false)}
                 className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close

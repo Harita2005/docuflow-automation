@@ -1749,14 +1749,26 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         if is_attachment_stage and (not has_attachment) and not is_feedback_doc:
             raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical document file must be attached and uploaded before approving Stage 1.')
 
-        checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
-        if not checklist_items:
-            default_items = resolve_checklist_items(db, inv, current_step_name)
-            for t_text in default_items:
-                item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False, is_mandatory=True)
-                db.add(item)
-                checklist_items.append(item)
-            db.commit()
+        configured_items = resolve_checklist_items(db, inv, current_step_name)
+        if not configured_items:
+            # Stage has NO checklist configured -> clean up stale items if any so approval is never blocked
+            stale_items = db.query(InvoiceChecklistState).filter(
+                InvoiceChecklistState.invoice_id == inv.id, 
+                InvoiceChecklistState.stage_name == current_step_name
+            ).all()
+            if stale_items:
+                for s in stale_items:
+                    db.delete(s)
+                db.commit()
+            checklist_items = []
+        else:
+            checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
+            if not checklist_items:
+                for t_text in configured_items:
+                    item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False, is_mandatory=True)
+                    db.add(item)
+                    checklist_items.append(item)
+                db.commit()
         if checklist_items and not is_feedback_doc:
             unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
             if unchecked_mandatory:
@@ -3421,120 +3433,87 @@ def split_checklist_items(text: str) -> List[str]:
 
 def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[str]:
     """
-    Universal Condition-Based Checklist Resolution:
-    - Purely stage-wise and document-wise (Division, Category/DocType, Stage, Branch/Plant, Cost Center).
-    - Decoupled from individual workflow/flow profiles.
-    - Evaluates ChecklistRule table matching the document's stage and business attributes.
-    - Deduplicates items case-insensitively while preserving priority order.
+    Checklist Resolution:
+    - If document has no workflow_profile_id or is unrouted: return [] (no checklist).
+    - If workflow_profile_id is set:
+      1. Check WorkflowStepDefinition for this flow & stage. If step has checklist_json, return those items.
+      2. Check ChecklistRule explicitly configured for this workflow_profile.
+      3. If neither is defined, this stage has NO checklist: return [] (no hardcoded/default items injected).
     """
-    if not inv:
+    if not inv or not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ('', 'UNROUTED', 'NONE', 'None'):
+        return []
+    if 'unrouted' in (inv.status or '').lower() or 'no rule matched' in (inv.status or '').lower():
         return []
 
     clean_stage = (stage_name or '').strip()
-    matrix_items: List[str] = []
+    flow_items: List[str] = []
 
-    # 1. Stage filter (Stage-wise)
-    stage_conditions = [(ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')]
-    if clean_stage.lower() == 'attachment status':
-        stage_conditions.append(ChecklistRule.stage_name.ilike('Stage 1'))
-    elif clean_stage.lower() == 'stage 1':
-        stage_conditions.append(ChecklistRule.stage_name.ilike('Attachment Status'))
-    stage_match = or_(*stage_conditions)
+    # 1. Flow-Specific Step Items from Flow Builder (WorkflowStepDefinition)
+    step = db.query(WorkflowStepDefinition).filter(
+        (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+        (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+        WorkflowStepDefinition.step_name.ilike(clean_stage)
+    ).first()
+    if not step and clean_stage.lower().startswith('stage '):
+        try:
+            stg_num = int(clean_stage.split()[1])
+            step = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                WorkflowStepDefinition.stage_number == stg_num
+            ).first()
+        except Exception:
+            pass
+    if not step and clean_stage.lower() in ('attachment status', 'stage 1'):
+        step = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+            WorkflowStepDefinition.stage_number == 1
+        ).first()
 
-    # 2. Division filter (Document-wise)
-    if inv.division:
-        div_match = or_(ChecklistRule.division == inv.division, ChecklistRule.division == 'ALL', ChecklistRule.division.is_(None), ChecklistRule.division == '')
-    else:
-        div_match = or_(ChecklistRule.division == 'ALL', ChecklistRule.division.is_(None), ChecklistRule.division == '')
+    if step and step.checklist_json:
+        try:
+            parsed = json.loads(step.checklist_json)
+            if isinstance(parsed, list):
+                for itm in parsed:
+                    for s_itm in split_checklist_items(str(itm)):
+                        if s_itm and s_itm not in flow_items:
+                            flow_items.append(s_itm)
+            elif isinstance(parsed, str) and parsed.strip():
+                for s_itm in split_checklist_items(parsed):
+                    if s_itm and s_itm not in flow_items:
+                        flow_items.append(s_itm)
+        except Exception as e:
+            logger.debug("Failed parsing step.checklist_json: %s", e)
 
-    # 3. Category / Document Type filter (Document-wise)
-    cat_vals = [v for v in [getattr(inv, 'category', None), getattr(inv, 'document_type', None)] if v]
-    if cat_vals:
-        cat_match = or_(ChecklistRule.category.in_(cat_vals), ChecklistRule.category == 'ALL', ChecklistRule.category.is_(None), ChecklistRule.category == '')
-    else:
-        cat_match = or_(ChecklistRule.category == 'ALL', ChecklistRule.category.is_(None), ChecklistRule.category == '')
-
-    # 4. Cost Center & Branch/Plant (Document-wise)
-    if getattr(inv, 'cost_center', None):
-        cost_match = or_(ChecklistRule.cost_center == inv.cost_center, ChecklistRule.cost_center == 'ALL', ChecklistRule.cost_center.is_(None), ChecklistRule.cost_center == '')
-    else:
-        cost_match = or_(ChecklistRule.cost_center == 'ALL', ChecklistRule.cost_center.is_(None), ChecklistRule.cost_center == '')
-
-    if getattr(inv, 'plant', None):
-        branch_match = or_(ChecklistRule.branch == inv.plant, ChecklistRule.branch == 'ALL', ChecklistRule.branch.is_(None), ChecklistRule.branch == '')
-    else:
-        branch_match = or_(ChecklistRule.branch == 'ALL', ChecklistRule.branch.is_(None), ChecklistRule.branch == '')
-
-    # Query matching rules by stage and document conditions
-    rules = db.query(ChecklistRule).filter(
+    # 2. ChecklistRule explicitly configured for this workflow profile (if any)
+    wf_rules = db.query(ChecklistRule).filter(
         ChecklistRule.is_active == True,
-        stage_match,
-        div_match,
-        cat_match,
-        cost_match,
-        branch_match
+        ChecklistRule.workflow_profile == inv.workflow_profile_id,
+        (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
     ).order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.id.asc()).all()
 
-    for r in rules:
+    for r in wf_rules:
         for itm in split_checklist_items(r.item_text):
-            if itm and itm not in matrix_items:
-                matrix_items.append(itm)
+            if itm and itm not in flow_items:
+                flow_items.append(itm)
 
-    # Step B: Flow-Specific Checklist Items (if defined directly on this flow's step in Flow Builder)
-    flow_step_extras: List[str] = []
-    if inv.workflow_profile_id:
-        step = db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-            WorkflowStepDefinition.step_name.ilike(clean_stage)
-        ).first()
-        if not step and clean_stage.lower().startswith('stage '):
-            try:
-                stg_num = int(clean_stage.split()[1])
-                step = db.query(WorkflowStepDefinition).filter(
-                    WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-                    WorkflowStepDefinition.stage_number == stg_num
-                ).first()
-            except Exception as exc:
-                logger.debug("Failed parsing stage number from '%s': %s", clean_stage, exc)
-        if not step and clean_stage.lower() in ('attachment status', 'stage 1'):
-            step = db.query(WorkflowStepDefinition).filter(
-                WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
-                WorkflowStepDefinition.stage_number == 1
-            ).first()
-
-        if step and step.checklist_json:
-            try:
-                parsed = json.loads(step.checklist_json)
-                if isinstance(parsed, list):
-                    for itm in parsed:
-                        for s_itm in split_checklist_items(str(itm)):
-                            if s_itm and s_itm not in flow_step_extras:
-                                flow_step_extras.append(s_itm)
-            except Exception as e:
-                logger.debug("Failed parsing step.checklist_json: %s", e)
-
-    # Step C: Union of Universal Condition Matrix Items + Flow-Specific Step Items (Deduplicated)
-    final_checklist: List[str] = []
-    seen_normalized = set()
-    for item in matrix_items:
-        norm = item.strip().lower()
-        if norm and norm not in seen_normalized:
-            seen_normalized.add(norm)
-            final_checklist.append(item.strip())
-
-    for item in flow_step_extras:
-        norm = item.strip().lower()
-        if norm and norm not in seen_normalized:
-            seen_normalized.add(norm)
-            final_checklist.append(item.strip())
-
-    return final_checklist
+    return flow_items
 
 @router.get('/api/invoices/{invoice_id}/checklist')
 def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail='Invoice not found')
+
+    is_unrouted = (
+        not inv.workflow_profile_id
+        or str(inv.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']
+        or 'unrouted' in (inv.status or '').lower()
+        or 'no rule matched' in (inv.status or '').lower()
+    )
+    if is_unrouted:
+        return []
 
     target_stage = stage_num or inv.current_stage or 1
     current_step_name = None
@@ -3551,15 +3530,44 @@ def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_
     if not current_step_name:
         current_step_name = 'Attachment Status' if target_stage == 1 else f'Stage {target_stage}'
 
-    items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).order_by(InvoiceChecklistState.id.asc()).all()
-    if not items:
-        default_items = resolve_checklist_items(db, inv, current_step_name)
-        for t_text in default_items:
-            item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False)
-            db.add(item)
-            items.append(item)
-        if default_items:
+    configured_items = resolve_checklist_items(db, inv, current_step_name)
+    if not configured_items:
+        # No checklist configured for this stage of this flow -> clean up any stale legacy items
+        stale_items = db.query(InvoiceChecklistState).filter(
+            InvoiceChecklistState.invoice_id == inv.id,
+            InvoiceChecklistState.stage_name == current_step_name
+        ).all()
+        if stale_items:
+            for s in stale_items:
+                db.delete(s)
             db.commit()
+        return []
+
+    # If configured_items exist, sync with InvoiceChecklistState
+    existing_items = db.query(InvoiceChecklistState).filter(
+        InvoiceChecklistState.invoice_id == inv.id,
+        InvoiceChecklistState.stage_name == current_step_name
+    ).order_by(InvoiceChecklistState.id.asc()).all()
+
+    existing_texts = {item.item_text: item for item in existing_items}
+    for item in existing_items:
+        if item.item_text not in configured_items:
+            db.delete(item)
+
+    items = []
+    for t_text in configured_items:
+        if t_text in existing_texts:
+            items.append(existing_texts[t_text])
+        else:
+            new_item = InvoiceChecklistState(
+                invoice_id=inv.id,
+                stage_name=current_step_name,
+                item_text=t_text,
+                is_checked=False
+            )
+            db.add(new_item)
+            items.append(new_item)
+    db.commit()
     return [{'id': item.id, 'stage_name': item.stage_name, 'item_text': item.item_text, 'is_checked': item.is_checked, 'checked_by': item.checked_by, 'checked_at': item.checked_at} for item in items]
 
 @router.post('/api/invoices/{invoice_id}/checklist')

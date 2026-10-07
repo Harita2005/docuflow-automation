@@ -453,7 +453,8 @@ export default function CustomerFeedbackDetails({
   const [imageLoading, setImageLoading] = useState<boolean>(true);
   const [imageError, setImageError] = useState<boolean>(false);
 
-  // Audit History Modal State
+  // Timeline and Audit History Modal States
+  const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
 
   // Approval Success & Assignment Transition Modal State
@@ -1205,10 +1206,10 @@ export default function CustomerFeedbackDetails({
 
         <button
           type="button"
-          onClick={() => setShowAuditModal(true)}
+          onClick={() => setShowTimelineModal(true)}
           className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer shrink-0"
         >
-          View Stage Timeline & Logs &rarr;
+          View Stage Timeline &rarr;
         </button>
       </div>
 
@@ -1991,12 +1992,12 @@ export default function CustomerFeedbackDetails({
       )}
 
       {/* ========================================================= */}
-      {/* APPROVAL TIMELINE & AUDIT TRAIL MODAL */}
+      {/* 1. STAGE APPROVAL TIMELINE MODAL (TIMELINE STAGES ONLY - NO LOGS) */}
       {/* ========================================================= */}
-      {showAuditModal && (
+      {showTimelineModal && (
         <div
           className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setShowAuditModal(false)}
+          onClick={() => setShowTimelineModal(false)}
         >
           <div
             className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
@@ -2010,7 +2011,7 @@ export default function CustomerFeedbackDetails({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
-                    <span>Approval Timeline & Audit Trail</span>
+                    <span>Stage Approval Timeline</span>
                     <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
                       {formatDocNumber(activeDoc.id, docTypeCanonical, (activeDoc as any).category)}
                     </span>
@@ -2025,17 +2026,15 @@ export default function CustomerFeedbackDetails({
               </div>
               <button
                 type="button"
-                onClick={() => setShowAuditModal(false)}
+                onClick={() => setShowTimelineModal(false)}
                 className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Modal Body: Chronological Audit & Timeline Stepper */}
+            {/* Modal Body: Workflow Stages Stepper Only */}
             <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
-              
-              {/* Dynamic Approval Workflow Stages (Vertical Stepper) */}
               {effectiveSteps && effectiveSteps.length > 0 && (
                 effectiveSteps.map((step: any, idx: number) => {
                   const stgNum = step.stage_number || idx + 1;
@@ -2198,8 +2197,64 @@ export default function CustomerFeedbackDetails({
                   );
                 })
               )}
+            </div>
 
-              {/* Audit Remarks Log */}
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between">
+              <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
+              <button
+                type="button"
+                onClick={() => setShowTimelineModal(false)}
+                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 2. AUDIT HISTORY & LOGS MODAL (AUDIT LOGS & REMARKS ONLY) */}
+      {/* ========================================================= */}
+      {showAuditModal && (
+        <div
+          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowAuditModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+                  <History className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
+                    <span>Audit History & Trail</span>
+                    <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
+                      {formatDocNumber(activeDoc.id, docTypeCanonical, (activeDoc as any).category)}
+                    </span>
+                  </h3>
+                  <p className="text-[10.5px] text-emerald-100/80 font-medium truncate max-w-sm">
+                    {accountName || "Customer Record"} &bull; Tamper-Evident Chronological Audit Log
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Signed Audit Trail & Remarks Log */}
+            <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs flex-1">
               {(() => {
                 const rawTrail = (activeDoc as any)?.audit_trail;
                 let parsedTrail: any[] = Array.isArray(rawTrail) ? rawTrail : [];
@@ -2210,10 +2265,16 @@ export default function CustomerFeedbackDetails({
                   } catch {}
                 }
 
-                if (parsedTrail.length === 0) return null;
+                if (parsedTrail.length === 0) {
+                  return (
+                    <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 text-xs italic">
+                      No audit history entries recorded for this document yet.
+                    </div>
+                  );
+                }
 
                 return (
-                  <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <div className="space-y-2">
                     <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                       <span>Signed Audit Trail & Remarks ({parsedTrail.length})</span>
                       <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Tamper-Evident</span>
@@ -2231,6 +2292,11 @@ export default function CustomerFeedbackDetails({
                             {item.action || "Signed Off"}
                           </span>
                         </div>
+                        {item.timestamp && (
+                          <div className="text-[9px] font-mono text-slate-400 pl-6">
+                            {formatDate(item.timestamp)} • {formatTimeOnly(item.timestamp)}
+                          </div>
+                        )}
                         {item.details && <p className="text-slate-600 text-[10.5px] pl-6 leading-relaxed">{item.details}</p>}
                         {item.comments && <p className="text-emerald-900 text-[10.5px] font-semibold bg-white p-1.5 rounded-lg border border-slate-200 mt-1 pl-6">Remark: {item.comments}</p>}
                       </div>
@@ -2238,7 +2304,6 @@ export default function CustomerFeedbackDetails({
                   </div>
                 );
               })()}
-
             </div>
 
             {/* Modal Footer */}
@@ -2252,7 +2317,6 @@ export default function CustomerFeedbackDetails({
                 Close
               </button>
             </div>
-
           </div>
         </div>
       )}
