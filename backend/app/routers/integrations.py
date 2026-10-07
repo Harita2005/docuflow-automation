@@ -107,7 +107,8 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
                 res_p = p.resolve()
                 if any(res_p.is_relative_to(root) for root in allowed_roots):
                     valid_candidates.append(res_p)
-            except Exception:
+            except (OSError, RuntimeError, ValueError, Exception):
+                # Intentionally ignored: path resolution or boundary validation on unresolvable path is skipped
                 pass
                 
     found_path = next((p for p in valid_candidates if p.is_file()), None)

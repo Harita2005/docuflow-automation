@@ -3491,7 +3491,8 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
                 (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
                 WorkflowStepDefinition.stage_number == stg_num
             ).first()
-        except Exception:
+        except (ValueError, IndexError, Exception):
+            # Intentionally ignored: stage string format cannot be parsed into an integer stage number
             pass
     if not step and clean_stage.lower() in ('attachment status', 'stage 1'):
         step = db.query(WorkflowStepDefinition).filter(

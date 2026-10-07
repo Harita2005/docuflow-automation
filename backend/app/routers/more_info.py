@@ -637,6 +637,7 @@ def discover_available_fields_for_doc(
                     try:
                         db.rollback()
                     except Exception:
+                        # Intentionally ignored: rollback error on already-aborted transaction is benign
                         pass
                     continue
                 if raw_val is None:
@@ -875,6 +876,7 @@ def get_doc_type_more_info_config(
         try:
             db.rollback()
         except Exception:
+            # Intentionally ignored: rollback error on already-aborted transaction is benign
             pass
         catalog = DOCUMENT_TYPE_ALLOWED_FIELDS.get(norm_type, DOCUMENT_TYPE_ALLOWED_FIELDS.get("AP INVOICE", []))
         fallback_fields = [
@@ -927,6 +929,7 @@ def get_document_more_info_config(
         try:
             db.rollback()
         except Exception:
+            # Intentionally ignored: rollback error during query exception recovery is benign
             pass
 
     if not doc:
@@ -940,6 +943,7 @@ def get_document_more_info_config(
             try:
                 db.rollback()
             except Exception:
+                # Intentionally ignored: rollback error during fallback query recovery is benign
                 pass
 
     if not doc:
@@ -976,6 +980,7 @@ def get_document_more_info_config(
         try:
             db.rollback()
         except Exception:
+            # Intentionally ignored: rollback error on already-aborted transaction is benign
             pass
         norm_type = normalize_doc_type(getattr(doc, "document_type", None) or "CREDIT NOTE")
         catalog = DOCUMENT_TYPE_ALLOWED_FIELDS.get(norm_type, DOCUMENT_TYPE_ALLOWED_FIELDS.get("AP INVOICE", []))
@@ -1094,6 +1099,7 @@ def save_doc_type_more_info_config(
         try:
             db.rollback()
         except Exception:
+            # Intentionally ignored: rollback error on already-aborted transaction is benign
             pass
 
         try:
@@ -1139,6 +1145,7 @@ def save_doc_type_more_info_config(
             try:
                 db.rollback()
             except Exception:
+                # Intentionally ignored: rollback error during error handling is benign
                 pass
             raise HTTPException(status_code=400, detail="Could not save configuration.")
 
@@ -1309,6 +1316,7 @@ def save_document_more_info_config(
         try:
             db.rollback()
         except Exception:
+            # Intentionally ignored: rollback error on already-aborted transaction is benign
             pass
 
         try:
@@ -1356,6 +1364,7 @@ def save_document_more_info_config(
             try:
                 db.rollback()
             except Exception:
+                # Intentionally ignored: rollback error during error handling is benign
                 pass
             raise HTTPException(status_code=400, detail="Could not save configuration.")
 
