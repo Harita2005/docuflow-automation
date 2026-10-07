@@ -148,10 +148,26 @@ export function getCanonicalDocumentType(docOrType?: any): string {
     if (upper === "JOURNAL VOUCHER" || upper === "JV") {
       return "JOURNAL VOUCHER";
     }
-    if (upper === "CREDIT NOTE" || upper === "CREDIT") {
+    if (
+      upper === "CREDIT NOTE" ||
+      upper === "CREDIT" ||
+      upper.includes("CREDIT NOTE") ||
+      upper.includes("CREDIT_NOTE") ||
+      upper.includes("CREDIT-NOTE") ||
+      upper.startsWith("CN-") ||
+      upper.startsWith("CN_")
+    ) {
       return "CREDIT NOTE";
     }
-    if (upper === "DEBIT NOTE" || upper === "DEBIT") {
+    if (
+      upper === "DEBIT NOTE" ||
+      upper === "DEBIT" ||
+      upper.includes("DEBIT NOTE") ||
+      upper.includes("DEBIT_NOTE") ||
+      upper.includes("DEBIT-NOTE") ||
+      upper.startsWith("DN-") ||
+      upper.startsWith("DN_")
+    ) {
       return "DEBIT NOTE";
     }
     if (upper.includes("STAFF") || upper.includes("HR EXPENSE") || upper === "EXPENSE") {
@@ -716,6 +732,8 @@ export interface DynamicTableHeaders {
   partyLabel: string;
   docTypeLabel: string;
   amountLabel: string;
+  assignedLabel?: string;
+  statusLabel?: string;
 }
 
 /**
@@ -724,77 +742,135 @@ export interface DynamicTableHeaders {
 export function getDynamicTableHeaders(docTypeInput?: string | null): DynamicTableHeaders {
   const norm = (docTypeInput || "").toUpperCase().trim();
 
-  if (norm.includes("FEEDBACK") || norm.includes("CUSTOMER")) {
+  // 1. Credit Note
+  if (norm.includes("CREDIT") || norm.startsWith("CN")) {
+    return {
+      docIdLabel: "CREDIT NOTE NO",
+      partyLabel: "CUSTOMER / PARTY",
+      docTypeLabel: "NOTE TYPE",
+      amountLabel: "CREDIT AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
+    };
+  }
+
+  // 2. Debit Note
+  if (norm.includes("DEBIT") || norm.startsWith("DN")) {
+    return {
+      docIdLabel: "DEBIT NOTE NO",
+      partyLabel: "SUPPLIER / VENDOR",
+      docTypeLabel: "NOTE TYPE",
+      amountLabel: "DEBIT AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
+    };
+  }
+
+  // 3. Customer Feedback / Complaint
+  if (norm.includes("FEEDBACK") || norm.includes("CUSTOMER") || norm.includes("COMPLAINT") || norm.startsWith("CF") || norm.startsWith("CMP")) {
     return {
       docIdLabel: "TICKET ID",
       partyLabel: "CUSTOMER / CLIENT",
       docTypeLabel: "FEEDBACK TYPE",
-      amountLabel: "PRIORITY / VALUE"
+      amountLabel: "PRIORITY / VALUE",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("UTILITY") || norm.includes("RENT")) {
+
+  // 4. Utility Bills & Rent
+  if (norm.includes("UTILITY") || norm.includes("RENT") || norm.startsWith("UTL")) {
     return {
       docIdLabel: "BILL / REF NO",
       partyLabel: "SERVICE PROVIDER / LANDLORD",
       docTypeLabel: "UTILITY TYPE",
-      amountLabel: "BILL AMOUNT (₹)"
+      amountLabel: "BILL AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("VOUCHER") || norm.includes("E_VOUCHER")) {
+
+  // 5. Vouchers (Cash, E-Voucher, Journal)
+  if (norm.includes("VOUCHER") || norm.includes("E_VOUCHER") || norm.startsWith("CV") || norm.startsWith("EV") || norm.startsWith("JV")) {
+    const isJournal = norm.includes("JOURNAL") || norm.startsWith("JV");
     return {
-      docIdLabel: "VOUCHER NO",
-      partyLabel: "BENEFICIARY / PAYEE",
+      docIdLabel: isJournal ? "JV NUMBER" : "VOUCHER NO",
+      partyLabel: isJournal ? "ACCOUNT / LEDGER" : "BENEFICIARY / PAYEE",
       docTypeLabel: "VOUCHER TYPE",
-      amountLabel: "VOUCHER AMOUNT (₹)"
+      amountLabel: "VOUCHER AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("EXPENSE") || norm.includes("TRAVEL")) {
+
+  // 6. Staff & HR Expense / Claims
+  if (norm.includes("EXPENSE") || norm.includes("TRAVEL") || norm.includes("STAFF") || norm.startsWith("EXP")) {
     return {
       docIdLabel: "CLAIM ID",
       partyLabel: "EMPLOYEE / CLAIMANT",
       docTypeLabel: "EXPENSE TYPE",
-      amountLabel: "CLAIM AMOUNT (₹)"
+      amountLabel: "CLAIM AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("CAPEX")) {
+
+  // 7. Capex / Fixed Asset
+  if (norm.includes("CAPEX") || norm.includes("ASSET")) {
     return {
       docIdLabel: "CAPEX ID",
       partyLabel: "VENDOR / PROJECT",
-      docTypeLabel: "DOCUMENT TYPE",
-      amountLabel: "BUDGET (₹)"
+      docTypeLabel: "ASSET TYPE",
+      amountLabel: "BUDGET (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("GOODS") || norm.includes("GRN")) {
+
+  // 8. Goods Receipt Note (GRN)
+  if (norm.includes("GOODS") || norm.includes("GRN") || norm.startsWith("GRN")) {
     return {
       docIdLabel: "GRN NUMBER",
       partyLabel: "SUPPLIER / VENDOR",
-      docTypeLabel: "DOCUMENT TYPE",
-      amountLabel: "ORDER AMOUNT (₹)"
+      docTypeLabel: "RECEIPT TYPE",
+      amountLabel: "ORDER AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("PURCHASE") || norm.includes("PO")) {
+
+  // 9. Purchase Order (PO)
+  if (norm.includes("PURCHASE") || norm === "PO" || norm.startsWith("PO")) {
     return {
       docIdLabel: "PO NUMBER",
       partyLabel: "SUPPLIER / VENDOR",
-      docTypeLabel: "DOCUMENT TYPE",
-      amountLabel: "PO AMOUNT (₹)"
+      docTypeLabel: "ORDER TYPE",
+      amountLabel: "PO AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
-  if (norm.includes("INVOICE") || norm.includes("AP")) {
+
+  // 10. AP Invoice
+  if (norm.includes("INVOICE") || norm.includes("AP") || norm.startsWith("INV")) {
     return {
       docIdLabel: "DOCUMENT ID",
       partyLabel: "SUPPLIER / VENDOR",
       docTypeLabel: "DOCUMENT TYPE",
-      amountLabel: "AMOUNT (₹)"
+      amountLabel: "AMOUNT (₹)",
+      assignedLabel: "ASSIGNED TO",
+      statusLabel: "STATUS"
     };
   }
 
-  // Default header titles
+  // Default cross-category / ALL header titles
   return {
     docIdLabel: "DOCUMENT ID",
     partyLabel: "SUPPLIER / VENDOR",
     docTypeLabel: "DOCUMENT TYPE",
-    amountLabel: "AMOUNT (₹)"
+    amountLabel: "AMOUNT (₹)",
+    assignedLabel: "ASSIGNED TO",
+    statusLabel: "STATUS"
   };
 }
 

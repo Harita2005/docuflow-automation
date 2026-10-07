@@ -313,8 +313,10 @@ export default function WorkTrackerPage({
         const isGeneral = selectedTab.includes("GENERAL") && (docType.includes("GENERAL") || docType.includes("VCC") || docType.includes("EXPENSE"));
         const isPO = selectedTab.includes("PURCHASE") && (docType.includes("PURCHASE") || docType === "PO");
         const isGRN = selectedTab.includes("GOODS") && (docType.includes("GOODS") || docType === "GRN");
+        const isCreditNote = selectedTab.includes("CREDIT") && (docType.includes("CREDIT") || docType.startsWith("CN"));
+        const isDebitNote = selectedTab.includes("DEBIT") && (docType.includes("DEBIT") || docType.startsWith("DN"));
 
-        if (!isAPInvoice && !isGeneral && !isPO && !isGRN) {
+        if (!isAPInvoice && !isGeneral && !isPO && !isGRN && !isCreditNote && !isDebitNote) {
           return false;
         }
       }
@@ -434,7 +436,17 @@ export default function WorkTrackerPage({
             <Search className="h-3 w-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search vendor, doc #, PO..."
+              placeholder={
+                effectiveDocType.includes("CREDIT")
+                  ? "Search customer, credit note #, ref..."
+                  : effectiveDocType.includes("FEEDBACK")
+                  ? "Search customer, ticket #, complaint..."
+                  : effectiveDocType.includes("PURCHASE")
+                  ? "Search supplier, PO #, item..."
+                  : effectiveDocType.includes("EXPENSE")
+                  ? "Search claimant, claim #, type..."
+                  : "Search vendor, doc #, PO..."
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-6.5 pr-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-[#003F28] transition"
@@ -549,16 +561,18 @@ export default function WorkTrackerPage({
                  <th className="py-1.5 px-2.5 w-[26%]">{tableHeaders.partyLabel}</th>
                  <th className="py-1.5 px-2.5 w-[14%]">{tableHeaders.docTypeLabel}</th>
                  <th className="py-1.5 px-2.5 w-[15%] text-right">{tableHeaders.amountLabel}</th>
-                 <th className="py-1.5 px-2.5 w-[11%] text-center">ASSIGNED TO</th>
-                 <th className="py-1.5 px-2.5 w-[10%] text-center">Status</th>
-                 <th className="py-1.5 px-2.5 w-[9%] text-center">Action</th>
+                 <th className="py-1.5 px-2.5 w-[11%] text-center">{tableHeaders.assignedLabel || "ASSIGNED TO"}</th>
+                 <th className="py-1.5 px-2.5 w-[10%] text-center">{tableHeaders.statusLabel || "STATUS"}</th>
+                 <th className="py-1.5 px-2.5 w-[9%] text-center">ACTION</th>
                </tr>
             </thead>
 
             {/* Enterprise Compact Table Body */}
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {filteredAndSortedDocs.map((doc, idx) => {
-                const vendorName = doc.vendor_name || "Enterprise Supplier";
+                const docCanonicalType = getCanonicalDocumentType(doc);
+                const isDocCredit = docCanonicalType.includes("CREDIT") || String(doc.id).toUpperCase().startsWith("CN-");
+                const vendorName = doc.vendor_name || (doc as any).customer_name || (doc as any).party_name || (doc as any).account_name || (doc as any).dealer_name || (doc as any).client_name || (isDocCredit ? "Enterprise Customer" : "Enterprise Supplier");
                 const grossAmount = Number(doc.amount || 0);
                 const displayId = formatDocNumber(doc.id, getCanonicalDocumentType(doc), (doc as any).category);
                 const docDate = doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "");
