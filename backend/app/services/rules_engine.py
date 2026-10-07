@@ -23,6 +23,9 @@ def parse_date_str(val: Any) -> Optional[datetime.date]:
 
 def infer_document_type(category: str='', trans_type: str='', wf_name: str='', doc_type: str='') -> str:
     if doc_type and doc_type.strip():
+        dt_clean = doc_type.strip().upper()
+        if 'FEEDBACK' in dt_clean or 'COMPLAINT' in dt_clean:
+            return 'CUSTOMER FEEDBACK'
         return doc_type.strip()
     n = f'{category} {trans_type} {wf_name}'.upper()
     if 'EVOUCHER' in n or 'E-VOUCHER' in n or 'E_VOUCHER' in n:
@@ -282,7 +285,7 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
     rule_items_lower = [it.lower() for it in rule_items]
 
     def _token_words_match(r_items: list, d_val: Any) -> bool:
-        doc_components = [c.strip() for c in str(d_val or '').split(',') if c.strip()]
+        doc_components = [c.strip() for c in str(d_val or '').replace(';', ',').split(',') if c.strip()]
         stop_words = {'and', 'or', 'the', 'of', 'in', 'to', 'a', 'an', '&'}
         for r_item in r_items:
             r_words = set(re.findall(r'[a-zA-Z0-9]+', str(r_item).lower())) - stop_words
@@ -292,6 +295,11 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
                     if d_words.issubset(r_words) or r_words.issubset(d_words) or len(r_words & d_words) >= 2:
                         return True
         return False
+
+    feedback_synonyms = {'customerfeedback', 'customer_feedback', 'customer complaint', 'customercomplaint', 'feedback', 'complaint'}
+    if clean_doc in feedback_synonyms and any(it in feedback_synonyms for it in clean_rule_items):
+        if op_str in ['equals', '==', '=', 'eq', 'contains', 'in']:
+            return True
 
     if op_str in ['equals', '==', '=', 'eq']:
         direct_match = (
