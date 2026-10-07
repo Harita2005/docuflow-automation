@@ -167,7 +167,7 @@ export default function CustomerFeedbackPage({
               </span>
             </h1>
             <p className="text-[11px] text-slate-500 font-medium leading-tight">
-              Track customer complaint lifecycle, workflow stages, and physical document evidence.
+              Track customer feedback lifecycle, workflow stages, and physical document evidence.
             </p>
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function CustomerFeedbackPage({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search complaint ID, account, dealer..."
+              placeholder="Search feedback ID, account, dealer..."
               className="w-full pl-8 pr-7 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
             />
             {searchTerm && (

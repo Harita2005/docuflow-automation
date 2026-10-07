@@ -233,7 +233,7 @@ export function formatDocumentTypeDisplay(docOrType?: any): string {
     "UTILITY & RENT": "Utility & Rent",
     "GOODS RECEIPT": "Goods Receipt",
     "CAPEX": "Capex",
-    "CUSTOMER COMPLAINT": "Customer Complaint",
+    "CUSTOMER COMPLAINT": "Customer Feedback",
     "CUSTOMER FEEDBACK": "Customer Feedback",
     "GENERAL RECORDS": "General Records",
   };

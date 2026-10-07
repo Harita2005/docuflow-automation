@@ -542,7 +542,7 @@ def discover_available_fields_for_doc(
     # Auto-detect doc type from column hints when type is unknown/new
     if norm_type not in DOCUMENT_TYPE_ALLOWED_FIELDS:
         if getattr(doc, "type_of_complaint", None) or getattr(doc, "account_name", None):
-            norm_type = "CUSTOMER COMPLAINT"
+            norm_type = "CUSTOMER FEEDBACK"
         elif getattr(doc, "expense_type", None) or getattr(doc, "department", None):
             norm_type = "HR EXPENSE"
         elif getattr(doc, "credit_note_number", None) or getattr(doc, "reason_for_credit", None):

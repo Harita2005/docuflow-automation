@@ -93,8 +93,14 @@ const CANONICAL_KEY_MAP: Record<string, string> = {
   "bp type": "bp_type",
   type_of_complaint: "type_of_complaint",
   "type of complaint": "type_of_complaint",
+  type_of_feedback: "type_of_complaint",
+  "type of feedback": "type_of_complaint",
+  feedback_type: "type_of_complaint",
+  "feedback type": "type_of_complaint",
   subtype_of_complaint: "subtype_of_complaint",
   "subtype of complaint": "subtype_of_complaint",
+  subtype_of_feedback: "subtype_of_complaint",
+  "subtype of feedback": "subtype_of_complaint",
   additional_comments: "additional_comments",
   "additional comments": "additional_comments",
   invoice_number: "invoice_number",
@@ -772,7 +778,7 @@ export default function CustomerFeedbackDetails({
         body: JSON.stringify({
           invoiceId: activeDoc.id,
           expected_stage: activeDoc.current_stage || 1,
-          comments: approvalComment.trim() || "Approved customer feedback complaint",
+          comments: approvalComment.trim() || "Approved customer feedback",
         }),
       });
 
@@ -908,7 +914,7 @@ export default function CustomerFeedbackDetails({
       });
 
       if (res.ok) {
-        setActionSuccess("✓ Complaint record rejected / cancelled.");
+        setActionSuccess("✓ Feedback record rejected / cancelled.");
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
@@ -1237,17 +1243,17 @@ export default function CustomerFeedbackDetails({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-stretch">
         
         {/* ========================================================================= */}
-        {/* LEFT COLUMN: CUSTOMER, COMPLAINT & REVIEWER ACTIONS (Span 7 on lg) */}
+        {/* LEFT COLUMN: CUSTOMER, FEEDBACK & REVIEWER ACTIONS (Span 7 on lg) */}
         {/* ========================================================================= */}
         <div className="lg:col-span-7 flex flex-col space-y-2">
           
-          {/* CARD 1: CUSTOMER, PARTNER & COMPLAINT DETAILS */}
+          {/* CARD 1: CUSTOMER, PARTNER & FEEDBACK DETAILS */}
           <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-2xs space-y-2">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-1">
               <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-[#003F28] tracking-wider">
                 <Building className="h-3.5 w-3.5 text-emerald-700" />
-                <span>Customer, Partner & Complaint Details</span>
+                <span>Customer, Partner & Feedback Details</span>
               </div>
               <span className="text-[9px] font-bold text-slate-400 uppercase">Registry Master</span>
             </div>
@@ -1285,15 +1291,15 @@ export default function CustomerFeedbackDetails({
               </div>
             </div>
 
-            {/* Grid 2: Complaint Details */}
+            {/* Grid 2: Feedback Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
               <div className="bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
-                <div className="text-[8.5px] font-extrabold uppercase text-slate-500">Type of Complaint</div>
+                <div className="text-[8.5px] font-extrabold uppercase text-slate-500">Type of Feedback</div>
                 {renderFieldValue(typeOfComplaint)}
               </div>
 
               <div className="bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
-                <div className="text-[8.5px] font-extrabold uppercase text-slate-500">Subtype of Complaint</div>
+                <div className="text-[8.5px] font-extrabold uppercase text-slate-500">Subtype of Feedback</div>
                 {renderFieldValue(subtypeOfComplaint)}
               </div>
             </div>
@@ -1611,7 +1617,7 @@ export default function CustomerFeedbackDetails({
                     disabled={actionLoading}
                     onClick={handleWorkflowReject}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-                    title="Reject / Cancel Complaint"
+                    title="Reject / Cancel Feedback"
                   >
                     <XCircle className="h-3.5 w-3.5" />
                     <span>Reject</span>
