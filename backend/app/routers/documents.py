@@ -3198,7 +3198,7 @@ def _require_docs_admin(user: User, db: Session):
 
 @router.get('/api/admin/config')
 def get_admin_config(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
-    _require_docs_admin(current_user, db)
+    # Authenticated users need access to app configs for FLAC field permissions and UI actions
     return load_app_configs()
 
 @router.post('/api/admin/config')

@@ -493,6 +493,8 @@ def check_invoice_escalation_status(
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import can_stage_escalate
     inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
     can_esc, reason = can_stage_escalate(inv, db)
     return {'document_id': inv.id, 'can_escalate': can_esc, 'current_stage': inv.current_stage or 1, 'reason': reason}
 
@@ -506,6 +508,8 @@ def execute_invoice_escalation(
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import escalate_invoice_stage
     inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
     user_name = current_user.employee_name or current_user.name or current_user.username or 'Escalation Engine'
     reason = payload.get('reason') or 'SLA Threshold Exceeded'
     return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)
