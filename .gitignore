@@ -28,3 +28,5 @@ frontend/tsconfig.tsbuildinfo
 stored_pdfs/
 uploads/
 scratch/
+*.mfa_tickets.json
+backend/data/.mfa_tickets.json
