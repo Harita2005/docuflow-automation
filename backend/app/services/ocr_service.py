@@ -2,10 +2,58 @@ import json
 import logging
 import os
 import re
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from app.config.settings import settings
+
 logger = logging.getLogger(__name__)
+
+MAX_CONCURRENT_OCR = int(getattr(settings, "MAX_CONCURRENT_OCR", 3))
+OCR_SEMAPHORE_TIMEOUT = float(getattr(settings, "OCR_SEMAPHORE_TIMEOUT", 60.0))
+_ocr_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_OCR)
+
+
+class OCRConcurrencyError(RuntimeError):
+    """Raised when the maximum concurrent OCR/LLM extraction limit is saturated."""
+    pass
+
+
+@contextmanager
+def ocr_concurrency_guard(timeout: Optional[float] = None):
+    """
+    Context manager to limit simultaneous OCR and LLM extractions.
+    Prevents CPU and memory starvation under high concurrent uploads.
+    """
+    t = timeout if timeout is not None else OCR_SEMAPHORE_TIMEOUT
+    acquired = _ocr_semaphore.acquire(timeout=t)
+    if not acquired:
+        logger.warning(
+            "[OCR] Maximum concurrent OCR limit (%d) reached. Job timed out after %s seconds.",
+            MAX_CONCURRENT_OCR, t
+        )
+        raise OCRConcurrencyError(
+            f"Server busy: OCR/LLM extraction capacity reached ({MAX_CONCURRENT_OCR} concurrent). Please retry."
+        )
+    try:
+        yield
+    finally:
+        _ocr_semaphore.release()
+
+
+def get_ocr_semaphore() -> threading.BoundedSemaphore:
+    """Helper for testing and diagnostics."""
+    global _ocr_semaphore
+    return _ocr_semaphore
+
+
+def set_ocr_semaphore(semaphore: threading.BoundedSemaphore):
+    """Helper for testing concurrency behavior."""
+    global _ocr_semaphore
+    _ocr_semaphore = semaphore
+
 
 _ocr_engine = None
 
@@ -339,39 +387,43 @@ def extract_document_for_verification(file_path: Path) -> Dict[str, Any]:
     Main extraction pipeline for Manual Upload (Path A).
     Performs OCR, runs LLM data extraction with heuristic fallback, and returns
     a complete structured dictionary for the Human-in-the-Loop verification view.
+    Protected by ocr_concurrency_guard to bound concurrent CPU & memory usage.
     """
-    raw_text = extract_raw_text(file_path)
-    
-    # 1. Try LLM extraction first
-    llm_data = extract_with_llm(raw_text) if raw_text.strip() else None
+    with ocr_concurrency_guard():
+        raw_text = extract_raw_text(file_path)
+        
+        # 1. Try LLM extraction first
+        llm_data = extract_with_llm(raw_text) if raw_text.strip() else None
 
-    # 2. Extract heuristics from raw text
-    heuristic_data = parse_invoice_heuristics(raw_text)
+        # 2. Extract heuristics from raw text
+        heuristic_data = parse_invoice_heuristics(raw_text)
 
-    # 3. Merge results (LLM takes precedence, heuristics fill any gaps)
-    final_data = heuristic_data.copy()
-    if llm_data:
-        for k, v in llm_data.items():
-            if v is not None and v != "" and v != 0.0:
-                final_data[k] = v
-        final_data["extraction_source"] = llm_data.get("extraction_source", "llm")
-        final_data["confidence_score"] = float(llm_data.get("confidence_score") or 0.95)
+        # 3. Merge results (LLM takes precedence, heuristics fill any gaps)
+        final_data = heuristic_data.copy()
+        if llm_data:
+            for k, v in llm_data.items():
+                if v is not None and v != "" and v != 0.0:
+                    final_data[k] = v
+            final_data["extraction_source"] = llm_data.get("extraction_source", "llm")
+            final_data["confidence_score"] = float(llm_data.get("confidence_score") or 0.95)
 
-    final_data["raw_text_preview"] = raw_text[:1000] if raw_text else ""
-    return final_data
+        final_data["raw_text_preview"] = raw_text[:1000] if raw_text else ""
+        return final_data
 
 
 def extract_text_from_pdf(pdf_path: Path) -> Dict[str, Any]:
     """
     Backward-compatible extractor for legacy callers (sync attachments, etc.).
+    Protected by ocr_concurrency_guard to bound concurrent CPU & memory usage.
     """
-    raw_text = extract_raw_text(pdf_path)
-    heuristics = parse_invoice_heuristics(raw_text)
-    return {
-        'raw_text': raw_text,
-        'vendor_name': heuristics.get('vendor_name'),
-        'invoice_number': heuristics.get('invoice_number'),
-        'date': heuristics.get('invoice_date'),
-        'amount': heuristics.get('amount', 0.0),
-        'gstin': heuristics.get('gstin')
-    }
+    with ocr_concurrency_guard():
+        raw_text = extract_raw_text(pdf_path)
+        heuristics = parse_invoice_heuristics(raw_text)
+        return {
+            'raw_text': raw_text,
+            'vendor_name': heuristics.get('vendor_name'),
+            'invoice_number': heuristics.get('invoice_number'),
+            'date': heuristics.get('invoice_date'),
+            'amount': heuristics.get('amount', 0.0),
+            'gstin': heuristics.get('gstin')
+        }

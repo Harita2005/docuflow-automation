@@ -194,6 +194,7 @@ def classify_with_llm(
 
     # 1. Attempt LLM invocation
     try:
+        from app.services.ocr_service import ocr_concurrency_guard
         payload = json.dumps({
             "model": DEFAULT_LLM_MODEL,
             "prompt": prompt,
@@ -206,8 +207,9 @@ def classify_with_llm(
             data=payload,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            resp_data = json.loads(resp.read().decode("utf-8"))
+        with ocr_concurrency_guard(timeout=5.0):
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                resp_data = json.loads(resp.read().decode("utf-8"))
             raw_text = resp_data.get("response", "").strip()
             clean_json_str = re.sub(r'^```(?:json)?\s*', '', raw_text)
             clean_json_str = re.sub(r'\s*```$', '', clean_json_str).strip()

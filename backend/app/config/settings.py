@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     # LLM & AI Extraction Configuration
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    MAX_CONCURRENT_OCR: int = 3
+    OCR_SEMAPHORE_TIMEOUT: float = 60.0
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

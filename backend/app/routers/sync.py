@@ -873,10 +873,15 @@ async def sync_attachment_upload(
     with open(file_path, 'wb') as f:
         f.write(contents)
     file_size = len(contents)
-    file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if file.filename.lower().endswith('.pdf'):
-        ocr_data = extract_text_from_pdf(file_path)
+        from starlette.concurrency import run_in_threadpool
+        from app.services.ocr_service import OCRConcurrencyError
+        try:
+            ocr_data = await run_in_threadpool(extract_text_from_pdf, file_path)
+        except OCRConcurrencyError as ocr_err:
+            logging.getLogger(__name__).warning("OCR concurrency limit reached in upload_attachment: %s", ocr_err)
+            ocr_data = {}
     inv.file_url = file_url
     inv.file_path = str(file_path)
     inv.file_size = file_size
@@ -917,7 +922,12 @@ def sync_attachment_base64(
     file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if payload.file_name.lower().endswith('.pdf'):
-        ocr_data = extract_text_from_pdf(file_path)
+        from app.services.ocr_service import OCRConcurrencyError
+        try:
+            ocr_data = extract_text_from_pdf(file_path)
+        except OCRConcurrencyError as ocr_err:
+            logging.getLogger(__name__).warning("OCR concurrency limit reached in sync_attachment_base64: %s", ocr_err)
+            ocr_data = {}
     inv.file_url = file_url
     inv.file_path = str(file_path)
     inv.file_size = file_size
@@ -952,7 +962,13 @@ async def sync_record_attachment_by_pk(
     file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if file.filename.lower().endswith('.pdf'):
-        ocr_data = extract_text_from_pdf(file_path)
+        from starlette.concurrency import run_in_threadpool
+        from app.services.ocr_service import OCRConcurrencyError
+        try:
+            ocr_data = await run_in_threadpool(extract_text_from_pdf, file_path)
+        except OCRConcurrencyError as ocr_err:
+            logging.getLogger(__name__).warning("OCR concurrency limit reached in sync_record_attachment_by_pk: %s", ocr_err)
+            ocr_data = {}
     inv.file_url = file_url
     inv.file_path = str(file_path)
     inv.file_size = file_size
@@ -998,7 +1014,12 @@ def sync_record_attachment_by_pk_base64(
     file_url = f'/api/documents/{inv.id}/file'
     ocr_data = {}
     if payload.file_name.lower().endswith('.pdf'):
-        ocr_data = extract_text_from_pdf(file_path)
+        from app.services.ocr_service import OCRConcurrencyError
+        try:
+            ocr_data = extract_text_from_pdf(file_path)
+        except OCRConcurrencyError as ocr_err:
+            logging.getLogger(__name__).warning("OCR concurrency limit reached in sync_record_attachment_by_pk_base64: %s", ocr_err)
+            ocr_data = {}
     inv.file_url = file_url
     inv.file_path = str(file_path)
     inv.file_size = file_size

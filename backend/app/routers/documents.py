@@ -2385,10 +2385,17 @@ async def extract_document_preview(
 
     final_file_size = process_and_validate_pdf_size(file_path, detected_type)
 
-    # Perform OCR + LLM extraction
-    from app.services.ocr_service import extract_document_for_verification
+    # Perform OCR + LLM extraction via run_in_threadpool with concurrency limit
+    from starlette.concurrency import run_in_threadpool
+    from app.services.ocr_service import extract_document_for_verification, OCRConcurrencyError
     try:
-        extracted = extract_document_for_verification(file_path)
+        extracted = await run_in_threadpool(extract_document_for_verification, file_path)
+    except OCRConcurrencyError as err:
+        logger.warning("[Extract Preview] OCR concurrency limit reached: %s", err)
+        raise HTTPException(
+            status_code=503,
+            detail="Server is currently busy processing document OCR/LLM extractions. Please retry shortly."
+        )
     except Exception as exc:
         logger.warning("[Extract Preview] Extraction failed: %s", exc)
         extracted = {
@@ -2680,8 +2687,12 @@ async def upload_document(
 
     ocr_data = {}
     try:
-        from app.services.ocr_service import extract_document_for_verification
-        ocr_data = extract_document_for_verification(file_path) or {}
+        from starlette.concurrency import run_in_threadpool
+        from app.services.ocr_service import extract_document_for_verification, OCRConcurrencyError
+        ocr_data = (await run_in_threadpool(extract_document_for_verification, file_path)) or {}
+    except OCRConcurrencyError as err:
+        logger.warning("[Upload Document] OCR concurrency limit reached: %s. Proceeding with user form metadata.", err)
+        ocr_data = {}
     except Exception as exc:
         logger.warning('Handled OCR/LLM extraction exception in upload_document: %s', exc)
 
@@ -2810,9 +2821,11 @@ async def trigger_workflow_from_excel(
             detail="Access Denied: Missing required permission to trigger workflows via Excel."
         )
 
+    from starlette.concurrency import run_in_threadpool
     from app.services.excel_trigger_service import process_excel_workflow_trigger
     file_bytes = await file.read()
-    return process_excel_workflow_trigger(
+    return await run_in_threadpool(
+        process_excel_workflow_trigger,
         file_bytes=file_bytes,
         filename=file.filename or 'batch.xlsx',
         db=db,
