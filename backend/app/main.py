@@ -37,6 +37,13 @@ async def lifespan(app: FastAPI):
     # Enforce production security invariants (refuse to start if SERVICE_API_KEY insecure)
     validate_production_service_api_key(settings.SERVICE_API_KEY, settings.ENVIRONMENT)
 
+    if (settings.ENVIRONMENT or "").strip().lower() != "production":
+        logger.warning(
+            "SECURITY WARNING: Server running in non-production mode (ENVIRONMENT='%s'). "
+            "Ensure ENVIRONMENT=production and strict credentials are set in production deployments.",
+            settings.ENVIRONMENT,
+        )
+
     if not os.getenv("PYTEST_CURRENT_TEST"):
         try:
             Base.metadata.create_all(bind=engine)

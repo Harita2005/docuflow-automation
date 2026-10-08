@@ -1,7 +1,7 @@
 import datetime
 import logging
 import secrets
-from typing import Optional
+from typing import Optional, Any
 
 import bcrypt
 from fastapi import Depends, HTTPException, Header, status
@@ -287,6 +287,138 @@ async def verify_service_api_key(
     )
 
 
+# ---------------------------------------------------------------------------
+# Dual Authentication: User JWT OR Valid Service Key
+# ---------------------------------------------------------------------------
+
+async def get_current_user_or_service_key(
+    x_api_key: Optional[str] = Header(
+        None,
+        alias="X-API-Key",
+    ),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    Validate that the incoming request is authenticated either by:
+    1. A valid X-API-Key configured through SERVICE_API_KEY
+    2. A valid service Bearer JWT
+    3. A valid active user Bearer JWT
+
+    If both credentials are missing or both are invalid, raises HTTP 401 Unauthorized.
+    """
+    # 1. Check X-API-Key
+    expected_key = getattr(
+        settings,
+        "SERVICE_API_KEY",
+        None,
+    )
+    if expected_key and x_api_key:
+        cleaned_key = x_api_key.strip()
+        expected_cleaned = str(expected_key).strip()
+        if cleaned_key and expected_cleaned:
+            if secrets.compare_digest(
+                cleaned_key.encode("utf-8"),
+                expected_cleaned.encode("utf-8"),
+            ):
+                return {
+                    "is_service": True,
+                    "identity": "service_api_key",
+                    "role": "service",
+                    "username": "service_api_key",
+                }
+
+    # 2. Check Bearer token (service JWT or user JWT)
+    if credentials and credentials.credentials:
+        try:
+            payload = decode_token(credentials.credentials)
+        except (JWTError, Exception) as exc:
+            logger.debug("Bearer token decode error: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        subject = payload.get("sub") or payload.get("username")
+        role = payload.get("role")
+
+        if subject in {"backend_sync_client", "sync_service"} or role == "service":
+            return {
+                "is_service": True,
+                "identity": subject or "sync_service",
+                "role": "service",
+                "username": subject or "sync_service",
+            }
+
+        if not subject:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user = (
+            db.query(User)
+            .filter(
+                (User.username == subject)
+                | (User.email == subject)
+                | (User.employee_id == subject)
+            )
+            .filter(User.is_deleted == False)
+            .first()
+        )
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is deactivated. Access denied.",
+            )
+
+        return user
+
+    # 3. Neither valid service key nor valid Bearer token provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Provide a valid Bearer token or X-API-Key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def require_permission_or_service(permission: str):
+    """
+    Factory creating a FastAPI dependency that verifies the caller is either:
+    1. A valid M2M service caller (X-API-Key or Service JWT), OR
+    2. An authenticated user possessing the specified RBAC permission (or admin).
+
+    Returns 401 if unauthenticated, 403 if user lacks required permission.
+    """
+    async def _perm_dependency(
+        auth_entity: Any = Depends(get_current_user_or_service_key),
+        db: Session = Depends(get_db),
+    ) -> Any:
+        if isinstance(auth_entity, dict) and auth_entity.get("is_service"):
+            return auth_entity
+
+        from app.services.rbac_service import check_permission
+        if not check_permission(auth_entity, permission, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access Denied: Missing required permission '{permission}'.",
+            )
+
+        return auth_entity
+
+    return _perm_dependency
+
+
 __all__ = [
     "verify_password",
     "get_password_hash",
@@ -296,4 +428,6 @@ __all__ = [
     "get_current_user_optional",
     "get_current_active_user",
     "verify_service_api_key",
+    "get_current_user_or_service_key",
+    "require_permission_or_service",
 ]

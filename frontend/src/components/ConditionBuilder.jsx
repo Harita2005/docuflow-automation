@@ -168,6 +168,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [valueListModalIdx, setValueListModalIdx] = useState(null);
   const [valueListSearch, setValueListSearch] = useState('');
   const [valueListBulkInput, setValueListBulkInput] = useState('');
+  const [workflowNotice, setWorkflowNotice] = useState(null);
 
   // Fetch Workflow Profiles on Mount
   useEffect(() => {
@@ -179,6 +180,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
         if (res.ok) {
           const data = await res.json();
           setWorkflows(Array.isArray(data) ? data : []);
+        } else if (res.status === 403) {
+          setWorkflowNotice("Notice: You lack 'workflow:read' permission to view target workflow profiles.");
         }
       } catch (err) {
         console.error("Failed to load workflows:", err);
@@ -794,6 +797,12 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   if (editingRule) {
     return (
       <div className="flex flex-col gap-2 max-w-7xl mx-auto w-full pb-6 animate-in fade-in duration-150">
+        {workflowNotice && (
+          <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
+            <span>⚠️ {workflowNotice}</span>
+            <button onClick={() => setWorkflowNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
+          </div>
+        )}
         
         {/* 1. COMPACT HEADER */}
         <div className="bg-white border border-slate-200/80 rounded-lg px-3 py-2 shadow-2xs">
@@ -2063,6 +2072,12 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
   return (
     <div className="flex flex-col gap-2.5 w-full pb-6">
+      {workflowNotice && (
+        <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
+          <span>⚠️ {workflowNotice}</span>
+          <button onClick={() => setWorkflowNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
+        </div>
+      )}
       {/* Top Header Bar */}
       <div className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">

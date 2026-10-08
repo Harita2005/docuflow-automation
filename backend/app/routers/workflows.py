@@ -2,10 +2,15 @@ import logging
 import datetime
 import json
 import re
+import urllib.parse
 from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.auth import get_current_active_user
+from app.auth import (
+    get_current_active_user,
+    get_current_user_or_service_key,
+    require_permission_or_service,
+)
 from app.database.connection import get_db
 from app.database.models import AuditLog, BusinessRule, ChecklistTemplate, Invoice, SystemLog, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import WorkflowProfileSchema
@@ -80,12 +85,14 @@ def enforce_designated_approvers(db: Session):
     pass
 
 @router.post('/api/admin/workflows/sync-approvers')
-def sync_all_workflow_approvers(db: Session=Depends(get_db)):
+def sync_all_workflow_approvers(
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('workflow:write'))
+):
     return {'status': 'success', 'message': 'FlowBuilder custom approvers preserved.'}
 
-@router.get('/api/workflows', response_model=List[WorkflowProfileSchema])
-@router.get('/api/admin/workflows', response_model=List[WorkflowProfileSchema])
-def get_all_workflow_profiles(db: Session=Depends(get_db)):
+
+def _get_all_workflow_profiles_data(db: Session) -> List[dict]:
     profiles = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).order_by(WorkflowProfile.created_at.desc()).all()
     if not profiles:
         return []
@@ -127,17 +134,38 @@ def get_all_workflow_profiles(db: Session=Depends(get_db)):
         result.append(p_dict)
     return result
 
+
+@router.get('/api/workflows', response_model=List[WorkflowProfileSchema])
+def get_all_workflow_profiles(
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(get_current_user_or_service_key)
+):
+    return _get_all_workflow_profiles_data(db)
+
+
+@router.get('/api/admin/workflows', response_model=List[WorkflowProfileSchema])
+def get_all_workflow_profiles_admin(
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('workflow:read'))
+):
+    return _get_all_workflow_profiles_data(db)
+
+
 @router.get('/api/admin/workflow-steps')
-def get_workflow_steps(db: Session=Depends(get_db)):
+def get_workflow_steps(
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('workflow:read'))
+):
     steps = db.query(WorkflowStepDefinition).order_by(WorkflowStepDefinition.profile_name.asc(), WorkflowStepDefinition.stage_number.asc()).all()
     return steps
+
 
 @router.post('/api/admin/workflows')
 @router.post('/api/admin/workflows/save')
 def save_workflow_profile(
     payload: WorkflowProfileSchema,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Any = Depends(require_permission_or_service('workflow:write'))
 ):
     if not check_permission(current_user, 'workflow:write', db):
         raise HTTPException(
@@ -300,9 +328,7 @@ def save_workflow_profile(
         logger.exception("[save_workflow_profile] Exception saving workflow profile: %s", e)
         raise HTTPException(status_code=500, detail=f'Database error while saving workflow: {str(e)}')
 
-@router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
-@router.get('/api/workflows/{profile_name}', response_model=WorkflowProfileSchema)
-def get_single_workflow_profile(profile_name: str, db: Session=Depends(get_db)):
+def _get_single_workflow_profile_data(profile_name: str, db: Session):
     raw_name = profile_name.strip()
     decoded = urllib.parse.unquote(raw_name)
     p = db.query(WorkflowProfile).filter(
@@ -318,6 +344,24 @@ def get_single_workflow_profile(profile_name: str, db: Session=Depends(get_db)):
     raw_steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p.profile_name).order_by(WorkflowStepDefinition.stage_number.asc()).all()
     steps = [format_step_with_checklist(db, st, p.profile_name) for st in raw_steps]
     return {'profile_name': p.profile_name, 'workflow_code': p.workflow_code, 'workflow_category': p.workflow_category, 'workflow_type': p.workflow_type, 'description': p.description, 'status': p.status, 'approval_threshold': p.approval_threshold, 'rejection_handling': p.rejection_handling, 'reminder_interval_hours': p.reminder_interval_hours, 'escalation_after_hours': p.escalation_after_hours, 'auto_escalation': p.auto_escalation, 'rule_action': p.rule_action or 'WORKFLOW_ROUTE', 'cancel_reason': p.cancel_reason, 'auto_approve_enabled': bool(p.auto_approve_enabled), 'auto_approve_condition': p.auto_approve_condition, 'auto_cancel_enabled': bool(p.auto_cancel_enabled), 'auto_cancel_condition': p.auto_cancel_condition, 'steps': steps}
+
+
+@router.get('/api/workflows/{profile_name}', response_model=WorkflowProfileSchema)
+def get_single_workflow_profile_user(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(get_current_user_or_service_key)
+):
+    return _get_single_workflow_profile_data(profile_name, db)
+
+
+@router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
+def get_single_workflow_profile_admin(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('workflow:read'))
+):
+    return _get_single_workflow_profile_data(profile_name, db)
 
 @router.delete('/api/admin/categories/{category_name}')
 @router.delete('/api/categories/{category_name}')
@@ -484,6 +528,49 @@ def publish_configurations(
     db.commit()
     return {'success': True, 'message': f'Successfully published {changes} config changes.'}
 
+def verify_escalation_authorization(current_user: User, inv: Invoice, db: Session) -> None:
+    """
+    Object-level authorization check for invoice escalation endpoints.
+    Allowed if:
+    1. User is an admin (role in ('admin', 'administrator', 'system_admin', 'superadmin') or has 'admin:access')
+    2. User possesses explicit escalation or approval permission ('workflow:escalate', 'workflow:write', 'invoice:approve')
+    3. User is an assigned reviewer/approver for this invoice's current stage (matches username, employee_name, employee_id, or role).
+    Otherwise raises HTTP 403 Forbidden.
+    """
+    user_role = (getattr(current_user, 'role', '') or '').strip().lower()
+    if user_role in {'admin', 'administrator', 'system_admin', 'superadmin'}:
+        return
+
+    if (
+        check_permission(current_user, 'workflow:escalate', db)
+        or check_permission(current_user, 'workflow:write', db)
+        or check_permission(current_user, 'invoice:approve', db)
+    ):
+        return
+
+    assigned = getattr(inv, 'assigned_approver', None)
+    if assigned and str(assigned).strip():
+        assigned_targets = {t.strip().lower() for t in str(assigned).split(',') if t.strip()}
+        user_identifiers = {
+            (getattr(current_user, 'username', '') or '').strip().lower(),
+            (getattr(current_user, 'employee_name', '') or '').strip().lower(),
+            (getattr(current_user, 'name', '') or '').strip().lower(),
+            (getattr(current_user, 'employee_id', '') or '').strip().lower(),
+            user_role,
+        }
+        if getattr(current_user, 'role_rel', None) and getattr(current_user.role_rel, 'name', None):
+            user_identifiers.add(current_user.role_rel.name.strip().lower())
+
+        user_identifiers.discard('')
+        if any(ident in assigned_targets for ident in user_identifiers):
+            return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Forbidden: You are not assigned to this document's active stage and lack escalation authority."
+    )
+
+
 @router.get('/api/workflows/{invoice_id}/escalate-check')
 def check_invoice_escalation_status(
     invoice_id: str,
@@ -495,8 +582,10 @@ def check_invoice_escalation_status(
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+    verify_escalation_authorization(current_user, inv, db)
     can_esc, reason = can_stage_escalate(inv, db)
     return {'document_id': inv.id, 'can_escalate': can_esc, 'current_stage': inv.current_stage or 1, 'reason': reason}
+
 
 @router.post('/api/workflows/{invoice_id}/escalate')
 def execute_invoice_escalation(
@@ -510,6 +599,7 @@ def execute_invoice_escalation(
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+    verify_escalation_authorization(current_user, inv, db)
     user_name = current_user.employee_name or current_user.name or current_user.username or 'Escalation Engine'
     reason = payload.get('reason') or 'SLA Threshold Exceeded'
     return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)

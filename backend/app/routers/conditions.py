@@ -1,8 +1,12 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.auth import get_current_active_user, get_current_user_optional
+from app.auth import (
+    get_current_active_user,
+    get_current_user_or_service_key,
+    require_permission_or_service,
+)
 from app.database.connection import get_db
 from app.database.models import BusinessRule, Document, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import BusinessRuleSchema
@@ -11,15 +15,27 @@ from app.services.rbac_service import check_permission
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Policy Matrix & Conditions'])
 
+
+def _get_business_rules_data(db: Session) -> List[BusinessRule]:
+    return db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
+
+
 @router.get('/api/conditions', response_model=List[BusinessRuleSchema])
-@router.get('/api/admin/conditions', response_model=List[BusinessRuleSchema])
-@router.get('/api/admin/routing-rules', response_model=List[BusinessRuleSchema])
 def get_business_rules(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    _auth: Any = Depends(get_current_user_or_service_key)
 ):
-    rules = db.query(BusinessRule).filter(BusinessRule.is_deleted == False).order_by(BusinessRule.priority.asc()).all()
-    return rules
+    return _get_business_rules_data(db)
+
+
+@router.get('/api/admin/conditions', response_model=List[BusinessRuleSchema])
+@router.get('/api/admin/routing-rules', response_model=List[BusinessRuleSchema])
+def get_business_rules_admin(
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('condition:read'))
+):
+    return _get_business_rules_data(db)
+
 
 @router.post('/api/conditions', response_model=BusinessRuleSchema)
 @router.post('/api/admin/conditions', response_model=BusinessRuleSchema)
@@ -28,7 +44,7 @@ def get_business_rules(
 def save_business_rule(
     payload: BusinessRuleSchema,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Any = Depends(require_permission_or_service('condition:write'))
 ):
     if not check_permission(current_user, 'condition:write', db):
         raise HTTPException(
@@ -250,7 +266,7 @@ def save_business_rule(
 def delete_business_rule(
     rule_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Any = Depends(require_permission_or_service('condition:write'))
 ):
     if not check_permission(current_user, 'condition:write', db):
         raise HTTPException(
@@ -270,7 +286,11 @@ def delete_business_rule(
     return {'success': True, 'deleted_id': rule_id}
 
 @router.post('/api/admin/rules/simulate')
-def simulate_rule_routing(payload: dict, db: Session=Depends(get_db)):
+def simulate_rule_routing(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('condition:read'))
+):
     """
     Simulation sandbox for Policy Matrix rules.
     Takes mock document attributes (division, plant, category, amount, etc.) and optional draft rules.
@@ -291,7 +311,11 @@ def simulate_rule_routing(payload: dict, db: Session=Depends(get_db)):
 
 @router.post('/api/admin/rules/detect-conflicts')
 @router.get('/api/admin/rules/conflicts')
-def detect_conflicts_endpoint(payload: dict=None, db: Session=Depends(get_db)):
+def detect_conflicts_endpoint(
+    payload: dict = None,
+    db: Session = Depends(get_db),
+    _auth: Any = Depends(require_permission_or_service('condition:read'))
+):
     """
     Detects duplicate condition signatures, priority ties, and shadowed rules across the Policy Matrix.
     """

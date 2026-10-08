@@ -180,6 +180,7 @@ export default function FlowBuilder({ users = [] }) {
   const [conditions, setConditions] = useState([]);
   const [checklistRules, setChecklistRules] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [permissionNotice, setPermissionNotice] = useState(null);
   const itemsPerPage = 15;
 
   const fetchConditions = async () => {
@@ -191,6 +192,8 @@ export default function FlowBuilder({ users = [] }) {
       if (res.ok) {
         const data = await res.json();
         setConditions(Array.isArray(data) ? data : []);
+      } else if (res.status === 403) {
+        setPermissionNotice(prev => prev || "Notice: You lack 'condition:read' permission. Routing condition rules cannot be viewed or linked.");
       }
     } catch (e) {
       console.error("Failed to fetch routing conditions:", e);
@@ -276,6 +279,8 @@ export default function FlowBuilder({ users = [] }) {
       if (res.ok) {
         const data = await res.json();
         setWorkflows(data);
+      } else if (res.status === 403) {
+        setPermissionNotice(prev => prev || "Notice: You lack 'workflow:read' permission. Workflow profiles cannot be loaded.");
       }
     } catch (e) {
       console.error("Failed to fetch workflows:", e);
@@ -535,6 +540,12 @@ export default function FlowBuilder({ users = [] }) {
     if (!selectedCategory) {
       return (
         <div className="flex flex-col gap-4 mt-2">
+          {permissionNotice && (
+            <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
+              <span>⚠️ {permissionNotice}</span>
+              <button onClick={() => setPermissionNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.keys(groupedWorkflows).map(cat => (
               <div key={cat} onClick={() => setSelectedCategory(cat)} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all flex items-center justify-between group text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -610,6 +621,12 @@ export default function FlowBuilder({ users = [] }) {
 
     return (
       <div className="flow-builder-green-theme flex flex-col gap-4 mt-4">
+        {permissionNotice && (
+          <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
+            <span>⚠️ {permissionNotice}</span>
+            <button onClick={() => setPermissionNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
           <div className="flex items-center gap-4">
             <button aria-label="Back" onClick={() => selectedSubCategory ? setSelectedSubCategory(null) : setSelectedCategory(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">

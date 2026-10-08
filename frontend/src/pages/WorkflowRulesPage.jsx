@@ -47,6 +47,7 @@ export default function WorkflowRulesPage() {
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
   const [_templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
   const [publishConfirm, setPublishConfirm] = useState(false);
+  const [permissionNotice, setPermissionNotice] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('workflowActiveTab', activeTab);
@@ -84,6 +85,7 @@ export default function WorkflowRulesPage() {
 
   const fetchData = async () => {
     setLoading(true);
+    setPermissionNotice(null);
     try {
       const token = localStorage.getItem('authToken');
       const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
@@ -93,6 +95,12 @@ export default function WorkflowRulesPage() {
         fetch('/api/templates', { headers }),
         fetch('/api/admin/users', { headers })
       ]);
+      if (rulesRes.status === 403) {
+        setPermissionNotice(prev => (prev ? prev + " | " : "") + "Notice: Missing 'condition:read' permission (routing rules not loaded).");
+      }
+      if (stepsRes.status === 403) {
+        setPermissionNotice(prev => (prev ? prev + " | " : "") + "Notice: Missing 'workflow:read' permission (workflow steps not loaded).");
+      }
       const rulesData = rulesRes.ok ? await rulesRes.json() : [];
       const stepsData = stepsRes.ok ? await stepsRes.json() : [];
       const templatesData = templatesRes.ok ? await templatesRes.json() : [];
@@ -280,6 +288,12 @@ export default function WorkflowRulesPage() {
 
   return (
     <div className='admin-settings-theme flex flex-col h-[calc(100vh-4.2rem)] w-full font-sans overflow-hidden px-3 py-1.5'>
+      {permissionNotice && (
+        <div className="shrink-0 mb-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-lg flex items-center justify-between">
+          <span>⚠️ {permissionNotice}</span>
+          <button onClick={() => setPermissionNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
+        </div>
+      )}
       
       {/* Unified Workflow & Rules Header Bar */}
       <div className='shrink-0 mb-1.5 border border-slate-200/80 bg-white/95 backdrop-blur-md rounded-lg p-2 px-3 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2'>

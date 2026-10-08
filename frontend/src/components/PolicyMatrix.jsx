@@ -24,9 +24,13 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
   const handleRunSimulation = async () => {
     setSimLoading(true);
     try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
       const res = await fetch('/api/admin/rules/simulate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           division: simDivision,
           plant: simPlant,
@@ -37,8 +41,12 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
           draft_rules: rules.filter(r => String(r.id).startsWith('tmp-'))
         })
       });
-      const data = await res.json();
-      setSimResult(data);
+      if (res.ok) {
+        const data = await res.json();
+        setSimResult(data);
+      } else if (res.status === 403) {
+        alert("Access Denied: You need 'condition:read' permission to simulate policy rules.");
+      }
     } catch (e) {
       console.error("Simulation failed:", e);
     } finally {
@@ -51,13 +59,21 @@ export default function PolicyMatrix({ rules, setRules, setHasChanges, steps, se
     setConflictLoading(true);
     setShowConflicts(true);
     try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
       const res = await fetch('/api/admin/rules/detect-conflicts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ rules })
       });
-      const data = await res.json();
-      setConflictReport(data);
+      if (res.ok) {
+        const data = await res.json();
+        setConflictReport(data);
+      } else if (res.status === 403) {
+        alert("Access Denied: You need 'condition:read' permission to run the conflict detector.");
+      }
     } catch (e) {
       console.error("Conflict check failed:", e);
     } finally {

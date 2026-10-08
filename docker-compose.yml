@@ -9,6 +9,7 @@ services:
     env_file:
       - .env
     environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - FRONTEND_URL=${FRONTEND_URL:-http://192.168.179.22:8085}
       - DB_HOST=${DB_HOST:-192.168.179.22}
       - DB_PORT=${DB_PORT:-1443}
