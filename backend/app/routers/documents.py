@@ -2378,7 +2378,7 @@ async def extract_document_preview(
     content = await file.read()
     unique_filename, detected_type = validate_uploaded_file(file, content)
     
-    staged_filename = f"TEMP_STAGE_{uuid.uuid4().hex[:8]}_{unique_filename}"
+    staged_filename = f"TEMP_STAGE_U{current_user.id}_{uuid.uuid4().hex[:8]}_{unique_filename}"
     file_path = settings.UPLOAD_DIR / staged_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
@@ -2433,24 +2433,38 @@ async def extract_document_preview(
 @router.get('/api/documents/temp-preview/{filename}')
 def serve_temp_preview(
     filename: str,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Secure preview streaming of temporarily staged PDF during human verification."""
     safe_base = os.path.basename(filename)
     clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_base)
     if not clean_name or clean_name in ('.', '..') or clean_name != filename:
         raise HTTPException(status_code=400, detail="Invalid preview filename")
-    
+
+    is_admin = (current_user.role or '').strip().lower() in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator'] or getattr(current_user, 'is_superuser', False)
+
+    match = re.match(r'^TEMP_STAGE_U(\d+)_', clean_name)
+    if not is_admin:
+        if not match or int(match.group(1)) != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access Denied: You do not have permission to view this staged document preview."
+            )
+
     target_path = (settings.UPLOAD_DIR / clean_name).resolve()
     if not target_path.is_file() or not target_path.is_relative_to(settings.UPLOAD_DIR.resolve()):
         raise HTTPException(status_code=404, detail="Preview document not found or expired")
-    
+
     media_type = 'application/pdf' if clean_name.lower().endswith('.pdf') else 'image/jpeg'
     return FileResponse(
         path=str(target_path),
         media_type=media_type,
         filename=clean_name,
-        headers={'Content-Disposition': f'inline; filename="{clean_name}"'}
+        headers={
+            'Content-Disposition': f'inline; filename="{clean_name}"',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox allow-scripts; frame-ancestors 'self'",
+            'X-Content-Type-Options': 'nosniff'
+        }
     )
 
 
@@ -2487,6 +2501,12 @@ async def confirm_and_ingest_document(
 
     if temp_file_id:
         clean_temp = re.sub(r'[^a-zA-Z0-9_\-\.]', '', os.path.basename(temp_file_id))
+        is_admin = (current_user.role or '').strip().lower() in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator'] or getattr(current_user, 'is_superuser', False)
+        match = re.match(r'^TEMP_STAGE_U(\d+)_', clean_temp)
+        if not is_admin and match:
+            if int(match.group(1)) != current_user.id:
+                raise HTTPException(status_code=403, detail="Access Denied: Staged preview file belongs to another user.")
+
         staged_path = (settings.UPLOAD_DIR / clean_temp).resolve()
         if not staged_path.is_file() or not staged_path.is_relative_to(settings.UPLOAD_DIR.resolve()):
             raise HTTPException(status_code=400, detail="Staged preview file not found or expired. Please re-upload.")
@@ -2731,6 +2751,9 @@ async def upload_document(
         po_number=final_po,
         division=user_div,
         plant=user_plant,
+        contact_person=current_user.username or current_user.employee_name,
+        employee_id=current_user.employee_id,
+        employee_name=current_user.employee_name,
         category=final_doc_type,
         document_type=final_doc_type,
         file_url=f'/api/documents/{new_id}/file',
@@ -2744,6 +2767,8 @@ async def upload_document(
         source_application='DocuFlow Direct'
     )
     
+    uploader_name = current_user.employee_name or current_user.username or "Document Uploader"
+
     if workflow_profile and workflow_profile.strip() and workflow_profile.strip() != 'auto':
         matched_wf = workflow_profile.strip()
         rule_act = 'WORKFLOW_ROUTE'
@@ -2763,7 +2788,7 @@ async def upload_document(
         new_inv.total_stages = 0
         new_inv.current_stage = 0
         new_inv.checklist_state = json.dumps({})
-        db.add(AuditLog(invoice_id=new_inv.id, user='Document Uploader', action='UNROUTED', stage='Rule Evaluation', notes='Document uploaded but no active business rule matched the document criteria. Pending rule creation.'))
+        db.add(AuditLog(invoice_id=new_inv.id, user=uploader_name, action='UNROUTED', stage='Rule Evaluation', notes='Document uploaded but no active business rule matched the document criteria. Pending rule creation.'))
     else:
         new_inv.workflow_profile_id = matched_wf
         new_inv.document_type = infer_document_type(category=new_inv.category, wf_name=matched_wf, doc_type=final_doc_type)
@@ -2790,7 +2815,7 @@ async def upload_document(
                 new_inv.assigned_approver = 'Unassigned (No Step Approvers)'
                 new_inv.status = 'Initiated (Stage 1)'
             dispatch_assignment_inapp_notification(db, new_inv)
-            db.add(AuditLog(invoice_id=new_inv.id, user='Document Uploader', action='Created & Uploaded', stage='Stage 1', notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."))
+            db.add(AuditLog(invoice_id=new_inv.id, user=uploader_name, action='Created & Uploaded', stage='Stage 1', notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."))
         first_stage = 'Attachment Status'
         if steps and len(steps) > 0 and steps[0].step_name:
             first_stage = steps[0].step_name
@@ -2855,6 +2880,14 @@ async def upload_and_route(
     inv = db.query(Invoice).filter(Invoice.id == synced_doc_id).first()
     if not inv:
         raise HTTPException(status_code=404, detail='Synced staging document not found')
+
+    from app.services.rbac_service import check_document_owner_or_assigned
+    if not check_document_owner_or_assigned(current_user, inv, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access Denied: Only the document owner, assigned approver, or administrator can upload and route this document."
+        )
+
     content = await file.read()
     unique_filename, detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
@@ -2890,6 +2923,7 @@ async def upload_and_route(
     rule_act2 = rule_eval2.get('rule_action', 'WORKFLOW_ROUTE') if rule_eval2 else 'WORKFLOW_ROUTE'
     cancel_res2 = rule_eval2.get('cancel_reason', 'Auto-cancelled by policy') if rule_eval2 else None
     rule_name2 = rule_eval2.get('rule_name', 'Default Policy') if rule_eval2 else 'Default Policy'
+    steps = []
     if matched_wf:
         inv.workflow_profile_id = matched_wf
         inv.document_type = infer_document_type(category=inv.category, wf_name=matched_wf, doc_type=document_type)
@@ -2922,6 +2956,8 @@ async def upload_and_route(
     inv.checklist_state = json.dumps({item: False for item in checklist_items})
     db.commit()
     db.refresh(inv)
+    return {'success': True, 'document_id': inv.id, 'status': inv.status, 'file_url': inv.file_url}
+
 
 @router.post('/api/records/compress-pdf')
 @router.post('/api/documents/compress-pdf')
@@ -2974,6 +3010,13 @@ async def upload_invoice_version(
     if not inv:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    from app.services.rbac_service import check_permission, check_document_owner_or_assigned
+    if not check_permission(current_user, 'doc:create', db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access Denied: Missing required permission 'doc:create' to replace document PDF."
+        )
+
     status_upper = (inv.status or '').upper()
     if any(term in status_upper for term in ['APPROVED', 'SETTLED', 'CANCEL', 'VOID']):
         raise HTTPException(status_code=403, detail="Document is settled/closed. PDF replacement is not allowed.")
@@ -2995,13 +3038,11 @@ async def upload_invoice_version(
             detail="PDF replacement is restricted. Documents can only be replaced during Attachment Status (Stage 1)."
         )
 
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
-    if not is_admin and inv.assigned_approver:
-        if not is_user_in_approver_pool(current_user, inv.assigned_approver):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Access Denied: Only assigned approver ({inv.assigned_approver}) or administrator can replace the PDF for this document."
-            )
+    if not check_document_owner_or_assigned(current_user, inv, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access Denied: Only the document owner, assigned approver, or administrator can replace the PDF for this document."
+        )
 
     content = await file.read()
     unique_filename, detected_type = validate_uploaded_file(file, content)

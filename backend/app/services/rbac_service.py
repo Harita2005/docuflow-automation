@@ -296,3 +296,74 @@ def authorize_document_access(
             return True
 
     return False
+
+
+# ---------------------------------------------------------------------------
+# OBJECT-LEVEL REPLACEMENT & VERSIONING AUTHORIZATION
+# ---------------------------------------------------------------------------
+def check_document_owner_or_assigned(
+    user: User,
+    doc: Document,
+    db: Session = None,
+) -> bool:
+    """
+    Object-level authorization check for file replacement, re-routing, and versioning.
+    A caller with 'doc:create' is only permitted to replace/version files on documents
+    they own (creator/submitter) or are currently assigned to (assigned approver pool).
+    Administrators are always permitted.
+    """
+    if not user or not user.is_active:
+        return False
+
+    u_role = (user.role or "").strip().lower()
+    if u_role in {"admin", "administrator", "system_admin", "superadmin", "system administrator"} or getattr(user, "is_superuser", False):
+        return True
+
+    raw_handles = [
+        (user.username or "").strip().lower(),
+        (user.employee_id or "").strip().lower(),
+        (user.employee_name or "").strip().lower(),
+        (getattr(user, "name", None) or "").strip().lower(),
+        (user.email or "").strip().lower(),
+    ]
+    user_handles = [h for h in raw_handles if h]
+
+    # 1. Document ownership / creator attributes
+    if doc.contact_person and doc.contact_person.strip().lower() in user_handles:
+        return True
+    if doc.employee_id and doc.employee_id.strip().lower() in user_handles:
+        return True
+    if doc.employee_name and doc.employee_name.strip().lower() in user_handles:
+        return True
+    if getattr(doc, "uploaded_by", None) and str(doc.uploaded_by).strip().lower() in user_handles:
+        return True
+    if getattr(doc, "user_id", None) and doc.user_id == user.id:
+        return True
+
+    # 2. Database audit log / pending assignment check
+    if db:
+        from app.database.models import AuditLog, ApprovalAssignment
+        first_log = db.query(AuditLog).filter(AuditLog.invoice_id == str(doc.id)).order_by(AuditLog.timestamp.asc()).first()
+        if first_log and first_log.user and first_log.user.strip().lower() in user_handles:
+            return True
+
+        pending = db.query(ApprovalAssignment).filter(
+            ApprovalAssignment.document_id == str(doc.id),
+            ApprovalAssignment.approver_user_id == user.id,
+            ApprovalAssignment.status == "PENDING"
+        ).first()
+        if pending:
+            return True
+
+    # 3. Assigned approver pool
+    if doc.assigned_approver:
+        approvers = [
+            val.strip().lower()
+            for val in doc.assigned_approver.split(",")
+            if val.strip()
+        ]
+        for handle in user_handles:
+            if handle in approvers or u_role in approvers:
+                return True
+
+    return False

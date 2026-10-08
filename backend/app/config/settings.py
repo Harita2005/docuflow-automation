@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     SERVICE_API_KEY: str = "DocuFlow-M2M-Integration-Secret-2026"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     FILE_URL_SIGNING_SECRET: Optional[str] = None
     FILE_URL_TTL_SECONDS: int = 90
 

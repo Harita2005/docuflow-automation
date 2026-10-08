@@ -421,7 +421,11 @@ export default function DocumentUpload({
         });
       } else {
         const err = await response.json().catch(() => ({}));
-        setErrorMsg(err.detail || "Document extraction failed. Please try again.");
+        if (response.status === 503) {
+          setErrorMsg(err.detail || "AI and OCR extraction capacity is currently saturated. Please wait a moment and retry, or use direct upload.");
+        } else {
+          setErrorMsg(err.detail || "Document extraction failed. Please try again.");
+        }
       }
     } catch (err: any) {
       console.error("Extraction failed:", err);
