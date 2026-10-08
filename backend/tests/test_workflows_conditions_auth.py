@@ -11,7 +11,7 @@ from app.auth import (
     require_permission_or_service,
 )
 from app.config.settings import settings
-from app.database.connection import SessionLocal
+from app.database.connection import SessionLocal, engine, get_db
 from app.database.models import User, Role, Permission, RolePermission, Document
 from app.routers.workflows import verify_escalation_authorization
 
@@ -20,16 +20,28 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def db_session():
-    db = SessionLocal()
+    """Module-level transactional session that rolls back all test changes."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = SessionLocal(bind=connection)
+    # Intercept commits so queries in the session see data, but nothing is written permanently
+    session.commit = session.flush
+
+    app.dependency_overrides[get_db] = lambda: session
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        app.dependency_overrides.pop(get_db, None)
+        session.close()
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture(scope="module")
 def test_setup(db_session):
-    """Seed test roles, permissions, users, and a test document."""
+    """Seed test roles, permissions, users, and a test document within transaction."""
+    import uuid
+
     # 1. Seed permissions
     perm_wf_read = db_session.query(Permission).filter(Permission.code == "workflow:read").first()
     if not perm_wf_read:
@@ -66,14 +78,26 @@ def test_setup(db_session):
         db_session.flush()
         db_session.add(RolePermission(role_id=role_workflow_viewer.id, permission_id=perm_wf_read.id))
 
+    role_workflow_writer = db_session.query(Role).filter(Role.code == "TEST_WF_WRITER").first()
+    if not role_workflow_writer:
+        role_workflow_writer = Role(code="TEST_WF_WRITER", name="TestWorkflowWriterRole", description="Test role with workflow:write")
+        db_session.add(role_workflow_writer)
+        db_session.flush()
+        db_session.add(RolePermission(role_id=role_workflow_writer.id, permission_id=perm_wf_write.id))
+
+    role_workflow_escalator = db_session.query(Role).filter(Role.code == "TEST_WF_ESCALATOR").first()
+    if not role_workflow_escalator:
+        role_workflow_escalator = Role(code="TEST_WF_ESCALATOR", name="TestWorkflowEscalatorRole", description="Test role with dedicated workflow:escalate")
+        db_session.add(role_workflow_escalator)
+        db_session.flush()
+        db_session.add(RolePermission(role_id=role_workflow_escalator.id, permission_id=perm_wf_esc.id))
+
     role_plain_employee = db_session.query(Role).filter(Role.code == "TEST_PLAIN_EMP").first()
     if not role_plain_employee:
         role_plain_employee = Role(code="TEST_PLAIN_EMP", name="TestPlainEmployeeRole", description="Test role without admin permissions")
         db_session.add(role_plain_employee)
 
     db_session.commit()
-
-    import uuid
 
     # 3. Seed users
     plain_user = db_session.query(User).filter(User.username == "test_wf_plain_user").first()
@@ -108,6 +132,38 @@ def test_setup(db_session):
         )
         db_session.add(viewer_user)
 
+    writer_user = db_session.query(User).filter(User.username == "test_wf_writer_user").first()
+    if not writer_user:
+        writer_user = User(
+            user_uid=f"WF_UID_{uuid.uuid4().hex[:12]}",
+            username="test_wf_writer_user",
+            email="test_wf_writer@example.com",
+            employee_id="WF_EMP_WRITE",
+            employee_name="Workflow Writer",
+            name="Workflow Writer",
+            password_hash="testhash",
+            role="employee",
+            role_id=role_workflow_writer.id,
+            is_active=True,
+        )
+        db_session.add(writer_user)
+
+    escalator_user = db_session.query(User).filter(User.username == "test_wf_escalator_user").first()
+    if not escalator_user:
+        escalator_user = User(
+            user_uid=f"WF_UID_{uuid.uuid4().hex[:12]}",
+            username="test_wf_escalator_user",
+            email="test_wf_escalator@example.com",
+            employee_id="WF_EMP_ESC",
+            employee_name="Dedicated Escalator",
+            name="Dedicated Escalator",
+            password_hash="testhash",
+            role="employee",
+            role_id=role_workflow_escalator.id,
+            is_active=True,
+        )
+        db_session.add(escalator_user)
+
     admin_user = db_session.query(User).filter(User.username == "test_wf_admin_user").first()
     if not admin_user:
         admin_user = User(
@@ -139,6 +195,24 @@ def test_setup(db_session):
         )
         db_session.add(assigned_user)
 
+    # Imposter user whose display name / employee_name matches "test_assigned_approver",
+    # but username and employee_id do NOT match.
+    imposter_user = db_session.query(User).filter(User.username == "test_imposter_user").first()
+    if not imposter_user:
+        imposter_user = User(
+            user_uid=f"WF_UID_{uuid.uuid4().hex[:12]}",
+            username="test_imposter_user",
+            email="test_imposter@example.com",
+            employee_id="WF_EMP_IMPOSTER",
+            employee_name="test_assigned_approver",
+            name="test_assigned_approver",
+            password_hash="testhash",
+            role="employee",
+            role_id=role_plain_employee.id,
+            is_active=True,
+        )
+        db_session.add(imposter_user)
+
     db_session.commit()
 
     # 4. Seed test document
@@ -156,27 +230,17 @@ def test_setup(db_session):
         )
         db_session.add(doc)
         db_session.commit()
-    try:
-        yield {
-            "plain_user": plain_user,
-            "viewer_user": viewer_user,
-            "admin_user": admin_user,
-            "assigned_user": assigned_user,
-            "doc_id": "TEST-DOC-ESC-001",
-        }
-    finally:
-        try:
-            db_session.query(Document).filter(Document.id == "TEST-DOC-ESC-001").delete()
-            db_session.query(User).filter(User.username.in_([
-                "test_wf_plain_user", "test_wf_viewer_user", "test_wf_admin_user", "test_assigned_approver"
-            ])).delete()
-            roles = db_session.query(Role).filter(Role.code.in_(["TEST_WF_VIEWER", "TEST_PLAIN_EMP"])).all()
-            for r in roles:
-                db_session.query(RolePermission).filter(RolePermission.role_id == r.id).delete()
-                db_session.delete(r)
-            db_session.commit()
-        except Exception:
-            db_session.rollback()
+
+    yield {
+        "plain_user": plain_user,
+        "viewer_user": viewer_user,
+        "writer_user": writer_user,
+        "escalator_user": escalator_user,
+        "admin_user": admin_user,
+        "assigned_user": assigned_user,
+        "imposter_user": imposter_user,
+        "doc_id": "TEST-DOC-ESC-001",
+    }
 
 
 # ===========================================================================
@@ -419,11 +483,50 @@ def test_escalation_object_level_unauthorized_user_forbidden(test_setup, db_sess
     assert "not assigned" in exc_info.value.detail.lower()
 
 
+def test_escalation_object_level_display_name_imposter_forbidden(test_setup, db_session):
+    """A user whose employee_name / display name matches the assigned approver, but whose
+    username/ID do NOT match, MUST be rejected with 403."""
+    doc = db_session.query(Document).filter(Document.id == test_setup["doc_id"]).first()
+    assert doc is not None
+
+    with pytest.raises(HTTPException) as exc_info:
+        verify_escalation_authorization(test_setup["imposter_user"], doc, db_session)
+    assert exc_info.value.status_code == 403
+    assert "not assigned" in exc_info.value.detail.lower()
+
+
+def test_escalation_object_level_generic_workflow_write_forbidden(test_setup, db_session):
+    """A user with generic workflow:write is NOT authorized to escalate (dedicated workflow:escalate required)."""
+    doc = db_session.query(Document).filter(Document.id == test_setup["doc_id"]).first()
+    assert doc is not None
+
+    with pytest.raises(HTTPException) as exc_info:
+        verify_escalation_authorization(test_setup["writer_user"], doc, db_session)
+    assert exc_info.value.status_code == 403
+    assert "not assigned" in exc_info.value.detail.lower()
+
+
+def test_escalation_object_level_dedicated_workflow_escalate_allowed(test_setup, db_session):
+    """A user with dedicated workflow:escalate permission IS authorized, even if not assigned to doc."""
+    doc = db_session.query(Document).filter(Document.id == test_setup["doc_id"]).first()
+    # Must succeed without raising 403
+    verify_escalation_authorization(test_setup["escalator_user"], doc, db_session)
+
+
 def test_escalation_object_level_assigned_user_allowed(test_setup, db_session):
-    """The assigned approver for the invoice is authorized."""
+    """The assigned approver matching by username is authorized."""
     doc = db_session.query(Document).filter(Document.id == test_setup["doc_id"]).first()
     # Should not raise exception
     verify_escalation_authorization(test_setup["assigned_user"], doc, db_session)
+
+
+def test_escalation_object_level_assigned_by_employee_id_allowed(test_setup, db_session):
+    """An invoice assigned to employee_id (e.g. WF_EMP_004) authorizes that user."""
+    doc = db_session.query(Document).filter(Document.id == test_setup["doc_id"]).first()
+    doc.assigned_approver = test_setup["assigned_user"].employee_id
+    verify_escalation_authorization(test_setup["assigned_user"], doc, db_session)
+    # Reset
+    doc.assigned_approver = "test_assigned_approver"
 
 
 def test_escalation_object_level_admin_allowed(test_setup, db_session):
@@ -442,3 +545,15 @@ def test_escalation_endpoint_returns_403_for_unrelated_user(test_setup):
     )
     assert res.status_code == 403
     assert "not assigned" in res.text.lower()
+
+
+def test_escalation_endpoint_allowed_for_assigned_user(test_setup):
+    """Integration check: calling /escalate-check as assigned user succeeds."""
+    token = create_access_token({"sub": test_setup["assigned_user"].username})
+    res = client.get(
+        f"/api/workflows/{test_setup['doc_id']}/escalate-check",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["document_id"] == test_setup["doc_id"]

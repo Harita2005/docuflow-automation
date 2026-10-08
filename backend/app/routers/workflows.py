@@ -532,20 +532,18 @@ def verify_escalation_authorization(current_user: User, inv: Invoice, db: Sessio
     """
     Object-level authorization check for invoice escalation endpoints.
     Allowed if:
-    1. User is an admin (role in ('admin', 'administrator', 'system_admin', 'superadmin') or has 'admin:access')
-    2. User possesses explicit escalation or approval permission ('workflow:escalate', 'workflow:write', 'invoice:approve')
-    3. User is an assigned reviewer/approver for this invoice's current stage (matches username, employee_name, employee_id, or role).
+    1. User is an admin (role in ('admin', 'administrator', 'system_admin', 'superadmin'))
+    2. User possesses dedicated escalation permission ('workflow:escalate')
+    3. User is the assigned reviewer/approver for this invoice's current stage
+       (strictly matched by user ID, username, or employee_id - not by display name or role).
     Otherwise raises HTTP 403 Forbidden.
     """
     user_role = (getattr(current_user, 'role', '') or '').strip().lower()
     if user_role in {'admin', 'administrator', 'system_admin', 'superadmin'}:
         return
 
-    if (
-        check_permission(current_user, 'workflow:escalate', db)
-        or check_permission(current_user, 'workflow:write', db)
-        or check_permission(current_user, 'invoice:approve', db)
-    ):
+    # Dedicated escalation permission ONLY (generic workflow:write or invoice:approve are not sufficient)
+    if check_permission(current_user, 'workflow:escalate', db):
         return
 
     assigned = getattr(inv, 'assigned_approver', None)
@@ -553,14 +551,9 @@ def verify_escalation_authorization(current_user: User, inv: Invoice, db: Sessio
         assigned_targets = {t.strip().lower() for t in str(assigned).split(',') if t.strip()}
         user_identifiers = {
             (getattr(current_user, 'username', '') or '').strip().lower(),
-            (getattr(current_user, 'employee_name', '') or '').strip().lower(),
-            (getattr(current_user, 'name', '') or '').strip().lower(),
+            str(getattr(current_user, 'id', '') or '').strip().lower(),
             (getattr(current_user, 'employee_id', '') or '').strip().lower(),
-            user_role,
         }
-        if getattr(current_user, 'role_rel', None) and getattr(current_user.role_rel, 'name', None):
-            user_identifiers.add(current_user.role_rel.name.strip().lower())
-
         user_identifiers.discard('')
         if any(ident in assigned_targets for ident in user_identifiers):
             return
