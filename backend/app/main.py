@@ -4,11 +4,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from starlette.responses import PlainTextResponse, Response
-from starlette.types import Scope
+from starlette.responses import Response
 
-from .config.settings import settings, validate_production_service_api_key
+from .config.settings import (
+    settings,
+    validate_production_service_api_key,
+    validate_production_file_url_signing_secret,
+)
 from .database.connection import SessionLocal, engine
 from .services.mfa_service import invalidate_legacy_and_all_tickets
 from sqlalchemy import text
@@ -34,8 +36,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Enforce production security invariants (refuse to start if SERVICE_API_KEY insecure)
+    # Enforce production security invariants (refuse to start if keys/secrets insecure)
     validate_production_service_api_key(settings.SERVICE_API_KEY, settings.ENVIRONMENT)
+    validate_production_file_url_signing_secret(
+        settings.FILE_URL_SIGNING_SECRET, settings.ENVIRONMENT, settings.SECRET_KEY
+    )
 
     if (settings.ENVIRONMENT or "").strip().lower() != "production":
         logger.warning(
@@ -167,28 +172,8 @@ app.include_router(sync_router)
 app.include_router(m2m_sync_router)
 
 # ---------------------------------------------------------------------------
-# Static Directories
-
+# Root Health Endpoint
 # ---------------------------------------------------------------------------
-
-class SafeStaticFiles(StaticFiles):
-    """
-    StaticFiles subclass that explicitly blocks access to hidden files and dotfiles.
-    Any request containing a dotfile path segment is rejected with 403 Forbidden.
-    """
-    async def get_response(self, path: str, scope: Scope) -> Response:
-        norm_path = path.replace("\\", "/").strip("/")
-        segments = norm_path.split("/")
-        if any(seg.startswith(".") for seg in segments if seg):
-            return PlainTextResponse("Forbidden: Access to dotfiles and hidden files is blocked.", status_code=403)
-        return await super().get_response(path, scope)
-
-
-if settings.UPLOAD_DIR.exists():
-    app.mount("/uploads", SafeStaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
-
-if settings.PDF_STORAGE_DIR.exists():
-    app.mount("/stored_pdfs", SafeStaticFiles(directory=str(settings.PDF_STORAGE_DIR)), name="stored_pdfs")
 
 
 @app.get("/")

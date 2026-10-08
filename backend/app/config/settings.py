@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     SERVICE_API_KEY: str = "DocuFlow-M2M-Integration-Secret-2026"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
+    FILE_URL_SIGNING_SECRET: Optional[str] = None
+    FILE_URL_TTL_SECONDS: int = 90
 
     # Storage
     PDF_STORAGE_DIR: Path = ROOT_DIR / "stored_pdfs"
@@ -191,6 +193,15 @@ KNOWN_DEFAULT_SERVICE_KEYS = {
     "your-api-key",
 }
 
+KNOWN_DEFAULT_FILE_SIGNING_SECRETS = {
+    "<GENERATE_RANDOM_FILE_URL_SIGNING_SECRET_MIN_32_CHARS>",
+    "changeme",
+    "secret",
+    "default",
+    "your-file-signing-secret",
+    "DocuFlow-File-Signing-Secret-2026",
+}
+
 
 def validate_production_service_api_key(service_api_key: Optional[str], environment: str) -> bool:
     """
@@ -220,6 +231,42 @@ def validate_production_service_api_key(service_api_key: Optional[str], environm
     return True
 
 
+def validate_production_file_url_signing_secret(
+    signing_secret: Optional[str],
+    environment: str,
+    jwt_secret: Optional[str] = None,
+) -> bool:
+    """
+    Validates that in production, FILE_URL_SIGNING_SECRET is configured with a secure random key
+    of at least 32 characters, does not match known defaults/placeholders, and is NOT identical to SECRET_KEY.
+    Raises RuntimeError if insecure in production.
+    """
+    if environment.lower() not in ("production", "prod"):
+        return True
+
+    clean_secret = (signing_secret or "").strip()
+    if not clean_secret:
+        raise RuntimeError(
+            "FATAL: FILE_URL_SIGNING_SECRET is missing or empty in production environment. "
+            "Please configure a secure random key with at least 32 characters."
+        )
+    if clean_secret in KNOWN_DEFAULT_FILE_SIGNING_SECRETS:
+        raise RuntimeError(
+            "FATAL: FILE_URL_SIGNING_SECRET in production cannot use default, template, or placeholder values. "
+            "Please generate a unique random secret."
+        )
+    if len(clean_secret) < 32:
+        raise RuntimeError(
+            f"FATAL: FILE_URL_SIGNING_SECRET in production must be at least 32 characters long "
+            f"(current length: {len(clean_secret)}). Please generate a stronger secret."
+        )
+    if jwt_secret and clean_secret == jwt_secret.strip():
+        raise RuntimeError(
+            "FATAL: FILE_URL_SIGNING_SECRET must be distinct from SECRET_KEY."
+        )
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Public exports
 # ---------------------------------------------------------------------------
@@ -230,5 +277,7 @@ __all__ = [
     "ROOT_DIR",
     "Settings",
     "validate_production_service_api_key",
+    "validate_production_file_url_signing_secret",
     "KNOWN_DEFAULT_SERVICE_KEYS",
+    "KNOWN_DEFAULT_FILE_SIGNING_SECRETS",
 ]

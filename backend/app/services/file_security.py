@@ -90,6 +90,11 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
     if '..' in raw_path_str:
         raise HTTPException(status_code=403, detail='Access Denied: Path traversal detected.')
 
+    # Block dotfiles or hidden files in path segments
+    norm_check = raw_path_str.replace('\\', '/').strip('/')
+    if any(segment.startswith('.') for segment in norm_check.split('/') if segment):
+        raise HTTPException(status_code=403, detail='Access Denied: Dotfiles and hidden files are forbidden.')
+
     base_upload = settings.UPLOAD_DIR.resolve()
     base_pdf = settings.PDF_STORAGE_DIR.resolve()
     base_approved = settings.APPROVED_PDF_DIR.resolve()
@@ -97,14 +102,21 @@ def get_safe_file_path(relative_or_abs_path: str) -> Path:
     allowed_roots = [base_upload, base_pdf, base_approved, base_rejected]
 
     def _is_safe(path: Path) -> bool:
-        resolved = path.resolve()
-        for root in allowed_roots:
-            try:
-                if resolved.is_relative_to(root):
-                    return True
-            except AttributeError:
-                if str(resolved).startswith(str(root)):
-                    return True
+        try:
+            if path.is_symlink():
+                real = path.resolve()
+                if not any(real.is_relative_to(root) for root in allowed_roots):
+                    return False
+            resolved = path.resolve()
+            for root in allowed_roots:
+                try:
+                    if resolved.is_relative_to(root):
+                        return True
+                except AttributeError:
+                    if str(resolved).startswith(str(root)):
+                        return True
+        except Exception:
+            return False
         return False
 
     # 1. Check if it's already an absolute file path that exists on disk

@@ -61,16 +61,16 @@ def test_2_mfa_tickets_store_hashed_otp_not_plaintext():
 
 
 def test_3_static_mounts_block_dotfiles_and_hidden_files():
-    """Verify that requests to static file mounts for dotfiles return 403 Forbidden."""
-    # Ensure legacy file does not exist or if it does, it's blocked
+    """Verify that requests to legacy static paths for dotfiles return 403 or 404 (unmounted)."""
+    # Ensure legacy file does not exist or if it does, it's blocked / unmounted
     res1 = client.get("/uploads/.mfa_tickets.json")
-    assert res1.status_code == 403, f"Expected 403 for dotfile request, got {res1.status_code}"
+    assert res1.status_code in (403, 404), f"Expected 403 or 404 for dotfile request, got {res1.status_code}"
 
     res2 = client.get("/uploads/.env")
-    assert res2.status_code == 403, f"Expected 403 for .env probe, got {res2.status_code}"
+    assert res2.status_code in (403, 404), f"Expected 403 or 404 for .env probe, got {res2.status_code}"
 
     res3 = client.get("/stored_pdfs/.secret")
-    assert res3.status_code == 403, f"Expected 403 for hidden file probe, got {res3.status_code}"
+    assert res3.status_code in (403, 404), f"Expected 403 or 404 for hidden file probe, got {res3.status_code}"
 
 
 def test_4_startup_invalidation_cleans_legacy_files():

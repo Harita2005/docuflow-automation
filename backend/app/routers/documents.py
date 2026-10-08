@@ -1315,25 +1315,6 @@ def get_archived_pdf_path(inv: Invoice) -> Path:
     filename = f'{clean_doc_num}_{clean_id}.pdf'
     return get_storage_root_path() / 'approved' / filename
 
-@router.get('/stored_pdfs/{filename}')
-@router.head('/stored_pdfs/{filename}')
-def serve_stored_pdf(filename: str):
-    """Secure web streaming route for archived PDF files across custom OS storage paths."""
-    safe_base = os.path.basename(filename)
-    clean_name = re.sub('[^a-zA-Z0-9_\\-\\.]', '', safe_base)
-    if not clean_name or clean_name in ('.', '..') or clean_name != filename:
-        raise HTTPException(status_code=400, detail='Invalid document filename')
-    if clean_name.startswith('.'):
-        raise HTTPException(status_code=403, detail='Access to dotfiles or hidden files is blocked')
-    base_root = get_storage_root_path().resolve()
-    target_path = (base_root / clean_name).resolve()
-    if target_path.is_relative_to(base_root) and target_path.is_file():
-        return FileResponse(path=str(target_path), media_type='application/pdf', filename=clean_name)
-    default_root = settings.PDF_STORAGE_DIR.resolve()
-    default_path = (default_root / clean_name).resolve()
-    if default_path.is_relative_to(default_root) and default_path.is_file():
-        return FileResponse(path=str(default_path), media_type='application/pdf', filename=clean_name)
-    raise HTTPException(status_code=404, detail='Archived physical document file not found on disk')
 
 def get_rejected_pdf_path(inv: Invoice) -> Path:
     """
@@ -1386,11 +1367,8 @@ def archive_approved_pdf(inv: Invoice):
                             upload_path.unlink()
                         except Exception as exc:
                             logger.debug('Handled exception: %s', exc)
-                try:
-                    rel_path = dest_approved.relative_to(base_root)
-                    inv.file_url = f'/stored_pdfs/{rel_path.as_posix()}'
-                except ValueError as exc:
-                    logger.debug('Handled exception: %s', exc)
+                inv.file_url = f'/api/documents/{inv.id}/file'
+                inv.file_path = str(dest_approved)
         trigger_async_integration_push(str(inv.id))
     except Exception as e:
         logger.debug('Handled exception: %s', e)
@@ -1547,34 +1525,51 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'message': 'Workflow process cancelled and voided at Attachment Stage.'}
 
+def generate_fallback_pdf_bytes(inv: Invoice, invoice_id: str = "") -> bytes:
+    doc_id_str = str(getattr(inv, 'id', None) or invoice_id)
+    doc_type_str = str(getattr(inv, 'document_type', None) or 'CUSTOMER FEEDBACK').upper()
+    doc_title = str(getattr(inv, 'title', None) or getattr(inv, 'account_name', None) or f"Document {doc_id_str}").replace('(', '[').replace(')', ']')
+
+    stream_content = f"BT /F1 16 Tf 50 720 Td ({doc_type_str} - {doc_id_str}) Tj 0 -30 Td /F1 11 Tf (Reference ID: {doc_id_str}) Tj 0 -20 Td (Title: {doc_title}) Tj 0 -20 Td (Status: Attachment Pending / Synthetic View) Tj ET"
+    stream_len = len(stream_content)
+
+    pdf_bytes = f"""%PDF-1.4
+1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj
+2 0 obj <</Type/Pages/Count 1/Kids[3 0 R]>> endobj
+3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>> endobj
+4 0 obj <</Length {stream_len}>>
+stream
+{stream_content}
+endstream
+endobj
+5 0 obj <</Type/Font/Subtype/Type1/BaseFont/Helvetica>> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000052 00000 n 
+0000000101 00000 n 
+0000000212 00000 n 
+0000000300 00000 n 
+0000000390 00000 n 
+trailer <</Size 6/Root 1 0 R>>
+startxref
+460
+%%EOF""".encode('ascii', errors='ignore')
+    return pdf_bytes
+
+
 @router.get('/api/records/{invoice_id}/file')
 @router.get('/api/documents/{invoice_id}/file')
 @router.get('/api/invoices/{invoice_id}/file')
 def stream_document_file(
     invoice_id: str,
-    token: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_active_user)
 ):
-    auth_user = current_user
-    if not auth_user and token:
-        try:
-            payload = decode_token(token)
-            username = payload.get('sub') or payload.get('username')
-            if username:
-                auth_user = db.query(User).filter(
-                    (User.username == username) | (User.employee_id == username) | (User.email == username),
-                    User.is_active == True,
-                    User.is_deleted == False
-                ).first()
-        except Exception as auth_err:
-            logger.debug('Failed to decode token for pdf attachment: %s', auth_err)
-
-    if not auth_user:
-        raise HTTPException(status_code=401, detail='Authentication required to view document attachment.')
-
     inv = find_invoice_by_identifier(db, invoice_id)
-    if not authorize_document_access(auth_user, inv) and not is_user_in_approver_pool(auth_user, inv.assigned_approver):
+    if not inv:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if not authorize_document_access(current_user, inv) and not is_user_in_approver_pool(current_user, inv.assigned_approver):
         raise HTTPException(status_code=403, detail='Access Denied: You are not authorized to access this document file.')
 
     target_ref = getattr(inv, 'file_path', None) or inv.file_url
@@ -1608,50 +1603,141 @@ def stream_document_file(
                 except Exception as exc:
                     logger.debug('Fallback lookup by clean_id failed: %s', exc)
 
+    safe_filename = inv.file_name or (safe_path.name if safe_path else f"{inv.id}.pdf")
+    resp_headers = {
+        'Content-Security-Policy': "sandbox; frame-ancestors 'self'",
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Content-Disposition': f'inline; filename="{safe_filename}"'
+    }
+
     if safe_path and safe_path.is_file():
         media_type = 'application/pdf' if safe_path.suffix.lower() == '.pdf' else 'image/jpeg'
         return FileResponse(
             path=str(safe_path),
             media_type=media_type,
-            filename=safe_path.name,
-            headers={'Content-Disposition': f'inline; filename="{safe_path.name}"'}
+            filename=safe_filename,
+            headers=resp_headers
         )
 
-    # Dynamic fallback PDF generator when physical file is not yet attached/uploaded
-    doc_id_str = str(inv.id or invoice_id)
-    doc_type_str = str(getattr(inv, 'document_type', None) or 'CUSTOMER FEEDBACK').upper()
-    doc_title = str(getattr(inv, 'title', None) or getattr(inv, 'account_name', None) or f"Document {doc_id_str}").replace('(', '[').replace(')', ']')
-    
-    stream_content = f"BT /F1 16 Tf 50 720 Td ({doc_type_str} - {doc_id_str}) Tj 0 -30 Td /F1 11 Tf (Reference ID: {doc_id_str}) Tj 0 -20 Td (Title: {doc_title}) Tj 0 -20 Td (Status: Attachment Pending / Synthetic View) Tj ET"
-    stream_len = len(stream_content)
-    
-    pdf_bytes = f"""%PDF-1.4
-1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj
-2 0 obj <</Type/Pages/Count 1/Kids[3 0 R]>> endobj
-3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>> endobj
-4 0 obj <</Length {stream_len}>>
-stream
-{stream_content}
-endstream
-endobj
-5 0 obj <</Type/Font/Subtype/Type1/BaseFont/Helvetica>> endobj
-xref
-0 6
-0000000000 65535 f 
-0000000052 00000 n 
-0000000101 00000 n 
-0000000212 00000 n 
-0000000300 00000 n 
-0000000390 00000 n 
-trailer <</Size 6/Root 1 0 R>>
-startxref
-460
-%%EOF""".encode('ascii', errors='ignore')
-
+    pdf_bytes = generate_fallback_pdf_bytes(inv, invoice_id)
     return Response(
         content=pdf_bytes,
         media_type='application/pdf',
-        headers={'Content-Disposition': f'inline; filename="{doc_id_str}_summary.pdf"'}
+        headers=resp_headers
+    )
+
+
+@router.get('/api/documents/{invoice_id}/signed-url')
+def get_document_signed_url(
+    invoice_id: str,
+    disp: str = Query('inline', regex='^(inline|attachment)$'),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+
+    if not authorize_document_access(current_user, inv) and not is_user_in_approver_pool(current_user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to view this document")
+
+    from app.services.signed_file_service import generate_signed_file_token
+    token_info = generate_signed_file_token(
+        document_id=str(inv.id),
+        user_id=current_user.id,
+        disp=disp,
+    )
+    return token_info
+
+
+@router.get('/api/files/signed/{document_id}')
+def serve_signed_document_file(
+    document_id: str,
+    expires: int = Query(..., description="Unix expiration timestamp"),
+    sig: str = Query(..., description="HMAC-SHA256 signature"),
+    uid: str = Query(..., description="User ID"),
+    disp: str = Query("inline", regex="^(inline|attachment)$"),
+    db: Session = Depends(get_db),
+):
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', document_id) or '..' in document_id or document_id.startswith('.'):
+        raise HTTPException(status_code=400, detail="Invalid document identifier")
+
+    from app.services.signed_file_service import verify_signed_file_token
+    is_valid, reason = verify_signed_file_token(
+        document_id=document_id,
+        user_id=uid,
+        expires=expires,
+        sig=sig,
+        disp=disp,
+    )
+    if not is_valid:
+        raise HTTPException(status_code=403, detail=f"Access Denied: {reason}")
+
+    user = None
+    try:
+        user = db.query(User).filter(User.id == int(uid)).first()
+    except (ValueError, TypeError):
+        user = db.query(User).filter(User.username == uid).first()
+
+    if not user or not user.is_active or getattr(user, 'is_deleted', False):
+        raise HTTPException(status_code=403, detail="Access Denied: Authorized user account is inactive or deleted")
+
+    inv = find_invoice_by_identifier(db, document_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Document record not found")
+
+    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
+
+    target_ref = getattr(inv, 'file_path', None) or inv.file_url
+    safe_path = None
+    if target_ref:
+        try:
+            cand = get_safe_file_path(target_ref)
+            if cand.is_file():
+                safe_path = cand
+        except Exception:
+            pass
+
+    if not safe_path and getattr(inv, 'file_name', None):
+        try:
+            cand = get_safe_file_path(inv.file_name)
+            if cand.is_file():
+                safe_path = cand
+        except Exception:
+            pass
+
+    raw_fname = inv.file_name or (safe_path.name if safe_path else f"{inv.id}.pdf")
+    safe_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', raw_fname)
+    if not safe_filename.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg')):
+        safe_filename += '.pdf'
+
+    resp_headers = {
+        "Content-Security-Policy": "sandbox; frame-ancestors 'self'",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "Content-Disposition": f'{disp}; filename="{safe_filename}"',
+    }
+
+    if safe_path and safe_path.is_file():
+        media_type = 'application/pdf' if safe_path.suffix.lower() == '.pdf' else 'image/jpeg'
+        return FileResponse(
+            path=str(safe_path),
+            media_type=media_type,
+            filename=safe_filename,
+            headers=resp_headers,
+        )
+
+    pdf_bytes = generate_fallback_pdf_bytes(inv, document_id)
+    return Response(
+        content=pdf_bytes,
+        media_type='application/pdf',
+        headers=resp_headers,
     )
 
 def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None):
@@ -3718,5 +3804,5 @@ def get_approved_documents(db: Session=Depends(get_db), current_user: User=Depen
         doc_num = d.invoice_number or d.doc_num or str(d.id)
         total_tax = (d.cgst or 0.0) + (d.sgst or 0.0) + (d.igst or 0.0)
         base_amt = (d.amount or 0.0) - total_tax if (d.amount or 0.0) >= total_tax else d.amount or 0.0
-        results.append({'document_id': str(d.id), 'doc_key': d.doc_key or str(d.id), 'document_number': doc_num, 'document_type': d.document_type or d.category or 'ACCOUNTS PAYABLE', 'approval_status': 'APPROVED', 'settled': True, 'vendor_name': d.vendor_name or d.party_name or 'N/A', 'vendor_code': d.vendor_code or d.party_code or '', 'vendor_gstin': d.vendor_gstin or d.gstin or '', 'grand_total': d.amount or 0.0, 'base_amount': round(base_amt, 2), 'cgst': d.cgst or 0.0, 'sgst': d.sgst or 0.0, 'igst': d.igst or 0.0, 'total_tax': round(total_tax, 2), 'invoice_date': d.invoice_date or (d.created_at.strftime('%Y-%m-%d') if d.created_at else ''), 'approved_by': d.assigned_approver or 'VARUNAN', 'approved_at': d.updated_at.isoformat() if d.updated_at else '', 'company_code': d.division or 'VCC', 'cost_center': d.cost_center or 'CC-GENERAL', 'po_number': d.po_number or 'N/A', 'pdf_url': d.file_url or f'/stored_pdfs/approved/{doc_num}.pdf', 'external_sync_status': d.external_sync_status or 'SYNCED', 'external_sync_ref': d.external_sync_ref or doc_num, 'line_items': items})
+        results.append({'document_id': str(d.id), 'doc_key': d.doc_key or str(d.id), 'document_number': doc_num, 'document_type': d.document_type or d.category or 'ACCOUNTS PAYABLE', 'approval_status': 'APPROVED', 'settled': True, 'vendor_name': d.vendor_name or d.party_name or 'N/A', 'vendor_code': d.vendor_code or d.party_code or '', 'vendor_gstin': d.vendor_gstin or d.gstin or '', 'grand_total': d.amount or 0.0, 'base_amount': round(base_amt, 2), 'cgst': d.cgst or 0.0, 'sgst': d.sgst or 0.0, 'igst': d.igst or 0.0, 'total_tax': round(total_tax, 2), 'invoice_date': d.invoice_date or (d.created_at.strftime('%Y-%m-%d') if d.created_at else ''), 'approved_by': d.assigned_approver or 'VARUNAN', 'approved_at': d.updated_at.isoformat() if d.updated_at else '', 'company_code': d.division or 'VCC', 'cost_center': d.cost_center or 'CC-GENERAL', 'po_number': d.po_number or 'N/A', 'pdf_url': d.file_url or f'/api/documents/{d.id}/file', 'external_sync_status': d.external_sync_status or 'SYNCED', 'external_sync_ref': d.external_sync_ref or doc_num, 'line_items': items})
     return {'status': 'success', 'total_approved': len(results), 'documents': results}
