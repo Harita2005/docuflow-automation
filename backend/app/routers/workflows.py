@@ -14,7 +14,7 @@ from app.auth import (
 from app.database.connection import get_db
 from app.database.models import AuditLog, BusinessRule, ChecklistTemplate, Invoice, SystemLog, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import WorkflowProfileSchema
-from app.services.rbac_service import check_permission
+from app.services.rbac_service import check_permission, require_permission
 from collections import defaultdict
 
 router = APIRouter(tags=['Workflow Administration'])
@@ -165,13 +165,8 @@ def get_workflow_steps(
 def save_workflow_profile(
     payload: WorkflowProfileSchema,
     db: Session = Depends(get_db),
-    current_user: Any = Depends(require_permission_or_service('workflow:write'))
+    current_user: User = Depends(require_permission('workflow:write'))
 ):
-    if not check_permission(current_user, 'workflow:write', db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access Denied: Missing required permission 'workflow:write'."
-        )
     if not payload.profile_name or not str(payload.profile_name).strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

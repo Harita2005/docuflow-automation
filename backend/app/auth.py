@@ -236,15 +236,16 @@ async def verify_service_api_key(
 
             subject = payload.get("sub")
             role = payload.get("role")
+            scope = payload.get("scope")
 
-            # Service tokens
-            if subject in {
-                "backend_sync_client",
-                "sync_service",
-            }:
-                return True
-
-            if role == "service":
+            # Service tokens: must carry scope 'data:sync' to prove M2M service issuance
+            if scope == "data:sync" and (
+                subject in {
+                    "backend_sync_client",
+                    "sync_service",
+                }
+                or role == "service"
+            ):
                 return True
 
             # Admin JWT
@@ -342,13 +343,18 @@ async def get_current_user_or_service_key(
 
         subject = payload.get("sub") or payload.get("username")
         role = payload.get("role")
+        scope = payload.get("scope")
 
-        if subject in {"backend_sync_client", "sync_service"} or role == "service":
+        # Service tokens: must carry scope 'data:sync' to be accepted as service identity
+        if scope == "data:sync" and (
+            subject in {"backend_sync_client", "sync_service"} or role == "service"
+        ):
             return {
                 "is_service": True,
                 "identity": subject or "sync_service",
                 "role": "service",
                 "username": subject or "sync_service",
+                "scope": scope,
             }
 
         if not subject:

@@ -10,7 +10,7 @@ from app.auth import (
 from app.database.connection import get_db
 from app.database.models import BusinessRule, Document, User, WorkflowProfile, WorkflowStepDefinition
 from app.schemas import BusinessRuleSchema
-from app.services.rbac_service import check_permission
+from app.services.rbac_service import check_permission, require_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Policy Matrix & Conditions'])
@@ -44,13 +44,8 @@ def get_business_rules_admin(
 def save_business_rule(
     payload: BusinessRuleSchema,
     db: Session = Depends(get_db),
-    current_user: Any = Depends(require_permission_or_service('condition:write'))
+    current_user: User = Depends(require_permission('condition:write'))
 ):
-    if not check_permission(current_user, 'condition:write', db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access Denied: Missing required permission 'condition:write'."
-        )
 
     wf_id_val = getattr(payload, 'workflow_id', None) or payload.target_workflow_id or payload.workflow_code or ''
     target_wf_raw = str(wf_id_val).strip()
@@ -266,13 +261,8 @@ def save_business_rule(
 def delete_business_rule(
     rule_id: str,
     db: Session = Depends(get_db),
-    current_user: Any = Depends(require_permission_or_service('condition:write'))
+    current_user: User = Depends(require_permission('condition:write'))
 ):
-    if not check_permission(current_user, 'condition:write', db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access Denied: Missing required permission 'condition:write'."
-        )
     try:
         import datetime
         r_id = int(rule_id)
