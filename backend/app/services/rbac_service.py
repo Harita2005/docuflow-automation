@@ -311,6 +311,11 @@ def check_document_owner_or_assigned(
     A caller with 'doc:create' is only permitted to replace/version files on documents
     they own (creator/submitter) or are currently assigned to (assigned approver pool).
     Administrators are always permitted.
+
+    Ownership is strictly verified by unique user identifiers (user ID, employee_id, username).
+    Display-name matching (employee_name, contact_person if holding a display name) is strictly
+    forbidden to eliminate cross-user collision vulnerabilities when multiple employees share
+    the same display name.
     """
     if not user or not user.is_active:
         return False
@@ -319,34 +324,35 @@ def check_document_owner_or_assigned(
     if u_role in {"admin", "administrator", "system_admin", "superadmin", "system administrator"} or getattr(user, "is_superuser", False):
         return True
 
-    raw_handles = [
-        (user.username or "").strip().lower(),
-        (user.employee_id or "").strip().lower(),
-        (user.employee_name or "").strip().lower(),
-        (getattr(user, "name", None) or "").strip().lower(),
-        (user.email or "").strip().lower(),
-    ]
-    user_handles = [h for h in raw_handles if h]
+    # Strictly unique identifiers only
+    u_username = (user.username or "").strip().lower()
+    u_emp_id = (user.employee_id or "").strip().lower()
 
-    # 1. Document ownership / creator attributes
-    if doc.contact_person and doc.contact_person.strip().lower() in user_handles:
-        return True
-    if doc.employee_id and doc.employee_id.strip().lower() in user_handles:
-        return True
-    if doc.employee_name and doc.employee_name.strip().lower() in user_handles:
-        return True
-    if getattr(doc, "uploaded_by", None) and str(doc.uploaded_by).strip().lower() in user_handles:
-        return True
-    if getattr(doc, "user_id", None) and doc.user_id == user.id:
+    # 1. Document ownership by user_id
+    if getattr(doc, "user_id", None) is not None and doc.user_id == user.id:
         return True
 
-    # 2. Database audit log / pending assignment check
+    # 2. Document ownership by unique employee_id
+    if u_emp_id and doc.employee_id and doc.employee_id.strip().lower() == u_emp_id:
+        return True
+
+    # 3. Document ownership by username
+    if u_username:
+        if doc.contact_person and doc.contact_person.strip().lower() == u_username:
+            return True
+        if getattr(doc, "uploaded_by", None) and str(doc.uploaded_by).strip().lower() == u_username:
+            return True
+
+    # 4. Database audit log check: matches first creation audit log by username or employee_id
     if db:
         from app.database.models import AuditLog, ApprovalAssignment
         first_log = db.query(AuditLog).filter(AuditLog.invoice_id == str(doc.id)).order_by(AuditLog.timestamp.asc()).first()
-        if first_log and first_log.user and first_log.user.strip().lower() in user_handles:
-            return True
+        if first_log and first_log.user:
+            log_user = first_log.user.strip().lower()
+            if (u_username and log_user == u_username) or (u_emp_id and log_user == u_emp_id):
+                return True
 
+        # Check pending ApprovalAssignment by user.id
         pending = db.query(ApprovalAssignment).filter(
             ApprovalAssignment.document_id == str(doc.id),
             ApprovalAssignment.approver_user_id == user.id,
@@ -355,15 +361,14 @@ def check_document_owner_or_assigned(
         if pending:
             return True
 
-    # 3. Assigned approver pool
+    # 5. Assigned approver pool: strictly by username, employee_id, or role code
     if doc.assigned_approver:
         approvers = [
             val.strip().lower()
             for val in doc.assigned_approver.split(",")
             if val.strip()
         ]
-        for handle in user_handles:
-            if handle in approvers or u_role in approvers:
-                return True
+        if (u_username and u_username in approvers) or (u_emp_id and u_emp_id in approvers) or (u_role and u_role in approvers):
+            return True
 
     return False

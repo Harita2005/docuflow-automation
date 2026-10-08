@@ -2751,7 +2751,7 @@ async def upload_document(
         po_number=final_po,
         division=user_div,
         plant=user_plant,
-        contact_person=current_user.username or current_user.employee_name,
+        contact_person=current_user.username,
         employee_id=current_user.employee_id,
         employee_name=current_user.employee_name,
         category=final_doc_type,
@@ -2767,7 +2767,7 @@ async def upload_document(
         source_application='DocuFlow Direct'
     )
     
-    uploader_name = current_user.employee_name or current_user.username or "Document Uploader"
+    uploader_name = current_user.username or current_user.employee_id or "system"
 
     if workflow_profile and workflow_profile.strip() and workflow_profile.strip() != 'auto':
         matched_wf = workflow_profile.strip()
@@ -3058,7 +3058,7 @@ async def upload_invoice_version(
     inv.file_path = str(file_path)
     inv.file_size = len(content)
     inv.file_name = file.filename
-    uploader_name = current_user.employee_name or current_user.username
+    uploader_name = current_user.username or current_user.employee_id
     db.add(AuditLog(invoice_id=str(inv.id), user=uploader_name, action='Invoice PDF Attached', stage=f'Stage {inv.current_stage or 1}', notes=f'Physical document attached: {file.filename}. Pending checklist verification and stage approval.'))
     db.commit()
     db.refresh(inv)

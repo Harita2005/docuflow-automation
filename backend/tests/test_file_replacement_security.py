@@ -152,6 +152,22 @@ def file_security_setup(db_session):
     )
     db_session.add(user_admin)
 
+    # User 6: Unrelated user with doc:create but IDENTICAL display name to user_owner
+    user_same_display_name = User(
+        user_uid=f"UID_SAMENAME_{uid}",
+        username=f"samename_{uid}",
+        email=f"samename_{uid}@example.com",
+        employee_id=f"EMP_SAMENAME_{uid}",
+        employee_name=f"Owner User {uid}",  # Exact same display name as user_owner!
+        name=f"Owner User {uid}",
+        password_hash="fakehash",
+        division="DIV_A",
+        role="employee",
+        role_id=role_creator.id,
+        is_active=True,
+    )
+    db_session.add(user_same_display_name)
+
     db_session.flush()
 
     # Create target documents
@@ -206,6 +222,7 @@ def file_security_setup(db_session):
         "unrelated": create_access_token({"sub": user_unrelated.username, "user_id": user_unrelated.id, "role": user_unrelated.role}),
         "noperm": create_access_token({"sub": user_noperm.username, "user_id": user_noperm.id, "role": user_noperm.role}),
         "admin": create_access_token({"sub": user_admin.username, "user_id": user_admin.id, "role": user_admin.role}),
+        "same_display_name": create_access_token({"sub": user_same_display_name.username, "user_id": user_same_display_name.id, "role": user_same_display_name.role}),
     }
 
     return {
@@ -215,6 +232,7 @@ def file_security_setup(db_session):
             "unrelated": user_unrelated,
             "noperm": user_noperm,
             "admin": user_admin,
+            "same_display_name": user_same_display_name,
         },
         "tokens": tokens,
         "doc1": doc1,
@@ -306,6 +324,20 @@ def test_upload_and_route_admin_allowed(file_security_setup):
     assert data["success"] is True
 
 
+def test_upload_and_route_same_display_name_rejected_403(file_security_setup):
+    """User has doc:create and the same employee_name display name as the owner, but different username/employee_id."""
+    doc_id = file_security_setup["doc_sync"].id
+    token = file_security_setup["tokens"]["same_display_name"]
+    files = {"file": make_dummy_pdf()}
+    res = client.post(
+        f"/api/documents/upload-and-route/{doc_id}",
+        files=files,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 403
+    assert "Only the document owner, assigned approver, or administrator" in res.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 2. Tests for POST /api/documents/{invoice_id}/version
 # ---------------------------------------------------------------------------
@@ -383,6 +415,20 @@ def test_version_replacement_admin_allowed(file_security_setup):
     assert res.json()["success"] is True
 
 
+def test_version_replacement_same_display_name_rejected_403(file_security_setup):
+    """User has doc:create and the same employee_name display name as the owner, but different username/employee_id."""
+    doc_id = file_security_setup["doc1"].id
+    token = file_security_setup["tokens"]["same_display_name"]
+    files = {"file": make_dummy_pdf()}
+    res = client.post(
+        f"/api/documents/{doc_id}/version",
+        files=files,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 403
+    assert "Only the document owner, assigned approver, or administrator" in res.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 3. Tests for GET /api/documents/temp-preview/{filename}
 # ---------------------------------------------------------------------------
@@ -448,3 +494,65 @@ def test_temp_preview_admin_allowed(file_security_setup, staged_preview_file):
     )
     assert res.status_code == 200
     assert res.headers.get("content-type") == "application/pdf"
+
+
+def test_temp_preview_cannot_read_by_guessing_name(file_security_setup, staged_preview_file):
+    """An attacker guessing the exact filename of another user's staged file is rejected with 403."""
+    token_unrelated = file_security_setup["tokens"]["unrelated"]
+    # Guesses the exact filename
+    guessed_filename = staged_preview_file
+    res = client.get(
+        f"/api/documents/temp-preview/{guessed_filename}",
+        headers={"Authorization": f"Bearer {token_unrelated}"}
+    )
+    assert res.status_code == 403
+    assert "You do not have permission to view this staged document preview" in res.json()["detail"]
+
+
+def test_temp_preview_cannot_forge_staged_name_by_crafted_upload_filename(file_security_setup):
+    """
+    An attacker attempts to spoof ownership by crafting an upload filename like
+    TEMP_STAGE_U{victim_id}_exploit.pdf. The server must enforce its own U{current_user.id} prefix
+    and prevent the attacker from impersonating the victim or reading the victim's files.
+    """
+    victim = file_security_setup["users"]["owner"]
+    attacker = file_security_setup["users"]["unrelated"]
+    token_attacker = file_security_setup["tokens"]["unrelated"]
+    token_victim = file_security_setup["tokens"]["owner"]
+
+    crafted_filename = f"TEMP_STAGE_U{victim.id}_exploit.pdf"
+    file_bytes = b"%PDF-1.4 test exploit PDF content\n%%EOF"
+
+    # Attacker uploads file with crafted name to extract-preview
+    res = client.post(
+        "/api/documents/extract-preview",
+        files={"file": (crafted_filename, file_bytes, "application/pdf")},
+        headers={"Authorization": f"Bearer {token_attacker}"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    staged_id = data["temp_file_id"]
+
+    # Verify server prefixed it with the ATTACKER's user ID, not the victim's
+    assert staged_id.startswith(f"TEMP_STAGE_U{attacker.id}_")
+    assert not staged_id.startswith(f"TEMP_STAGE_U{victim.id}_")
+
+    # Attacker can access their own staged file
+    res_attacker = client.get(
+        f"/api/documents/temp-preview/{staged_id}",
+        headers={"Authorization": f"Bearer {token_attacker}"}
+    )
+    assert res_attacker.status_code == 200
+
+    # Victim CANNOT access the attacker's staged file
+    res_victim = client.get(
+        f"/api/documents/temp-preview/{staged_id}",
+        headers={"Authorization": f"Bearer {token_victim}"}
+    )
+    assert res_victim.status_code == 403
+
+    # Clean up staged file
+    staged_path = settings.UPLOAD_DIR / staged_id
+    if staged_path.exists():
+        staged_path.unlink()
+
