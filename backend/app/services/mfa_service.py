@@ -38,10 +38,47 @@ MAX_MFA_ATTEMPTS = 5
 # ---------------------------------------------------------------------------
 
 _MFA_TICKETS: Dict[str, Dict[str, Any]] = {}
-_CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", ".mfa_tickets.json")
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_CACHE_DIR = os.path.join(_BACKEND_ROOT, "data")
+_CACHE_PATH = os.path.join(_CACHE_DIR, ".mfa_tickets.json")
+_LEGACY_CACHE_PATH = os.path.join(_BACKEND_ROOT, "uploads", ".mfa_tickets.json")
+
+
+def invalidate_legacy_and_all_tickets() -> None:
+    """
+    Security hardening:
+    1. Removes any legacy MFA ticket cache file from the public uploads directory.
+    2. Clears in-memory ticket store and disk cache file on startup to invalidate
+       any previously stored plaintext tickets/OTPs.
+    """
+    global _MFA_TICKETS
+    _MFA_TICKETS.clear()
+
+    # 1. Purge legacy uploads file if it exists
+    if os.path.exists(_LEGACY_CACHE_PATH):
+        try:
+            os.remove(_LEGACY_CACHE_PATH)
+            logger.info("Removed insecure legacy MFA ticket cache from uploads: %s", _LEGACY_CACHE_PATH)
+        except Exception as exc:
+            logger.warning("Could not remove legacy MFA cache at %s: %s", _LEGACY_CACHE_PATH, exc)
+
+    # 2. Invalidate existing cache file to ensure no stale/unhashed tickets persist
+    if os.path.exists(_CACHE_PATH):
+        try:
+            os.remove(_CACHE_PATH)
+            logger.info("Cleared previous MFA ticket store on startup: %s", _CACHE_PATH)
+        except Exception as exc:
+            logger.warning("Could not clear MFA ticket store at %s: %s", _CACHE_PATH, exc)
 
 
 def _sync_cache_load() -> None:
+    # Ensure legacy file in public path is deleted immediately if found
+    if os.path.exists(_LEGACY_CACHE_PATH):
+        try:
+            os.remove(_LEGACY_CACHE_PATH)
+        except Exception as exc:
+            logger.debug("Failed cleaning legacy cache path: %s", exc)
+
     if os.path.exists(_CACHE_PATH):
         try:
             import json
@@ -49,8 +86,12 @@ def _sync_cache_load() -> None:
                 data = json.load(f)
                 if isinstance(data, dict):
                     for k, v in data.items():
-                        if k not in _MFA_TICKETS:
-                            _MFA_TICKETS[k] = v
+                        if isinstance(v, dict):
+                            # Security: never load legacy entries containing plaintext 'otp'
+                            if "otp" in v:
+                                v.pop("otp", None)
+                            if k not in _MFA_TICKETS:
+                                _MFA_TICKETS[k] = v
         except Exception as e:
             logger.debug("Failed loading MFA ticket cache: %s", e)
 
@@ -59,8 +100,15 @@ def _sync_cache_save() -> None:
     try:
         import json
         os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
+        # Security: ensure no plaintext OTP is written to disk
+        sanitized: Dict[str, Dict[str, Any]] = {}
+        for ticket, data in _MFA_TICKETS.items():
+            entry = dict(data)
+            entry.pop("otp", None)
+            sanitized[ticket] = entry
+
         with open(_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(_MFA_TICKETS, f)
+            json.dump(sanitized, f)
     except Exception as e:
         logger.debug("Failed saving MFA ticket cache: %s", e)
 
@@ -87,7 +135,7 @@ def create_mfa_ticket(user_id: int, username: str) -> str:
     _MFA_TICKETS[ticket] = {
         "user_id": user_id,
         "username": username,
-        "otp": None,
+        "otp_hash": None,
         "method": None,
         "expires_at": time.time() + TICKET_EXPIRY_SECONDS,
         "otp_expires_at": None,
@@ -641,6 +689,7 @@ __all__ = [
     "TICKET_EXPIRY_SECONDS",
     "OTP_EXPIRY_SECONDS",
     "MAX_MFA_ATTEMPTS",
+    "invalidate_legacy_and_all_tickets",
     "cleanup_expired_tickets",
     "create_mfa_ticket",
     "get_mfa_ticket",

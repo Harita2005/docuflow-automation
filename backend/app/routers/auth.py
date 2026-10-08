@@ -349,11 +349,9 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
     ticket_data['attempts'] = 0
     ticket_data.pop('verified', None)
 
-    # For testing environment test-runners (e.g. test_all_mfa_methods), make ticket['otp'] accessible only in test mode
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        ticket_data['otp'] = code
-    else:
-        ticket_data.pop('otp', None)
+    # Security requirement: store OTP strictly hashed, NEVER in plaintext
+    ticket_data['otp_hash'] = otp_hash
+    ticket_data.pop('otp', None)
 
     save_mfa_ticket()
 
@@ -468,6 +466,7 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
                 mark_otp_used(db, otp_record)
                 ticket_data['verified'] = True
                 ticket_data.pop('otp', None)
+                ticket_data.pop('otp_hash', None)
                 save_mfa_ticket()
             else:
                 curr_attempts = increment_otp_attempts(db, otp_record)

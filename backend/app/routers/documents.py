@@ -1323,6 +1323,8 @@ def serve_stored_pdf(filename: str):
     clean_name = re.sub('[^a-zA-Z0-9_\\-\\.]', '', safe_base)
     if not clean_name or clean_name in ('.', '..') or clean_name != filename:
         raise HTTPException(status_code=400, detail='Invalid document filename')
+    if clean_name.startswith('.'):
+        raise HTTPException(status_code=403, detail='Access to dotfiles or hidden files is blocked')
     base_root = get_storage_root_path().resolve()
     target_path = (base_root / clean_name).resolve()
     if target_path.is_relative_to(base_root) and target_path.is_file():

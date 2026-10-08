@@ -5,9 +5,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import PlainTextResponse, Response
+from starlette.types import Scope
 
 from .config.settings import settings
 from .database.connection import SessionLocal, engine
+from .services.mfa_service import invalidate_legacy_and_all_tickets
 from sqlalchemy import text
 from .database.models import Base
 from .routers.audit import prune_expired_audit_logs, router as audit_router
@@ -97,6 +100,12 @@ async def lifespan(app: FastAPI):
                     prune_expired_audit_logs(db_session)
             except Exception as prune_err:
                 logger.warning(f"Audit log retention pruning deferred: {prune_err}")
+
+            # Invalidate legacy MFA tickets from public uploads/ and clear ticket store
+            try:
+                invalidate_legacy_and_all_tickets()
+            except Exception as mfa_clean_err:
+                logger.warning(f"MFA cache invalidation on startup deferred: {mfa_clean_err}")
         except Exception as exc: 
             logger.warning(f"Database schema initialization deferred: {exc}")
     yield
@@ -152,11 +161,24 @@ app.include_router(m2m_sync_router)
 
 # ---------------------------------------------------------------------------
 
+class SafeStaticFiles(StaticFiles):
+    """
+    StaticFiles subclass that explicitly blocks access to hidden files and dotfiles.
+    Any request containing a dotfile path segment is rejected with 403 Forbidden.
+    """
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        norm_path = path.replace("\\", "/").strip("/")
+        segments = norm_path.split("/")
+        if any(seg.startswith(".") for seg in segments if seg):
+            return PlainTextResponse("Forbidden: Access to dotfiles and hidden files is blocked.", status_code=403)
+        return await super().get_response(path, scope)
+
+
 if settings.UPLOAD_DIR.exists():
-    app.mount("/uploads", StaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
+    app.mount("/uploads", SafeStaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
 
 if settings.PDF_STORAGE_DIR.exists():
-    app.mount("/stored_pdfs", StaticFiles(directory=str(settings.PDF_STORAGE_DIR)), name="stored_pdfs")
+    app.mount("/stored_pdfs", SafeStaticFiles(directory=str(settings.PDF_STORAGE_DIR)), name="stored_pdfs")
 
 
 @app.get("/")

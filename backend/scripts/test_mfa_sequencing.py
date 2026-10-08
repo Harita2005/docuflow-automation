@@ -76,32 +76,35 @@ def test_2_mfa_enabled_user_completes_mfa_and_receives_jwt(mfa_user):
     ticket = res_login.json().get("mfa_ticket")
     assert ticket is not None
 
-    # Step 2: Request OTP dispatch
-    res_send = client.post(
-        "/api/auth/mfa/send-otp",
-        json={"ticket": ticket, "method": "EMAIL"}
-    )
-    assert res_send.status_code == 200
-    assert "otp" not in res_send.json()  # Issue 1 preservation: No OTP in response
+    # Step 2: Request OTP dispatch with patched generator
+    from unittest.mock import patch
+    with patch("app.routers.auth.generate_numeric_otp", return_value="654321"):
+        res_send = client.post(
+            "/api/auth/mfa/send-otp",
+            json={"ticket": ticket, "method": "EMAIL"}
+        )
+        assert res_send.status_code == 200
+        assert "otp" not in res_send.json()  # Issue 1 preservation: No OTP in response
 
-    # Step 3: Retrieve internal OTP from test runner ticket
-    ticket_data = get_mfa_ticket(ticket)
-    valid_code = ticket_data.get("otp")
-    assert valid_code is not None
+        # Step 3: Verify ticket data stores hashed OTP and NO plaintext OTP
+        ticket_data = get_mfa_ticket(ticket)
+        assert ticket_data is not None
+        assert ticket_data.get("otp") is None, "Security violation: Plaintext OTP present in ticket"
+        assert ticket_data.get("otp_hash") is not None, "otp_hash must be stored"
 
-    # Step 4: Verify MFA
-    res_verify = client.post(
-        "/api/auth/mfa/verify",
-        json={"ticket": ticket, "method": "EMAIL", "code": valid_code, "force_login": True}
-    )
-    assert res_verify.status_code == 200, res_verify.text
-    verify_data = res_verify.json()
+        # Step 4: Verify MFA
+        res_verify = client.post(
+            "/api/auth/mfa/verify",
+            json={"ticket": ticket, "method": "EMAIL", "code": "654321", "force_login": True}
+        )
+        assert res_verify.status_code == 200, res_verify.text
+        verify_data = res_verify.json()
 
-    # JWT must be successfully issued upon completing MFA
-    assert verify_data.get("access_token") is not None
-    assert verify_data.get("token_type") == "bearer"
-    assert verify_data.get("user") is not None
-    assert verify_data["user"]["username"] == mfa_user.username
+        # JWT must be successfully issued upon completing MFA
+        assert verify_data.get("access_token") is not None
+        assert verify_data.get("token_type") == "bearer"
+        assert verify_data.get("user") is not None
+        assert verify_data["user"]["username"] == mfa_user.username
 
 def test_3_mfa_enabled_user_wrong_password_rejected(mfa_user):
     """3. Invalid password for MFA-enabled user is rejected with HTTP 401."""

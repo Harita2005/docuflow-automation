@@ -97,20 +97,23 @@ def test_5_mfa_send_otp_rate_limiting(active_user):
     assert "wait" in res2.json().get("detail", "").lower()
 
 def test_6_mfa_verification_with_valid_and_invalid_code(active_user):
-    """6. Verify OTP verification functions correctly without relying on response OTP."""
-    ticket = create_mfa_ticket(active_user.id, active_user.username)
-    res_send = client.post(
-        "/api/auth/mfa/send-otp",
-        json={"ticket": ticket, "method": "EMAIL"}
-    )
-    assert res_send.status_code == 200
-    assert "otp" not in res_send.json()
+    """6. Verify OTP verification functions correctly without relying on plaintext OTP in response or ticket."""
+    from unittest.mock import patch
 
-    # In test runner mode, ticket holds the generated OTP internally for testing verification
-    ticket_data = get_mfa_ticket(ticket)
-    assert ticket_data is not None
-    valid_code = ticket_data.get("otp")
-    assert valid_code is not None, "Test runner internal OTP must be available for testing verify endpoint"
+    ticket = create_mfa_ticket(active_user.id, active_user.username)
+    with patch("app.routers.auth.generate_numeric_otp", return_value="543210"):
+        res_send = client.post(
+            "/api/auth/mfa/send-otp",
+            json={"ticket": ticket, "method": "EMAIL"}
+        )
+        assert res_send.status_code == 200
+        assert "otp" not in res_send.json()
+
+        # Ticket must store hashed OTP and NO plaintext OTP
+        ticket_data = get_mfa_ticket(ticket)
+        assert ticket_data is not None
+        assert ticket_data.get("otp") is None, "Security violation: Plaintext OTP present in ticket"
+        assert ticket_data.get("otp_hash") is not None, "otp_hash must be stored"
 
     # Test invalid code first
     res_bad = client.post(
@@ -123,7 +126,7 @@ def test_6_mfa_verification_with_valid_and_invalid_code(active_user):
     # Test valid code
     res_good = client.post(
         "/api/auth/mfa/verify",
-        json={"ticket": ticket, "method": "EMAIL", "code": valid_code}
+        json={"ticket": ticket, "method": "EMAIL", "code": "543210"}
     )
     assert res_good.status_code == 200, res_good.text
     token_data = res_good.json()
