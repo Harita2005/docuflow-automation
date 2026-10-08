@@ -1,5 +1,6 @@
 import datetime
 import logging
+import secrets
 from typing import Optional
 
 import bcrypt
@@ -217,10 +218,16 @@ async def verify_service_api_key(
         None,
     )
 
-    # X-API-Key authentication
+    # X-API-Key authentication (constant-time byte comparison against timing attacks)
     if expected_key and x_api_key:
-        if x_api_key.strip() == expected_key:
-            return True
+        cleaned_key = x_api_key.strip()
+        expected_cleaned = str(expected_key).strip()
+        if cleaned_key and expected_cleaned:
+            if secrets.compare_digest(
+                cleaned_key.encode("utf-8"),
+                expected_cleaned.encode("utf-8"),
+            ):
+                return True
 
     # JWT service/admin authentication
     if credentials and credentials.credentials:
