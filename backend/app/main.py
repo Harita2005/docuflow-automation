@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import Scope
 
-from .config.settings import settings
+from .config.settings import settings, validate_production_service_api_key
 from .database.connection import SessionLocal, engine
 from .services.mfa_service import invalidate_legacy_and_all_tickets
 from sqlalchemy import text
@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Enforce production security invariants (refuse to start if SERVICE_API_KEY insecure)
+    validate_production_service_api_key(settings.SERVICE_API_KEY, settings.ENVIRONMENT)
+
     if not os.getenv("PYTEST_CURRENT_TEST"):
         try:
             Base.metadata.create_all(bind=engine)

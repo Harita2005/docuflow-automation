@@ -11,18 +11,11 @@ from app.auth import create_access_token, get_current_user, verify_password
 from app.config.settings import settings
 from app.database.connection import get_db
 from app.database.models import AuditLog, NotificationProviderConfig, User, UserAccessLog
+from app.services.security_middleware import resolve_client_ip
 
 def extract_client_ip(req: Request) -> str:
-    """Extracts client IP address correctly handling proxies and load balancers."""
-    fwd = req.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    real_ip = req.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    if req.client and req.client.host:
-        return req.client.host.strip()
-    return "127.0.0.1"
+    """Extracts client IP address securely, verifying proxy trustworthiness."""
+    return resolve_client_ip(req)
 from app.schemas.schemas import (
     LoginRequest,
     MFASendOTPRequest,
@@ -285,6 +278,11 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail='Employee account is deactivated. Access denied.')
 
+    # Do not allow OTP generation if the ticket already accumulated max failed attempts
+    if ticket_data.get('attempts', 0) >= 5:
+        delete_mfa_ticket(request.ticket)
+        raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
+
     method_upper = request.method.upper()
 
     # Enforce 60s resend rate limiting on the same method
@@ -346,7 +344,8 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
     ticket_data['otp_id'] = otp_record.id
     ticket_data['otp_expires_at'] = time.time() + 300
     ticket_data['otp_sent_at'] = time.time()
-    ticket_data['attempts'] = 0
+    # Security requirement: do NOT reset accumulated failed attempts on new OTP request
+    ticket_data['attempts'] = ticket_data.get('attempts', 0)
     ticket_data.pop('verified', None)
 
     # Security requirement: store OTP strictly hashed, NEVER in plaintext

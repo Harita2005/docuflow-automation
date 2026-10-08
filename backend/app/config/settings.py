@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote_plus
 
 from pydantic import model_validator
@@ -178,6 +179,48 @@ settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
+# Security validation
+# ---------------------------------------------------------------------------
+
+KNOWN_DEFAULT_SERVICE_KEYS = {
+    "DocuFlow-M2M-Integration-Secret-2026",
+    "<GENERATE_RANDOM_M2M_API_KEY>",
+    "changeme",
+    "secret",
+    "default",
+    "your-api-key",
+}
+
+
+def validate_production_service_api_key(service_api_key: Optional[str], environment: str) -> bool:
+    """
+    Validates that in production, SERVICE_API_KEY is configured with a secure random key
+    of at least 32 characters and does not match any known default or placeholder.
+    Raises RuntimeError if insecure in production.
+    """
+    if environment.lower() not in ("production", "prod"):
+        return True
+
+    clean_key = (service_api_key or "").strip()
+    if not clean_key:
+        raise RuntimeError(
+            "FATAL: SERVICE_API_KEY is missing or empty in production environment. "
+            "Please configure a secure random key with at least 32 characters."
+        )
+    if clean_key in KNOWN_DEFAULT_SERVICE_KEYS:
+        raise RuntimeError(
+            "FATAL: SERVICE_API_KEY in production cannot use default, template, or placeholder values. "
+            "Please generate a unique random secret."
+        )
+    if len(clean_key) < 32:
+        raise RuntimeError(
+            f"FATAL: SERVICE_API_KEY in production must be at least 32 characters long "
+            f"(current length: {len(clean_key)}). Please generate a stronger secret."
+        )
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Public exports
 # ---------------------------------------------------------------------------
 
@@ -186,4 +229,6 @@ __all__ = [
     "BASE_DIR",
     "ROOT_DIR",
     "Settings",
+    "validate_production_service_api_key",
+    "KNOWN_DEFAULT_SERVICE_KEYS",
 ]

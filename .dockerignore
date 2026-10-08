@@ -6,8 +6,13 @@ backend/venv
 venv
 *.log
 *.db
-.env
-stored_pdfs
+.env*
+uploads/
+backend/uploads/
+stored_pdfs/
+backend/stored_pdfs/
+*.mfa_tickets.json
+backend/data/.mfa_tickets.json
 __pycache__
 *.pyc
 coverage
