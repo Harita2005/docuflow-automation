@@ -611,29 +611,65 @@ export default function CustomerFeedbackDetails({
     });
   }, [imageFields]);
 
-  // Derive Invoice PDF Source URL
-  const pdfSrc = useMemo(() => {
-    if (localPdfBlobUrl) return localPdfBlobUrl;
-    if (!activeDoc) return "";
-    const rawPath = activeDoc.file_url || activeDoc.file_path || (activeDoc as any).pdf_url || "";
-    if (
-      rawPath &&
-      rawPath !== "/" &&
-      rawPath !== "invoice.pdf" &&
-      rawPath !== "/uploads/invoice.pdf" &&
-      rawPath !== "uploads/invoice.pdf"
-    ) {
-      const isAbsolute = rawPath.startsWith("/") || rawPath.startsWith("http");
-      let path = isAbsolute ? rawPath : `/${rawPath}`;
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      if (token && path.includes("/file")) {
-        const separator = path.includes("?") ? "&" : "?";
-        path = `${path}${separator}token=${encodeURIComponent(token)}`;
-      }
-      return path;
+  // Derive Invoice PDF Source URL via HMAC Signed URL
+  const [signedPdfSrc, setSignedPdfSrc] = useState<string>("");
+
+  useEffect(() => {
+    let isMounted = true;
+    let refreshTimer: any = null;
+
+    if (localPdfBlobUrl) {
+      setSignedPdfSrc(localPdfBlobUrl);
+      return;
     }
-    return "";
-  }, [activeDoc?.file_url, activeDoc?.file_path, localPdfBlobUrl]);
+
+    if (!activeDoc?.id) {
+      setSignedPdfSrc("");
+      return;
+    }
+
+    const loadSignedUrl = async () => {
+      const rawPath = activeDoc.file_url || activeDoc.file_path || (activeDoc as any).pdf_url || "";
+      if (
+        rawPath &&
+        rawPath !== "/" &&
+        rawPath !== "invoice.pdf" &&
+        rawPath !== "/uploads/invoice.pdf" &&
+        rawPath !== "uploads/invoice.pdf"
+      ) {
+        try {
+          const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+          const headers: Record<string, string> = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/signed-url?disp=inline`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            if (isMounted && data.signed_url) {
+              setSignedPdfSrc(data.signed_url);
+              const ttl = data.expires_in_seconds || 90;
+              const refreshDelay = Math.max((ttl - 15) * 1000, 30000);
+              refreshTimer = setTimeout(loadSignedUrl, refreshDelay);
+            }
+          } else {
+            if (isMounted) setSignedPdfSrc("");
+          }
+        } catch {
+          if (isMounted) setSignedPdfSrc("");
+        }
+      } else {
+        setSignedPdfSrc("");
+      }
+    };
+
+    loadSignedUrl();
+
+    return () => {
+      isMounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [activeDoc?.id, activeDoc?.file_url, activeDoc?.file_path, localPdfBlobUrl]);
+
+  const pdfSrc = localPdfBlobUrl || signedPdfSrc;
 
   const stepDefinitions = useMemo(() => {
     const rawSteps = activeDoc?.workflow_step_definitions || (activeDoc as any)?.workflow_steps || [];
@@ -991,7 +1027,30 @@ export default function CustomerFeedbackDetails({
     }
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    if (activeDoc?.id && !localPdfBlobUrl) {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/signed-url?disp=attachment`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.signed_url) {
+            const link = document.createElement("a");
+            link.href = data.signed_url;
+            link.download = `${invoiceNumber || activeDoc?.id || "invoice"}.pdf`;
+            link.target = "_blank";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to acquire download signed url:", err);
+      }
+    }
     if (!pdfSrc) return;
     const link = document.createElement("a");
     link.href = pdfSrc;
@@ -1002,13 +1061,31 @@ export default function CustomerFeedbackDetails({
     document.body.removeChild(link);
   };
 
-  const handlePrintPdf = () => {
+  const handlePrintPdf = async () => {
     if (pdfIframeRef.current?.contentWindow) {
       try {
         pdfIframeRef.current.contentWindow.focus();
         pdfIframeRef.current.contentWindow.print();
         return;
       } catch {}
+    }
+    if (activeDoc?.id && !localPdfBlobUrl) {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(`/api/documents/${encodeURIComponent(activeDoc.id)}/signed-url?disp=inline`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.signed_url) {
+            const printWin = window.open(data.signed_url, "_blank");
+            if (printWin) printWin.focus();
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to acquire print signed url:", err);
+      }
     }
     if (pdfSrc) {
       const printWin = window.open(pdfSrc, "_blank");

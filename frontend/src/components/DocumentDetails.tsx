@@ -1108,16 +1108,6 @@ export default function DocumentDetails({
       });
 
       if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        let newPath = data.file_url || data.file_path;
-        if (newPath) {
-          newPath = newPath.startsWith('/') ? newPath : `/${newPath}`;
-          if (token && newPath.includes("/file")) {
-            const separator = newPath.includes("?") ? "&" : "?";
-            newPath = `${newPath}${separator}token=${encodeURIComponent(token)}`;
-          }
-          setIframeSrc(newPath);
-        }
         showToast("✓ Physical PDF Attached & Saved Successfully!", "success");
         onRefreshDocument();
       } else {
@@ -1381,7 +1371,30 @@ export default function DocumentDetails({
     setZoomLevel(100);
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    if (document?.id) {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/signed-url?disp=attachment`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.signed_url) {
+            const link = window.document.createElement("a");
+            link.href = data.signed_url;
+            link.download = document?.file_name || `${document?.id || "document"}.pdf`;
+            link.target = "_blank";
+            window.document.body.appendChild(link);
+            link.click();
+            window.document.body.removeChild(link);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to acquire download signed url:", err);
+      }
+    }
     if (!iframeSrc) return;
     const cleanUrl = iframeSrc.split("#")[0];
     const link = window.document.createElement("a");
@@ -1393,7 +1406,7 @@ export default function DocumentDetails({
     window.document.body.removeChild(link);
   };
 
-  const handlePrintPdf = () => {
+  const handlePrintPdf = async () => {
     if (iframeRef.current?.contentWindow) {
       try {
         iframeRef.current.contentWindow.focus();
@@ -1401,6 +1414,26 @@ export default function DocumentDetails({
         return;
       } catch {
         // Fall back to opening in a new tab for printing
+      }
+    }
+    if (document?.id) {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/signed-url?disp=inline`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.signed_url) {
+            const printWindow = window.open(data.signed_url, "_blank");
+            if (printWindow) {
+              printWindow.focus();
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to acquire print signed url:", err);
       }
     }
     if (iframeSrc) {
@@ -1670,7 +1703,10 @@ export default function DocumentDetails({
   }, [document, onGoBack]);
 
   useEffect(() => {
-    if (!document) {
+    let isMounted = true;
+    let refreshTimer: any = null;
+
+    if (!document?.id) {
       setIframeSrc("");
       return;
     }
@@ -1684,17 +1720,38 @@ export default function DocumentDetails({
       rawPath !== "/uploads/invoice.pdf" &&
       rawPath !== "uploads/invoice.pdf"
     ) {
-      const isAbsolute = rawPath.startsWith('/') || rawPath.startsWith('http');
-      let path = isAbsolute ? rawPath : `/${rawPath}`;
-      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      if (token && path.includes("/file")) {
-        const separator = path.includes("?") ? "&" : "?";
-        path = `${path}${separator}token=${encodeURIComponent(token)}`;
-      }
-      setIframeSrc(path);
+      const loadSignedUrl = async () => {
+        try {
+          const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+          const headers: Record<string, string> = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/signed-url?disp=inline`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            if (isMounted && data.signed_url) {
+              setIframeSrc(data.signed_url);
+              // Proactively refresh before TTL expires (e.g. 15s before expiry)
+              const ttl = data.expires_in_seconds || 90;
+              const refreshDelay = Math.max((ttl - 15) * 1000, 30000);
+              refreshTimer = setTimeout(loadSignedUrl, refreshDelay);
+            }
+          } else {
+            if (isMounted) setIframeSrc("");
+          }
+        } catch {
+          if (isMounted) setIframeSrc("");
+        }
+      };
+
+      loadSignedUrl();
     } else {
       setIframeSrc("");
     }
+
+    return () => {
+      isMounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
   }, [document?.id, document?.file_url, document?.file_path]);
 
   const fetchVersions = async () => {
