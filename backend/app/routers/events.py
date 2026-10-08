@@ -2,14 +2,46 @@ import logging
 import asyncio
 import json
 import time
-from typing import Set, Optional
-from fastapi import APIRouter, Request, Query
+from typing import Set, Optional, Any
+from fastapi import APIRouter, Request, Query, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from app.database.connection import get_db
+from app.database.models import User
+from app.auth import get_current_active_user
+from app.services.rbac_service import authorize_document_access
+from app.routers.documents import find_invoice_by_identifier, is_user_in_approver_pool
 from app.services.lock_service import lock_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Real-Time Events & Collision Locks'])
 _active_listeners: Set[asyncio.Queue] = set()
+
+MIN_LOCK_LEASE_SECONDS = 15
+MAX_LOCK_LEASE_SECONDS = 300
+DEFAULT_LOCK_LEASE_SECONDS = 180
+
+def _cap_lease_seconds(val: Optional[Any]) -> int:
+    try:
+        s = int(val)
+    except (ValueError, TypeError):
+        s = DEFAULT_LOCK_LEASE_SECONDS
+    return max(MIN_LOCK_LEASE_SECONDS, min(s, MAX_LOCK_LEASE_SECONDS))
+
+def _is_admin_user(user: User) -> bool:
+    u_role = (user.role or "").strip().lower()
+    return (
+        u_role in {"admin", "administrator", "system_admin", "superadmin"}
+        or getattr(user, "is_superuser", False)
+    )
+
+def _verify_document_access(user: User, doc_id: str, db: Session):
+    inv = find_invoice_by_identifier(db, doc_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
+    return inv
 
 def broadcast_event(event_type: str, payload: dict):
     """
@@ -66,43 +98,106 @@ async def event_stream(request: Request):
 
 @router.post('/api/invoices/{invoice_id}/lock/acquire')
 @router.post('/api/documents/{invoice_id}/lock/acquire')
-def acquire_document_lock(invoice_id: str, payload: dict):
+def acquire_document_lock(
+    invoice_id: str,
+    payload: Optional[dict] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """
-    Acquires an exclusive review lock on a document for the current user.
+    Acquires an exclusive review lock on a document for the current authenticated user.
     """
-    user_handle = payload.get('user_handle') or payload.get('username') or 'unknown'
-    user_name = payload.get('user_name') or payload.get('name') or user_handle
-    lease_seconds = int(payload.get('lease_seconds') or 180)
-    result = lock_manager.acquire_lock(doc_id=invoice_id, user_handle=user_handle, user_name=user_name, lease_seconds=lease_seconds)
+    inv = _verify_document_access(current_user, invoice_id, db)
+    clean_payload = payload or {}
+    user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
+    user_name = current_user.employee_name or current_user.name or current_user.username or "Reviewer"
+    lease_seconds = _cap_lease_seconds(clean_payload.get('lease_seconds'))
+    result = lock_manager.acquire_lock(
+        doc_id=str(inv.id),
+        user_handle=user_handle,
+        user_name=user_name,
+        lease_seconds=lease_seconds,
+    )
     if result.get('acquired'):
-        broadcast_event('DOCUMENT_LOCKED', {'document_id': invoice_id, 'locked_by': user_name, 'user_handle': user_handle, 'expires_in': lease_seconds})
+        broadcast_event(
+            'DOCUMENT_LOCKED',
+            {
+                'document_id': str(inv.id),
+                'locked_by': user_name,
+                'user_handle': user_handle,
+                'expires_in': lease_seconds,
+            },
+        )
     return result
 
 @router.post('/api/invoices/{invoice_id}/lock/heartbeat')
 @router.post('/api/documents/{invoice_id}/lock/heartbeat')
-def renew_document_lock(invoice_id: str, payload: dict):
+def renew_document_lock(
+    invoice_id: str,
+    payload: Optional[dict] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """
-    Renews the active review lock lease.
+    Renews the active review lock lease for the authenticated user.
     """
-    user_handle = payload.get('user_handle') or payload.get('username') or ''
-    lease_seconds = int(payload.get('lease_seconds') or 180)
-    return lock_manager.renew_lock(doc_id=invoice_id, user_handle=user_handle, lease_seconds=lease_seconds)
+    inv = _verify_document_access(current_user, invoice_id, db)
+    clean_payload = payload or {}
+    user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
+    lease_seconds = _cap_lease_seconds(clean_payload.get('lease_seconds'))
+    return lock_manager.renew_lock(
+        doc_id=str(inv.id),
+        user_handle=user_handle,
+        lease_seconds=lease_seconds,
+    )
 
 @router.post('/api/invoices/{invoice_id}/lock/release')
 @router.post('/api/documents/{invoice_id}/lock/release')
-def release_document_lock(invoice_id: str, payload: dict=None):
+def release_document_lock(
+    invoice_id: str,
+    payload: Optional[dict] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """
     Releases the review lock on a document.
+    Only the lock owner or an administrator can release the lock.
     """
-    user_handle = payload.get('user_handle') if payload else None
-    result = lock_manager.release_lock(doc_id=invoice_id, user_handle=user_handle)
-    broadcast_event('DOCUMENT_UNLOCKED', {'document_id': invoice_id, 'released_by': user_handle})
+    inv = _verify_document_access(current_user, invoice_id, db)
+    user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
+    is_admin = _is_admin_user(current_user)
+    result = lock_manager.release_lock(
+        doc_id=str(inv.id),
+        user_handle=user_handle,
+        is_admin=is_admin,
+    )
+    if not result.get('released'):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=result.get('message', "Cannot release lock owned by another user"),
+        )
+    broadcast_event(
+        'DOCUMENT_UNLOCKED',
+        {
+            'document_id': str(inv.id),
+            'released_by': user_handle,
+        },
+    )
     return result
 
 @router.get('/api/invoices/{invoice_id}/lock/status')
 @router.get('/api/documents/{invoice_id}/lock/status')
-def get_document_lock_status(invoice_id: str, user_handle: Optional[str]=Query(None)):
+def get_document_lock_status(
+    invoice_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     """
-    Gets the current lock status of a document.
+    Gets the current lock status of a document for the authenticated user.
     """
-    return lock_manager.get_lock_status(doc_id=invoice_id, current_user_handle=user_handle)
+    inv = _verify_document_access(current_user, invoice_id, db)
+    user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
+    return lock_manager.get_lock_status(
+        doc_id=str(inv.id),
+        current_user_handle=user_handle,
+    )

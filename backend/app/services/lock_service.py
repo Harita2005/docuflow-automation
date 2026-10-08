@@ -49,13 +49,14 @@ class DocumentLockManager:
                 return {'success': True, 'renewed': True, 'expires_in': lease_seconds}
             return {'success': False, 'renewed': False, 'message': 'Lock expired or held by another user'}
 
-    def release_lock(self, doc_id: str, user_handle: Optional[str]=None) -> Dict[str, Any]:
+    def release_lock(self, doc_id: str, user_handle: Optional[str] = None, is_admin: bool = False) -> Dict[str, Any]:
         with self._lock_mutex:
             clean_doc_id = str(doc_id).strip()
             existing = self._locks.get(clean_doc_id)
             if not existing:
                 return {'success': True, 'released': True}
-            if user_handle is None or existing.get('user_handle') == str(user_handle).strip().lower():
+            clean_handle = str(user_handle).strip().lower() if user_handle else None
+            if is_admin or clean_handle is None or existing.get('user_handle') == clean_handle:
                 del self._locks[clean_doc_id]
                 return {'success': True, 'released': True}
             return {'success': False, 'released': False, 'message': 'Not lock owner'}

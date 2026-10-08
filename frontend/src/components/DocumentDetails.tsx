@@ -1155,13 +1155,23 @@ export default function DocumentDetails({
     const userHandle = currentUserUsername || currentUserEmail || "reviewer";
     const userName = currentUserUsername || "Reviewer";
 
+    const getAuthHeaders = (): Record<string, string> => {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
+    };
+
     const acquireLock = async () => {
       try {
         const res = await fetch(`/api/invoices/${document.id}/lock/acquire`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ user_handle: userHandle, user_name: userName, lease_seconds: 180 })
         });
+        if (!res.ok) return;
         const data = await res.json();
         if (data.acquired) {
           setLockInfo({ isLocked: false, lockedBy: userName, isSelf: true });
@@ -1179,7 +1189,7 @@ export default function DocumentDetails({
       try {
         await fetch(`/api/invoices/${document.id}/lock/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ user_handle: userHandle, lease_seconds: 180 })
         });
       } catch {}
@@ -1190,7 +1200,7 @@ export default function DocumentDetails({
       try {
         fetch(`/api/invoices/${document.id}/lock/release`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ user_handle: userHandle })
         }).catch(() => {});
       } catch {}
