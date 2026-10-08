@@ -296,34 +296,63 @@ export default function App() {
 
     // Real-Time Server-Sent Events (SSE) Stream
     let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/events/stream');
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          // Check for session kick on this user
-          if (data.type === "SESSION_KICKED") {
-            if (data.payload?.username && data.payload.username.toLowerCase() === currentUserUsername.toLowerCase()) {
-              const newDevice = data.payload.new_device || "another device/browser";
-              const reason = `Your session was terminated because your account was logged in from ${newDevice}.`;
-              handleLogout(reason, true);
-              return;
+    let isCancelled = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const connectSSE = async () => {
+      if (isCancelled || !isLoggedIn) return;
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+        if (!token) return;
+
+        // Request a short-lived, single-use ticket to prevent exposing JWT in URLs
+        const ticketRes = await fetch('/api/events/stream-ticket', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!ticketRes.ok || isCancelled) return;
+        const ticketData = await ticketRes.json();
+        const ticket = ticketData?.ticket;
+        if (!ticket || isCancelled) return;
+
+        eventSource = new EventSource(`/api/events/stream?ticket=${encodeURIComponent(ticket)}`);
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            // Check for session kick on this user
+            if (data.type === "SESSION_KICKED") {
+              if (data.payload?.username && data.payload.username.toLowerCase() === currentUserUsername.toLowerCase()) {
+                const newDevice = data.payload.new_device || "another device/browser";
+                const reason = `Your session was terminated because your account was logged in from ${newDevice}.`;
+                handleLogout(reason, true);
+                return;
+              }
             }
+            if (['DOCUMENT_UPDATED', 'DOCUMENT_CREATED', 'DOCUMENT_LOCKED', 'DOCUMENT_UNLOCKED', 'STAGE_APPROVED'].includes(data.type)) {
+              fetchDocuments(true);
+              fetchStats(true);
+            }
+          } catch {
+            // heartbeat or ping
           }
-          if (['DOCUMENT_UPDATED', 'DOCUMENT_CREATED', 'DOCUMENT_LOCKED', 'DOCUMENT_UNLOCKED', 'STAGE_APPROVED'].includes(data.type)) {
-            fetchDocuments(true);
-            fetchStats(true);
+        };
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
           }
-        } catch {
-          // heartbeat or ping
-        }
-      };
-      eventSource.onerror = () => {
-        // EventSource will auto-reconnect
-      };
-    } catch (e) {
-      console.warn("SSE connection error:", e);
-    }
+          if (!isCancelled) {
+            reconnectTimeout = setTimeout(connectSSE, 5000);
+          }
+        };
+      } catch (e) {
+        console.warn("SSE connection error:", e);
+      }
+    };
+
+    connectSSE();
 
     // Polling fallback
     const docInterval = setInterval(() => {
@@ -334,6 +363,8 @@ export default function App() {
     }, 15000);
 
     return () => {
+      isCancelled = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) eventSource.close();
       clearInterval(docInterval);
       clearInterval(statsInterval);
