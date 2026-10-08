@@ -21,14 +21,23 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Create storage directories inside Docker container for storing approved files
-RUN mkdir -p /app/uploads /app/stored_pdfs/approved
+# Create non-root group and user with dedicated permissions
+RUN groupadd -r appgroup && useradd -r -u 10001 -g appgroup appuser \
+    && mkdir -p /app/uploads /app/stored_pdfs/approved /app/data \
+    && chown -R appuser:appgroup /app
 
 # Copy backend source code
-COPY . .
+COPY --chown=appuser:appgroup . .
+
+# Switch to non-root user
+USER appuser
 
 # Expose backend port
 EXPOSE 3000
+
+# Container healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start FastAPI server
 CMD ["python", "run.py"]

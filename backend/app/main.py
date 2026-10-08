@@ -184,3 +184,13 @@ def root():
         "version": settings.VERSION,
         "docs_url": "/docs",
     }
+
+
+@app.get("/health")
+@app.get("/api/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+    }

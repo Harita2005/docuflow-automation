@@ -27,18 +27,26 @@ COPY package.json package-lock.json* ./
 COPY frontend/package.json ./frontend/
 RUN npm install
 
+# Create non-root app user
+RUN groupadd -r appgroup && useradd -r -u 10001 -g appgroup appuser \
+    && mkdir -p /app/backend/uploads /app/stored_pdfs/approved /app/backend/data \
+    && chown -R appuser:appgroup /app
+
 # Copy application source code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
 # Build production frontend assets
 RUN npm run build -w frontend
+
+# Switch to non-root user
+USER appuser
 
 # Expose backend API port
 EXPOSE 3000
 
 # Healthcheck endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/api/stats || exit 1
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start Uvicorn production server
 CMD ["python", "backend/run.py"]

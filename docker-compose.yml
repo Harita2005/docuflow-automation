@@ -9,13 +9,13 @@ services:
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - FRONTEND_URL=${FRONTEND_URL:-http://192.168.179.22:8085}
-      - DB_HOST=${DB_HOST:-192.168.179.22}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT:-1443}
       - DB_NAME=${DB_NAME:-DocuFlowDB}
-      - DB_USER=${DB_USER:-sa}
-      - DB_PASSWORD=${DB_PASSWORD:-Admin@1234}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
       - SMTP_HOST=${SMTP_HOST:-}
@@ -35,6 +35,12 @@ services:
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
       - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
       - FAST2SMS_API_KEY=${FAST2SMS_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
