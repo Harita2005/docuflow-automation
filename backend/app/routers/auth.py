@@ -133,9 +133,31 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         except Exception as e:
             logger.debug("Error logging failed login: %s", e)
         logger.warning(f"Login failed: User '{ident_str}' not found from IP: {client_ip}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"User '{ident_str}' not found in system.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated. Access denied.")
+        try:
+            db.add(UserAccessLog(
+                username=user.username,
+                event_type="LOGIN_FAILED",
+                status="FAILED",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason="User account is deactivated",
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='Login Failed',
+                stage='Authentication',
+                notes=f"Failed login attempt for '{user.username}' from {client_ip}. User account is deactivated.",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging failed login: %s", e)
+        logger.warning(f"Login failed: Deactivated account for user '{user.username}' from IP: {client_ip}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
     if request.password:
         is_valid = verify_password(request.password, user.password_hash or '')
         if not is_valid:
