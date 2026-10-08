@@ -169,6 +169,42 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 logger.debug("Error logging failed login: %s", e)
             logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
+
+        # If user has MFA enabled, require secondary verification before issuing token
+        if user.mfa_enabled:
+            ticket = create_mfa_ticket(user.id, user.username)
+            ticket_data = get_mfa_ticket(ticket)
+            if ticket_data:
+                ticket_data['password_verified'] = True
+                save_mfa_ticket()
+
+            available_methods = []
+            if user.email and '@' in user.email:
+                available_methods.append('EMAIL')
+            if user.phone_number and user.phone_number.strip():
+                available_methods.append('SMS')
+            available_methods.append('AUTHENTICATOR')
+
+            has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+
+            return {
+                'token': None,
+                'access_token': None,
+                'token_type': 'bearer',
+                'expires_in': 3600,
+                'user': None,
+                'mfa_required': True,
+                'mfa_ticket': ticket,
+                'available_methods': available_methods,
+                'selected_method': None,
+                'initial_otp_sent': False,
+                'masked_email': mask_email(user.email) if user.email else '',
+                'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+                'has_authenticator_setup': has_auth_setup,
+                'active_session_conflict': False,
+                'message': 'Password verified. Please complete secondary two-factor authentication.',
+            }
+
         new_session_id = str(uuid.uuid4())
         device_label = request.device_info or 'Web Browser'
         had_prior_session = bool(user.active_session_id)
@@ -283,7 +319,7 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         if success:
             msg = f'Verification code dispatched to {destination}'
         else:
-            msg = f'Mail server unreachable ({delivery_msg}). OTP generated for UI display.'
+            msg = f'Mail server unreachable ({delivery_msg}). Please verify SMTP configuration or contact your system administrator.'
 
     elif method_upper == 'SMS':
         if not user.phone_number or not user.phone_number.strip():
@@ -327,7 +363,6 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
-        'otp': code,
     }
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)

@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_SENDER_EMAIL: str = ""
     SMTP_SENDER_NAME: str = "DocuFlow Security"
-    SHOW_OTP_IN_UI: bool = True
+    SHOW_OTP_IN_UI: bool = False
 
     # SMS Gateway Configuration
     SMS_PROVIDER: str = "generic"
