@@ -26,13 +26,15 @@ def test_users():
     session = SessionLocal()
     try:
         # User with email only, no phone, no authenticator
-        user_email_only = session.query(User).filter(User.username == "testapprover").first()
+        user_email_only = session.query(User).filter((User.username == "test_locked_user") | (User.username == "testapprover")).first()
         if not user_email_only:
             user_email_only = User(
+                user_uid="UID_test_locked_01",
                 username="test_locked_user",
                 employee_id="TEST_LOCK_01",
                 email="locked.user@example.com",
                 employee_name="Locked User",
+                password_hash="testhash",
                 mfa_enabled=True,
                 is_active=True,
                 is_deleted=False,

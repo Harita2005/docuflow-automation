@@ -3673,6 +3673,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
     return flow_items
 
 @router.get('/api/invoices/{invoice_id}/checklist')
+@router.get('/api/documents/{invoice_id}/checklist')
 def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
@@ -3743,6 +3744,7 @@ def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_
     return [{'id': item.id, 'stage_name': item.stage_name, 'item_text': item.item_text, 'is_checked': item.is_checked, 'checked_by': item.checked_by, 'checked_at': item.checked_at} for item in items]
 
 @router.post('/api/invoices/{invoice_id}/checklist')
+@router.post('/api/documents/{invoice_id}/checklist')
 def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:

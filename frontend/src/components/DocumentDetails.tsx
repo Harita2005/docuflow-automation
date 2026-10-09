@@ -716,7 +716,9 @@ export default function DocumentDetails({
       showToast("✓ More Info configuration saved.", "success");
     } else {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || "Failed to save configuration.");
+      const msg = errData.detail || "Failed to save configuration.";
+      showToast(`⚠️ ${msg}`, "error");
+      throw new Error(msg);
     }
   };
 
@@ -1904,13 +1906,18 @@ export default function DocumentDetails({
       if (token) headers["Authorization"] = `Bearer ${token}`;
       
       const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
-      await fetch(`/api/invoices/${document.id}/checklist`, {
+      const res = await fetch(`/api/invoices/${document.id}/checklist`, {
         method: "POST",
         headers,
         body: JSON.stringify({ checked_items })
       });
-    } catch (e) {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        showToast(`⚠️ Checklist save failed: ${errData.detail || 'Server error'}`, "error");
+      }
+    } catch (e: any) {
       console.error("Failed to update checklist state on server:", e);
+      showToast(`⚠️ Checklist error: ${e.message}`, "error");
     }
   };
 

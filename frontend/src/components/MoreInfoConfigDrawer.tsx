@@ -92,6 +92,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // All ERP synced master data fields available for selection
   const selectableAvailableFields = useMemo(() => {
@@ -108,6 +109,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
       setSelectedKeys(keys);
       setOrderedFieldKeys(selectedFields.map((f) => f.field_key));
       setSaveAsDefault(false);
+      setSaveError(null);
       setSearchQuery("");
       setActiveTab("fields");
     }
@@ -232,10 +234,11 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   // Submit Save
   const handleSave = async () => {
     if (orderedFieldKeys.length === 0) {
-      alert("Please select at least one field to display in More Info.");
+      setSaveError("Please select at least one field to display in More Info.");
       return;
     }
     setIsSaving(true);
+    setSaveError(null);
     try {
       const finalItems: ConfigFieldItem[] = orderedFieldKeys
         .map((key, index) => {
@@ -252,7 +255,7 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
       await onSave(finalItems, saveAsDefault);
       onClose();
     } catch (err: any) {
-      alert(err.message || "Failed to save field configuration.");
+      setSaveError(err.message || "Failed to save field configuration.");
     } finally {
       setIsSaving(false);
     }
@@ -627,6 +630,12 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                 <span>Save as organization default for all users</span>
               </div>
             </label>
+          )}
+          {saveError && (
+            <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-semibold flex items-center justify-between">
+              <span>⚠️ {saveError}</span>
+              <button type="button" onClick={() => setSaveError(null)} className="text-rose-500 hover:text-rose-700 font-bold ml-2">✕</button>
+            </div>
           )}
 
           <div className="flex items-center justify-end gap-1.5">
