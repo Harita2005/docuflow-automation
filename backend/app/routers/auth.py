@@ -52,6 +52,10 @@ from app.services.otp_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/auth', tags=['Authentication'])
 
+def should_show_dev_otp() -> bool:
+    """Return True if running in development/testing mode where OTP should be shown in UI."""
+    return bool(getattr(settings, "SHOW_OTP_IN_UI", False) or os.getenv("SHOW_OTP_IN_UI", "").lower() in ("true", "1", "yes"))
+
 @router.get('/login')
 @router.get('/token')
 def login_get_info():
@@ -194,9 +198,10 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 ticket_data['password_verified'] = True
                 save_mfa_ticket()
 
+            show_dev_otp = should_show_dev_otp()
             email_available = is_email_otp_available(db=db)
             available_methods = []
-            if email_available and user.email and '@' in user.email:
+            if (email_available or show_dev_otp) and user.email and '@' in user.email:
                 available_methods.append('EMAIL')
             if user.phone_number and user.phone_number.strip():
                 available_methods.append('SMS')
@@ -214,7 +219,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 'mfa_required': True,
                 'mfa_ticket': ticket,
                 'available_methods': available_methods,
-                'email_otp_available': email_available,
+                'email_otp_available': email_available or show_dev_otp,
                 'selected_method': None,
                 'initial_otp_sent': False,
                 'masked_email': mask_email(user.email) if user.email else '',
@@ -265,9 +270,10 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
     # Discover available MFA methods based on actual user profile in DB
+    show_dev_otp = should_show_dev_otp()
     email_available = is_email_otp_available(db=db)
     available_methods = []
-    if email_available and user.email and '@' in user.email:
+    if (email_available or show_dev_otp) and user.email and '@' in user.email:
         available_methods.append('EMAIL')
     if user.phone_number and user.phone_number.strip():
         available_methods.append('SMS')
@@ -286,7 +292,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         'mfa_required': True,
         'mfa_ticket': ticket,
         'available_methods': available_methods,
-        'email_otp_available': email_available,
+        'email_otp_available': email_available or show_dev_otp,
         'selected_method': None,
         'initial_otp_sent': False,
         'masked_email': mask_email(user.email) if user.email else '',
@@ -322,8 +328,10 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         remaining = int(60 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
 
+    show_dev_otp = should_show_dev_otp()
+
     if method_upper == 'EMAIL':
-        if not is_email_otp_available(db=db):
+        if not is_email_otp_available(db=db) and not show_dev_otp:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Email verification is not available right now. Please use your authenticator app or contact your administrator.",
@@ -331,33 +339,36 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         if not user.email or '@' not in user.email:
             raise HTTPException(status_code=400, detail='No registered email address found for this user.')
         code = generate_numeric_otp(6)
-        config = db.query(NotificationProviderConfig).first()
-        config_dict = None
-        if config and config.smtp_server:
-            config_dict = {
-                'smtp_server': config.smtp_server,
-                'port': config.port,
-                'username': config.username,
-                'encrypted_password': config.encrypted_password,
-                'sender_email': config.sender_email,
-                'sender_name': config.sender_name,
-            }
-        success, delivery_msg = send_email_otp(user.email, user.employee_name or user.name, code, config_dict)
-        strict_check = getattr(settings, "STRICT_SMTP_CHECK", False) or os.getenv("STRICT_SMTP_CHECK", "").lower() in ("1", "true", "yes")
-        if not success and strict_check:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Email delivery failed: {delivery_msg}")
         destination = mask_email(user.email)
-        if success:
-            msg = f'Verification code dispatched to {destination}'
+        if is_email_otp_available(db=db):
+            config = db.query(NotificationProviderConfig).first()
+            config_dict = None
+            if config and config.smtp_server:
+                config_dict = {
+                    'smtp_server': config.smtp_server,
+                    'port': config.port,
+                    'username': config.username,
+                    'encrypted_password': config.encrypted_password,
+                    'sender_email': config.sender_email,
+                    'sender_name': config.sender_name,
+                }
+            success, delivery_msg = send_email_otp(user.email, user.employee_name or user.name, code, config_dict)
+            strict_check = getattr(settings, "STRICT_SMTP_CHECK", False) or os.getenv("STRICT_SMTP_CHECK", "").lower() in ("1", "true", "yes")
+            if not success and strict_check and not show_dev_otp:
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Email delivery failed: {delivery_msg}")
+            if success:
+                msg = f'Verification code dispatched to {destination}'
+            else:
+                msg = f'Mail server unreachable ({delivery_msg}). OTP generated for UI display.'
         else:
-            msg = f'Mail server unreachable ({delivery_msg}). Please verify SMTP configuration or contact your system administrator.'
+            msg = 'Verification code generated for testing (SMTP not configured).'
 
     elif method_upper == 'SMS':
         if not user.phone_number or not user.phone_number.strip():
             raise HTTPException(status_code=400, detail='No registered mobile phone number found for this user.')
         code = generate_numeric_otp(6)
         success, delivery_msg = send_sms_otp(user.phone_number, user.employee_name or user.name, code)
-        if not success:
+        if not success and not show_dev_otp:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"SMS delivery failed: {delivery_msg}")
         destination = mask_phone(user.phone_number)
         msg = f'Verification code dispatched to {destination}'
@@ -388,13 +399,17 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
 
     save_mfa_ticket()
 
-    return {
+    response_payload = {
         'success': True,
         'method': method_upper,
         'destination': destination,
         'message': msg,
         'expires_in_seconds': 300,
     }
+    if show_dev_otp:
+        response_payload['otp'] = code
+
+    return response_payload
 
 @router.post('/mfa/setup-totp', response_model=MFASetupTOTPResponse)
 def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):

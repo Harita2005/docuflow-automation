@@ -8,10 +8,17 @@ from app.services.mfa_service import (
     create_mfa_ticket,
     is_email_otp_available,
 )
+from app.config.settings import settings
 from app.database.connection import SessionLocal
 from app.database.models import User, OTPVerification
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def ensure_hardened_production_mode(monkeypatch):
+    """Ensure tests 1-5 test hardened production mode where SHOW_OTP_IN_UI is False."""
+    monkeypatch.setattr(settings, "SHOW_OTP_IN_UI", False)
 
 
 @pytest.fixture(scope="module")
@@ -168,3 +175,19 @@ def test_5_user_with_only_email_has_empty_available_methods_when_smtp_missing(te
         assert data.get("mfa_required") is True
         assert data.get("email_otp_available") is False
         assert data.get("available_methods") == [], f"Expected empty available_methods for locked user, got {data.get('available_methods')}"
+
+
+def test_6_dev_testing_mode_returns_otp_when_show_otp_in_ui_is_true(test_users):
+    """When SHOW_OTP_IN_UI is True (testing mode), OTP is returned in send-otp for UI display."""
+    user = test_users["user_with_email"]
+    ticket = create_mfa_ticket(user.id, user.username)
+    with patch("app.routers.auth.should_show_dev_otp", return_value=True):
+        res = client.post(
+            "/api/auth/mfa/send-otp",
+            json={"ticket": ticket, "method": "EMAIL"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data.get("success") is True
+        assert "otp" in data
+        assert len(data["otp"]) == 6
