@@ -33,6 +33,7 @@ from app.services.mfa_service import (
     generate_totp_secret,
     get_mfa_ticket,
     get_totp_provisioning_uri,
+    is_email_otp_available,
     mask_email,
     mask_phone,
     send_email_otp,
@@ -193,12 +194,14 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 ticket_data['password_verified'] = True
                 save_mfa_ticket()
 
+            email_available = is_email_otp_available(db=db)
             available_methods = []
-            if user.email and '@' in user.email:
+            if email_available and user.email and '@' in user.email:
                 available_methods.append('EMAIL')
             if user.phone_number and user.phone_number.strip():
                 available_methods.append('SMS')
-            available_methods.append('AUTHENTICATOR')
+            if user.mfa_secret:
+                available_methods.append('AUTHENTICATOR')
 
             has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
 
@@ -211,6 +214,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 'mfa_required': True,
                 'mfa_ticket': ticket,
                 'available_methods': available_methods,
+                'email_otp_available': email_available,
                 'selected_method': None,
                 'initial_otp_sent': False,
                 'masked_email': mask_email(user.email) if user.email else '',
@@ -261,12 +265,14 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
     # Discover available MFA methods based on actual user profile in DB
+    email_available = is_email_otp_available(db=db)
     available_methods = []
-    if user.email and '@' in user.email:
+    if email_available and user.email and '@' in user.email:
         available_methods.append('EMAIL')
     if user.phone_number and user.phone_number.strip():
         available_methods.append('SMS')
-    available_methods.append('AUTHENTICATOR')
+    if user.mfa_secret:
+        available_methods.append('AUTHENTICATOR')
 
     has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
     ticket = create_mfa_ticket(user.id, user.username)
@@ -280,6 +286,7 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         'mfa_required': True,
         'mfa_ticket': ticket,
         'available_methods': available_methods,
+        'email_otp_available': email_available,
         'selected_method': None,
         'initial_otp_sent': False,
         'masked_email': mask_email(user.email) if user.email else '',
@@ -315,11 +322,15 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         remaining = int(60 - (time.time() - last_sent))
         raise HTTPException(status_code=429, detail=f'Please wait {remaining} seconds before requesting a new verification code.')
 
-    code = generate_numeric_otp(6)
-
     if method_upper == 'EMAIL':
+        if not is_email_otp_available(db=db):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Email verification is not available right now. Please use your authenticator app or contact your administrator.",
+            )
         if not user.email or '@' not in user.email:
             raise HTTPException(status_code=400, detail='No registered email address found for this user.')
+        code = generate_numeric_otp(6)
         config = db.query(NotificationProviderConfig).first()
         config_dict = None
         if config and config.smtp_server:
@@ -344,6 +355,7 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
     elif method_upper == 'SMS':
         if not user.phone_number or not user.phone_number.strip():
             raise HTTPException(status_code=400, detail='No registered mobile phone number found for this user.')
+        code = generate_numeric_otp(6)
         success, delivery_msg = send_sms_otp(user.phone_number, user.employee_name or user.name, code)
         if not success:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"SMS delivery failed: {delivery_msg}")

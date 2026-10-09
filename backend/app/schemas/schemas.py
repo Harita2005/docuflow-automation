@@ -21,6 +21,7 @@ class TokenResponse(BaseModel):
     mfa_required: bool = False
     mfa_ticket: Optional[str] = None
     available_methods: Optional[List[str]] = None
+    email_otp_available: bool = False
     masked_email: Optional[str] = None
     masked_phone: Optional[str] = None
     has_authenticator_setup: bool = False

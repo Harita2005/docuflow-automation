@@ -266,8 +266,124 @@ def verify_totp(secret: str, code: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Email OTP
+# Email OTP & Availability
 # ---------------------------------------------------------------------------
+
+def is_email_otp_available(
+    db: Optional[Any] = None,
+    smtp_config: Optional[dict] = None,
+) -> bool:
+    """
+    Returns True only if all required SMTP settings (host, port, sender,
+    and credentials) are set and not placeholders.
+    Never exposes or logs secret values.
+    """
+    try:
+        if smtp_config is not None:
+            smtp_host = (smtp_config.get("smtp_server") or smtp_config.get("host") or "").strip()
+            port_val = smtp_config.get("port") or 587
+            smtp_user = (smtp_config.get("username") or smtp_config.get("user") or "").strip()
+            smtp_password = (smtp_config.get("encrypted_password") or smtp_config.get("password") or "").strip()
+            sender_email = (smtp_config.get("sender_email") or smtp_config.get("from") or smtp_user).strip()
+        else:
+            config = {}
+            if db is not None:
+                try:
+                    from app.database.models import NotificationProviderConfig
+                    db_cfg = db.query(NotificationProviderConfig).first()
+                    if db_cfg and getattr(db_cfg, "smtp_server", ""):
+                        config = {
+                            "smtp_server": getattr(db_cfg, "smtp_server", ""),
+                            "port": getattr(db_cfg, "port", None),
+                            "username": getattr(db_cfg, "username", ""),
+                            "encrypted_password": getattr(db_cfg, "encrypted_password", ""),
+                            "sender_email": getattr(db_cfg, "sender_email", ""),
+                            "sender_name": getattr(db_cfg, "sender_name", ""),
+                        }
+                except Exception:
+                    config = {}
+
+            smtp_host = (
+                config.get("smtp_server")
+                or os.getenv("SMTP_HOST", "")
+                or os.getenv("SMTP_SERVER", "")
+                or getattr(settings, "SMTP_HOST", "")
+                or ""
+            ).strip()
+
+            port_val = (
+                config.get("port")
+                or os.getenv("SMTP_PORT")
+                or getattr(settings, "SMTP_PORT", None)
+                or 587
+            )
+
+            smtp_user = (
+                config.get("username")
+                or os.getenv("SMTP_USERNAME", "")
+                or os.getenv("SMTP_USER", "")
+                or getattr(settings, "SMTP_USERNAME", "")
+                or getattr(settings, "SMTP_USER", "")
+                or ""
+            ).strip()
+
+            smtp_password = (
+                config.get("encrypted_password")
+                or os.getenv("SMTP_PASSWORD", "")
+                or os.getenv("SMTP_PASS", "")
+                or getattr(settings, "SMTP_PASSWORD", "")
+                or getattr(settings, "SMTP_PASS", "")
+                or ""
+            ).strip()
+
+            sender_email = (
+                config.get("sender_email")
+                or os.getenv("SMTP_FROM", "")
+                or os.getenv("SMTP_SENDER_EMAIL", "")
+                or os.getenv("SMTP_SENDER_MAIL", "")
+                or getattr(settings, "SMTP_FROM", "")
+                or getattr(settings, "SMTP_SENDER_EMAIL", "")
+                or smtp_user
+            ).strip()
+
+        def is_placeholder(val: str) -> bool:
+            if not val:
+                return True
+            v = val.strip().lower()
+            if v in {
+                "", "none", "null", "undefined", "false", "todo", "placeholder",
+                "changeme", "change_me", "your_username", "your_password",
+                "your_email", "your-smtp-host", "your-smtp-server",
+                "smtp.example.com", "example.com", "noreply@example.com",
+                "user@example.com", "test@example.com", "secret", "password"
+            }:
+                return True
+            if v.startswith("<") and v.endswith(">"):
+                return True
+            if v.startswith("your_") or v.startswith("your-") or v.endswith("example.com"):
+                return True
+            return False
+
+        if is_placeholder(smtp_host):
+            return False
+
+        try:
+            port = int(port_val)
+            if port <= 0 or port > 65535:
+                return False
+        except (ValueError, TypeError):
+            return False
+
+        if is_placeholder(smtp_user) or is_placeholder(smtp_password):
+            return False
+
+        if is_placeholder(sender_email) or "@" not in sender_email:
+            return False
+
+        return True
+    except Exception:
+        return False
+
 
 def send_email_otp(
     email: str,

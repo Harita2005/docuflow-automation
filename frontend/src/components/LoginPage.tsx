@@ -46,7 +46,7 @@ export default function LoginPage({
 
   // MFA State
   const [mfaTicket, setMfaTicket] = useState("");
-  const [availableMethods, setAvailableMethods] = useState<MFAMethod[]>(["EMAIL"]);
+  const [availableMethods, setAvailableMethods] = useState<MFAMethod[]>([]);
   const [maskedEmail, setMaskedEmail] = useState("");
   const [maskedPhone, setMaskedPhone] = useState("");
   const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
@@ -181,11 +181,20 @@ export default function LoginPage({
         setMfaTicket(data.mfa_ticket);
         const methods: MFAMethod[] = Array.isArray(data.available_methods)
           ? data.available_methods
-          : ["EMAIL", "AUTHENTICATOR"];
+          : [];
         setAvailableMethods(methods);
         setMaskedEmail(data.masked_email || "");
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
+
+        // Preselect the next available method (Authenticator, then SMS)
+        if (methods.includes("EMAIL")) {
+          setSelectedMethod("EMAIL");
+        } else if (methods.includes("AUTHENTICATOR")) {
+          setSelectedMethod("AUTHENTICATOR");
+        } else if (methods.includes("SMS")) {
+          setSelectedMethod("SMS");
+        }
 
         // Advance to Step 2: Choose Verification Method
         setStep(2);
@@ -712,110 +721,178 @@ export default function LoginPage({
                 </p>
               </div>
 
-              <div className="space-y-3 pt-2">
-                {/* 1. EMAIL OTP */}
-                <button
-                  type="button"
-                  disabled={loading || !availableMethods.includes("EMAIL")}
-                  onClick={() => void handleSelectMethod("EMAIL")}
-                  className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
-                >
-                  <div className="flex items-center space-x-3.5">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#006B3F] flex items-center justify-center shrink-0">
-                      <Mail className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        Email OTP
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {maskedEmail ? `Send code to ${maskedEmail}` : "Registered email"}
+              {availableMethods.length === 0 ? (
+                <div className="space-y-4 pt-2">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-left">
+                    <div className="flex items-start space-x-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-900">
+                          Verification Unavailable
+                        </h3>
+                        <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                          No verification method is available. Please contact your administrator.
+                        </p>
                       </div>
                     </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                </button>
-
-                {/* 2. SMS OTP */}
-                {availableMethods.includes("SMS") ? (
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => void handleSelectMethod("SMS")}
-                    className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                    onClick={handleBackToId}
+                    className="w-full py-3.5 px-4 bg-[#006B3F] hover:bg-[#005A35] text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
                   >
-                    <div className="flex items-center space-x-3.5">
-                      <div className="w-10 h-10 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
-                        <Smartphone className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          SMS OTP
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {maskedPhone ? `Send code to ${maskedPhone}` : "Registered mobile number"}
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    <span>Back to login</span>
                   </button>
-                ) : (
-                  <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
-                    <div className="flex items-center space-x-3.5">
-                      <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
-                        <Smartphone className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-700">
-                          SMS OTP
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          No registered phone number found on account
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
-                      Unavailable
-                    </span>
-                  </div>
-                )}
-
-                {/* 3. AUTHENTICATOR APP */}
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => void handleSelectMethod("AUTHENTICATOR")}
-                  className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
-                >
-                  <div className="flex items-center space-x-3.5">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        Authenticator App (TOTP)
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {hasAuthenticatorSetup
-                          ? "Use Google or Microsoft Authenticator code"
-                          : "First-time setup with QR code scan"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span
-                      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                        hasAuthenticatorSetup
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-purple-100 text-purple-800"
-                      }`}
+                </div>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  {/* 1. EMAIL OTP */}
+                  {availableMethods.includes("EMAIL") ? (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleSelectMethod("EMAIL")}
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
                     >
-                      {hasAuthenticatorSetup ? "Configured" : "Setup Required"}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
-                  </div>
-                </button>
-              </div>
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#006B3F] flex items-center justify-center shrink-0">
+                          <Mail className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            Email OTP
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {maskedEmail ? `Send code to ${maskedEmail}` : "Registered email"}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                    </button>
+                  ) : (
+                    <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
+                          <Mail className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-700">
+                            Email OTP
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Email OTP is not configured yet
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
+                        Disabled
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 2. SMS OTP */}
+                  {availableMethods.includes("SMS") ? (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleSelectMethod("SMS")}
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                    >
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            SMS OTP
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {maskedPhone ? `Send code to ${maskedPhone}` : "Registered mobile number"}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                    </button>
+                  ) : (
+                    <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-700">
+                            SMS OTP
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            No registered phone number found on account
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
+                        Unavailable
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 3. AUTHENTICATOR APP */}
+                  {availableMethods.includes("AUTHENTICATOR") ? (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleSelectMethod("AUTHENTICATOR")}
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                    >
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
+                          <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            Authenticator App (TOTP)
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {hasAuthenticatorSetup
+                              ? "Use Google or Microsoft Authenticator code"
+                              : "First-time setup with QR code scan"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span
+                          className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                            hasAuthenticatorSetup
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-purple-100 text-purple-800"
+                          }`}
+                        >
+                          {hasAuthenticatorSetup ? "Configured" : "Setup Required"}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
+                          <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-700">
+                            Authenticator App (TOTP)
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Not enrolled on this account
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
+                        Unavailable
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
