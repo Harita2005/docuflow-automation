@@ -191,7 +191,7 @@ def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depe
         logger.debug('Handled exception: %s', url_err)
         return {'success': False, 'target_url': target_url, 'error': str(getattr(url_err, 'detail', url_err))}
     try:
-        resp = requests.post(safe_target_url, data=payload_json.encode('utf-8'), headers=headers, timeout=10)
+        resp = requests.post(safe_target_url, data=payload_json.encode('utf-8'), headers=headers, timeout=10, allow_redirects=False)
         return {'success': resp.status_code < 400, 'status_code': resp.status_code, 'target_url': safe_target_url, 'response': resp.text[:1000]}
     except Exception as e:
         logger.debug('Handled exception: %s', e)

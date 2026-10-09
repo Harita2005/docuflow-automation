@@ -307,7 +307,7 @@ def execute_test_callback(body: TestCallbackRequest, db: Session=Depends(get_db)
             logger.debug('Handled exception: %s', url_err)
             return {'success': False, 'error': str(getattr(url_err, 'detail', url_err)), 'request_preview': request_preview}
         start = time.time()
-        resp = requests.request(method=method, url=safe_target_url, data=body_bytes, headers=final_headers, timeout=rule_obj.timeout_seconds or 15)
+        resp = requests.request(method=method, url=safe_target_url, data=body_bytes, headers=final_headers, timeout=rule_obj.timeout_seconds or 15, allow_redirects=False)
         elapsed_ms = int((time.time() - start) * 1000)
         return {'success': resp.status_code < 400, 'status_code': resp.status_code, 'response_time_ms': elapsed_ms, 'request_preview': request_preview, 'response_body': resp.text[:2000]}
     except requests.exceptions.RequestException as req_err:
