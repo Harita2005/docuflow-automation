@@ -39,6 +39,7 @@ export default function LoginPage({
   onClearKickedReason,
 }: LoginPageProps) {
   const [employeeId, setEmployeeId] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   // 1 = Employee ID, 2 = Choose MFA Method, 3 = Verification (Code or QR Scan)
@@ -149,6 +150,11 @@ export default function LoginPage({
       return;
     }
 
+    if (!password) {
+      setOtpError("Please enter your password");
+      return;
+    }
+
     setLoading(true);
     setOtpError("");
     setOtpSentNotice("");
@@ -161,6 +167,7 @@ export default function LoginPage({
         },
         body: JSON.stringify({
           username: identifier,
+          password: password,
           device_info: getDeviceLabel(),
         }),
       });
@@ -653,10 +660,35 @@ export default function LoginPage({
                       onChange={(e) =>
                         setEmployeeId(e.target.value)
                       }
-                      placeholder="e.g. EMP001 or username"
+                      placeholder="e.g. admin or YUVASREE"
                       required
                       autoFocus
                       autoComplete="username"
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Field */}
+                <div className="space-y-1.5 text-left">
+                  <label className="text-xs font-semibold text-gray-800">
+                    Password
+                  </label>
+
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <Key className="h-4 w-4 text-gray-400" />
+                    </div>
+
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) =>
+                        setPassword(e.target.value)
+                      }
+                      placeholder="Enter your password"
+                      required
+                      autoComplete="current-password"
                       className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] transition-colors"
                     />
                   </div>
