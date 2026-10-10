@@ -50,12 +50,21 @@ PRINT 'Granting EXECUTE permissions on application stored procedures...';
 GRANT EXECUTE ON SCHEMA::dbo TO [docuflow_app];
 GO
 
--- 5. Explicitly Deny High-Risk Administrative / DDL Operations
+-- 5. Explicitly Deny High-Risk Administrative / DDL Operations and Protect Audit Immutability
 PRINT 'Explicitly denying high-privilege administrative actions...';
 DENY ALTER ANY USER TO [docuflow_app];
 DENY ALTER ANY ROLE TO [docuflow_app];
 DENY ALTER ANY SCHEMA TO [docuflow_app];
 DENY VIEW ANY DEFINITION TO [docuflow_app];
+
+-- SEC-08 Audit Log Immutability: Make audit and log tables insert-only for application account
+PRINT 'Enforcing append-only audit trail: denying UPDATE and DELETE on audit/log tables...';
+IF OBJECT_ID('dbo.audit_logs', 'U') IS NOT NULL
+    DENY UPDATE, DELETE ON dbo.audit_logs TO [docuflow_app];
+IF OBJECT_ID('dbo.user_access_logs', 'U') IS NOT NULL
+    DENY UPDATE, DELETE ON dbo.user_access_logs TO [docuflow_app];
+IF OBJECT_ID('dbo.system_logs', 'U') IS NOT NULL
+    DENY UPDATE, DELETE ON dbo.system_logs TO [docuflow_app];
 GO
 
 -- 6. Verification
