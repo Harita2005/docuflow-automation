@@ -257,3 +257,51 @@ def delete_user(
     user.deleted_at = datetime.datetime.utcnow()
     db.commit()
     return {'success': True, 'message': f'Employee {user.employee_id} deleted successfully'}
+
+@router.post('/{user_id}/unlock')
+@admin_router.post('/{user_id}/unlock')
+def unlock_user(
+    user_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    SEC-10 Admin Account Unlock:
+    Allows an administrator to immediately unlock an account locked out due to failed attempts,
+    by purging recent LOGIN_FAILED and ACCOUNT_LOCKED logs for the user.
+    """
+    if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to unlock employee accounts.')
+
+    user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='Employee not found')
+
+    from app.database.models import UserAccessLog, AuditLog
+    lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+    
+    # Remove recent lockout / failed records within the 15-minute window for this username
+    deleted_count = (
+        db.query(UserAccessLog)
+        .filter(
+            UserAccessLog.username == user.username,
+            UserAccessLog.event_type.in_(["LOGIN_FAILED", "ACCOUNT_LOCKED"]),
+            UserAccessLog.timestamp >= lockout_window
+        )
+        .delete(synchronize_session=False)
+    )
+
+    db.add(AuditLog(
+        invoice_id=None,
+        user=current_user.employee_name or current_user.name or current_user.username,
+        action='Account Unlocked',
+        stage='Authentication',
+        notes=f"Administrator '{current_user.username}' unlocked account '{user.username}'. Cleared {deleted_count} failed login records."
+    ))
+    db.commit()
+
+    return {
+        'success': True,
+        'message': f"Account for '{user.username}' has been unlocked successfully.",
+        'cleared_records': deleted_count
+    }
