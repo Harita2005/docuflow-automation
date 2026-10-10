@@ -22,7 +22,7 @@ def test_setup(db_session):
     if not normal:
         normal = db_session.query(User).filter(User.role == "employee").first()
     
-    # Ensure a sample document exists
+    # Ensure a sample document exists and normal user is authorized
     doc = db_session.query(Invoice).filter(Invoice.is_deleted == False).first()
     if not doc:
         doc = Invoice(
@@ -33,9 +33,17 @@ def test_setup(db_session):
             status="Pending Approval",
             current_stage=1,
             document_type="INVOICE",
+            contact_person=normal.username,
+            division=normal.division or "VCC",
             is_deleted=False
         )
         db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+    else:
+        # Align doc division and contact_person with normal user so IDOR guard permits access
+        doc.division = normal.division or "VCC"
+        doc.contact_person = normal.username
         db_session.commit()
         db_session.refresh(doc)
         

@@ -1388,6 +1388,7 @@ def save_document_more_info_config(
 def get_document_type_available_fields(
     document_type: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Returns available fields catalogue for a given document type.

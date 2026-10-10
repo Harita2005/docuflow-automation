@@ -3047,10 +3047,12 @@ def get_document_comments(id: str, db: Session=Depends(get_db), current_user: Us
 @router.post('/api/documents/{id}/comments')
 @router.post('/api/records/{id}/comments')
 @router.post('/api/invoices/{id}/comments')
-def add_document_comment(id: str, payload: dict, db: Session=Depends(get_db)):
+def add_document_comment(id: str, payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, id)
+    if not authorize_document_access(current_user, inv) and not is_user_in_approver_pool(current_user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You do not have permission to comment on this document.")
     text = payload.get('text') or payload.get('comment') or payload.get('notes') or ''
-    author = payload.get('author') or payload.get('user') or 'User'
+    author = current_user.employee_name or current_user.name or current_user.username or 'User'
     if text:
         db.add(AuditLog(invoice_id=str(inv.id), user=author, action='Comment Added', stage=f'Stage {inv.current_stage or 1}', notes=text))
         db.commit()
@@ -3059,8 +3061,10 @@ def add_document_comment(id: str, payload: dict, db: Session=Depends(get_db)):
 @router.get('/api/documents/{id}/versions')
 @router.get('/api/records/{id}/versions')
 @router.get('/api/invoices/{id}/versions')
-def get_document_versions(id: str, db: Session=Depends(get_db)):
+def get_document_versions(id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, id)
+    if not authorize_document_access(current_user, inv) and not is_user_in_approver_pool(current_user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You do not have permission to view versions for this document.")
     versions = []
     if inv.file_url:
         versions.append({'version_number': 1, 'file_url': inv.file_url, 'uploaded_at': inv.created_at.isoformat() if inv.created_at else datetime.datetime.utcnow().isoformat(), 'uploaded_by': 'System / Approver', 'is_current': True})
@@ -3624,10 +3628,13 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
 
 @router.get('/api/invoices/{invoice_id}/checklist')
 @router.get('/api/documents/{invoice_id}/checklist')
-def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db)):
+def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail='Invoice not found')
+
+    if not authorize_document_access(current_user, inv) and not is_user_in_approver_pool(current_user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail="Access Denied: You do not have permission to view this document's checklist.")
 
     is_unrouted = (
         not inv.workflow_profile_id
