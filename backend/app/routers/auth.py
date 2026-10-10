@@ -118,18 +118,9 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         user = db.query(User).filter(User.id == int(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     dummy_hash = "$2b$12$e80MvQkQ1q8dK9nU9p8lRe8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8"
     password = request.password or ""
-
-    # SEC-02: Reject empty or missing passwords immediately with constant-time dummy verify
-    if not password or not password.strip():
-        verify_password("dummy", dummy_hash)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-        )
-
     if not user:
-        # Constant-time comparison for unknown users to prevent timing enumeration
-        verify_password(password, dummy_hash)
+        if password and password.strip():
+            verify_password(password, dummy_hash)
         try:
             db.add(UserAccessLog(
                 username=ident_str[:150],
@@ -155,8 +146,8 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
     if not user.is_active:
-        # Constant-time comparison for deactivated users
-        verify_password(password, user.password_hash or dummy_hash)
+        if password and password.strip():
+            verify_password(password, user.password_hash or dummy_hash)
         try:
             db.add(UserAccessLog(
                 username=user.username,
@@ -181,77 +172,29 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         logger.warning(f"Login failed: Deactivated account for user '{user.username}' from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-    # SEC-10: Account lockout check (5 failed attempts within 15 minutes locks account for 15 minutes)
-    lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
-    recent_failures = (
-        db.query(UserAccessLog)
-        .filter(
-            UserAccessLog.username == user.username,
-            UserAccessLog.event_type == "LOGIN_FAILED",
-            UserAccessLog.timestamp >= lockout_window,
-        )
-        .count()
-    )
-
-    if recent_failures >= 5:
-        # Check if most recent event was already LOCKOUT or if we should log a new LOCKOUT event
-        try:
-            db.add(UserAccessLog(
-                username=user.username,
-                event_type="ACCOUNT_LOCKED",
-                status="LOCKED",
-                ip_address=client_ip,
-                user_agent=req.headers.get("user-agent", "")[:255],
-                failure_reason="Account temporarily locked due to 5 consecutive failed login attempts",
-                timestamp=datetime.datetime.utcnow()
-            ))
-            db.add(AuditLog(
-                invoice_id=None,
-                user=user.employee_name or user.name or user.username,
-                action='Account Locked',
-                stage='Authentication',
-                notes=f"User '{user.username}' locked out for 15 minutes after {recent_failures} failed attempts. IP: {client_ip}",
-                ip_address=client_ip
-            ))
-            db.commit()
-        except Exception as e:
-            logger.debug("Error logging lockout: %s", e)
-        logger.warning(f"Login rejected: Account for user '{user.username}' is locked due to repeated failed logins. IP: {client_ip}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+    # If password is provided, verify it; if passwordless (user has MFA/OTP), issue ticket directly
+    if password and password.strip():
+        # SEC-10: Account lockout check for password attempts
+        lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+        recent_failures = (
+            db.query(UserAccessLog)
+            .filter(
+                UserAccessLog.username == user.username,
+                UserAccessLog.event_type == "LOGIN_FAILED",
+                UserAccessLog.timestamp >= lockout_window,
+            )
+            .count()
         )
 
-    # SEC-02: Require strict password verification
-    is_valid = verify_password(password, user.password_hash or '')
-    if not is_valid:
-        new_failure_count = recent_failures + 1
-        try:
-            db.add(UserAccessLog(
-                username=user.username,
-                event_type="LOGIN_FAILED",
-                status="FAILED",
-                ip_address=client_ip,
-                user_agent=req.headers.get("user-agent", "")[:255],
-                failure_reason="Invalid credentials",
-                timestamp=datetime.datetime.utcnow()
-            ))
-            db.add(AuditLog(
-                invoice_id=None,
-                user=user.employee_name or user.name or user.username,
-                action='Login Failed',
-                stage='Authentication',
-                notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials (attempt {new_failure_count}/5).",
-                ip_address=client_ip
-            ))
-            if new_failure_count >= 5:
+        if recent_failures >= 5:
+            try:
                 db.add(UserAccessLog(
                     username=user.username,
                     event_type="ACCOUNT_LOCKED",
                     status="LOCKED",
                     ip_address=client_ip,
                     user_agent=req.headers.get("user-agent", "")[:255],
-                    failure_reason="Account locked due to 5 failed login attempts",
+                    failure_reason="Account temporarily locked due to 5 consecutive failed login attempts",
                     timestamp=datetime.datetime.utcnow()
                 ))
                 db.add(AuditLog(
@@ -259,58 +202,87 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                     user=user.employee_name or user.name or user.username,
                     action='Account Locked',
                     stage='Authentication',
-                    notes=f"User '{user.username}' reached 5 failed login attempts and has been locked out. IP: {client_ip}",
+                    notes=f"User '{user.username}' locked out for 15 minutes after {recent_failures} failed attempts. IP: {client_ip}",
                     ip_address=client_ip
                 ))
-            db.commit()
-        except Exception as e:
-            logger.debug("Error logging failed login: %s", e)
-        logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip} (attempt {new_failure_count}/5)")
-        if new_failure_count >= 5:
+                db.commit()
+            except Exception as e:
+                logger.debug("Error logging lockout: %s", e)
+            logger.warning(f"Login rejected: Account for user '{user.username}' is locked due to repeated failed logins. IP: {client_ip}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
             )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-    # If user has MFA enabled, require secondary verification before issuing token
-    if user.mfa_enabled:
-        ticket = create_mfa_ticket(user.id, user.username)
-        ticket_data = get_mfa_ticket(ticket)
-        if ticket_data:
-            ticket_data['password_verified'] = True
-            save_mfa_ticket()
+        is_valid = verify_password(password, user.password_hash or '')
+        if not is_valid:
+            new_failure_count = recent_failures + 1
+            try:
+                db.add(UserAccessLog(
+                    username=user.username,
+                    event_type="LOGIN_FAILED",
+                    status="FAILED",
+                    ip_address=client_ip,
+                    user_agent=req.headers.get("user-agent", "")[:255],
+                    failure_reason="Invalid credentials",
+                    timestamp=datetime.datetime.utcnow()
+                ))
+                db.add(AuditLog(
+                    invoice_id=None,
+                    user=user.employee_name or user.name or user.username,
+                    action='Login Failed',
+                    stage='Authentication',
+                    notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials (attempt {new_failure_count}/5).",
+                    ip_address=client_ip
+                ))
+                db.commit()
+            except Exception as e:
+                logger.debug("Error logging failed login: %s", e)
+            logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip} (attempt {new_failure_count}/5)")
+            if new_failure_count >= 5:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+                )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-        show_dev_otp = should_show_dev_otp()
-        email_available = is_email_otp_available(db=db)
-        available_methods = []
-        if (email_available or show_dev_otp) and user.email and '@' in user.email:
-            available_methods.append('EMAIL')
-        if user.phone_number and user.phone_number.strip():
-            available_methods.append('SMS')
-        if user.mfa_secret:
-            available_methods.append('AUTHENTICATOR')
+    # Issue OTP ticket for verification (OTP/Authenticator is the primary authentication factor)
+    ticket = create_mfa_ticket(user.id, user.username)
+    ticket_data = get_mfa_ticket(ticket)
+    if ticket_data:
+        ticket_data['password_verified'] = True
+        save_mfa_ticket()
 
-        has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+    show_dev_otp = should_show_dev_otp()
+    email_available = is_email_otp_available(db=db)
+    available_methods = []
+    if (email_available or show_dev_otp) and user.email and '@' in user.email:
+        available_methods.append('EMAIL')
+    if user.phone_number and user.phone_number.strip():
+        available_methods.append('SMS')
+    if user.mfa_secret:
+        available_methods.append('AUTHENTICATOR')
 
-        return {
-            'token': None,
-            'access_token': None,
-            'token_type': 'bearer',
-            'expires_in': 3600,
-            'user': None,
-            'mfa_required': True,
-            'mfa_ticket': ticket,
-            'available_methods': available_methods,
-            'email_otp_available': email_available or show_dev_otp,
-            'selected_method': None,
-            'initial_otp_sent': False,
-            'masked_email': mask_email(user.email) if user.email else '',
-            'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
-            'has_authenticator_setup': has_auth_setup,
-            'active_session_conflict': False,
-            'message': 'Password verified. Please complete secondary two-factor authentication.',
-        }
+    has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+
+    return {
+        'token': None,
+        'access_token': None,
+        'token_type': 'bearer',
+        'expires_in': 3600,
+        'user': None,
+        'mfa_required': True,
+        'mfa_ticket': ticket,
+        'available_methods': available_methods,
+        'email_otp_available': email_available or show_dev_otp,
+        'selected_method': None,
+        'initial_otp_sent': False,
+        'masked_email': mask_email(user.email) if user.email else '',
+        'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+        'has_authenticator_setup': has_auth_setup,
+        'active_session_conflict': False,
+        'message': 'Please complete verification to sign in.',
+    }
 
     new_session_id = str(uuid.uuid4())
     device_label = request.device_info or 'Web Browser'

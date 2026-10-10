@@ -150,11 +150,6 @@ export default function LoginPage({
       return;
     }
 
-    if (!password) {
-      setOtpError("Please enter your password");
-      return;
-    }
-
     setLoading(true);
     setOtpError("");
     setOtpSentNotice("");
@@ -669,37 +664,12 @@ export default function LoginPage({
                   </div>
                 </div>
 
-                {/* Password Field */}
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-gray-800">
-                    Password
-                  </label>
-
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <Key className="h-4 w-4 text-gray-400" />
-                    </div>
-
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) =>
-                        setPassword(e.target.value)
-                      }
-                      placeholder="Enter your password"
-                      required
-                      autoComplete="current-password"
-                      className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] transition-colors"
-                    />
-                  </div>
-                </div>
-
                 {/* 2FA info badge */}
                 <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
                   <ShieldCheck className="h-4 w-4 text-[#006B3F] mt-0.5 shrink-0" />
 
                   <p className="text-xs text-emerald-800 leading-relaxed">
-                    Secure 2-Factor Authentication via <strong>Email OTP</strong>,{" "}
+                    Secure passwordless login via <strong>Email OTP</strong>,{" "}
                     <strong>SMS OTP</strong>, or <strong>Authenticator App</strong>.
                   </p>
                 </div>
