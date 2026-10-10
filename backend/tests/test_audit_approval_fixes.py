@@ -515,5 +515,71 @@ def test_aud02_double_approval_returns_409_conflict_and_no_duplicate_logs(db_ses
         db_session.commit()
 
 
+def test_aud05_deterministic_rule_ordering_priority_desc_id_asc(db_session, test_setup):
+    """
+    AUD-05:
+    - Rule ordering must be deterministic: .order_by(BusinessRule.priority.desc(), BusinessRule.id.asc())
+    - When two rules have identical priority, the one with lower ID (created earlier) wins deterministically.
+    """
+    import json
+    from app.services.rules_engine import evaluate_business_rules_full
+    from app.database.models import BusinessRule, WorkflowProfile, WorkflowStepDefinition
+
+    wf1 = WorkflowProfile(profile_name=f"WF-P1-{uuid.uuid4().hex[:6]}", workflow_code="WFP1", is_deleted=False)
+    wf2 = WorkflowProfile(profile_name=f"WF-P2-{uuid.uuid4().hex[:6]}", workflow_code="WFP2", is_deleted=False)
+    db_session.add_all([wf1, wf2])
+    db_session.commit()
+
+    # Rule 1: priority 100
+    rule1 = BusinessRule(
+        rule_name=f"Rule-1-{uuid.uuid4().hex[:4]}",
+        priority=100,
+        target_workflow_id=wf1.profile_name,
+        conditions_json=json.dumps([{"field": "vendor_name", "operator": "equals", "value": "SharedVendor"}]),
+        is_active=True,
+        is_deleted=False
+    )
+    # Rule 2: same priority 100, also matches SharedVendor
+    rule2 = BusinessRule(
+        rule_name=f"Rule-2-{uuid.uuid4().hex[:4]}",
+        priority=100,
+        target_workflow_id=wf2.profile_name,
+        conditions_json=json.dumps([{"field": "vendor_name", "operator": "equals", "value": "SharedVendor"}]),
+        is_active=True,
+        is_deleted=False
+    )
+    db_session.add_all([rule1, rule2])
+    db_session.commit()
+
+    # Ensure rule1.id < rule2.id
+    first_rule, second_rule = (rule1, rule2) if rule1.id < rule2.id else (rule2, rule1)
+
+    inv = Invoice(
+        id=f"DOC-AUD05-{uuid.uuid4().hex[:6]}",
+        invoice_number=f"INV-AUD05-{uuid.uuid4().hex[:4]}",
+        vendor_name="SharedVendor",
+        amount=100.0,
+        status="Uploaded",
+        contact_person="system",
+        is_deleted=False
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    try:
+        res = evaluate_business_rules_full(db_session, inv)
+        assert res is not None, "Expected matching rule"
+        # Must deterministically evaluate the rule with lower id when priorities are equal
+        assert res["rule_name"] == first_rule.rule_name, f"Expected deterministic match {first_rule.rule_name}, got {res['rule_name']}"
+        assert res["target_workflow_id"] == first_rule.target_workflow_id
+    finally:
+        db_session.delete(inv)
+        db_session.delete(rule1)
+        db_session.delete(rule2)
+        db_session.delete(wf1)
+        db_session.delete(wf2)
+        db_session.commit()
+
+
 
 

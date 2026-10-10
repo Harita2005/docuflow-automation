@@ -658,7 +658,7 @@ def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
     return res.get('target_workflow_id') if res else None
 
 def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict[str, Any]]:
-    rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc()).all()
+    rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc(), BusinessRule.id.asc()).all()
     for rule in rules:
         if not rule.conditions_json:
             continue
@@ -695,14 +695,14 @@ def simulate_rule_evaluation(db: Session, mock_invoice: Any, draft_rules: Option
     Dry-run simulation engine for Business Rules.
     Evaluates mock document attributes against all active and draft rules, producing a full execution trace and stage breakdown.
     """
-    db_rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc()).all()
+    db_rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc(), BusinessRule.id.asc()).all()
     all_rules_to_eval = []
     if draft_rules:
         for idx, dr in enumerate(draft_rules):
-            all_rules_to_eval.append({'rule_name': dr.get('rule_name') or f'Draft Rule #{idx + 1}', 'priority': int(dr.get('priority') or 999), 'target_workflow_id': dr.get('target_workflow_id') or '', 'conditions_json': dr.get('conditions_json') or '[]', 'rule_action': dr.get('rule_action') or 'WORKFLOW_ROUTE', 'cancel_reason': dr.get('cancel_reason') or '', 'is_draft': True})
+            all_rules_to_eval.append({'id': dr.get('id', 0), 'rule_name': dr.get('rule_name') or f'Draft Rule #{idx + 1}', 'priority': int(dr.get('priority') or 999), 'target_workflow_id': dr.get('target_workflow_id') or '', 'conditions_json': dr.get('conditions_json') or '[]', 'rule_action': dr.get('rule_action') or 'WORKFLOW_ROUTE', 'cancel_reason': dr.get('cancel_reason') or '', 'is_draft': True})
     for r in db_rules:
-        all_rules_to_eval.append({'rule_name': r.rule_name, 'priority': r.priority, 'target_workflow_id': r.target_workflow_id, 'conditions_json': r.conditions_json, 'rule_action': r.rule_action or 'WORKFLOW_ROUTE', 'cancel_reason': r.cancel_reason or '', 'is_draft': False})
-    all_rules_to_eval.sort(key=lambda x: x.get('priority', 0), reverse=True)
+        all_rules_to_eval.append({'id': r.id, 'rule_name': r.rule_name, 'priority': r.priority, 'target_workflow_id': r.target_workflow_id, 'conditions_json': r.conditions_json, 'rule_action': r.rule_action or 'WORKFLOW_ROUTE', 'cancel_reason': r.cancel_reason or '', 'is_draft': False})
+    all_rules_to_eval.sort(key=lambda x: (-x.get('priority', 0), x.get('id', 0)))
     matched_rule = None
     trace = []
     for rule_info in all_rules_to_eval:

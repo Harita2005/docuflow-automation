@@ -170,6 +170,32 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [valueListBulkInput, setValueListBulkInput] = useState('');
   const [workflowNotice, setWorkflowNotice] = useState(null);
 
+  // Detect active rules that share the exact same priority and potential overlapping conditions
+  const overlappingWarnings = useMemo(() => {
+    const warnings = [];
+    const activeRules = (rules || []).filter(r => r.is_active !== false && !r.is_deleted);
+    for (let i = 0; i < activeRules.length; i++) {
+      for (let j = i + 1; j < activeRules.length; j++) {
+        const r1 = activeRules[i];
+        const r2 = activeRules[j];
+        if (Number(r1.priority || 10) === Number(r2.priority || 10)) {
+          // Check if document_type overlaps
+          const dt1 = (r1.document_type || 'AP INVOICE').toUpperCase().trim();
+          const dt2 = (r2.document_type || 'AP INVOICE').toUpperCase().trim();
+          if (dt1 === dt2 || !dt1 || !dt2) {
+            warnings.push({
+              r1Name: r1.rule_name,
+              r2Name: r2.rule_name,
+              priority: r1.priority || 10,
+              docType: dt1 || dt2
+            });
+          }
+        }
+      }
+    }
+    return warnings;
+  }, [rules]);
+
   // Fetch Workflow Profiles on Mount
   useEffect(() => {
     const fetchWf = async () => {
@@ -2072,6 +2098,26 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
   return (
     <div className="flex flex-col gap-2.5 w-full pb-6">
+      {overlappingWarnings.length > 0 && (
+        <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-900 text-xs rounded-md flex flex-col gap-1 shadow-2xs">
+          <div className="flex items-center gap-1.5 font-bold text-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>Rule Conflict Warning: Same Priority &amp; Overlapping Conditions Detected</span>
+          </div>
+          <div className="text-[11px] text-amber-800/90 pl-5">
+            {overlappingWarnings.slice(0, 3).map((w, idx) => (
+              <p key={idx}>
+                • Rules <strong>&quot;{w.r1Name}&quot;</strong> and <strong>&quot;{w.r2Name}&quot;</strong> share Priority <strong>{w.priority}</strong> for {w.docType}. Deterministic resolution will prioritize the earlier ID.
+              </p>
+            ))}
+            {overlappingWarnings.length > 3 && (
+              <p className="text-[10px] text-amber-700 italic mt-0.5">
+                + {overlappingWarnings.length - 3} more overlapping rules with identical priority.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       {workflowNotice && (
         <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
           <span>⚠️ {workflowNotice}</span>
