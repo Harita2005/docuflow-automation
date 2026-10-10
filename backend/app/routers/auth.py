@@ -115,7 +115,20 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         )
     if not user and ident_str.isdigit():
         user = db.query(User).filter(User.id == int(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
+    dummy_hash = "$2b$12$e80MvQkQ1q8dK9nU9p8lRe8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8"
+    password = request.password or ""
+
+    # SEC-02: Reject empty or missing passwords immediately with constant-time dummy verify
+    if not password or not password.strip():
+        verify_password("dummy", dummy_hash)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
     if not user:
+        # Constant-time comparison for unknown users to prevent timing enumeration
+        verify_password(password, dummy_hash)
         try:
             db.add(UserAccessLog(
                 username=ident_str[:150],
@@ -139,7 +152,10 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
             logger.debug("Error logging failed login: %s", e)
         logger.warning(f"Login failed: User '{ident_str}' not found from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
+
     if not user.is_active:
+        # Constant-time comparison for deactivated users
+        verify_password(password, user.password_hash or dummy_hash)
         try:
             db.add(UserAccessLog(
                 username=user.username,
@@ -163,144 +179,112 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
             logger.debug("Error logging failed login: %s", e)
         logger.warning(f"Login failed: Deactivated account for user '{user.username}' from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
-    if request.password:
-        is_valid = verify_password(request.password, user.password_hash or '')
-        if not is_valid:
-            try:
-                db.add(UserAccessLog(
-                    username=user.username,
-                    event_type="LOGIN_FAILED",
-                    status="FAILED",
-                    ip_address=client_ip,
-                    user_agent=req.headers.get("user-agent", "")[:255],
-                    failure_reason="Invalid credentials",
-                    timestamp=datetime.datetime.utcnow()
-                ))
-                db.add(AuditLog(
-                    invoice_id=None,
-                    user=user.employee_name or user.name or user.username,
-                    action='Login Failed',
-                    stage='Authentication',
-                    notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials.",
-                    ip_address=client_ip
-                ))
-                db.commit()
-            except Exception as e:
-                logger.debug("Error logging failed login: %s", e)
-            logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-        # If user has MFA enabled, require secondary verification before issuing token
-        if user.mfa_enabled:
-            ticket = create_mfa_ticket(user.id, user.username)
-            ticket_data = get_mfa_ticket(ticket)
-            if ticket_data:
-                ticket_data['password_verified'] = True
-                save_mfa_ticket()
-
-            show_dev_otp = should_show_dev_otp()
-            email_available = is_email_otp_available(db=db)
-            available_methods = []
-            if (email_available or show_dev_otp) and user.email and '@' in user.email:
-                available_methods.append('EMAIL')
-            if user.phone_number and user.phone_number.strip():
-                available_methods.append('SMS')
-            if user.mfa_secret:
-                available_methods.append('AUTHENTICATOR')
-
-            has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
-
-            return {
-                'token': None,
-                'access_token': None,
-                'token_type': 'bearer',
-                'expires_in': 3600,
-                'user': None,
-                'mfa_required': True,
-                'mfa_ticket': ticket,
-                'available_methods': available_methods,
-                'email_otp_available': email_available or show_dev_otp,
-                'selected_method': None,
-                'initial_otp_sent': False,
-                'masked_email': mask_email(user.email) if user.email else '',
-                'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
-                'has_authenticator_setup': has_auth_setup,
-                'active_session_conflict': False,
-                'message': 'Password verified. Please complete secondary two-factor authentication.',
-            }
-
-        new_session_id = str(uuid.uuid4())
-        device_label = request.device_info or 'Web Browser'
-        had_prior_session = bool(user.active_session_id)
-        user.active_session_id = new_session_id
-        user.active_device_info = device_label
-        user.session_created_at = datetime.datetime.utcnow()
-        user.last_activity_at = datetime.datetime.utcnow()
-        user.last_login = datetime.datetime.utcnow()
-        if had_prior_session:
-            try:
-                broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
-                db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.', ip_address=client_ip))
-            except Exception as e:
-                logger.debug('Handled exception: %s', e)
+    # SEC-02: Require strict password verification
+    is_valid = verify_password(password, user.password_hash or '')
+    if not is_valid:
         try:
             db.add(UserAccessLog(
                 username=user.username,
-                event_type="LOGIN",
-                status="SUCCESS",
+                event_type="LOGIN_FAILED",
+                status="FAILED",
                 ip_address=client_ip,
                 user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason="Invalid credentials",
                 timestamp=datetime.datetime.utcnow()
             ))
             db.add(AuditLog(
                 invoice_id=None,
                 user=user.employee_name or user.name or user.username,
-                action='User Logged In',
+                action='Login Failed',
                 stage='Authentication',
-                notes=f'User {user.employee_name or user.username} logged in successfully from {client_ip}. Device: {device_label}',
+                notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials.",
                 ip_address=client_ip
             ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging failed login: %s", e)
+        logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
+
+    # If user has MFA enabled, require secondary verification before issuing token
+    if user.mfa_enabled:
+        ticket = create_mfa_ticket(user.id, user.username)
+        ticket_data = get_mfa_ticket(ticket)
+        if ticket_data:
+            ticket_data['password_verified'] = True
+            save_mfa_ticket()
+
+        show_dev_otp = should_show_dev_otp()
+        email_available = is_email_otp_available(db=db)
+        available_methods = []
+        if (email_available or show_dev_otp) and user.email and '@' in user.email:
+            available_methods.append('EMAIL')
+        if user.phone_number and user.phone_number.strip():
+            available_methods.append('SMS')
+        if user.mfa_secret:
+            available_methods.append('AUTHENTICATOR')
+
+        has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+
+        return {
+            'token': None,
+            'access_token': None,
+            'token_type': 'bearer',
+            'expires_in': 3600,
+            'user': None,
+            'mfa_required': True,
+            'mfa_ticket': ticket,
+            'available_methods': available_methods,
+            'email_otp_available': email_available or show_dev_otp,
+            'selected_method': None,
+            'initial_otp_sent': False,
+            'masked_email': mask_email(user.email) if user.email else '',
+            'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+            'has_authenticator_setup': has_auth_setup,
+            'active_session_conflict': False,
+            'message': 'Password verified. Please complete secondary two-factor authentication.',
+        }
+
+    new_session_id = str(uuid.uuid4())
+    device_label = request.device_info or 'Web Browser'
+    had_prior_session = bool(user.active_session_id)
+    user.active_session_id = new_session_id
+    user.active_device_info = device_label
+    user.session_created_at = datetime.datetime.utcnow()
+    user.last_activity_at = datetime.datetime.utcnow()
+    user.last_login = datetime.datetime.utcnow()
+    if had_prior_session:
+        try:
+            broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
+            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.', ip_address=client_ip))
         except Exception as e:
             logger.debug('Handled exception: %s', e)
-        db.commit()
-        db.refresh(user)
-        logger.info(f"Login successful: User '{user.username}' ({user.employee_name or user.name}) logged in from IP: {client_ip} [Device: {device_label}]")
-        expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
-        return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
-
-    # Discover available MFA methods based on actual user profile in DB
-    show_dev_otp = should_show_dev_otp()
-    email_available = is_email_otp_available(db=db)
-    available_methods = []
-    if (email_available or show_dev_otp) and user.email and '@' in user.email:
-        available_methods.append('EMAIL')
-    if user.phone_number and user.phone_number.strip():
-        available_methods.append('SMS')
-    if user.mfa_secret:
-        available_methods.append('AUTHENTICATOR')
-
-    has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
-    ticket = create_mfa_ticket(user.id, user.username)
-
-    return {
-        'token': None,
-        'access_token': None,
-        'token_type': 'bearer',
-        'expires_in': 3600,
-        'user': None,
-        'mfa_required': True,
-        'mfa_ticket': ticket,
-        'available_methods': available_methods,
-        'email_otp_available': email_available or show_dev_otp,
-        'selected_method': None,
-        'initial_otp_sent': False,
-        'masked_email': mask_email(user.email) if user.email else '',
-        'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
-        'has_authenticator_setup': has_auth_setup,
-        'active_session_conflict': False,
-        'message': 'Please select your two-factor verification method.',
-    }
+    try:
+        db.add(UserAccessLog(
+            username=user.username,
+            event_type="LOGIN",
+            status="SUCCESS",
+            ip_address=client_ip,
+            user_agent=req.headers.get("user-agent", "")[:255],
+            timestamp=datetime.datetime.utcnow()
+        ))
+        db.add(AuditLog(
+            invoice_id=None,
+            user=user.employee_name or user.name or user.username,
+            action='User Logged In',
+            stage='Authentication',
+            notes=f'User {user.employee_name or user.username} logged in successfully from {client_ip}. Device: {device_label}',
+            ip_address=client_ip
+        ))
+    except Exception as e:
+        logger.debug('Handled exception: %s', e)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Login successful: User '{user.username}' ({user.employee_name or user.name}) logged in from IP: {client_ip} [Device: {device_label}]")
+    expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
+    return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
 @router.post('/mfa/send-otp')
 def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):

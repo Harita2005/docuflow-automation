@@ -104,16 +104,17 @@ def test_1_is_email_otp_available_detects_placeholders_and_missing():
 
 def test_2_login_mfa_response_omits_email_when_smtp_not_configured(test_users):
     """When SMTP is not configured, available_methods must omit EMAIL and email_otp_available must be False."""
-    with patch("app.routers.auth.is_email_otp_available", return_value=False):
-        res = client.post(
-            "/api/auth/login",
-            json={"username": test_users["user_with_email"].username},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data.get("mfa_required") is True
-        assert data.get("email_otp_available") is False
-        assert "EMAIL" not in data.get("available_methods", [])
+    with patch("app.routers.auth.verify_password", return_value=True):
+        with patch("app.routers.auth.is_email_otp_available", return_value=False):
+            res = client.post(
+                "/api/auth/login",
+                json={"username": test_users["user_with_email"].username, "password": "ValidPassword123!"},
+            )
+            assert res.status_code == 200
+            data = res.json()
+            assert data.get("mfa_required") is True
+            assert data.get("email_otp_available") is False
+            assert "EMAIL" not in data.get("available_methods", [])
 
 
 def test_3_send_otp_email_returns_503_and_creates_no_record_when_smtp_unset(test_users):
@@ -168,16 +169,17 @@ def test_4_send_otp_email_succeeds_when_smtp_is_configured(test_users):
 def test_5_user_with_only_email_has_empty_available_methods_when_smtp_missing(test_users):
     """Users who have MFA enabled but no authenticator secret and no phone have empty available_methods when SMTP is unset."""
     user = test_users["user_email_only"]
-    with patch("app.routers.auth.is_email_otp_available", return_value=False):
-        res = client.post(
-            "/api/auth/login",
-            json={"username": user.username},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data.get("mfa_required") is True
-        assert data.get("email_otp_available") is False
-        assert data.get("available_methods") == [], f"Expected empty available_methods for locked user, got {data.get('available_methods')}"
+    with patch("app.routers.auth.verify_password", return_value=True):
+        with patch("app.routers.auth.is_email_otp_available", return_value=False):
+            res = client.post(
+                "/api/auth/login",
+                json={"username": user.username, "password": "ValidPassword123!"},
+            )
+            assert res.status_code == 200
+            data = res.json()
+            assert data.get("mfa_required") is True
+            assert data.get("email_otp_available") is False
+            assert data.get("available_methods") == [], f"Expected empty available_methods for locked user, got {data.get('available_methods')}"
 
 
 def test_6_dev_testing_mode_returns_otp_when_show_otp_in_ui_is_true(test_users):
