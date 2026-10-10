@@ -126,10 +126,14 @@ async def lifespan(app: FastAPI):
     yield
 
 
+is_production = (settings.ENVIRONMENT or "").strip().lower() in ("production", "prod")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=None if is_production else f"{settings.API_V1_STR}/openapi.json",
+    docs_url=None if is_production else "/docs",
+    redoc_url=None if is_production else "/redoc",
     lifespan=lifespan,
 )
 
@@ -178,12 +182,14 @@ app.include_router(m2m_sync_router)
 
 @app.get("/")
 def root():
-    return {
+    resp = {
         "status": "online",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "docs_url": "/docs",
     }
+    if not is_production:
+        resp["docs_url"] = "/docs"
+    return resp
 
 
 @app.get("/health")
