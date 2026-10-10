@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import or_, and_, func, extract
 from sqlalchemy.orm import Session
 from app.config.settings import settings
+from app.services.crypto_service import encrypt_secret, decrypt_secret, mask_secret
 from app.database.connection import SessionLocal, get_db
 from app.database.models import (
     ApprovalAssignment,
@@ -3449,7 +3450,7 @@ def get_admin_notifications_provider(db: Session=Depends(get_db), current_user: 
     _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
     if config:
-        masked_pwd = '••••••••' if config.encrypted_password else ''
+        masked_pwd = mask_secret(config.encrypted_password)
         return {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': masked_pwd, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
     return {'smtp_server': 'smtp.office365.com', 'port': 587, 'username': 'Sqlalerts@ramrajcotton.net', 'encrypted_password': '', 'sender_email': 'Sqlalerts@ramrajcotton.net', 'sender_name': 'DocuFlow Alerts'}
 
@@ -3458,17 +3459,22 @@ def save_admin_notifications_provider(payload: NotificationProviderSchema, db: S
     _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
     new_pwd = payload.encrypted_password
-    if config and new_pwd == '••••••••':
-        new_pwd = config.encrypted_password
+    if config and (new_pwd in ['••••••••', '********', None, '']):
+        encrypted_pwd = config.encrypted_password
+    elif new_pwd:
+        encrypted_pwd = encrypt_secret(new_pwd)
+    else:
+        encrypted_pwd = None
+
     if not config:
-        config = NotificationProviderConfig(smtp_server=payload.smtp_server, port=payload.port, username=payload.username, encrypted_password=new_pwd, sender_email=payload.sender_email, sender_name=payload.sender_name)
+        config = NotificationProviderConfig(smtp_server=payload.smtp_server, port=payload.port, username=payload.username, encrypted_password=encrypted_pwd, sender_email=payload.sender_email, sender_name=payload.sender_name)
         db.add(config)
     else:
         config.smtp_server = payload.smtp_server
         config.port = payload.port
         config.username = payload.username
-        if new_pwd != '••••••••':
-            config.encrypted_password = new_pwd
+        if encrypted_pwd is not None:
+            config.encrypted_password = encrypted_pwd
         config.sender_email = payload.sender_email
         config.sender_name = payload.sender_name
     db.commit()
@@ -3507,7 +3513,7 @@ def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=D
     smtp_host = (config.smtp_server if config and config.smtp_server else 'smtp.office365.com').strip()
     smtp_port = config.port if (config and config.port) else 587
     smtp_user = (config.username if config and config.username else '').strip() or os.getenv('SMTP_USER', '') or os.getenv('SMTP_USERNAME', '') or getattr(settings, 'SMTP_USER', '') or ''
-    smtp_pass = (config.encrypted_password if config and config.encrypted_password else '').strip() or os.getenv('SMTP_PASS', '') or os.getenv('SMTP_PASSWORD', '') or getattr(settings, 'SMTP_PASS', '') or ''
+    smtp_pass = (decrypt_secret(config.encrypted_password) if config and config.encrypted_password else '').strip() or os.getenv('SMTP_PASS', '') or os.getenv('SMTP_PASSWORD', '') or getattr(settings, 'SMTP_PASS', '') or ''
     sender_email = (config.sender_email if config and config.sender_email else None) or smtp_user or 'no-reply@docuflow.net'
     sender_name = (config.sender_name if config and config.sender_name else None) or 'DocuFlow Alerts'
 

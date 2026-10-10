@@ -290,13 +290,15 @@ def is_email_otp_available(
             if db is not None:
                 try:
                     from app.database.models import NotificationProviderConfig
+                    from app.services.crypto_service import decrypt_secret
                     db_cfg = db.query(NotificationProviderConfig).first()
                     if db_cfg and getattr(db_cfg, "smtp_server", ""):
+                        raw_pw = getattr(db_cfg, "encrypted_password", "")
                         config = {
                             "smtp_server": getattr(db_cfg, "smtp_server", ""),
                             "port": getattr(db_cfg, "port", None),
                             "username": getattr(db_cfg, "username", ""),
-                            "encrypted_password": getattr(db_cfg, "encrypted_password", ""),
+                            "encrypted_password": decrypt_secret(raw_pw) if raw_pw else "",
                             "sender_email": getattr(db_cfg, "sender_email", ""),
                             "sender_name": getattr(db_cfg, "sender_name", ""),
                         }

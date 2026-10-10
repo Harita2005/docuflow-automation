@@ -189,7 +189,9 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
     if not auth_type or auth_type == 'None' or (not auth_config_json):
         return headers
     try:
-        cfg = json.loads(auth_config_json) if isinstance(auth_config_json, str) else auth_config_json
+        from app.services.crypto_service import decrypt_secret
+        decrypted_json = decrypt_secret(auth_config_json)
+        cfg = json.loads(decrypted_json) if isinstance(decrypted_json, str) else decrypted_json
         if not isinstance(cfg, dict):
             return headers
         if auth_type == 'API_KEY':

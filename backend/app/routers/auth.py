@@ -40,6 +40,7 @@ from app.services.mfa_service import (
     send_sms_otp,
     verify_totp,
 )
+from app.services.crypto_service import encrypt_secret, decrypt_secret
 from app.services.otp_service import (
     hash_otp,
     store_otp,
@@ -415,14 +416,17 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
             )
 
         if not user.mfa_secret:
-            user.mfa_secret = generate_totp_secret()
+            raw_secret = generate_totp_secret()
+            user.mfa_secret = encrypt_secret(raw_secret)
             user.mfa_enabled = False
             db.commit()
             db.refresh(user)
+        else:
+            raw_secret = decrypt_secret(user.mfa_secret)
 
-        qr_svg = generate_totp_qr_svg(user.mfa_secret, user.username)
-        uri = get_totp_provisioning_uri(user.mfa_secret, user.username)
-        return {'secret': user.mfa_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
+        qr_svg = generate_totp_qr_svg(raw_secret, user.username)
+        uri = get_totp_provisioning_uri(raw_secret, user.username)
+        return {'secret': raw_secret, 'qr_svg_data_url': qr_svg, 'provisioning_uri': uri}
     except HTTPException:
         raise
     except Exception as exc:
@@ -469,7 +473,7 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
     is_valid = False
 
     if method_upper == 'AUTHENTICATOR':
-        secret = user.mfa_secret
+        secret = decrypt_secret(user.mfa_secret)
         if not secret:
             raise HTTPException(
                 status_code=400,

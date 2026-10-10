@@ -14,6 +14,7 @@ from app.schemas import ThirdPartyWebhookConfigCreate, ThirdPartyWebhookConfigRe
 from app.services.integration_service import build_universal_export_payload, dispatch_outgoing_webhook, compute_hmac_signature
 from app.auth import get_current_active_user, verify_service_api_key
 from app.services.rbac_service import check_permission
+from app.services.crypto_service import encrypt_secret, decrypt_secret, mask_secret
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/integrations/v1', tags=['Third-Party & SAP Integrations'])
@@ -124,11 +125,24 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
 @router.get('/webhook-config', response_model=Optional[ThirdPartyWebhookConfigResponse])
 def get_webhook_config(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
-    Returns current outbound webhook configuration.
+    Returns current outbound webhook configuration with masked secrets.
     """
     _require_integration_admin(current_user, db)
     config = db.query(ThirdPartyWebhookConfig).first()
-    return config
+    if not config:
+        return None
+    return ThirdPartyWebhookConfigResponse(
+        id=config.id,
+        name=config.name,
+        target_url=config.target_url,
+        auth_header_name=config.auth_header_name,
+        auth_token=mask_secret(config.auth_token),
+        hmac_secret=mask_secret(config.hmac_secret),
+        is_active=config.is_active,
+        retry_count=config.retry_count,
+        created_at=config.created_at,
+        updated_at=config.updated_at,
+    )
 
 @router.post('/webhook-config', response_model=ThirdPartyWebhookConfigResponse)
 def save_webhook_config(body: ThirdPartyWebhookConfigCreate, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
@@ -149,14 +163,33 @@ def save_webhook_config(body: ThirdPartyWebhookConfigCreate, db: Session=Depends
     config.name = body.name or 'Primary ERP Integration Endpoint'
     config.target_url = body.target_url
     config.auth_header_name = body.auth_header_name or 'Authorization'
-    config.auth_token = body.auth_token
-    config.hmac_secret = body.hmac_secret
+    if body.auth_token and body.auth_token != '********':
+        config.auth_token = encrypt_secret(body.auth_token)
+    elif not body.auth_token:
+        config.auth_token = None
+
+    if body.hmac_secret and body.hmac_secret != '********':
+        config.hmac_secret = encrypt_secret(body.hmac_secret)
+    elif not body.hmac_secret:
+        config.hmac_secret = None
+
     config.is_active = body.is_active if body.is_active is not None else True
     config.retry_count = body.retry_count or 3
     config.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(config)
-    return config
+    return ThirdPartyWebhookConfigResponse(
+        id=config.id,
+        name=config.name,
+        target_url=config.target_url,
+        auth_header_name=config.auth_header_name,
+        auth_token=mask_secret(config.auth_token),
+        hmac_secret=mask_secret(config.hmac_secret),
+        is_active=config.is_active,
+        retry_count=config.retry_count,
+        created_at=config.created_at,
+        updated_at=config.updated_at,
+    )
 
 @router.post('/webhook-test')
 def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
@@ -168,13 +201,16 @@ def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depe
     auth_header_name = body.auth_header_name or 'Authorization'
     auth_token = body.auth_token
     hmac_secret = body.hmac_secret
-    if not target_url:
+    if not target_url or auth_token == '********' or hmac_secret == '********':
         saved_config = db.query(ThirdPartyWebhookConfig).first()
         if saved_config:
-            target_url = saved_config.target_url
-            auth_header_name = saved_config.auth_header_name
-            auth_token = saved_config.auth_token
-            hmac_secret = saved_config.hmac_secret
+            if not target_url:
+                target_url = saved_config.target_url
+                auth_header_name = saved_config.auth_header_name
+            if not auth_token or auth_token == '********':
+                auth_token = decrypt_secret(saved_config.auth_token)
+            if not hmac_secret or hmac_secret == '********':
+                hmac_secret = decrypt_secret(saved_config.hmac_secret)
     if not target_url:
         raise HTTPException(status_code=400, detail='No target URL provided or configured')
     test_payload = {'event': 'ping', 'timestamp': datetime.datetime.utcnow().isoformat() + 'Z', 'message': 'DocuFlow Automation Webhook Connectivity Test', 'docuflow_version': '2.0'}

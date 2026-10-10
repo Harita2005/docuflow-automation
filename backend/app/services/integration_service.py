@@ -79,10 +79,11 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
         payload_json = json.dumps(payload_dict, default=str)
         payload_bytes = payload_json.encode('utf-8')
         headers = {'Content-Type': 'application/json', 'User-Agent': 'DocuFlow-Automation-Webhook/2.0', 'X-DocuFlow-Event': 'document.settled', 'X-DocuFlow-Document-ID': str(inv.id)}
+        from app.services.crypto_service import decrypt_secret
         if config.auth_header_name and config.auth_token:
-            headers[config.auth_header_name] = config.auth_token
+            headers[config.auth_header_name] = decrypt_secret(config.auth_token)
         if config.hmac_secret:
-            signature = compute_hmac_signature(payload_json, config.hmac_secret)
+            signature = compute_hmac_signature(payload_json, decrypt_secret(config.hmac_secret))
             headers['X-DocuFlow-Signature'] = f'sha256={signature}'
         max_attempts = config.retry_count or 3
         last_error = None

@@ -11,6 +11,7 @@ from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, In
 from app.schemas import ThirdPartyApplicationCreate, ThirdPartyApplicationUpdate, CallbackRuleCreate, CallbackRuleUpdate, TestCallbackRequest
 from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers, ALLOWED_STORED_PROCEDURES
 from app.services.security_service import validate_and_reconstruct_url
+from app.services.crypto_service import encrypt_secret, decrypt_secret, mask_json_secrets
 from app.auth import get_current_active_user
 from app.services.rbac_service import check_permission
 
@@ -49,6 +50,23 @@ def record_audit(db: Session, entity_type: str, entity_id: int, action: str, pre
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
+def serialize_app_response(app_obj: ThirdPartyApplication, rules_count: int = 0, last_callback_str: Optional[str] = None) -> dict:
+    return {
+        'id': app_obj.id,
+        'name': app_obj.name,
+        'code': app_obj.code,
+        'description': app_obj.description,
+        'base_url': app_obj.base_url,
+        'environment': app_obj.environment or 'Production',
+        'status': app_obj.status or 'Active',
+        'auth_type': app_obj.auth_type or 'None',
+        'auth_config_json': mask_json_secrets(decrypt_secret(app_obj.auth_config_json)),
+        'rules_count': rules_count,
+        'last_callback': last_callback_str,
+        'created_at': app_obj.created_at.isoformat() if app_obj.created_at else None,
+        'updated_at': app_obj.updated_at.isoformat() if app_obj.updated_at else None,
+    }
+
 @router.get('/applications')
 def list_applications(db: Session=Depends(get_db)):
     """Returns list of configured third-party applications with rule counts and last activity."""
@@ -58,7 +76,7 @@ def list_applications(db: Session=Depends(get_db)):
         rules_count = db.query(CallbackRule).filter(CallbackRule.application_id == a.id).count()
         last_evt = db.query(CallbackEvent).filter(CallbackEvent.application_id == a.id).order_by(CallbackEvent.created_at.desc()).first()
         last_callback_str = last_evt.created_at.strftime('%I:%M %p') if last_evt and last_evt.created_at else None
-        results.append({'id': a.id, 'name': a.name, 'code': a.code, 'description': a.description, 'base_url': a.base_url, 'environment': a.environment or 'Production', 'status': a.status or 'Active', 'auth_type': a.auth_type or 'None', 'auth_config_json': a.auth_config_json, 'rules_count': rules_count, 'last_callback': last_callback_str, 'created_at': a.created_at.isoformat() if a.created_at else None, 'updated_at': a.updated_at.isoformat() if a.updated_at else None})
+        results.append(serialize_app_response(a, rules_count=rules_count, last_callback_str=last_callback_str))
     return {'success': True, 'count': len(results), 'data': results}
 
 @router.post('/applications')
@@ -67,19 +85,22 @@ def create_application(body: ThirdPartyApplicationCreate, db: Session=Depends(ge
     existing = db.query(ThirdPartyApplication).filter(ThirdPartyApplication.code == body.code.strip().upper()).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Application code '{body.code}' already exists. Code must be unique.")
-    app_obj = ThirdPartyApplication(name=body.name.strip(), code=body.code.strip().upper(), description=body.description, base_url=body.base_url.strip(), environment=body.environment or 'Production', status=body.status or 'Active', auth_type=body.auth_type or 'None', auth_config_json=helper_serialize_json_field(body.auth_config_json), created_at=datetime.datetime.utcnow(), updated_at=datetime.datetime.utcnow())
+    auth_cfg = helper_serialize_json_field(body.auth_config_json)
+    if auth_cfg:
+        auth_cfg = encrypt_secret(auth_cfg)
+    app_obj = ThirdPartyApplication(name=body.name.strip(), code=body.code.strip().upper(), description=body.description, base_url=body.base_url.strip(), environment=body.environment or 'Production', status=body.status or 'Active', auth_type=body.auth_type or 'None', auth_config_json=auth_cfg, created_at=datetime.datetime.utcnow(), updated_at=datetime.datetime.utcnow())
     db.add(app_obj)
     db.commit()
     db.refresh(app_obj)
     record_audit(db, 'APPLICATION', app_obj.id, 'CREATED', new_val={'name': app_obj.name, 'code': app_obj.code})
-    return {'success': True, 'data': app_obj}
+    return {'success': True, 'data': serialize_app_response(app_obj)}
 
 @router.get('/applications/{app_id}')
 def get_application(app_id: int, db: Session=Depends(get_db)):
     app_obj = db.query(ThirdPartyApplication).filter(ThirdPartyApplication.id == app_id).first()
     if not app_obj:
         raise HTTPException(status_code=404, detail=f'Application #{app_id} not found')
-    return {'success': True, 'data': app_obj}
+    return {'success': True, 'data': serialize_app_response(app_obj)}
 
 @router.put('/applications/{app_id}')
 def update_application(app_id: int, body: ThirdPartyApplicationUpdate, db: Session=Depends(get_db)):
@@ -107,12 +128,13 @@ def update_application(app_id: int, body: ThirdPartyApplicationUpdate, db: Sessi
     if body.auth_type is not None:
         app_obj.auth_type = body.auth_type
     if body.auth_config_json is not None:
-        app_obj.auth_config_json = helper_serialize_json_field(body.auth_config_json)
+        auth_cfg = helper_serialize_json_field(body.auth_config_json)
+        app_obj.auth_config_json = encrypt_secret(auth_cfg) if auth_cfg else None
     app_obj.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(app_obj)
     record_audit(db, 'APPLICATION', app_obj.id, 'UPDATED', prev=prev_state, new_val={'name': app_obj.name, 'status': app_obj.status})
-    return {'success': True, 'data': app_obj}
+    return {'success': True, 'data': serialize_app_response(app_obj)}
 
 @router.post('/applications/{app_id}/toggle-status')
 def toggle_application_status(app_id: int, db: Session=Depends(get_db)):
@@ -138,6 +160,42 @@ def delete_application(app_id: int, db: Session=Depends(get_db)):
     record_audit(db, 'APPLICATION', app_id, 'DELETED', prev={'name': name})
     return {'success': True, 'message': f"Application '{name}' deleted successfully"}
 
+def serialize_rule_response(r: CallbackRule, last_exec_str: Optional[str] = None) -> dict:
+    return {
+        'id': r.id,
+        'rule_name': r.rule_name,
+        'description': r.description,
+        'application_id': r.application_id,
+        'application_name': r.application.name if r.application else 'Unknown',
+        'application_code': r.application.code if r.application else '',
+        'status': r.status or 'ACTIVE',
+        'priority': r.priority or 100,
+        'trigger_event': r.trigger_event or 'FDO_FINAL_DECISION',
+        'run_when': r.run_when or 'BOTH',
+        'conditions_json': r.conditions_json,
+        'http_method': r.http_method or 'POST',
+        'url_mode': r.url_mode or 'INHERIT_BASE',
+        'endpoint_path': r.endpoint_path,
+        'custom_url': r.custom_url,
+        'body_type': r.body_type or 'JSON',
+        'payload_source': getattr(r, 'payload_source', 'MAPPING') or 'MAPPING',
+        'stored_procedure_name': getattr(r, 'stored_procedure_name', None),
+        'content_type': r.content_type or 'application/json',
+        'payload_mapping_json': r.payload_mapping_json,
+        'raw_payload_template': r.raw_payload_template,
+        'query_params_json': r.query_params_json,
+        'headers_json': r.headers_json,
+        'auth_override_type': r.auth_override_type or 'INHERIT',
+        'auth_override_config_json': mask_json_secrets(decrypt_secret(r.auth_override_config_json)),
+        'timeout_seconds': r.timeout_seconds or 30,
+        'success_criteria_json': r.success_criteria_json,
+        'follow_redirects': bool(r.follow_redirects),
+        'retry_config_json': r.retry_config_json,
+        'last_execution': last_exec_str,
+        'created_at': r.created_at.isoformat() if r.created_at else None,
+        'updated_at': r.updated_at.isoformat() if r.updated_at else None,
+    }
+
 @router.get('/rules')
 def list_callback_rules(application_id: Optional[int]=None, db: Session=Depends(get_db)):
     """Lists all configured callback rules."""
@@ -149,7 +207,7 @@ def list_callback_rules(application_id: Optional[int]=None, db: Session=Depends(
     for r in rules:
         last_evt = db.query(CallbackEvent).filter(CallbackEvent.rule_id == r.id).order_by(CallbackEvent.created_at.desc()).first()
         last_exec_str = last_evt.created_at.strftime('%I:%M %p') if last_evt and last_evt.created_at else None
-        results.append({'id': r.id, 'rule_name': r.rule_name, 'description': r.description, 'application_id': r.application_id, 'application_name': r.application.name if r.application else 'Unknown', 'application_code': r.application.code if r.application else '', 'status': r.status or 'ACTIVE', 'priority': r.priority or 100, 'trigger_event': r.trigger_event or 'FDO_FINAL_DECISION', 'run_when': r.run_when or 'BOTH', 'conditions_json': r.conditions_json, 'http_method': r.http_method or 'POST', 'url_mode': r.url_mode or 'INHERIT_BASE', 'endpoint_path': r.endpoint_path, 'custom_url': r.custom_url, 'body_type': r.body_type or 'JSON', 'content_type': r.content_type or 'application/json', 'payload_mapping_json': r.payload_mapping_json, 'raw_payload_template': r.raw_payload_template, 'query_params_json': r.query_params_json, 'headers_json': r.headers_json, 'auth_override_type': r.auth_override_type or 'INHERIT', 'auth_override_config_json': r.auth_override_config_json, 'timeout_seconds': r.timeout_seconds or 30, 'success_criteria_json': r.success_criteria_json, 'follow_redirects': bool(r.follow_redirects), 'retry_config_json': r.retry_config_json, 'last_execution': last_exec_str, 'created_at': r.created_at.isoformat() if r.created_at else None, 'updated_at': r.updated_at.isoformat() if r.updated_at else None})
+        results.append(serialize_rule_response(r, last_exec_str=last_exec_str))
     return {'success': True, 'count': len(results), 'data': results}
 
 @router.post('/rules')
@@ -166,19 +224,22 @@ def create_callback_rule(body: CallbackRuleCreate, db: Session=Depends(get_db)):
             )
     if body.custom_url:
         validate_and_reconstruct_url(body.custom_url)
-    rule = CallbackRule(rule_name=body.rule_name.strip(), description=body.description, application_id=body.application_id, status=body.status or 'ACTIVE', priority=body.priority if body.priority is not None else 100, trigger_event=body.trigger_event or 'FDO_FINAL_DECISION', run_when=body.run_when or 'BOTH', conditions_json=helper_serialize_json_field(body.conditions_json), http_method=(body.http_method or 'POST').upper(), url_mode=body.url_mode or 'INHERIT_BASE', endpoint_path=body.endpoint_path, custom_url=body.custom_url, body_type=body.body_type or 'JSON', payload_source=body.payload_source or 'MAPPING', stored_procedure_name=body.stored_procedure_name, content_type=body.content_type or 'application/json', payload_mapping_json=helper_serialize_json_field(body.payload_mapping_json), raw_payload_template=body.raw_payload_template, query_params_json=helper_serialize_json_field(body.query_params_json), headers_json=helper_serialize_json_field(body.headers_json), auth_override_type=body.auth_override_type or 'INHERIT', auth_override_config_json=helper_serialize_json_field(body.auth_override_config_json), timeout_seconds=body.timeout_seconds or 30, success_criteria_json=helper_serialize_json_field(body.success_criteria_json), follow_redirects=bool(body.follow_redirects), retry_config_json=helper_serialize_json_field(body.retry_config_json), created_at=datetime.datetime.utcnow(), updated_at=datetime.datetime.utcnow())
+    auth_override = helper_serialize_json_field(body.auth_override_config_json)
+    if auth_override:
+        auth_override = encrypt_secret(auth_override)
+    rule = CallbackRule(rule_name=body.rule_name.strip(), description=body.description, application_id=body.application_id, status=body.status or 'ACTIVE', priority=body.priority if body.priority is not None else 100, trigger_event=body.trigger_event or 'FDO_FINAL_DECISION', run_when=body.run_when or 'BOTH', conditions_json=helper_serialize_json_field(body.conditions_json), http_method=(body.http_method or 'POST').upper(), url_mode=body.url_mode or 'INHERIT_BASE', endpoint_path=body.endpoint_path, custom_url=body.custom_url, body_type=body.body_type or 'JSON', payload_source=body.payload_source or 'MAPPING', stored_procedure_name=body.stored_procedure_name, content_type=body.content_type or 'application/json', payload_mapping_json=helper_serialize_json_field(body.payload_mapping_json), raw_payload_template=body.raw_payload_template, query_params_json=helper_serialize_json_field(body.query_params_json), headers_json=helper_serialize_json_field(body.headers_json), auth_override_type=body.auth_override_type or 'INHERIT', auth_override_config_json=auth_override, timeout_seconds=body.timeout_seconds or 30, success_criteria_json=helper_serialize_json_field(body.success_criteria_json), follow_redirects=bool(body.follow_redirects), retry_config_json=helper_serialize_json_field(body.retry_config_json), created_at=datetime.datetime.utcnow(), updated_at=datetime.datetime.utcnow())
     db.add(rule)
     db.commit()
     db.refresh(rule)
     record_audit(db, 'RULE', rule.id, 'CREATED', new_val={'rule_name': rule.rule_name, 'app': app_obj.name})
-    return {'success': True, 'data': rule}
+    return {'success': True, 'data': serialize_rule_response(rule)}
 
 @router.get('/rules/{rule_id}')
 def get_callback_rule(rule_id: int, db: Session=Depends(get_db)):
     rule = db.query(CallbackRule).filter(CallbackRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail=f'Callback rule #{rule_id} not found')
-    return {'success': True, 'data': rule}
+    return {'success': True, 'data': serialize_rule_response(rule)}
 
 @router.put('/rules/{rule_id}')
 def update_callback_rule(rule_id: int, body: CallbackRuleUpdate, db: Session=Depends(get_db)):
@@ -243,7 +304,8 @@ def update_callback_rule(rule_id: int, body: CallbackRuleUpdate, db: Session=Dep
     if body.auth_override_type is not None:
         rule.auth_override_type = body.auth_override_type
     if body.auth_override_config_json is not None:
-        rule.auth_override_config_json = helper_serialize_json_field(body.auth_override_config_json)
+        auth_ov = helper_serialize_json_field(body.auth_override_config_json)
+        rule.auth_override_config_json = encrypt_secret(auth_ov) if auth_ov else None
     if body.timeout_seconds is not None:
         rule.timeout_seconds = body.timeout_seconds
     if body.success_criteria_json is not None:
@@ -256,7 +318,7 @@ def update_callback_rule(rule_id: int, body: CallbackRuleUpdate, db: Session=Dep
     db.commit()
     db.refresh(rule)
     record_audit(db, 'RULE', rule.id, 'UPDATED', prev=prev_state, new_val={'rule_name': rule.rule_name, 'status': rule.status})
-    return {'success': True, 'data': rule}
+    return {'success': True, 'data': serialize_rule_response(rule)}
 
 @router.post('/rules/{rule_id}/duplicate')
 def duplicate_callback_rule(rule_id: int, db: Session=Depends(get_db)):

@@ -196,7 +196,7 @@ class User(Base):
 
     mfa_enabled = Column(Boolean, default=False)
     mfa_type = Column(String(50), default="EMAIL")
-    mfa_secret = Column(String(100), nullable=True)
+    mfa_secret = Column(String(500), nullable=True)
 
     last_login = Column(DateTime, nullable=True)
 
@@ -851,7 +851,7 @@ class NotificationProviderConfig(Base):
     smtp_server = Column(String(200), nullable=False)
     port = Column(Integer, default=587)
     username = Column(String(200), nullable=True)
-    encrypted_password = Column(String(200), nullable=True)
+    encrypted_password = Column(String(500), nullable=True)
     sender_email = Column(String(200), nullable=True)
     sender_name = Column(String(200), nullable=True)
 
@@ -926,7 +926,7 @@ class ThirdPartyWebhookConfig(Base):
         default="Authorization",
     )
     auth_token = Column(String(500), nullable=True)
-    hmac_secret = Column(String(200), nullable=True)
+    hmac_secret = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, index=True)
     events_json = Column(
         Text,
