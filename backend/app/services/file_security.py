@@ -19,12 +19,21 @@ MAGIC_BYTES = {
     'jpeg': b'\xff\xd8\xff'
 }
 
+DANGEROUS_EXTENSIONS = {
+    '.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.js', '.jar', '.com', '.msi', '.dll', '.scr', '.pif'
+}
+
 def sanitize_filename(filename: str) -> str:
     if not filename:
         return f'doc_{uuid.uuid4().hex[:8]}.pdf'
     raw = filename.replace('\x00', '').replace('/', '_').replace('\\', '_')
     no_path = re.sub(r'(\.\./|\.\.\\)', '', raw)
     clean = re.sub(r'[^a-zA-Z0-9_\.\-]', '_', no_path).lstrip('.')
+
+    # Neutralize dangerous double extensions (e.g. invoice.pdf.exe -> invoice.pdf_exe)
+    for dang in DANGEROUS_EXTENSIONS:
+        if clean.lower().endswith(dang):
+            clean = clean[:-len(dang)] + '_' + dang.lstrip('.')
     return clean or f'doc_{uuid.uuid4().hex[:8]}.pdf'
 
 def detect_file_type_and_validate_magic(header: bytes) -> str:
