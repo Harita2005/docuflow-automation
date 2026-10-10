@@ -181,9 +181,51 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         logger.warning(f"Login failed: Deactivated account for user '{user.username}' from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
+    # SEC-10: Account lockout check (5 failed attempts within 15 minutes locks account for 15 minutes)
+    lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+    recent_failures = (
+        db.query(UserAccessLog)
+        .filter(
+            UserAccessLog.username == user.username,
+            UserAccessLog.event_type == "LOGIN_FAILED",
+            UserAccessLog.timestamp >= lockout_window,
+        )
+        .count()
+    )
+
+    if recent_failures >= 5:
+        # Check if most recent event was already LOCKOUT or if we should log a new LOCKOUT event
+        try:
+            db.add(UserAccessLog(
+                username=user.username,
+                event_type="ACCOUNT_LOCKED",
+                status="LOCKED",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason="Account temporarily locked due to 5 consecutive failed login attempts",
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='Account Locked',
+                stage='Authentication',
+                notes=f"User '{user.username}' locked out for 15 minutes after {recent_failures} failed attempts. IP: {client_ip}",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging lockout: %s", e)
+        logger.warning(f"Login rejected: Account for user '{user.username}' is locked due to repeated failed logins. IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+        )
+
     # SEC-02: Require strict password verification
     is_valid = verify_password(password, user.password_hash or '')
     if not is_valid:
+        new_failure_count = recent_failures + 1
         try:
             db.add(UserAccessLog(
                 username=user.username,
@@ -199,13 +241,36 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 user=user.employee_name or user.name or user.username,
                 action='Login Failed',
                 stage='Authentication',
-                notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials.",
+                notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials (attempt {new_failure_count}/5).",
                 ip_address=client_ip
             ))
+            if new_failure_count >= 5:
+                db.add(UserAccessLog(
+                    username=user.username,
+                    event_type="ACCOUNT_LOCKED",
+                    status="LOCKED",
+                    ip_address=client_ip,
+                    user_agent=req.headers.get("user-agent", "")[:255],
+                    failure_reason="Account locked due to 5 failed login attempts",
+                    timestamp=datetime.datetime.utcnow()
+                ))
+                db.add(AuditLog(
+                    invoice_id=None,
+                    user=user.employee_name or user.name or user.username,
+                    action='Account Locked',
+                    stage='Authentication',
+                    notes=f"User '{user.username}' reached 5 failed login attempts and has been locked out. IP: {client_ip}",
+                    ip_address=client_ip
+                ))
             db.commit()
         except Exception as e:
             logger.debug("Error logging failed login: %s", e)
-        logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip}")
+        logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip} (attempt {new_failure_count}/5)")
+        if new_failure_count >= 5:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+            )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
     # If user has MFA enabled, require secondary verification before issuing token

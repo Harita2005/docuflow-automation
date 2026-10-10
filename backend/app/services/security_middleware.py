@@ -107,61 +107,96 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         max_auth_requests: int = 15,
         window_seconds: int = 60,
         cleanup_interval_seconds: int = 60,
+        enable_in_tests: bool = False,
     ):
         super().__init__(app)
         self.max_auth_requests = max_auth_requests
         self.window_seconds = window_seconds
         self.cleanup_interval = cleanup_interval_seconds
+        self.enable_in_tests = enable_in_tests
         self.last_cleanup = time.time()
-        # Use a standard dictionary (not defaultdict) so lookups never leave empty keys
-        self.auth_requests: Dict[str, List[float]] = {}
+        # Dictionary of key -> List[float]
+        self.requests: Dict[str, List[float]] = {}
+
+    @property
+    def auth_requests(self) -> Dict[str, List[float]]:
+        return self.requests
+
+    @auth_requests.setter
+    def auth_requests(self, val: Dict[str, List[float]]):
+        self.requests = val
 
     def prune_stale_ips(self, current_time: Optional[float] = None) -> int:
         """
-        Scans all tracked IPs, removing expired timestamps and deleting any
+        Scans all tracked keys, removing expired timestamps and deleting any
         keys that no longer have timestamps within the active sliding window.
-        Returns the number of pruned IP entries.
+        Returns the number of pruned entries.
         """
         now = current_time if current_time is not None else time.time()
         pruned_count = 0
-        for ip in list(self.auth_requests.keys()):
-            timestamps = self.auth_requests.get(ip, [])
+        for key in list(self.requests.keys()):
+            timestamps = self.requests.get(key, [])
             valid_timestamps = [t for t in timestamps if now - t < self.window_seconds]
             if valid_timestamps:
-                self.auth_requests[ip] = valid_timestamps
+                self.requests[key] = valid_timestamps
             else:
-                self.auth_requests.pop(ip, None)
+                self.requests.pop(key, None)
                 pruned_count += 1
         return pruned_count
 
     async def dispatch(self, request: Request, call_next):
-        if os.getenv("PYTEST_CURRENT_TEST"):
+        if os.getenv("PYTEST_CURRENT_TEST") and not self.enable_in_tests and not getattr(request.state, "test_rate_limit", False):
             return await call_next(request)
 
         path = request.url.path
+        limit: Optional[int] = None
+        category = "general"
+
+        # Categorize rate limits
         if (
             path.startswith('/api/auth/login')
             or path.startswith('/api/auth/token')
-            or path.startswith('/api/auth/mfa')
+            or path.startswith('/api/auth/forgot-password')
+            or path.startswith('/api/auth/reset-password')
         ):
+            limit = self.max_auth_requests  # default 15/min
+            category = "login"
+        elif path.startswith('/api/auth/mfa'):
+            limit = 10  # 10 OTP / MFA requests per min
+            category = "mfa"
+        elif (
+            path.startswith('/api/documents/upload')
+            or path.startswith('/api/documents/batch-upload')
+        ):
+            limit = 20  # 20 uploads per min per IP
+            category = "upload"
+        elif (
+            path.startswith('/api/integrations/v1/webhook')
+            or path.startswith('/api/callbacks')
+        ):
+            limit = 60  # 60 webhooks per min per IP
+            category = "webhook"
+
+        if limit is not None:
             current_time = time.time()
 
-            # Periodic cleanup across all tracked IPs
+            # Periodic cleanup across all tracked keys
             if current_time - self.last_cleanup >= self.cleanup_interval:
                 self.prune_stale_ips(current_time)
                 self.last_cleanup = current_time
 
             client_ip = resolve_client_ip(request)
+            rate_key = f"{category}:{client_ip}"
 
-            # Filter valid timestamps for this specific IP
-            existing = self.auth_requests.get(client_ip, [])
+            # Filter valid timestamps for this specific IP & category
+            existing = self.requests.get(rate_key, [])
             valid_timestamps = [t for t in existing if current_time - t < self.window_seconds]
 
-            if len(valid_timestamps) >= self.max_auth_requests:
+            if len(valid_timestamps) >= limit:
                 # Update with active window (do not append extra timestamp)
-                self.auth_requests[client_ip] = valid_timestamps
+                self.requests[rate_key] = valid_timestamps
                 return Response(
-                    content='{"detail": "Too many login attempts. Please wait 60 seconds before trying again."}',
+                    content=f'{{"detail": "Rate limit exceeded for {category}. Please wait {self.window_seconds} seconds before trying again."}}',
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     media_type='application/json',
                     headers={'Retry-After': str(self.window_seconds)},
@@ -169,7 +204,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 
             # Record attempt and update map
             valid_timestamps.append(current_time)
-            self.auth_requests[client_ip] = valid_timestamps
+            self.requests[rate_key] = valid_timestamps
 
         return await call_next(request)
 
