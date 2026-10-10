@@ -1197,8 +1197,137 @@ def test_aud07_webhook_fails_twice_then_succeeds(db_session, test_setup):
         db_session.delete(doc)
         if created_cfg:
             db_session.delete(cfg)
+def test_feedback_auto_attach_approved_invoice(db_session, test_setup):
+    """
+    Verify that when a Customer Feedback / Customer Complaint document is synced:
+    - It automatically finds an approved invoice with matching invoice_number.
+    - Copies its file_url, file_path, and file_name to the feedback document.
+    - Logs an AuditLog entry confirming the auto-attachment.
+    """
+    from pathlib import Path
+    from app.routers.sync import _upsert_single_document
+    from app.schemas.schemas import DocumentSyncRequest
+    from app.database.models import Invoice, AuditLog
+
+    inv_num = f"INV-TEST-SYNC-{uuid.uuid4().hex[:6]}"
+    
+    # 1. Create an approved invoice with a file attachment
+    approved_inv_id = f"INV-APPR-{uuid.uuid4().hex[:6]}"
+    approved_inv = Invoice(
+        id=approved_inv_id,
+        invoice_number=inv_num,
+        vendor_name="Ramraj Mills Ltd",
+        amount=15000.0,
+        status="Approved",
+        file_path="C:/Users/TempAdmin/OneDrive/Documents/docuflow-automation/stored_pdfs/approved/INV-3STAGE-01_DOC-3STAGE-01.pdf",
+        file_name="INV-3STAGE-01_DOC-3STAGE-01.pdf",
+        file_url=f"/api/documents/{approved_inv_id}/file",
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(approved_inv)
+    db_session.commit()
+
+    fb_key = f"FB-SYNC-KEY-{uuid.uuid4().hex[:6]}"
+    try:
+        # 2. Sync a new Customer Feedback / Complaint referencing that invoice_number
+        req = DocumentSyncRequest(
+            doc_key=fb_key,
+            document_type="CUSTOMER COMPLAINT",
+            category="Shortage",
+            division="VCC",
+            invoice_number=inv_num,
+            vendor_name="A.L.V javuli stores",
+            amount=1.0,
+            auto_route=False
+        )
+
+        feedback_doc = _upsert_single_document(req, db_session)
+
+        # 3. Assert feedback document automatically received the approved invoice attachment
+        assert Path(feedback_doc.file_path).resolve() == Path(approved_inv.file_path).resolve()
+        assert feedback_doc.file_name == approved_inv.file_name
+        assert feedback_doc.file_url == f"/api/documents/{feedback_doc.id}/file"
+
+        # 4. Check audit log
+        audit = db_session.query(AuditLog).filter(
+            AuditLog.invoice_id == feedback_doc.id,
+            AuditLog.action == "Invoice Attached"
+        ).first()
+        assert audit is not None, "Audit log not recorded for auto-attachment"
+        assert inv_num in audit.notes
+
+    finally:
+        if 'feedback_doc' in locals() and feedback_doc:
+            db_session.query(AuditLog).filter(AuditLog.invoice_id == feedback_doc.id).delete()
+            db_session.delete(feedback_doc)
+        if 'approved_inv' in locals() and approved_inv:
+            db_session.delete(approved_inv)
         db_session.commit()
 
 
+def test_auto_attach_only_applies_to_feedback_documents(db_session, test_setup):
+    """
+    Verify that standard AP Invoices or general documents do NOT trigger
+    invoice auto-attachment - it is strictly scoped to customer feedback / complaints.
+    """
+    from pathlib import Path
+    from app.routers.sync import _upsert_single_document
+    from app.schemas.schemas import DocumentSyncRequest
+    from app.database.models import Invoice, AuditLog
 
+    inv_num = f"INV-NON-FB-{uuid.uuid4().hex[:6]}"
+    
+    # 1. Existing approved invoice with file
+    approved_inv_id = f"INV-APPR-{uuid.uuid4().hex[:6]}"
+    approved_inv = Invoice(
+        id=approved_inv_id,
+        invoice_number=inv_num,
+        vendor_name="Ramraj Mills Ltd",
+        amount=25000.0,
+        status="Approved",
+        file_path="C:/Users/TempAdmin/OneDrive/Documents/docuflow-automation/stored_pdfs/approved/INV-3STAGE-01_DOC-3STAGE-01.pdf",
+        file_name="INV-3STAGE-01_DOC-3STAGE-01.pdf",
+        file_url=f"/api/documents/{approved_inv_id}/file",
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(approved_inv)
+    db_session.commit()
+
+    standard_doc = None
+    try:
+        # 2. Sync a standard AP Invoice (not customer feedback) with its own doc_key
+        req = DocumentSyncRequest(
+            doc_key=f"STD-AP-{uuid.uuid4().hex[:6]}",
+            document_type="AP INVOICE",
+            category="Raw Material",
+            division="VCC",
+            invoice_number=f"OTHER-{uuid.uuid4().hex[:4]}",
+            vendor_name="Standard Vendor Ltd",
+            amount=5000.0,
+            auto_route=False
+        )
+
+        standard_doc = _upsert_single_document(req, db_session)
+
+        # 3. Assert standard invoice did NOT get any file auto-attached
+        assert standard_doc.file_path is None
+        assert standard_doc.file_url is None
+
+        # 4. Assert no "Invoice Attached" audit entry was created for standard doc
+        attach_audit = db_session.query(AuditLog).filter(
+            AuditLog.invoice_id == standard_doc.id,
+            AuditLog.action == "Invoice Attached"
+        ).first()
+        assert attach_audit is None, "Standard AP invoice must NOT receive auto-attached invoice files"
+
+    finally:
+        if standard_doc:
+            db_session.query(AuditLog).filter(AuditLog.invoice_id == standard_doc.id).delete()
+            db_session.delete(standard_doc)
+        db_session.delete(approved_inv)
+        db_session.commit()
 

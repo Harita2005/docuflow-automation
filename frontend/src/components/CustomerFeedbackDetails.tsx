@@ -454,6 +454,7 @@ export default function CustomerFeedbackDetails({
 
   // In-Page Image Preview Modal State
   const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState<number>(1);
   const [imageRotation, setImageRotation] = useState<number>(0);
   const [imageLoading, setImageLoading] = useState<boolean>(true);
@@ -522,11 +523,58 @@ export default function CustomerFeedbackDetails({
   const permissions = useMemo(() => getCustomerFeedbackPermissions(currentUserRole), [currentUserRole]);
 
   useEffect(() => {
-    if (!previewImageModal) return;
+    if (!previewImageModal?.url) {
+      setPreviewBlobUrl(null);
+      return;
+    }
     setImageZoom(1);
     setImageRotation(0);
     setImageLoading(true);
     setImageError(false);
+
+    let isMounted = true;
+    let createdBlobUrl: string | null = null;
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+
+    let raw = previewImageModal.url.trim();
+    // Normalize any legacy hardcoded IP URLs to relative /api paths
+    if (raw.includes("/api/documents/temp-preview/")) {
+      raw = raw.substring(raw.indexOf("/api/documents/temp-preview/"));
+    } else if (raw.includes("/api/files/")) {
+      raw = raw.substring(raw.indexOf("/api/files/"));
+    } else if (!raw.startsWith("http") && !raw.startsWith("/") && !raw.startsWith("blob:") && !raw.startsWith("data:")) {
+      if (raw.toLowerCase().endsWith(".jpg") || raw.toLowerCase().endsWith(".png") || raw.toLowerCase().endsWith(".jpeg") || raw.startsWith("TEMP_STAGE_")) {
+        raw = `/api/documents/temp-preview/${raw}`;
+      }
+    }
+
+    if (raw.startsWith("blob:") || raw.startsWith("data:")) {
+      setPreviewBlobUrl(raw);
+      setImageLoading(false);
+    } else {
+      const sep = raw.includes("?") ? "&" : "?";
+      const directWithToken = token ? `${raw}${sep}token=${encodeURIComponent(token)}` : raw;
+
+      // Try fetching as Blob with Bearer header
+      fetch(raw, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          if (isMounted) {
+            createdBlobUrl = URL.createObjectURL(blob);
+            setPreviewBlobUrl(createdBlobUrl);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setPreviewBlobUrl(directWithToken);
+          }
+        });
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -535,7 +583,13 @@ export default function CustomerFeedbackDetails({
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      isMounted = false;
+      if (createdBlobUrl) {
+        URL.revokeObjectURL(createdBlobUrl);
+      }
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [previewImageModal]);
 
   // Extract canonical values
@@ -1992,7 +2046,7 @@ export default function CustomerFeedbackDetails({
                 </div>
 
                 <a
-                  href={previewImageModal.url}
+                  href={previewBlobUrl || previewImageModal.url}
                   download
                   className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition cursor-pointer"
                   title="Download image"
@@ -2044,7 +2098,7 @@ export default function CustomerFeedbackDetails({
                   }}
                 >
                   <img
-                    src={previewImageModal.url}
+                    src={previewBlobUrl || previewImageModal.url}
                     alt={previewImageModal.title || "Image Preview"}
                     onLoad={() => setImageLoading(false)}
                     onError={() => {

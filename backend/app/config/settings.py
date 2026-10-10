@@ -62,16 +62,34 @@ class Settings(BaseSettings):
 
         Enforces connection to 192.168.179.22:1443 and avoids localhost defaults.
         """
-        # Use explicit DATABASE_URL if provided and not forbidden
+        import socket
+        def _is_host_live(h: str, p: int) -> bool:
+            try:
+                with socket.create_connection((h, int(p)), timeout=0.8):
+                    return True
+            except Exception:
+                return False
+
+        # Use explicit DATABASE_URL if provided and host is reachable
         if self.DATABASE_URL:
             db_url = self.DATABASE_URL.strip()
-            forbidden = ["localhost", "127.0.0.1", ":1433", "@db:", "sqlite", "postgresql", "mysql"]
+            forbidden = ["@db:", "sqlite", "postgresql", "mysql"]
             if not any(f in db_url.lower() for f in forbidden):
-                trust_cert = "yes" if self.trust_server_certificate else "no"
-                if "TrustServerCertificate=" in db_url:
-                    import re
-                    return re.sub(r"TrustServerCertificate=[a-zA-Z0-9]+", f"TrustServerCertificate={trust_cert}", db_url)
-                return db_url
+                import re
+                host_port_match = re.search(r"@([^:/]+)(?::(\d+))?", db_url)
+                if host_port_match:
+                    target_h = host_port_match.group(1)
+                    target_p = int(host_port_match.group(2) or 1433)
+                    if target_h.lower() not in ("localhost", "127.0.0.1") and not _is_host_live(target_h, target_p):
+                        # Remote host is not reachable, proceed to fallback logic below
+                        pass
+                    else:
+                        trust_cert = "yes" if self.trust_server_certificate else "no"
+                        if "TrustServerCertificate=" in db_url:
+                            return re.sub(r"TrustServerCertificate=[a-zA-Z0-9]+", f"TrustServerCertificate={trust_cert}", db_url)
+                        return db_url
+                else:
+                    return db_url
         host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
         if host.lower() in ("localhost", "127.0.0.1", "db"):
             host = "192.168.179.22"
@@ -80,6 +98,22 @@ class Settings(BaseSettings):
             port = 1443
         driver = quote_plus(self.DB_DRIVER)
         trust_cert = "yes" if self.trust_server_certificate else "no"
+
+        # If remote host is not reachable on the network, fallback to localhost trusted connection
+        import socket
+        try:
+            with socket.create_connection((host, int(port)), timeout=0.8):
+                is_remote_live = True
+        except Exception:
+            is_remote_live = False
+
+        if not is_remote_live:
+            try:
+                with socket.create_connection(("localhost", 1433), timeout=0.5):
+                    return f"mssql+pyodbc://@localhost/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
+            except Exception:
+                pass
+
         if self.DB_USER and self.DB_PASSWORD:
             user = quote_plus(self.DB_USER)
             pwd = quote_plus(self.DB_PASSWORD)

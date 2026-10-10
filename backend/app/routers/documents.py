@@ -2696,29 +2696,67 @@ async def extract_document_preview(
 @router.get('/api/documents/temp-preview/{filename}')
 def serve_temp_preview(
     filename: str,
-    current_user: User = Depends(get_current_active_user)
+    token: Optional[str] = Query(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
 ):
-    """Secure preview streaming of temporarily staged PDF during human verification."""
+    """Secure preview streaming of temporarily staged PDF/image during human verification and feedback review."""
     safe_base = os.path.basename(filename)
     clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_base)
     if not clean_name or clean_name in ('.', '..') or clean_name != filename:
         raise HTTPException(status_code=400, detail="Invalid preview filename")
 
+    # If no user in Authorization header, check token query parameter
+    if not current_user and token:
+        try:
+            payload = decode_token(token)
+            uname = payload.get("sub") or payload.get("username")
+            if uname:
+                current_user = db.query(User).filter(
+                    (User.username == uname) | (User.email == uname) | (User.employee_id == uname)
+                ).filter(User.is_deleted == False, User.is_active == True).first()
+        except Exception:
+            pass
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required to preview staged files")
+
     is_admin = (current_user.role or '').strip().lower() in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator'] or getattr(current_user, 'is_superuser', False)
 
     match = re.match(r'^TEMP_STAGE_U(\d+)_', clean_name)
     if not is_admin:
-        if not match or int(match.group(1)) != current_user.id:
+        if match and int(match.group(1)) != current_user.id:
             raise HTTPException(
                 status_code=403,
                 detail="Access Denied: You do not have permission to view this staged document preview."
             )
 
     target_path = (settings.UPLOAD_DIR / clean_name).resolve()
-    if not target_path.is_file() or not target_path.is_relative_to(settings.UPLOAD_DIR.resolve()):
+    if not target_path.is_file():
+        # Check storage dir / temp locations fallback
+        for candidate_dir in [settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_DIR, settings.DATA_DIR]:
+            cand = (candidate_dir / clean_name).resolve()
+            if cand.is_file():
+                target_path = cand
+                break
+
+    if not target_path.is_file():
         raise HTTPException(status_code=404, detail="Preview document not found or expired")
 
-    media_type = 'application/pdf' if clean_name.lower().endswith('.pdf') else 'image/jpeg'
+    lower_name = clean_name.lower()
+    if lower_name.endswith('.pdf'):
+        media_type = 'application/pdf'
+    elif lower_name.endswith('.png'):
+        media_type = 'image/png'
+    elif lower_name.endswith(('.jpg', '.jpeg', '.jfif')):
+        media_type = 'image/jpeg'
+    elif lower_name.endswith('.webp'):
+        media_type = 'image/webp'
+    elif lower_name.endswith('.gif'):
+        media_type = 'image/gif'
+    else:
+        media_type = 'application/octet-stream'
+
     return FileResponse(
         path=str(target_path),
         media_type=media_type,

@@ -360,7 +360,16 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
             existing = db.query(Invoice).filter(or_(Invoice.id == str(req.doc_key), Invoice.id == f'{prefix}-{req.doc_key}', Invoice.id == f'DOC-{req.doc_key}')).first()
     if not existing and req.invoice_number:
-        existing = db.query(Invoice).filter(Invoice.invoice_number == req.invoice_number, Invoice.division == effective_division).first()
+        req_is_feedback = (
+            (req.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+            or (req.category or '').lower().startswith('customer')
+        )
+        if not req_is_feedback:
+            existing = db.query(Invoice).filter(
+                Invoice.invoice_number == req.invoice_number,
+                Invoice.division == effective_division,
+                ~Invoice.document_type.in_(['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'])
+            ).first()
     calculated_base = req.base_amount
     calculated_tax = req.tax_amount
     if req.amount > 0 and (calculated_base is None or calculated_tax is None):
@@ -651,6 +660,101 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     db.add(AuditLog(invoice_id=target_inv.id, user='ERP Data Sync', action='Data Ingested', stage='Intake (ERP)', notes=f'Invoice metadata ingested from ERP. Assigned status: {target_inv.status}.'))
     db.add(SystemLog(invoice_id=target_inv.id, action='Data Sync & Flow Initiation', user='Sync Engine', details=f'ERP Key: {target_inv.doc_key}, Total: ₹{target_inv.amount}, Plant: {target_inv.plant}, Status: {target_inv.status}'))
     db.commit()
+
+    # Auto-attach approved physical invoice PDF for Customer Feedback / Customer Complaint records
+    is_feedback_doc = (
+        (target_inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+        or str(target_inv.id).startswith('CMP')
+        or str(target_inv.id).startswith('CF')
+        or bool(getattr(target_inv, 'type_of_complaint', None))
+        or (target_inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+    )
+    if is_feedback_doc and not getattr(target_inv, 'file_path', None) and not target_inv.file_url:
+        lookup_invoice_num = (target_inv.invoice_number or target_inv.doc_num or '').strip()
+        if lookup_invoice_num:
+            # 1. Look for approved/settled document in DB matching invoice_number
+            approved_candidate = (
+                db.query(Invoice)
+                .filter(
+                    (Invoice.invoice_number == lookup_invoice_num) | (Invoice.doc_num == lookup_invoice_num),
+                    Invoice.id != target_inv.id,
+                    Invoice.is_deleted == False,
+                    Invoice.status.in_(['Approved', 'Settled', 'Ready for Payment', 'Paid'])
+                )
+                .filter((Invoice.file_path != None) | (Invoice.file_url != None))
+                .order_by(Invoice.id.desc())
+                .first()
+            )
+
+            # If no approved invoice found, fallback to any valid invoice record that has an attached file
+            if not approved_candidate:
+                approved_candidate = (
+                    db.query(Invoice)
+                    .filter(
+                        (Invoice.invoice_number == lookup_invoice_num) | (Invoice.doc_num == lookup_invoice_num),
+                        Invoice.id != target_inv.id,
+                        Invoice.is_deleted == False
+                    )
+                    .filter((Invoice.file_path != None) | (Invoice.file_url != None))
+                    .order_by(Invoice.id.desc())
+                    .first()
+                )
+
+            attached_path = None
+            attached_filename = None
+            if approved_candidate and (approved_candidate.file_path or approved_candidate.file_url):
+                cand_path = approved_candidate.file_path
+                if cand_path:
+                    try:
+                        resolved_cand = Path(cand_path)
+                        if resolved_cand.is_file():
+                            attached_path = str(resolved_cand)
+                    except Exception:
+                        pass
+                    if not attached_path:
+                        attached_path = cand_path
+                attached_filename = approved_candidate.file_name or (Path(cand_path).name if cand_path else f"{lookup_invoice_num}.pdf")
+
+                if not attached_path and approved_candidate.file_url:
+                    target_inv.file_url = approved_candidate.file_url
+                    target_inv.file_name = approved_candidate.file_name
+                    target_inv.file_size = approved_candidate.file_size
+
+            # 2. Check filesystem under stored_pdfs/approved/ if not found in DB
+            if not attached_path:
+                try:
+                    approved_root = settings.APPROVED_PDF_DIR.resolve()
+                    if approved_root.exists():
+                        for p in approved_root.rglob("*.pdf"):
+                            if lookup_invoice_num.lower() in p.name.lower():
+                                attached_path = str(p)
+                                attached_filename = p.name
+                                break
+                except Exception as fs_err:
+                    logger.debug("Filesystem scan for approved invoice PDF: %s", fs_err)
+
+            if attached_path:
+                target_inv.file_path = attached_path
+                target_inv.file_name = attached_filename or f"{lookup_invoice_num}.pdf"
+                target_inv.file_url = f"/api/documents/{target_inv.id}/file"
+                try:
+                    if os.path.isfile(attached_path):
+                        target_inv.file_size = os.path.getsize(attached_path)
+                    elif approved_candidate and approved_candidate.file_size:
+                        target_inv.file_size = approved_candidate.file_size
+                except Exception:
+                    pass
+                db.add(AuditLog(
+                    invoice_id=target_inv.id,
+                    user='Sync Engine (Auto-Attach)',
+                    action='Invoice Attached',
+                    stage='Intake (ERP)',
+                    notes=f"Auto-attached approved invoice PDF '{target_inv.file_name}' matching invoice number {lookup_invoice_num}."
+                ))
+                db.commit()
+                db.refresh(target_inv)
+                logger.info(f"[Sync] Auto-attached approved invoice {attached_path} to feedback {target_inv.id}")
+
     _sync_to_production_schema(req, db, target_inv)
     return target_inv
 
