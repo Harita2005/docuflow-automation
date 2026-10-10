@@ -1306,18 +1306,20 @@ def complete_document_lifecycle(
     next_info = next_assigned_info or 'Final Settlement Completed. Ready for payment disbursement.'
 
     # 1. Step 1: Archive physical PDF to year/month/document folder
-    archive_success = archive_approved_pdf(inv)
+    archive_success = False
+    try:
+        archive_success = archive_approved_pdf(inv)
+    except Exception as exc:
+        logger.error(f"[complete_document_lifecycle] PDF archiving exception for doc {inv.id}: {exc}")
+        archive_success = False
 
-    # 2. Step 2: Trigger async integration push (back sync) ONLY after archiving succeeds
     if archive_success:
-        if getattr(inv, 'external_sync_status', None) not in ['SYNCED', 'PENDING', 'QUEUED']:
-            inv.external_sync_status = 'PENDING'
-            db.commit()
-            trigger_async_integration_push(str(inv.id))
+        inv.storage_status = 'ARCHIVED'
     else:
-        logger.warning(f"[complete_document_lifecycle] PDF archiving failed or source file missing for doc {inv.id}; back sync push skipped.")
+        inv.storage_status = 'PENDING'
+        logger.warning(f"[complete_document_lifecycle] PDF archiving failed or source file missing for doc {inv.id}; marked storage_status='PENDING'.")
 
-    # 3. Step 3: Notifications & Audit Log (Idempotency check)
+    # 2. Step 2: Notifications & Audit Log (Idempotency check)
     existing_final_log = db.query(AuditLog).filter(
         AuditLog.invoice_id == str(inv.id),
         AuditLog.action.ilike('Approved%'),
@@ -1353,8 +1355,19 @@ def complete_document_lifecycle(
             notes=f'{remarks} ➔ {next_info}',
             remarks=remarks
         ))
-        db.commit()
-        db.refresh(inv)
+
+    # Commit approval, storage status, and audit log to DB FIRST
+    db.commit()
+    db.refresh(inv)
+
+    # 3. Step 3: Trigger async integration push (back sync) ONLY after DB commit AND ONLY if archiving succeeded
+    if archive_success:
+        if getattr(inv, 'external_sync_status', None) not in ['SYNCED', 'PENDING', 'QUEUED']:
+            inv.external_sync_status = 'PENDING'
+            db.commit()
+            trigger_async_integration_push(str(inv.id))
+    else:
+        logger.warning(f"[complete_document_lifecycle] Back sync push skipped because storage is pending for doc {inv.id}.")
 
     safe_broadcast_event('STAGE_APPROVED', {
         'document_id': str(inv.id),

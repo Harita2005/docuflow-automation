@@ -1,4 +1,5 @@
 import datetime
+import json
 import uuid
 
 from sqlalchemy import (
@@ -410,6 +411,31 @@ class Document(Base):
         self._current_stage_name = val
 
     current_stage_name = property(_get_current_stage_name, _set_current_stage_name)
+
+    @property
+    def storage_status(self):
+        try:
+            if self.custom_data:
+                data = json.loads(self.custom_data) if isinstance(self.custom_data, str) else self.custom_data
+                if isinstance(data, dict) and "storage_status" in data:
+                    return data.get("storage_status")
+        except Exception:
+            pass
+        return getattr(self, "_storage_status", "PENDING")
+
+    @storage_status.setter
+    def storage_status(self, val):
+        self._storage_status = val
+        try:
+            data = {}
+            if self.custom_data:
+                data = json.loads(self.custom_data) if isinstance(self.custom_data, str) else self.custom_data
+                if not isinstance(data, dict):
+                    data = {}
+            data["storage_status"] = val
+            self.custom_data = json.dumps(data)
+        except Exception:
+            pass
 
     __table_args__ = (
         Index(

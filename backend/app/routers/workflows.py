@@ -726,6 +726,21 @@ def fallback_reassign_or_override(
             notes=f"Admin {action.lower()}: '{old_approver}' ➔ '{target_user.username}'. Reason: {reason}",
             remarks=reason
         ))
+        if payload.get('auto_approve') or 'APPROVE' in action:
+            from app.routers.documents import complete_document_lifecycle
+            prev_stage_num = inv.current_stage or 1
+            inv.status = "Approved"
+            complete_document_lifecycle(
+                db=db,
+                inv=inv,
+                approver_name=actor_name,
+                remarks=f"Fallback reassigned and approved: {reason}",
+                prev_stage_num=prev_stage_num,
+                stage_name=f"Stage {prev_stage_num}",
+                next_assigned_info="Fallback reassignment final settlement"
+            )
+            return {"success": True, "action": f"{action}_APPROVED", "status": inv.status, "assigned_approver": inv.assigned_approver, "document_id": inv.id}
+
         db.commit()
         db.refresh(inv)
         return {"success": True, "action": action, "assigned_approver": inv.assigned_approver, "document_id": inv.id}

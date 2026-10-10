@@ -221,8 +221,8 @@ def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, tes
                 stage_name="Stage 1"
             )
             assert success is True
-            # Verify strict ordering: archive -> back_sync_push -> notifications
-            assert call_order == ["archive", "back_sync_push", "notifications"], f"Incorrect execution order: {call_order}"
+            # Verify strict ordering: archive -> notifications & audit log -> commit -> back_sync_push
+            assert call_order == ["archive", "notifications", "back_sync_push"], f"Incorrect execution order: {call_order}"
 
             # Second execution (Idempotency test)
             call_order.clear()
@@ -327,6 +327,203 @@ def test_aud03_endpoints_invoke_complete_document_lifecycle(db_session, test_set
         db_session.delete(inv1)
         db_session.delete(step1)
         db_session.delete(wf)
+        db_session.commit()
+
+
+def test_aud03_archival_failure_keeps_approval_and_marks_storage_pending(db_session, test_setup):
+    """
+    AUD-03 (a): If physical PDF archiving fails, the document MUST remain 'Approved'
+    in the database, its storage_status must be marked 'PENDING', and back-sync push
+    must NOT be triggered.
+    """
+    from unittest.mock import patch
+    from app.routers.documents import complete_document_lifecycle
+
+    doc_id = f"DOC-AUD03-FAIL-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:6]}",
+        vendor_name="Storage Failure Vendor",
+        amount=300.0,
+        status="Approved",
+        current_stage=1,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    push_called = False
+
+    def mock_push(invoice_id):
+        nonlocal push_called
+        push_called = True
+
+    try:
+        # Simulate archiving raising an exception or returning False
+        with patch("app.routers.documents.archive_approved_pdf", side_effect=RuntimeError("Disk I/O error during archiving")), \
+             patch("app.routers.documents.trigger_async_integration_push", side_effect=mock_push):
+
+            success = complete_document_lifecycle(
+                db=db_session,
+                inv=doc,
+                approver_name=test_setup["approver"].username,
+                remarks="Approved but storage fails",
+                prev_stage_num=1,
+                stage_name="Stage 1"
+            )
+            assert success is True
+
+            # (a) Verify document stays Approved in DB
+            db_session.refresh(doc)
+            assert doc.status == "Approved", f"Document status should remain Approved, got {doc.status}"
+
+            # (b) Verify storage_status is marked PENDING
+            assert doc.storage_status == "PENDING", f"Expected storage_status 'PENDING', got {doc.storage_status}"
+
+            # (c) Back sync push MUST NOT run when archiving failed
+            assert push_called is False, "Back sync push must NOT run when archiving failed!"
+    finally:
+        db_session.delete(doc)
+        db_session.commit()
+
+
+def test_aud03_back_sync_runs_only_after_db_commit(db_session, test_setup):
+    """
+    AUD-03 (b): Back sync runs strictly AFTER the database commit.
+    When trigger_async_integration_push is invoked, the database must already
+    have the document committed with status='Approved' and AuditLog row written.
+    """
+    from unittest.mock import patch
+    from app.routers.documents import complete_document_lifecycle
+    from app.database.models import AuditLog
+
+    doc_id = f"DOC-AUD03-COMMIT-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:6]}",
+        vendor_name="Commit Timing Vendor",
+        amount=400.0,
+        status="Approved",
+        current_stage=1,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    db_state_at_push_time = {}
+
+    def mock_push_check_db(invoice_id):
+        # Open an independent DB session to inspect what is permanently committed
+        with SessionLocal() as verify_session:
+            verified_doc = verify_session.query(Invoice).filter(Invoice.id == invoice_id).first()
+            audit_log = verify_session.query(AuditLog).filter(
+                AuditLog.invoice_id == invoice_id,
+                AuditLog.action.ilike("%approved%")
+            ).first()
+            db_state_at_push_time["doc_status"] = verified_doc.status if verified_doc else None
+            db_state_at_push_time["storage_status"] = verified_doc.storage_status if verified_doc else None
+            db_state_at_push_time["has_audit_log"] = audit_log is not None
+
+    try:
+        with patch("app.routers.documents.archive_approved_pdf", return_value=True), \
+             patch("app.routers.documents.trigger_async_integration_push", side_effect=mock_push_check_db):
+
+            complete_document_lifecycle(
+                db=db_session,
+                inv=doc,
+                approver_name=test_setup["approver"].username,
+                remarks="Verify commit before push",
+                prev_stage_num=1,
+                stage_name="Stage 1"
+            )
+
+        # Assert that by the time push executed, the DB commit had ALREADY occurred:
+        assert db_state_at_push_time.get("doc_status") == "Approved", f"Expected DB committed status 'Approved', got {db_state_at_push_time}"
+        assert db_state_at_push_time.get("storage_status") == "ARCHIVED", f"Expected storage_status 'ARCHIVED', got {db_state_at_push_time}"
+        assert db_state_at_push_time.get("has_audit_log") is True, f"Expected AuditLog already committed when push ran, got {db_state_at_push_time}"
+
+    finally:
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
+        db_session.delete(doc)
+        db_session.commit()
+
+
+def test_aud03_override_approve_and_fallback_reassign_call_lifecycle(db_session, test_setup):
+    """
+    AUD-03 (c): OVERRIDE_APPROVE and fallback-reassign both invoke complete_document_lifecycle
+    upon final approval.
+    """
+    from unittest.mock import patch
+    token_admin = test_setup["token_admin"]
+    approver = test_setup["approver"]
+    admin = test_setup["admin"]
+
+    # 1. Test OVERRIDE_APPROVE invoking lifecycle on single stage document
+    doc1_id = f"DOC-AUD03-OVR-{uuid.uuid4().hex[:6]}"
+    doc1 = Invoice(
+        id=doc1_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:4]}",
+        vendor_name="Override Vendor",
+        amount=500.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        assigned_approver=approver.username,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc1)
+
+    # 2. Test fallback REASSIGN with auto_approve invoking lifecycle
+    doc2_id = f"DOC-AUD03-REAS-{uuid.uuid4().hex[:6]}"
+    doc2 = Invoice(
+        id=doc2_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:4]}",
+        vendor_name="Reassign Vendor",
+        amount=600.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        assigned_approver="inactive_user_xyz",
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc2)
+    db_session.commit()
+
+    lifecycle_calls = []
+
+    def mock_lifecycle(db, inv, approver_name, **kwargs):
+        lifecycle_calls.append(str(inv.id))
+        return True
+
+    try:
+        with patch("app.routers.documents.complete_document_lifecycle", side_effect=mock_lifecycle):
+            # (a) OVERRIDE_APPROVE call
+            r_ovr = client.post(
+                f"/api/admin/workflows/{doc1_id}/fallback-reassign",
+                json={"action": "OVERRIDE_APPROVE", "reason": "Approver on medical leave"},
+                headers={"Authorization": f"Bearer {token_admin}"}
+            )
+            assert r_ovr.status_code == 200, f"Expected 200 from OVERRIDE_APPROVE, got {r_ovr.status_code}: {r_ovr.text}"
+            assert doc1_id in lifecycle_calls, "complete_document_lifecycle was NOT invoked by OVERRIDE_APPROVE!"
+
+            # (b) REASSIGN with auto_approve call
+            r_reas = client.post(
+                f"/api/admin/workflows/{doc2_id}/fallback-reassign",
+                json={"action": "REASSIGN", "target_approver": approver.username, "reason": "Reassign to active peer", "auto_approve": True},
+                headers={"Authorization": f"Bearer {token_admin}"}
+            )
+            assert r_reas.status_code == 200, f"Expected 200 from REASSIGN auto_approve, got {r_reas.status_code}: {r_reas.text}"
+            assert doc2_id in lifecycle_calls, "complete_document_lifecycle was NOT invoked by fallback-reassign!"
+
+    finally:
+        db_session.delete(doc1)
+        db_session.delete(doc2)
         db_session.commit()
 
 
