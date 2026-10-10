@@ -173,6 +173,16 @@ def save_workflow_profile(
             detail="Workflow profile name is required."
         )
 
+    for idx, step in enumerate(payload.steps):
+        target = getattr(step, 'approver_target', None)
+        if not target or not str(target).strip():
+            stg = step.stage_number or (idx + 1)
+            name = step.step_name or f"Stage {stg}"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Workflow configuration error: Step {stg} ('{name}') must specify an approver_target."
+            )
+
     prof_name = str(payload.profile_name).strip()
     try:
         existing = db.query(WorkflowProfile).filter(

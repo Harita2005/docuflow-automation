@@ -1837,7 +1837,12 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
             WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
         ).first()
 
-    if next_step and next_step.approver_target:
+    if next_step:
+        if not next_step.approver_target or not str(next_step.approver_target).strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Workflow configuration error: Step {next_step.stage_number} ('{next_step.step_name}') has no valid approver target."
+            )
         next_stage_val = prev_stage_num + 1
         targets = [next_step.approver_target.strip()]
         if next_step.delegate_approver and next_step.delegate_approver.strip():
@@ -1947,7 +1952,12 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
             WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
         ).first()
 
-    if next_step and next_step.approver_target:
+    if next_step:
+        if not next_step.approver_target or not str(next_step.approver_target).strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Workflow configuration error: Step {next_step.stage_number} ('{next_step.step_name}') has no valid approver target."
+            )
         next_stage_val = prev_stage_num + 1
         targets = [next_step.approver_target.strip()]
         if next_step.delegate_approver and next_step.delegate_approver.strip():
@@ -2059,7 +2069,12 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
                 WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
             ).first()
 
-        if next_step and next_step.approver_target:
+        if next_step:
+            if not next_step.approver_target or not str(next_step.approver_target).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Workflow configuration error: Step {next_step.stage_number} ('{next_step.step_name}') has no valid approver target."
+                )
             next_stage_val = prev_stage_num + 1
             targets = [next_step.approver_target.strip()]
             if next_step.delegate_approver and next_step.delegate_approver.strip():
