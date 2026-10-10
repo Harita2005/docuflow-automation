@@ -501,41 +501,41 @@ export default function DocumentUpload({
   };
 
   return (
-    <div className="w-full flex flex-col justify-start py-1 px-1 sm:px-2 animate-fadeIn">
-      {/* Breadcrumb Navigation */}
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mb-2 px-1">
+    <div className="w-full flex flex-col justify-start py-0.5 px-1 animate-fadeIn">
+      {/* Breadcrumb Navigation - Ultra Compact */}
+      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium mb-1 px-1">
         <button
           type="button"
           onClick={() => setCurrentView("dashboard")}
           className="flex items-center gap-1 hover:text-slate-800 transition cursor-pointer"
         >
-          <Home className="w-3.5 h-3.5 text-slate-400" />
+          <Home className="w-3 h-3 text-slate-400" />
           <span>Home</span>
         </button>
         <span className="text-slate-400">&gt;</span>
         <span className="text-slate-800 font-semibold">Upload Document</span>
       </div>
 
-      {/* Page Title & Icon Banner */}
-      <div className="flex items-center gap-3 mb-3 px-1">
-        <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/70 flex items-center justify-center text-[#003F28] shrink-0 shadow-2xs">
+      {/* Page Title & Icon Banner - Compact */}
+      <div className="flex items-center gap-2.5 mb-2 px-1">
+        <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200/70 flex items-center justify-center text-[#003F28] shrink-0 shadow-2xs">
           <div className="relative">
-            <FileText className="w-5 h-5" />
-            <Shield className="w-2.5 h-2.5 text-[#003F28] absolute -bottom-0.5 -right-0.5 fill-[#003F28]" />
+            <FileText className="w-4 h-4" />
+            <Shield className="w-2 h-2 text-[#003F28] absolute -bottom-0.5 -right-0.5 fill-[#003F28]" />
           </div>
         </div>
         <div>
-          <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-tight">
+          <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-tight">
             Upload &amp; Initiate Workflow
           </h1>
-          <p className="text-xs text-slate-500 font-normal">
+          <p className="text-[11px] text-slate-500 font-normal">
             Upload a document to begin the automated approval process.
           </p>
         </div>
       </div>
 
-      {/* Main Card Container - Full Width */}
-      <div className="w-full bg-white rounded-xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
+      {/* Main Card Container - Tightened to fit in one viewport without scroll */}
+      <div className="w-full bg-white rounded-xl border border-slate-200 shadow-xs p-3.5 sm:p-4 space-y-2.5">
         {/* Loading State */}
         {loading ? (
           <div className="py-8 text-center flex flex-col items-center justify-center space-y-4">
@@ -1075,33 +1075,33 @@ export default function DocumentUpload({
 
           <>
             {/* Row 1: Document Configuration */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-slate-700" />
-                <h3 className="text-sm font-bold text-slate-900">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-700" />
+                <h3 className="text-xs font-bold text-slate-900">
                   Document Configuration
                 </h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                 {/* Document Type Dropdown */}
-                <div className="md:col-span-6 space-y-1.5">
+                <div className="md:col-span-6 space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-slate-800">
+                    <label className="block text-[11px] font-semibold text-slate-800">
                       Document Type <span className="text-red-500">*</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setShowNewDocTypeModal(true)}
-                      className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline"
+                      className="text-[10.5px] font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline"
                     >
                       + Add New Type
                     </button>
                   </div>
 
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <FileText className="w-4 h-4" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                      <FileText className="w-3.5 h-3.5" />
                     </div>
                     <select
                       value={selectedDocType}
@@ -1112,7 +1112,7 @@ export default function DocumentUpload({
                           handleDocTypeChange(e.target.value);
                         }
                       }}
-                      className="w-full bg-white border border-slate-200 text-slate-800 rounded-xl pl-10 pr-10 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs"
+                      className="w-full bg-white border border-slate-200 text-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs"
                     >
                       <optgroup label="Standard Document Types">
                         <option value="AP Invoice">AP Invoice</option>
@@ -1138,31 +1138,31 @@ export default function DocumentUpload({
                         Add New Document Type...
                       </option>
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400">
-                      <ChevronDown className="w-4 h-4" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                      <ChevronDown className="w-3.5 h-3.5" />
                     </div>
                   </div>
                 </div>
 
                 {/* Approval Workflow Dropdown */}
-                <div className="md:col-span-6 space-y-1.5">
+                <div className="md:col-span-6 space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-slate-800">
+                    <label className="block text-[11px] font-semibold text-slate-800">
                       Approval Workflow <span className="text-red-500">*</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleGoToFlowBuilder}
-                      className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline inline-flex items-center gap-1"
+                      className="text-[10.5px] font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline inline-flex items-center gap-1"
                     >
                       <span>Build Flow</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ExternalLink className="w-3 h-3" />
                     </button>
                   </div>
 
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <Layers className="w-4 h-4" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                      <Layers className="w-3.5 h-3.5" />
                     </div>
                     <select
                       value={selectedWorkflowProfile}
@@ -1173,7 +1173,7 @@ export default function DocumentUpload({
                           setSelectedWorkflowProfile(e.target.value);
                         }
                       }}
-                      className="w-full bg-white border border-slate-200 text-slate-800 rounded-xl pl-10 pr-10 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs truncate"
+                      className="w-full bg-white border border-slate-200 text-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs truncate"
                     >
                       {availableWorkflows.length > 0 ? (
                         <optgroup label="Available Workflows">
@@ -1196,117 +1196,113 @@ export default function DocumentUpload({
                         Build Flow in Flow Builder
                       </option>
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400">
-                      <ChevronDown className="w-4 h-4" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                      <ChevronDown className="w-3.5 h-3.5" />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Info alert banner under dropdowns */}
-              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center gap-2.5 text-xs text-emerald-900">
-                <AlertCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="p-2 bg-emerald-50/70 border border-emerald-200/80 rounded-lg flex items-center gap-2 text-[11px] text-emerald-900">
+                <AlertCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>This workflow will be used to determine the approval route for the uploaded document.</span>
               </div>
             </div>
 
             {/* Row 2: Approval Route Stepper Cards */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-slate-700" />
-                  <h3 className="text-sm font-bold text-slate-900">
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-slate-700" />
+                  <h3 className="text-xs font-bold text-slate-900">
                     Approval Route ({activeWorkflowData.stages.length} Stages)
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowStagesModal(true)}
-                  className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition cursor-pointer"
+                  className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition cursor-pointer"
                 >
                   <span>View All Stages &amp; Approvers</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
               {/* Responsive Horizontal Pipeline of Stage Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-center">
                 {activeWorkflowData.stages.map((stage, idx) => {
                   return (
-                    <React.Fragment key={idx}>
-                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs hover:border-emerald-300 transition-all flex items-center justify-between gap-3 relative">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Number Badge */}
-                          <div className="w-6 h-6 rounded-full bg-[#005A36] text-white flex items-center justify-center text-xs font-bold shrink-0">
-                            {stage.stageNum || idx + 1}
-                          </div>
+                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-2.5 relative">
+                      {/* Number Badge */}
+                      <div className="w-5 h-5 rounded-full bg-[#005A36] text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                        {stage.stageNum || idx + 1}
+                      </div>
 
-                          {/* Icon */}
-                          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800 shrink-0">
-                            {idx === 0 ? (
-                              <FileText className="w-4 h-4" />
-                            ) : idx === 1 ? (
-                              <Users className="w-4 h-4" />
-                            ) : idx === 2 ? (
-                              <BarChart2 className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4" />
-                            )}
-                          </div>
+                      {/* Icon */}
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800 shrink-0">
+                        {idx === 0 ? (
+                          <FileText className="w-3.5 h-3.5" />
+                        ) : idx === 1 ? (
+                          <Users className="w-3.5 h-3.5" />
+                        ) : idx === 2 ? (
+                          <BarChart2 className="w-3.5 h-3.5" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                      </div>
 
-                          {/* Titles */}
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-slate-900 truncate" title={stage.name}>
-                              {stage.name}
-                            </div>
-                            <div className="text-[11px] text-slate-500 truncate" title={stage.subtitle}>
-                              {stage.subtitle}
-                            </div>
-                            <div className="mt-1">
-                              <span className="inline-block px-2 py-0.5 bg-emerald-50 text-[#005A36] border border-emerald-200 text-[10px] font-semibold rounded-md">
-                                Approver
-                              </span>
-                            </div>
-                          </div>
+                      {/* Titles */}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11.5px] font-bold text-slate-900 truncate" title={stage.name}>
+                          {stage.name}
+                        </div>
+                        <div className="text-[10px] text-slate-500 truncate" title={stage.subtitle}>
+                          {stage.subtitle}
+                        </div>
+                        <div className="mt-0.5">
+                          <span className="inline-block px-1.5 py-0.2 bg-emerald-50 text-[#005A36] border border-emerald-200 text-[9.5px] font-semibold rounded">
+                            Approver
+                          </span>
                         </div>
                       </div>
-                    </React.Fragment>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
             {/* Row 3: Upload Document Dropzone */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-slate-700" />
-                  <h3 className="text-sm font-bold text-slate-900">
+                <div className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-700" />
+                  <h3 className="text-xs font-bold text-slate-900">
                     Upload Document <span className="text-red-500">*</span>
                   </h3>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-[10.5px] text-slate-400">
                   Attach your document (PDF only, maximum size 15 MB)
                 </p>
               </div>
 
-              {/* Drag & Drop Area */}
+              {/* Drag & Drop Area - Height calibrated to fit screen */}
               <div
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
                 onClick={triggerFileInput}
-                className={`border-2 border-dashed rounded-2xl py-8 px-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 ${
+                className={`border-2 border-dashed rounded-xl py-4 sm:py-5 px-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
                   dragActive
                     ? "border-emerald-600 bg-emerald-50/50"
                     : "border-emerald-400/60 bg-emerald-50/20 hover:border-emerald-600 hover:bg-emerald-50/30"
                 }`}
               >
                 {/* Cloud Upload Icon */}
-                <div className="w-12 h-12 rounded-full bg-white border border-emerald-200 flex items-center justify-center text-emerald-800 shadow-2xs">
+                <div className="w-9 h-9 rounded-full bg-white border border-emerald-200 flex items-center justify-center text-emerald-800 shadow-2xs">
                   <svg
-                    className="w-6 h-6 text-emerald-800"
+                    className="w-5 h-5 text-emerald-800"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1320,24 +1316,24 @@ export default function DocumentUpload({
                   </svg>
                 </div>
 
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-slate-800">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-slate-800">
                     Drag &amp; drop your PDF here
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11px] text-slate-500">
                     or browse from your computer
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  className="mt-1 px-4 py-2 bg-[#005A36] hover:bg-[#00472b] text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all pointer-events-none"
+                  className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00472b] text-white text-[11px] font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all pointer-events-none"
                 >
-                  <FileText className="w-3.5 h-3.5" />
+                  <FileText className="w-3 h-3" />
                   <span>Browse Files</span>
                 </button>
 
-                <p className="text-[11px] text-slate-400 pt-1">
+                <p className="text-[10px] text-slate-400">
                   PDF only &nbsp;|&nbsp; Max 15 MB
                 </p>
 
@@ -1352,23 +1348,23 @@ export default function DocumentUpload({
 
               {/* Uploaded File Selected Card */}
               {pendingFile && (
-                <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between shadow-2xs animate-fadeIn">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-red-500 text-white flex items-center justify-center font-bold text-xs uppercase shadow-2xs">
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center justify-between shadow-2xs animate-fadeIn">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-red-500 text-white flex items-center justify-center font-bold text-[10px] uppercase shadow-2xs">
                       PDF
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-900 truncate max-w-md">
                         {pendingFile.name}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[10.5px] text-slate-400">
                         {(pendingFile.size / 1024).toFixed(0)} KB
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span>File Selected</span>
                     <button
                       type="button"
@@ -1376,10 +1372,10 @@ export default function DocumentUpload({
                         e.stopPropagation();
                         setPendingFile(null);
                       }}
-                      className="ml-2 text-slate-400 hover:text-slate-600 p-1"
+                      className="ml-1 text-slate-400 hover:text-slate-600 p-0.5"
                       title="Remove file"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1388,14 +1384,14 @@ export default function DocumentUpload({
 
             {/* Error Message */}
             {errorMsg && (
-              <div className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start gap-2 text-red-800 text-xs">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="bg-red-50 border border-red-200 p-2 rounded-lg flex items-start gap-1.5 text-red-800 text-xs">
+                <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
             {/* Row 4: Action Buttons (Cancel & Upload) */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => {
@@ -1405,7 +1401,7 @@ export default function DocumentUpload({
                     setCurrentView("dashboard");
                   }
                 }}
-                className="px-6 py-2.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                className="px-5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-2xs cursor-pointer"
               >
                 Cancel
               </button>
@@ -1414,11 +1410,11 @@ export default function DocumentUpload({
                 type="button"
                 onClick={() => handleExtractPreview()}
                 disabled={!pendingFile || extracting}
-                className="px-6 py-2.5 text-xs font-semibold text-white bg-[#005A36] hover:bg-[#00472b] rounded-xl shadow-xs hover:shadow transition flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 text-xs font-semibold text-white bg-[#005A36] hover:bg-[#00472b] rounded-lg shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Sparkles className="w-4 h-4 text-emerald-300" />
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
                 <span>Analyze &amp; Verify Document</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </>
