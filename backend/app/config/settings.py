@@ -43,7 +43,19 @@ class Settings(BaseSettings):
 
     # SQL Server
     DB_DRIVER: str = "ODBC Driver 17 for SQL Server"
-    DB_TRUST_SERVER_CERTIFICATE: bool = True
+    DB_TRUST_SERVER_CERTIFICATE: Optional[bool] = None
+
+    @property
+    def trust_server_certificate(self) -> bool:
+        """
+        Determines whether to trust server TLS certificate without validation.
+        Defaults to False in production (strict TLS validation), and True in development.
+        Can be explicitly overridden via DB_TRUST_SERVER_CERTIFICATE.
+        """
+        if self.DB_TRUST_SERVER_CERTIFICATE is not None:
+            return self.DB_TRUST_SERVER_CERTIFICATE
+        env = (self.ENVIRONMENT or "").strip().lower()
+        return env not in ("production", "prod")
 
     def get_database_url(self) -> str:
         """Build the SQL Server connection URL.
@@ -55,6 +67,10 @@ class Settings(BaseSettings):
             db_url = self.DATABASE_URL.strip()
             forbidden = ["localhost", "127.0.0.1", ":1433", "@db:", "sqlite", "postgresql", "mysql"]
             if not any(f in db_url.lower() for f in forbidden):
+                trust_cert = "yes" if self.trust_server_certificate else "no"
+                if "TrustServerCertificate=" in db_url:
+                    import re
+                    return re.sub(r"TrustServerCertificate=[a-zA-Z0-9]+", f"TrustServerCertificate={trust_cert}", db_url)
                 return db_url
         host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
         if host.lower() in ("localhost", "127.0.0.1", "db"):
@@ -63,14 +79,15 @@ class Settings(BaseSettings):
         if not port or port == 1433:
             port = 1443
         driver = quote_plus(self.DB_DRIVER)
+        trust_cert = "yes" if self.trust_server_certificate else "no"
         if self.DB_USER and self.DB_PASSWORD:
             user = quote_plus(self.DB_USER)
             pwd = quote_plus(self.DB_PASSWORD)
             return (
-                f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{self.DB_NAME}?driver={driver}&TrustServerCertificate={'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
+                f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{self.DB_NAME}?driver={driver}&TrustServerCertificate={trust_cert}"
             )
         return (
-            f"mssql+pyodbc://@{host}:{port}/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={'yes' if self.DB_TRUST_SERVER_CERTIFICATE else 'no'}"
+            f"mssql+pyodbc://@{host}:{port}/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
         )
 
     # Authentication
