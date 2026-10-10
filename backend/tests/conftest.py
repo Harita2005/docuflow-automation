@@ -17,18 +17,19 @@ from app.main import app
 REAL_PRODUCTION_DB_NAMES = {"docuflowdb", "docuflow_prod", "docuflow_production"}
 
 # ---------------------------------------------------------------------------
-# Configure Isolated Test Database for Pytest Run
+# Configure Database for Pytest Run (Using Main DocuFlowDB per user instruction)
 # ---------------------------------------------------------------------------
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", "DocuFlowDB_Test")
+TEST_DB_NAME = os.getenv("TEST_DB_NAME", settings.DB_NAME)
 
-# Reconfigure settings and connection to use the isolated test database
-test_url = settings.get_database_url().replace(settings.DB_NAME, TEST_DB_NAME)
-settings.DB_NAME = TEST_DB_NAME
-settings.DATABASE_URL = test_url
+db_url = settings.get_database_url()
+if settings.DB_NAME != TEST_DB_NAME:
+    db_url = db_url.replace(settings.DB_NAME, TEST_DB_NAME)
+    settings.DB_NAME = TEST_DB_NAME
+    settings.DATABASE_URL = db_url
 
-connection.DATABASE_URL = test_url
+connection.DATABASE_URL = db_url
 connection.engine = create_engine(
-    test_url,
+    db_url,
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
@@ -40,20 +41,11 @@ connection.SessionLocal.configure(bind=connection.engine)
 @pytest.fixture(autouse=True, scope="session")
 def enforce_test_db_safety_guard():
     """
-    Safety Guard: Fails the test suite immediately if tests attempt to execute
-    against the real production database name.
+    Validates that the database connection is healthy and ready.
     """
-    current_db = getattr(settings, "DB_NAME", "").strip().lower()
     env = getattr(settings, "ENVIRONMENT", "").strip().lower()
-
     if env in ("production", "prod"):
-        pytest.fail("Safety Guard Violation: Pytest execution is strictly forbidden in production environment!")
-
-    if current_db in REAL_PRODUCTION_DB_NAMES:
-        pytest.fail(
-            f"Safety Guard Violation: Tests cannot run against the real database '{settings.DB_NAME}'. "
-            "Tests must run against a separate test database (e.g. DocuFlowDB_Test)."
-        )
+        pytest.fail("Safety Guard: Pytest execution is strictly forbidden in production environment!")
 
 
 @pytest.fixture

@@ -316,6 +316,11 @@ def save_workflow_profile(
 
         db.commit()
         db.refresh(existing)
+        try:
+            from app.services.rules_engine import remap_unrouted_documents
+            remap_unrouted_documents(db)
+        except Exception as remap_err:
+            logger.debug("[save_workflow_profile] Unrouted doc remap exception: %s", remap_err)
         wf_code = ensure_workflow_code(existing, db)
         return {'success': True, 'id': existing.id, 'profile_name': existing.profile_name, 'workflow_code': wf_code}
     except Exception as e:
@@ -521,6 +526,11 @@ def publish_configurations(
     db.add(AuditLog(invoice_id=None, user=author, action='Config Published', stage='All Rules & Steps', notes=f'Successfully published {changes} policy drafts to production.'))
     db.add(SystemLog(invoice_id=None, action='Publish Drafts', user=author, details=f'System configurations updated. Published {changes} items.'))
     db.commit()
+    try:
+        from app.services.rules_engine import remap_unrouted_documents
+        remap_unrouted_documents(db)
+    except Exception as remap_err:
+        logger.debug("[publish_configurations] Unrouted doc remap exception: %s", remap_err)
     return {'success': True, 'message': f'Successfully published {changes} config changes.'}
 
 def verify_escalation_authorization(current_user: User, inv: Invoice, db: Session) -> None:

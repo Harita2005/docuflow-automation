@@ -793,3 +793,138 @@ def detect_rule_conflicts(db: Session, custom_rules: Optional[List[Dict[str, Any
                 conflict_type = 'PRIORITY_COLLISION' if has_priority_tie else 'OVERLAPPING_CONDITIONS'
                 conflicts.append({'conflict_type': conflict_type, 'severity': severity, 'signature': sig, 'affected_rules': [m.get('rule_name') for m in active_matches], 'target_workflows': list(workflows), 'priorities': priorities, 'recommendation': 'Adjust priorities to ensure a clear evaluation order.' if has_priority_tie else 'One rule shadows another with the same conditions. Consider merging or archiving obsolete rules.'})
     return {'success': True, 'total_rules_scanned': len(rules_list), 'conflict_count': len(conflicts), 'conflicts': conflicts}
+
+def remap_unrouted_documents(db: Session) -> List[Dict[str, Any]]:
+    """
+    Finds all documents currently in an unrouted state (status containing 'Unrouted',
+    or workflow_profile_id is NULL) and re-evaluates them against all active business rules.
+    Whenever a matching workflow rule is found, the document is automatically mapped,
+    assigned to Stage 1, its checklist is populated, an audit log entry is written,
+    and assigned approvers are notified.
+    """
+    from sqlalchemy import or_
+    from app.database.models import Invoice, WorkflowProfile, WorkflowStepDefinition, InvoiceChecklistState, AuditLog
+
+    # Find unrouted documents
+    unrouted_docs = db.query(Invoice).filter(
+        Invoice.is_deleted == False,
+        or_(
+            Invoice.workflow_profile_id.is_(None),
+            Invoice.workflow_profile_id == '',
+            Invoice.workflow_profile_id == 'UNROUTED',
+            Invoice.status.ilike('%Unrouted%'),
+            Invoice.status.ilike('%No Rule Matched%')
+        )
+    ).all()
+
+    if not unrouted_docs:
+        return []
+
+    remapped_results = []
+    for doc in unrouted_docs:
+        rule_eval_res = evaluate_business_rules_full(db, doc)
+        if not rule_eval_res or not rule_eval_res.get('target_workflow_id'):
+            continue
+
+        target_wf = rule_eval_res['target_workflow_id']
+        rule_name = rule_eval_res.get('rule_name', 'Policy Rule')
+        rule_action = rule_eval_res.get('rule_action', 'WORKFLOW_ROUTE')
+        cancel_reason = rule_eval_res.get('cancel_reason')
+
+        profile = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.profile_name == target_wf) | (WorkflowProfile.workflow_code == target_wf),
+            WorkflowProfile.is_deleted == False
+        ).first()
+
+        if not profile:
+            continue
+
+        steps = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == profile.profile_name) |
+            (WorkflowStepDefinition.profile_name.ilike(profile.profile_name.strip()))
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+
+        doc.workflow_profile_id = profile.profile_name
+        doc.total_stages = len(steps) if steps else 1
+        
+        # Document Type inference if not already set
+        if not doc.document_type or doc.document_type.upper() in ('GENERAL RECORDS', 'DOC', 'AP INVOICE', ''):
+            if profile.workflow_type and profile.workflow_type.upper() not in ('GENERAL RECORDS', 'AP INVOICE', ''):
+                doc.document_type = profile.workflow_type
+            else:
+                doc.document_type = infer_document_type(category=doc.category, wf_name=profile.profile_name, doc_type=doc.document_type)
+
+        if rule_action == 'AUTO_APPROVE':
+            doc.status = 'Approved'
+            doc.current_stage = doc.total_stages
+            doc.assigned_approver = 'System Auto-Approved'
+            db.add(AuditLog(
+                invoice_id=doc.id,
+                user='Policy Engine (Auto-Remap)',
+                action='AUTO_APPROVED',
+                stage='Straight-Through Processing',
+                notes=f"Document auto-approved via rule '{rule_name}' mapped to '{profile.profile_name}'."
+            ))
+        elif rule_action == 'AUTO_CANCEL':
+            doc.status = 'Cancelled'
+            doc.current_stage = 1
+            doc.assigned_approver = 'System Auto-Cancelled'
+            db.add(AuditLog(
+                invoice_id=doc.id,
+                user='Policy Engine (Auto-Remap)',
+                action='AUTO_CANCELLED',
+                stage='Auto-Rejection Guard',
+                notes=f"Document auto-cancelled via rule '{rule_name}'. Reason: {cancel_reason or 'Policy Violation'}"
+            ))
+        else:
+            doc.current_stage = 1
+            stage_name = steps[0].step_name if steps else 'Stage 1'
+            doc.assigned_approver = steps[0].approver_target if steps else 'Unassigned'
+            doc.status = f"Initiated ({stage_name})"
+
+            # Resolve checklist items for Stage 1
+            try:
+                from app.routers.documents import resolve_checklist_items, dispatch_assignment_inapp_notification
+                stage_items = resolve_checklist_items(db, doc, stage_name)
+                db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == doc.id).delete()
+                for it_text in stage_items:
+                    db.add(InvoiceChecklistState(
+                        invoice_id=doc.id,
+                        stage_name=stage_name,
+                        item_text=it_text,
+                        is_checked=False
+                    ))
+                doc.checklist_state = json.dumps({it_text: False for it_text in stage_items})
+                
+                # Notify Stage 1 approver
+                if steps and steps[0].approver_target:
+                    dispatch_assignment_inapp_notification(db, doc, steps[0].approver_target)
+            except Exception as chk_exc:
+                logger.debug("Checklist/notification setup exception during auto-remap: %s", chk_exc)
+
+            db.add(AuditLog(
+                invoice_id=doc.id,
+                user='Policy Engine (Auto-Remap)',
+                action='WORKFLOW_MAPPED',
+                stage='Stage 1',
+                notes=f"Document auto-mapped from Unrouted status to workflow '{profile.profile_name}' based on rule '{rule_name}'."
+            ))
+
+        remapped_results.append({
+            'document_id': doc.id,
+            'invoice_number': getattr(doc, 'invoice_number', None) or getattr(doc, 'document_number', None),
+            'workflow_profile_id': doc.workflow_profile_id,
+            'assigned_approver': doc.assigned_approver,
+            'status': doc.status,
+            'rule_name': rule_name
+        })
+
+    if remapped_results:
+        db.commit()
+        try:
+            from app.routers.events import broadcast_event
+            broadcast_event('DOCUMENTS_AUTO_REMAPPED', {'count': len(remapped_results), 'documents': [r['document_id'] for r in remapped_results]})
+        except Exception:
+            pass
+
+    return remapped_results

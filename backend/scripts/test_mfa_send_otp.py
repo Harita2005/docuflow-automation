@@ -31,7 +31,21 @@ def active_user(db_session):
 @pytest.fixture(scope="module")
 def deactivated_user(db_session):
     user = db_session.query(User).filter(User.is_active == False).first()
-    assert user is not None, "Deactivated test user must exist in database"
+    if not user:
+        user = User(
+            user_uid="UID_test_deactivated_mfa",
+            username="test_deact_mfa_user",
+            employee_id="TEST_DEACT_MFA",
+            email="deact.mfa@example.com",
+            employee_name="Deactivated MFA User",
+            name="Deactivated MFA User",
+            password_hash="testpasshash",
+            is_active=False,
+            is_deleted=False
+        )
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
     return user
 
 def test_1_mfa_send_otp_does_not_return_otp_in_response(active_user):

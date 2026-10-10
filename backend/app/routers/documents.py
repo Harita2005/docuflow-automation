@@ -3574,8 +3574,21 @@ def trigger_admin_backup(db: Session=Depends(get_db), current_user: User=Depends
     _require_docs_admin(current_user, db)
     return {'success': True, 'message': 'Database and uploads backup ran successfully!'}
 
+@router.post('/api/admin/documents/remap-unrouted')
+def trigger_unrouted_documents_remap(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    """Manually triggers evaluation and re-mapping of all unrouted documents against active business rules."""
+    _require_docs_admin(current_user, db)
+    from app.services.rules_engine import remap_unrouted_documents
+    remapped = remap_unrouted_documents(db)
+    return {
+        'success': True,
+        'message': f'Successfully evaluated unrouted documents: {len(remapped)} documents remapped to active workflows.',
+        'remapped_count': len(remapped),
+        'remapped_documents': remapped
+    }
+
 @router.get('/api/erp/{po_number}')
-def get_erp_po_details(po_number: str, db: Session=Depends(get_db)):
+def get_erp_po_details(po_number: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = db.query(Invoice).filter(Invoice.po_number == po_number).first()
     return {'po_number': po_number, 'vendor_name': inv.vendor_name if inv else 'COIMBATORE TEXTILE TOOLS', 'amount': inv.amount if inv else 35000.0, 'status': 'Approved', 'items': []}
 
