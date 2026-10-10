@@ -1191,14 +1191,25 @@ def get_storage_root_path() -> Path:
 
 def get_archived_pdf_path(inv: Invoice) -> Path:
     """
-    Constructs the storage path for approved documents under storage root.
+    Constructs the storage path for approved documents under storage root:
+    year/month/document folder.
     """
     raw_doc_num = os.path.basename(str(inv.invoice_number or inv.doc_num or 'DOC'))
     clean_doc_num = re.sub('[^a-zA-Z0-9_\\-\\.]', '', raw_doc_num)
     raw_id = os.path.basename(str(inv.id) if inv.id else '0')
     clean_id = re.sub('[^a-zA-Z0-9_\\-\\.]', '', raw_id)
     filename = f'{clean_doc_num}_{clean_id}.pdf'
-    return get_storage_root_path() / 'approved' / filename
+
+    dt = inv.created_at or datetime.datetime.utcnow()
+    year_str = dt.strftime('%Y')
+    month_str = dt.strftime('%m')
+    doc_type_str = sanitize_name(inv.document_type or 'document')
+
+    base_root = get_storage_root_path().resolve()
+    target_path = (base_root / 'approved' / year_str / month_str / doc_type_str / filename).resolve()
+    if target_path.is_relative_to(base_root):
+        return target_path
+    return base_root / 'approved' / filename
 
 
 def get_rejected_pdf_path(inv: Invoice) -> Path:
@@ -1217,17 +1228,22 @@ def get_rejected_pdf_path(inv: Invoice) -> Path:
         return target_path
     return base_rejected / filename
 
-def archive_approved_pdf(inv: Invoice):
+def archive_approved_pdf(inv: Invoice) -> bool:
     """
     Archival helper:
-    1. Saves approved physical PDF into configured folders under stored_pdfs/approved/.
-    2. Updates inv.file_url in the database to point to the new /stored_pdfs/ web route.
+    1. Saves approved physical PDF into configured folders under stored_pdfs/approved/year/month/document.
+    2. Updates inv.file_url and inv.file_path in the database.
     3. Deletes temporary upload file from uploads/ directory.
-    4. Triggers background push to 3rd-party webhook / SAP.
+    Returns True if archive succeeded (or was already archived), False otherwise.
     """
     try:
         if not inv:
-            return
+            return False
+        dest_approved = get_archived_pdf_path(inv).resolve()
+
+        if dest_approved.exists() and getattr(inv, 'file_path', None) == str(dest_approved):
+            return True
+
         safe_base = os.path.basename(inv.file_url) if inv.file_url else ''
         clean_filename = re.sub('[^a-zA-Z0-9_\\-\\.]', '', safe_base)
         upload_root = settings.UPLOAD_DIR.resolve()
@@ -1235,28 +1251,126 @@ def archive_approved_pdf(inv: Invoice):
         upload_path = (upload_root / clean_filename).resolve() if clean_filename else None
         legacy_storage_path = (legacy_root / clean_filename).resolve() if clean_filename else None
         src_path = None
-        if upload_path and upload_path.is_relative_to(upload_root) and upload_path.exists():
+        if getattr(inv, 'file_path', None) and Path(inv.file_path).exists():
+            src_path = Path(inv.file_path).resolve()
+        elif upload_path and upload_path.is_relative_to(upload_root) and upload_path.exists():
             src_path = upload_path
         elif legacy_storage_path and legacy_storage_path.is_relative_to(legacy_root) and legacy_storage_path.exists():
             src_path = legacy_storage_path
         if src_path and src_path.exists():
-            base_root = get_storage_root_path().resolve()
-            dest_approved = get_archived_pdf_path(inv).resolve()
-            if dest_approved.is_relative_to(base_root):
-                dest_approved.parent.mkdir(parents=True, exist_ok=True)
-                if src_path != dest_approved:
-                    shutil.copy2(str(src_path), str(dest_approved))
-                    logger.info(f'[Archive] Successfully archived approved PDF for document {inv.id}')
-                    if upload_path and upload_path.exists() and (upload_path != dest_approved):
-                        try:
-                            upload_path.unlink()
-                        except Exception as exc:
-                            logger.debug('Handled exception: %s', exc)
-                inv.file_url = f'/api/documents/{inv.id}/file'
-                inv.file_path = str(dest_approved)
-        trigger_async_integration_push(str(inv.id))
+            dest_approved.parent.mkdir(parents=True, exist_ok=True)
+            if src_path != dest_approved:
+                shutil.copy2(str(src_path), str(dest_approved))
+                logger.info(f'[Archive] Successfully archived approved PDF for document {inv.id} to {dest_approved}')
+                if upload_path and upload_path.exists() and (upload_path != dest_approved):
+                    try:
+                        upload_path.unlink()
+                    except Exception as exc:
+                        logger.debug('Handled exception: %s', exc)
+            inv.file_url = f'/api/documents/{inv.id}/file'
+            inv.file_path = str(dest_approved)
+            return True
+        return False
     except Exception as e:
-        logger.debug('Handled exception: %s', e)
+        logger.error(f'[Archive] Error archiving approved PDF for document {getattr(inv, "id", "N/A")}: {e}')
+        return False
+
+def complete_document_lifecycle(
+    db: Session,
+    inv: Invoice,
+    approver_name: str,
+    remarks: Optional[str] = None,
+    prev_stage_num: Optional[int] = None,
+    stage_name: Optional[str] = None,
+    next_assigned_info: Optional[str] = None
+) -> bool:
+    """
+    Unified post-approval lifecycle handler called by:
+      - /api/workflows/approve
+      - /api/documents/{id}/approve
+      - /api/records/{id}/step-action
+
+    Execution order:
+      1. Archive PDF to year/month/document folder
+      2. If archiving succeeds, trigger trigger_async_integration_push (back sync)
+      3. Dispatch notifications and audit log
+
+    Idempotent:
+      - Does not re-archive if already archived.
+      - Does not push back sync twice.
+      - Does not create duplicate final approval audit logs or notifications.
+    """
+    remarks = remarks or 'Compliance items verified and signed off.'
+    prev_stg = prev_stage_num or inv.current_stage or 1
+    stg_name = stage_name or f'Stage {prev_stg}'
+    next_info = next_assigned_info or 'Final Settlement Completed. Ready for payment disbursement.'
+
+    # 1. Step 1: Archive physical PDF to year/month/document folder
+    archive_success = archive_approved_pdf(inv)
+
+    # 2. Step 2: Trigger async integration push (back sync) ONLY after archiving succeeds
+    if archive_success:
+        if getattr(inv, 'external_sync_status', None) not in ['SYNCED', 'PENDING', 'QUEUED']:
+            inv.external_sync_status = 'PENDING'
+            db.commit()
+            trigger_async_integration_push(str(inv.id))
+    else:
+        logger.warning(f"[complete_document_lifecycle] PDF archiving failed or source file missing for doc {inv.id}; back sync push skipped.")
+
+    # 3. Step 3: Notifications & Audit Log (Idempotency check)
+    existing_final_log = db.query(AuditLog).filter(
+        AuditLog.invoice_id == str(inv.id),
+        AuditLog.action.ilike('Approved%'),
+        AuditLog.stage == stg_name
+    ).first()
+
+    if not existing_final_log:
+        dispatch_approval_inapp_notifications(
+            db=db,
+            inv=inv,
+            approver_name=approver_name,
+            prev_stage=prev_stg,
+            new_stage=inv.current_stage,
+            next_approver_target=inv.assigned_approver,
+            is_completed=True
+        )
+        record_approval_assignment_transition(
+            db=db,
+            inv=inv,
+            completed_stage_num=prev_stg,
+            action="APPROVED",
+            approver_handle=approver_name,
+            remarks=remarks,
+            next_stage_num=None,
+            next_stage_name=None,
+            next_approver_handle=None
+        )
+        db.add(AuditLog(
+            invoice_id=str(inv.id),
+            user=approver_name,
+            action=f'Approved ({stg_name})',
+            stage=stg_name,
+            notes=f'{remarks} ➔ {next_info}',
+            remarks=remarks
+        ))
+        db.commit()
+        db.refresh(inv)
+
+    safe_broadcast_event('STAGE_APPROVED', {
+        'document_id': str(inv.id),
+        'approved_stage': prev_stg,
+        'new_stage': inv.current_stage,
+        'status': inv.status,
+        'approver': approver_name
+    })
+    safe_broadcast_event('DOCUMENT_UPDATED', {
+        'document_id': str(inv.id),
+        'status': inv.status,
+        'current_stage': inv.current_stage,
+        'assigned_approver': inv.assigned_approver
+    })
+
+    return True
 
 def archive_rejected_pdf(inv: Invoice):
     """
@@ -1866,7 +1980,6 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     else:
         next_status_val = 'Approved'
         next_stage_val = prev_stage_num
-        archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
         Invoice.id == inv.id,
@@ -1898,24 +2011,35 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     except Exception as exc:
         logger.debug('Lock release on approval failed: %s', exc)
 
-    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
-    record_approval_assignment_transition(
-        db=db,
-        inv=inv,
-        completed_stage_num=prev_stage_num,
-        action="APPROVED",
-        approver_handle=approver_name,
-        remarks=remarks,
-        next_stage_num=next_stage_val if inv.status != 'Approved' else None,
-        next_stage_name=next_step.step_name if (inv.status != 'Approved' and next_step) else None,
-        next_approver_handle=next_assigned_val if inv.status != 'Approved' else None
-    )
     next_step_title = next_step.step_name if next_step else f'Stage {next_stage_val}'
-    db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
-    db.commit()
-    db.refresh(inv)
-    safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
-    safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+    if inv.status == 'Approved':
+        complete_document_lifecycle(
+            db=db,
+            inv=inv,
+            approver_name=approver_name,
+            remarks=remarks,
+            prev_stage_num=prev_stage_num,
+            stage_name=stage_name,
+            next_assigned_info=next_assigned_info
+        )
+    else:
+        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
+        record_approval_assignment_transition(
+            db=db,
+            inv=inv,
+            completed_stage_num=prev_stage_num,
+            action="APPROVED",
+            approver_handle=approver_name,
+            remarks=remarks,
+            next_stage_num=next_stage_val,
+            next_stage_name=next_step.step_name if next_step else None,
+            next_approver_handle=next_assigned_val
+        )
+        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
+        db.commit()
+        db.refresh(inv)
+        safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
+        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
     return {
         'success': True,
         'status': inv.status,
@@ -1981,7 +2105,6 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     else:
         next_status_val = 'Approved'
         next_stage_val = prev_stage_num
-        archive_approved_pdf(inv)
 
     rows_affected = db.query(Invoice).filter(
         Invoice.id == inv.id,
@@ -2012,24 +2135,35 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     except Exception as exc:
         logger.debug('Lock release on approval failed: %s', exc)
 
-    dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
-    record_approval_assignment_transition(
-        db=db,
-        inv=inv,
-        completed_stage_num=prev_stage_num,
-        action="APPROVED",
-        approver_handle=username,
-        remarks=remarks,
-        next_stage_num=next_stage_val if inv.status != 'Approved' else None,
-        next_stage_name=next_step.step_name if (inv.status != 'Approved' and next_step) else None,
-        next_approver_handle=next_assigned_val if inv.status != 'Approved' else None
-    )
     next_step_title = next_step.step_name if next_step else f'Stage {next_stage_val}'
-    db.add(AuditLog(invoice_id=str(inv.id), user=username, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
-    db.commit()
-    db.refresh(inv)
-    safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': username})
-    safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+    if inv.status == 'Approved':
+        complete_document_lifecycle(
+            db=db,
+            inv=inv,
+            approver_name=username,
+            remarks=remarks,
+            prev_stage_num=prev_stage_num,
+            stage_name=stage_name,
+            next_assigned_info=next_assigned_info
+        )
+    else:
+        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
+        record_approval_assignment_transition(
+            db=db,
+            inv=inv,
+            completed_stage_num=prev_stage_num,
+            action="APPROVED",
+            approver_handle=username,
+            remarks=remarks,
+            next_stage_num=next_stage_val,
+            next_stage_name=next_step.step_name if next_step else None,
+            next_approver_handle=next_assigned_val
+        )
+        db.add(AuditLog(invoice_id=str(inv.id), user=username, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
+        db.commit()
+        db.refresh(inv)
+        safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': username})
+        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
     return {
         'success': True,
         'status': inv.status,
@@ -2098,7 +2232,6 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
         else:
             next_status_val = 'Approved'
             next_stage_val = prev_stage_num
-            archive_approved_pdf(inv)
 
         rows_affected = db.query(Invoice).filter(
             Invoice.id == inv.id,
@@ -2129,24 +2262,35 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
         except Exception as exc:
             logger.debug('Lock release on inline approval failed: %s', exc)
 
-        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=inv.status == 'Approved')
-        record_approval_assignment_transition(
-            db=db,
-            inv=inv,
-            completed_stage_num=prev_stage_num,
-            action="APPROVED",
-            approver_handle=approver_name,
-            remarks=comments,
-            next_stage_num=next_stage_val if inv.status != 'Approved' else None,
-            next_stage_name=next_step.step_name if (inv.status != 'Approved' and next_step) else None,
-            next_approver_handle=next_assigned_val if inv.status != 'Approved' else None
-        )
         next_step_title = next_step.step_name if next_step else f'Stage {next_stage_val}'
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{comments} ➔ {next_assigned_info}', remarks=comments))
-        db.commit()
-        db.refresh(inv)
-        safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
-        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        if inv.status == 'Approved':
+            complete_document_lifecycle(
+                db=db,
+                inv=inv,
+                approver_name=approver_name,
+                remarks=comments,
+                prev_stage_num=prev_stage_num,
+                stage_name=stage_name,
+                next_assigned_info=next_assigned_info
+            )
+        else:
+            dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
+            record_approval_assignment_transition(
+                db=db,
+                inv=inv,
+                completed_stage_num=prev_stage_num,
+                action="APPROVED",
+                approver_handle=approver_name,
+                remarks=comments,
+                next_stage_num=next_stage_val,
+                next_stage_name=next_step.step_name if next_step else None,
+                next_approver_handle=next_assigned_val
+            )
+            db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{comments} ➔ {next_assigned_info}', remarks=comments))
+            db.commit()
+            db.refresh(inv)
+            safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
+            safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         return {
             'success': True,
             'status': inv.status,

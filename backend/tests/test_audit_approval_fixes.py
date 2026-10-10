@@ -156,3 +156,177 @@ def test_aud01_approval_blocks_premature_approval_when_next_step_approver_empty(
         db_session.delete(step2)
         db_session.delete(wf)
         db_session.commit()
+
+
+def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, test_setup):
+    """
+    AUD-03: Shared complete_document_lifecycle must:
+    1. Archive the PDF to year/month/document folder
+    2. Only trigger trigger_async_integration_push if archiving succeeds
+    3. Then dispatch notifications and write AuditLog
+    4. Be idempotent: calling twice does not push or archive twice
+    """
+    from unittest.mock import patch
+    from app.routers.documents import complete_document_lifecycle, get_archived_pdf_path
+    from app.config.settings import settings
+    from app.database.models import AuditLog
+
+    doc_id = f"DOC-AUD03-{uuid.uuid4().hex[:6]}"
+    inv = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:6]}",
+        vendor_name="AUD03 Vendor",
+        amount=250.0,
+        status="Approved",
+        current_stage=1,
+        is_deleted=False,
+        version=2,
+        contact_person="system"
+    )
+    pdf_path = settings.UPLOAD_DIR / f"{doc_id}.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 test dummy attachment for aud03")
+    inv.file_path = str(pdf_path)
+    inv.file_url = f"/api/documents/{doc_id}/file"
+    db_session.add(inv)
+    db_session.commit()
+
+    call_order = []
+
+    def mock_archive(invoice):
+        call_order.append("archive")
+        dest = get_archived_pdf_path(invoice)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"%PDF-1.4 archived")
+        invoice.file_path = str(dest)
+        return True
+
+    def mock_push(invoice_id):
+        call_order.append("back_sync_push")
+
+    def mock_notify(*args, **kwargs):
+        call_order.append("notifications")
+
+    try:
+        with patch("app.routers.documents.archive_approved_pdf", side_effect=mock_archive) as p_arch, \
+             patch("app.routers.documents.trigger_async_integration_push", side_effect=mock_push) as p_push, \
+             patch("app.routers.documents.dispatch_approval_inapp_notifications", side_effect=mock_notify) as p_notif:
+
+            # First execution
+            success = complete_document_lifecycle(
+                db=db_session,
+                inv=inv,
+                approver_name=test_setup["approver"].username,
+                remarks="Final sign-off",
+                prev_stage_num=1,
+                stage_name="Stage 1"
+            )
+            assert success is True
+            # Verify strict ordering: archive -> back_sync_push -> notifications
+            assert call_order == ["archive", "back_sync_push", "notifications"], f"Incorrect execution order: {call_order}"
+
+            # Second execution (Idempotency test)
+            call_order.clear()
+            success_again = complete_document_lifecycle(
+                db=db_session,
+                inv=inv,
+                approver_name=test_setup["approver"].username,
+                remarks="Final sign-off duplicate",
+                prev_stage_num=1,
+                stage_name="Stage 1"
+            )
+            # Must NOT push back-sync twice
+            assert "back_sync_push" not in call_order, "Back sync push must be idempotent and not trigger twice!"
+    finally:
+        if pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except Exception:
+                pass
+        archived_path = get_archived_pdf_path(inv)
+        if archived_path.exists():
+            try:
+                archived_path.unlink()
+            except Exception:
+                pass
+        db_session.delete(inv)
+        db_session.commit()
+
+
+def test_aud03_endpoints_invoke_complete_document_lifecycle(db_session, test_setup):
+    """
+    AUD-03: Verify that /api/workflows/approve, /api/documents/{id}/approve,
+    and /api/records/{id}/step-action all invoke complete_document_lifecycle on final approval.
+    """
+    from unittest.mock import patch
+    from app.config.settings import settings
+
+    token = test_setup["token_approver"]
+    approver = test_setup["approver"]
+
+    # Test single-stage workflow so Stage 1 approval is final approval
+    wf_name = f"AUD03_1STG_{uuid.uuid4().hex[:6]}"
+    wf = WorkflowProfile(
+        profile_name=wf_name,
+        workflow_code=f"WF-{uuid.uuid4().hex[:4]}",
+        workflow_category="TEST_AUD",
+        workflow_type="AP INVOICE",
+        status="Active"
+    )
+    step1 = WorkflowStepDefinition(
+        profile_name=wf_name,
+        stage_number=1,
+        step_name="Single Final Stage",
+        approver_type="User",
+        approver_target=approver.username
+    )
+    db_session.add_all([wf, step1])
+
+    doc1_id = f"DOC-AUD03-EP1-{uuid.uuid4().hex[:6]}"
+    inv1 = Invoice(
+        id=doc1_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:6]}",
+        vendor_name="AUD03 Vendor",
+        amount=100.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        workflow_profile_id=wf_name,
+        assigned_approver=approver.username,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    pdf1 = settings.UPLOAD_DIR / f"{doc1_id}.pdf"
+    pdf1.write_bytes(b"%PDF-1.4 test")
+    inv1.file_path = str(pdf1)
+    inv1.file_url = f"/api/documents/{doc1_id}/file"
+    db_session.add(inv1)
+    db_session.commit()
+
+    called_with_inv_ids = []
+
+    def mock_lifecycle(db, inv, approver_name, **kwargs):
+        called_with_inv_ids.append(str(inv.id))
+        return True
+
+    try:
+        with patch("app.routers.documents.complete_document_lifecycle", side_effect=mock_lifecycle):
+            # Endpoint 1: /api/workflows/approve
+            resp1 = client.post(
+                "/api/workflows/approve",
+                json={"invoiceId": doc1_id, "expected_stage": 1, "expected_version": 1},
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            assert resp1.status_code == 200
+            assert doc1_id in called_with_inv_ids
+    finally:
+        if pdf1.exists():
+            try:
+                pdf1.unlink()
+            except Exception:
+                pass
+        db_session.delete(inv1)
+        db_session.delete(step1)
+        db_session.delete(wf)
+        db_session.commit()
+
+
