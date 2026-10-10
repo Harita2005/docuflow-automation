@@ -21,7 +21,7 @@ from .routers.callback_integrations import router as callback_integrations_route
 from .routers.conditions import router as conditions_router
 from .routers.documents import router as documents_router
 from .routers.events import router as events_router
-from .routers.integrations import router as integrations_router
+from .routers.integrations import router as integrations_router, alias_router as integrations_alias_router
 from .routers.more_info import router as more_info_router
 from .routers.roles import permission_router as permissions_router, router as roles_router
 from .routers.sync import router as sync_router
@@ -113,6 +113,7 @@ app.include_router(conditions_router)
 app.include_router(events_router)
 app.include_router(audit_router)
 app.include_router(integrations_router)
+app.include_router(integrations_alias_router)
 app.include_router(callback_integrations_router)
 app.include_router(sync_router)
 app.include_router(m2m_sync_router)

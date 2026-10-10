@@ -233,7 +233,10 @@ def test_webhook_connection(body: ThirdPartyWebhookTestRequest, db: Session=Depe
         logger.debug('Handled exception: %s', e)
         return {'success': False, 'target_url': safe_target_url, 'error': f'Request dispatch failed: {type(e).__name__}'}
 
+alias_router = APIRouter(prefix='/api/integrations', tags=['Third-Party & SAP Integrations'])
+
 @router.post('/documents/{document_id}/retry-push')
+@alias_router.post('/documents/{document_id}/retry-push')
 def retry_document_push(document_id: str, background_tasks: BackgroundTasks, request: Request=None, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Manually re-triggers outgoing webhook push for a specific document.
@@ -242,11 +245,48 @@ def retry_document_push(document_id: str, background_tasks: BackgroundTasks, req
     doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
+    doc.external_sync_status = 'PENDING'
+    db.commit()
     base_url = str(request.base_url).rstrip('/') if request else ''
     background_tasks.add_task(dispatch_outgoing_webhook, document_id=doc.id, base_url=base_url)
     return {'success': True, 'document_id': doc.id, 'message': f'Push event queued in background for document {doc.id}'}
 
+@router.get('/failed-syncs')
+@alias_router.get('/failed-syncs')
+def get_failed_sync_documents(limit: int=50, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    """
+    Returns documents that failed or are pending external synchronization.
+    Displays attempt count, last error, and next scheduled retry for admin oversight and manual retry.
+    """
+    _require_integration_admin(current_user, db)
+    docs = db.query(Document).filter(
+        Document.external_sync_status.in_(['FAILED', 'DEAD', 'NEEDS_ATTENTION', 'PENDING']),
+        Document.is_deleted == False
+    ).order_by(Document.updated_at.desc()).limit(limit).all()
+
+    from app.services.integration_service import get_sync_retry_meta
+    results = []
+    for d in docs:
+        meta = get_sync_retry_meta(d)
+        results.append({
+            'document_id': d.id,
+            'invoice_number': d.invoice_number or d.doc_num,
+            'vendor_name': d.vendor_name or d.party_name,
+            'amount': float(d.amount) if d.amount else 0.0,
+            'status': d.status,
+            'external_sync_status': d.external_sync_status,
+            'external_sync_system': d.external_sync_system,
+            'external_sync_ref': d.external_sync_ref,
+            'attempt_count': meta.get('attempt_count', 0),
+            'last_error': meta.get('last_error'),
+            'next_retry_at': meta.get('next_retry_at'),
+            'max_attempts': meta.get('max_attempts', 5),
+            'updated_at': d.updated_at.isoformat() if d.updated_at else None
+        })
+    return {'success': True, 'count': len(results), 'data': results}
+
 @router.get('/sync-logs')
+@alias_router.get('/sync-logs')
 def get_integration_sync_logs(limit: int=50, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     """
     Returns recent integration sync logs (both PUSH and PULL) for system auditing.

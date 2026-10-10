@@ -330,3 +330,90 @@ def test_aud03_endpoints_invoke_complete_document_lifecycle(db_session, test_set
         db_session.commit()
 
 
+def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, caplog):
+    """
+    AUD-07:
+    - Back sync failures must be logged at ERROR level, not DEBUG.
+    - Outbound push must record attempt_count, last_error, and next_retry_at.
+    - Uses exponential backoff (e.g. 1m, 5m, 15m, 1h).
+    - After max attempts, status is marked DEAD or NEEDS_ATTENTION.
+    - Push sends stable idempotency key in headers and payload.
+    - GET /api/integrations/failed-syncs lists failed syncs for admin retry.
+    """
+    import logging
+    from unittest.mock import patch, MagicMock
+    import urllib.error
+    from app.services.integration_service import dispatch_outgoing_webhook, get_sync_retry_meta
+    from app.database.models import ThirdPartyWebhookConfig
+
+    # Ensure active webhook config exists
+    cfg = db_session.query(ThirdPartyWebhookConfig).first()
+    if not cfg:
+        cfg = ThirdPartyWebhookConfig(
+            name="TestERP",
+            target_url="https://mock-erp.internal/webhook",
+            is_active=True,
+            retry_count=3
+        )
+        db_session.add(cfg)
+        db_session.commit()
+
+    doc_id = f"DOC-AUD07-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-AUD07-{uuid.uuid4().hex[:4]}",
+        vendor_name="ERP Sync Vendor",
+        amount=1000.0,
+        status="Approved",
+        current_stage=1,
+        is_deleted=False,
+        external_sync_status="PENDING",
+        contact_person="system"
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    captured_headers = {}
+
+    def mock_urlopen_fail(req, timeout=None):
+        nonlocal captured_headers
+        captured_headers = dict(req.headers)
+        raise urllib.error.HTTPError(
+            url=req.full_url,
+            code=503,
+            msg="Service Unavailable",
+            hdrs={},
+            fp=None
+        )
+
+    try:
+        with caplog.at_level(logging.ERROR):
+            with patch("urllib.request.urlopen", side_effect=mock_urlopen_fail):
+                res = dispatch_outgoing_webhook(document_id=doc_id)
+
+        # 1. Failure was logged at ERROR level
+        assert any("503" in rec.message or "Service Unavailable" in rec.message or "failure" in rec.message.lower() for rec in caplog.records if rec.levelno >= logging.ERROR), "Back sync failure was NOT logged at ERROR level!"
+
+        # 2. Check Document retry metadata
+        db_session.refresh(doc)
+        meta = get_sync_retry_meta(doc)
+        assert meta["attempt_count"] >= 1, f"Expected attempt_count >= 1, got {meta}"
+        assert meta["last_error"] is not None and "503" in str(meta["last_error"]), f"last_error missing or incorrect: {meta}"
+        assert meta["next_retry_at"] is not None, "next_retry_at was not computed for exponential backoff"
+
+        # 3. Check Idempotency key
+        assert doc.external_sync_ref is not None, "Document external_sync_ref idempotency key was not set"
+        assert "Idempotency-key" in captured_headers or "X-docuflow-idempotency-key" in captured_headers, f"Idempotency header missing in outgoing request: {captured_headers}"
+
+        # 4. Check admin failed syncs endpoint
+        token = test_setup["token_admin"]
+        resp = client.get("/api/integrations/failed-syncs", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200
+        items = resp.json().get("data", [])
+        assert any(item["document_id"] == doc_id for item in items), f"Document {doc_id} not returned in failed-syncs admin endpoint"
+    finally:
+        db_session.delete(doc)
+        db_session.commit()
+
+
+
