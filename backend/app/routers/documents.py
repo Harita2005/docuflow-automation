@@ -1762,13 +1762,64 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     if not user.is_active:
         raise HTTPException(status_code=403, detail='Account Inactive: Your user account is disabled.')
     # Concurrency collision check: if the client expected a specific stage but the document has moved or already completed
-    if expected_stage is not None and ((inv.current_stage or 1) != expected_stage or inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment']):
+    if expected_stage is not None and ((inv.current_stage or 1) != expected_stage or inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Cancelled', 'Failed']):
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
-    if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed']:
+    if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Rejected']:
         raise HTTPException(status_code=400, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
     is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+
+    # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document
+    if user and not is_feedback_doc:
+        user_identifiers = {
+            (user.username or '').strip().lower(),
+            (user.employee_id or '').strip().lower(),
+            (user.employee_name or '').strip().lower(),
+            (user.name or '').strip().lower(),
+            (user.email or '').strip().lower(),
+            str(user.id),
+        }
+        user_identifiers.discard('')
+
+        doc_creator = (getattr(inv, 'created_by', None) or '').strip().lower()
+        doc_emp_id = (getattr(inv, 'employee_id', None) or '').strip().lower()
+        doc_creator_id = getattr(inv, 'created_by_id', None)
+
+        if doc_creator_id and user.id == doc_creator_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Maker-Checker policy violation: The creator/submitter of a document cannot approve their own document."
+            )
+
+        if doc_creator and doc_creator not in ['system', 'system admin', 'api', 'sync'] and doc_creator in user_identifiers:
+            raise HTTPException(
+                status_code=403,
+                detail="Maker-Checker policy violation: The creator/submitter of a document cannot approve their own document."
+            )
+
+        if doc_emp_id and (user.employee_id or '').strip().lower() == doc_emp_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Maker-Checker policy violation: The creator/submitter of a document cannot approve their own document."
+            )
+
+        if db and inv.id:
+            creation_log = db.query(AuditLog).filter(
+                AuditLog.invoice_id == str(inv.id),
+                or_(
+                    AuditLog.action.ilike('%created%'),
+                    AuditLog.action.ilike('%upload%'),
+                    AuditLog.action == 'UNROUTED'
+                )
+            ).order_by(AuditLog.id.asc()).first()
+            if creation_log and creation_log.user:
+                creator_handle = creation_log.user.strip().lower()
+                if creator_handle not in ['system', 'system admin', 'policy engine (stp)', 'metadata editor / sync uploader'] and creator_handle in user_identifiers:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Maker-Checker policy violation: The creator/submitter of a document cannot approve their own document."
+                    )
 
     # Check if this user has already approved this invoice in an earlier action (skip for feedback documents)
     if db and user and not is_feedback_doc:
