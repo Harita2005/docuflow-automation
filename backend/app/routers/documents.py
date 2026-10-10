@@ -1450,13 +1450,14 @@ def dispatch_rejection_inapp_notifications(db: Session, inv: Invoice, approver_n
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
-def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remarks: str, action_type: str='Reject'):
+def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remarks: str, action_type: str='Reject', expected_version: Optional[int]=None):
     """
     Step-down rejection:
     - If Stage N (N > 1): Returns document to Stage N-1 previous approver.
     - If Stage 1 (Attachment Status): Cancels / voids the process.
     """
     current_stage = inv.current_stage or 1
+    cur_ver = expected_version if expected_version is not None else (inv.version or 1)
     if current_stage > 1:
         prev_stage = current_stage - 1
         inv.current_stage = prev_stage
@@ -1486,6 +1487,25 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
                 item.checked_by = None
                 item.checked_at = None
             inv.checklist_state = json.dumps({item.item_text: False for item in existing_items})
+
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == cur_ver
+        ).update({
+            Invoice.current_stage: inv.current_stage,
+            Invoice.status: inv.status,
+            Invoice.assigned_approver: inv.assigned_approver,
+            Invoice.version: cur_ver + 1,
+            Invoice.checklist_state: inv.checklist_state,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
+
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+        inv.version = cur_ver + 1
+
         dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=approver_name, from_stage=current_stage, to_stage=prev_stage, remarks=remarks, target_approver=inv.assigned_approver, is_cancelled=False)
         record_approval_assignment_transition(
             db=db,
@@ -1504,12 +1524,41 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': f'Document returned to Stage {prev_stage} ({prev_step_name}) for previous approver review.'}
     elif 'hold' in (action_type or '').lower() or 'send back' in (action_type or '').lower() or 'return' in (action_type or '').lower():
         inv.status = 'On Hold'
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == cur_ver
+        ).update({
+            Invoice.status: 'On Hold',
+            Invoice.version: cur_ver + 1,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
+
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+        inv.version = cur_ver + 1
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Placed on Hold', stage=f'Stage {current_stage}', notes=f'Placed on hold / returned for clarification: {remarks}'))
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
     else:
         inv.status = 'Cancelled'
         inv.assigned_approver = None
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == cur_ver
+        ).update({
+            Invoice.status: 'Cancelled',
+            Invoice.assigned_approver: None,
+            Invoice.version: cur_ver + 1,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
+
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+        inv.version = cur_ver + 1
         archive_rejected_pdf(inv)
         dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=approver_name, from_stage=1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
         record_approval_assignment_transition(
@@ -1919,6 +1968,12 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, doc_id)
     expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
     check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None)
@@ -1935,8 +1990,7 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
-    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
@@ -2054,7 +2108,13 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
 @router.post('/api/records/{invoice_id}/approve')
 @router.post('/api/documents/{invoice_id}/approve')
 @router.post('/api/invoices/{invoice_id}/approve')
-def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+    expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=True)
     username = user.employee_name or user.name if user else 'Reviewer'
@@ -2062,7 +2122,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
     stage_name = action.stage_name if action and action.stage_name else f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
-    if action and action.expected_version is not None and action.expected_version != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_assigned_val = inv.assigned_approver
@@ -2179,6 +2239,12 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
 @router.post('/api/documents/{invoice_id}/step-action')
 @router.post('/api/invoices/{invoice_id}/step-action')
 def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, invoice_id)
     action_type = str(payload.get('action') or 'Approve').strip()
     act_lower = action_type.lower()
@@ -2190,8 +2256,7 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
-    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     if 'approve' in act_lower or 'pass' in act_lower:
         next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
@@ -2305,12 +2370,26 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             'is_final_approval': inv.status == 'Approved'
         }
     elif 'reject' in act_lower or 'send back' in act_lower or 'return' in act_lower:
-        result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type)
+        result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type, expected_version=current_version)
         db.commit()
         db.refresh(inv)
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
     else:
         inv.status = 'On Hold'
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == current_version
+        ).update({
+            Invoice.status: 'On Hold',
+            Invoice.version: current_version + 1,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
+
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+        inv.version = current_version + 1
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'{action_type} (Hold)', stage=stage_name, notes=comments))
         db.commit()
         db.refresh(inv)
@@ -2323,15 +2402,20 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in rejection payload')
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
-    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     approver_name = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record rejected / returned to previous approver.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject')
+    result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject', expected_version=current_version)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
@@ -2340,15 +2424,20 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
 @router.post('/api/documents/{invoice_id}/reject')
 @router.post('/api/invoices/{invoice_id}/reject')
 def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
-    expected_ver = (payload.get('expected_version') or payload.get('expectedVersion')) if payload else None
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record rejected / returned to previous approver.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject')
+    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject', expected_version=current_version)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'invoice': inv, **result}
@@ -2359,15 +2448,34 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in hold payload')
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
-    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record placed on temporary hold.'
     inv.status = 'On Hold'
+    rows_affected = db.query(Invoice).filter(
+        Invoice.id == inv.id,
+        Invoice.version == current_version
+    ).update({
+        Invoice.status: 'On Hold',
+        Invoice.version: current_version + 1,
+        Invoice.updated_at: datetime.datetime.utcnow()
+    }, synchronize_session=False)
+
+    if rows_affected == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+    inv.version = current_version + 1
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
     db.commit()
     db.refresh(inv)
@@ -2380,15 +2488,20 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in sendback payload')
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
-    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
-    if expected_ver is not None and expected_ver != current_version:
+    if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record returned to previous stage.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back')
+    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back', expected_version=current_version)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
@@ -2416,11 +2529,34 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
 @router.post('/api/documents/{invoice_id}/hold')
 @router.post('/api/invoices/{invoice_id}/hold')
 def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = (user.employee_name or user.name) if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record placed on temporary administrative hold.'
     inv.status = 'On Hold'
+    rows_affected = db.query(Invoice).filter(
+        Invoice.id == inv.id,
+        Invoice.version == current_version
+    ).update({
+        Invoice.status: 'On Hold',
+        Invoice.version: current_version + 1,
+        Invoice.updated_at: datetime.datetime.utcnow()
+    }, synchronize_session=False)
+
+    if rows_affected == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
+
+    inv.version = current_version + 1
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
     db.commit()
     db.refresh(inv)

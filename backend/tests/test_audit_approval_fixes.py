@@ -515,6 +515,177 @@ def test_aud02_double_approval_returns_409_conflict_and_no_duplicate_logs(db_ses
         db_session.commit()
 
 
+def test_aud02_mandatory_expected_version_enforced(db_session, test_setup):
+    """
+    AUD-02: expected_version is mandatory across approve, reject, hold, sendback, step-action.
+    Omitting expected_version must be rejected with HTTP 422.
+    """
+    token = test_setup["token_approver"]
+    approver = test_setup["approver"]
+
+    doc_id = f"DOC-AUD02-MAND-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-AUD02-MAND-{uuid.uuid4().hex[:4]}",
+        vendor_name="Mandatory Version Vendor",
+        amount=100.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        assigned_approver=approver.username,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    try:
+        # Missing expected_version on approve
+        r_app = client.post(
+            "/api/workflows/approve",
+            json={"invoiceId": doc_id, "expected_stage": 1},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert r_app.status_code == 422, f"Approve without expected_version should return 422, got {r_app.status_code}"
+
+        # Missing expected_version on reject
+        r_rej = client.post(
+            "/api/workflows/reject",
+            json={"invoiceId": doc_id, "comments": "Missing version"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert r_rej.status_code == 422, f"Reject without expected_version should return 422, got {r_rej.status_code}"
+
+        # Missing expected_version on hold
+        r_hold = client.post(
+            "/api/workflows/hold",
+            json={"invoiceId": doc_id, "comments": "Missing version"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert r_hold.status_code == 422, f"Hold without expected_version should return 422, got {r_hold.status_code}"
+
+        # Missing expected_version on sendback
+        r_sb = client.post(
+            "/api/workflows/sendback",
+            json={"invoiceId": doc_id, "comments": "Missing version"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert r_sb.status_code == 422, f"Sendback without expected_version should return 422, got {r_sb.status_code}"
+
+        # Missing expected_version on step-action
+        r_sa = client.post(
+            f"/api/documents/{doc_id}/step-action",
+            json={"action": "Approve", "comments": "Missing version"},
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert r_sa.status_code == 422, f"Step-action without expected_version should return 422, got {r_sa.status_code}"
+    finally:
+        db_session.delete(doc)
+        db_session.commit()
+
+
+def test_aud02_real_concurrency_two_threads_one_succeeds_one_409(db_session, test_setup):
+    """
+    AUD-02 Real Concurrency Test:
+    Two threads fire at the exact same moment attempting to approve the same document
+    with expected_version=1.
+    Prove:
+    - Exactly one thread succeeds (200).
+    - The other thread gets 409 Conflict.
+    - Exactly ONE AuditLog row is created in the database for the approval.
+    """
+    import threading
+    import concurrent.futures
+    from app.config.settings import settings
+    from app.database.models import AuditLog
+
+    token = test_setup["token_approver"]
+    approver = test_setup["approver"]
+
+    wf_name = f"AUD02_CONC_WF_{uuid.uuid4().hex[:6]}"
+    wf = WorkflowProfile(
+        profile_name=wf_name,
+        workflow_code=f"WF-{uuid.uuid4().hex[:4]}",
+        workflow_category="TEST_AUD",
+        workflow_type="AP INVOICE",
+        status="Active"
+    )
+    step1 = WorkflowStepDefinition(
+        profile_name=wf_name,
+        stage_number=1,
+        step_name="Final Stage",
+        approver_type="User",
+        approver_target=approver.username
+    )
+    db_session.add_all([wf, step1])
+
+    doc_id = f"DOC-AUD02-CONC-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-AUD02-CONC-{uuid.uuid4().hex[:4]}",
+        vendor_name="Concurrent Vendor",
+        amount=500.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        workflow_profile_id=wf_name,
+        assigned_approver=approver.username,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    pdf = settings.UPLOAD_DIR / f"{doc_id}.pdf"
+    pdf.write_bytes(b"%PDF-1.4 concurrent test")
+    doc.file_path = str(pdf)
+    doc.file_url = f"/api/documents/{doc_id}/file"
+    db_session.add(doc)
+    db_session.commit()
+
+    barrier = threading.Barrier(2)
+
+    def worker_approve(worker_id):
+        worker_client = TestClient(app)
+        barrier.wait()  # synchronize release at the exact same millisecond
+        return worker_client.post(
+            "/api/workflows/approve",
+            json={
+                "invoiceId": doc_id,
+                "expected_stage": 1,
+                "expected_version": 1,
+                "comments": f"Sign-off from worker {worker_id}"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut1 = executor.submit(worker_approve, 1)
+            fut2 = executor.submit(worker_approve, 2)
+            res1 = fut1.result()
+            res2 = fut2.result()
+
+        status_codes = sorted([res1.status_code, res2.status_code])
+        assert status_codes == [200, 409], f"Expected one 200 and one 409, got {status_codes}. Resp1: {res1.text}, Resp2: {res2.text}"
+
+        # Verify exactly ONE AuditLog row was written
+        approval_logs = db_session.query(AuditLog).filter(
+            AuditLog.invoice_id == doc_id,
+            AuditLog.action.ilike("%approved%")
+        ).all()
+        assert len(approval_logs) == 1, f"Expected exactly 1 AuditLog row, but found {len(approval_logs)}: {[l.action for l in approval_logs]}"
+
+    finally:
+        if pdf.exists():
+            try:
+                pdf.unlink()
+            except Exception:
+                pass
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
+        db_session.delete(doc)
+        db_session.delete(step1)
+        db_session.delete(wf)
+        db_session.commit()
+
+
 def test_aud05_deterministic_rule_ordering_priority_desc_id_asc(db_session, test_setup):
     """
     AUD-05:
