@@ -416,4 +416,104 @@ def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, ca
         db_session.commit()
 
 
+def test_aud02_double_approval_returns_409_conflict_and_no_duplicate_logs(db_session, test_setup):
+    """
+    AUD-02: Double approval / concurrency idempotency:
+    - First approval request succeeds (200).
+    - Second identical approval request MUST return 409 Conflict.
+    - Second request MUST NOT create duplicate AuditLog entries or duplicate notifications.
+    - Expected version mismatch must return 409 Conflict.
+    """
+    from app.config.settings import settings
+    from app.database.models import AuditLog
+
+    token = test_setup["token_approver"]
+    approver = test_setup["approver"]
+
+    wf_name = f"AUD02_WF_{uuid.uuid4().hex[:6]}"
+    wf = WorkflowProfile(
+        profile_name=wf_name,
+        workflow_code=f"WF-{uuid.uuid4().hex[:4]}",
+        workflow_category="TEST_AUD",
+        workflow_type="AP INVOICE",
+        status="Active"
+    )
+    step1 = WorkflowStepDefinition(
+        profile_name=wf_name,
+        stage_number=1,
+        step_name="Final Stage",
+        approver_type="User",
+        approver_target=approver.username
+    )
+    db_session.add_all([wf, step1])
+
+    doc_id = f"DOC-AUD02-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-AUD02-{uuid.uuid4().hex[:4]}",
+        vendor_name="Idempotency Vendor",
+        amount=500.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        workflow_profile_id=wf_name,
+        assigned_approver=approver.username,
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    pdf = settings.UPLOAD_DIR / f"{doc_id}.pdf"
+    pdf.write_bytes(b"%PDF-1.4 test")
+    doc.file_path = str(pdf)
+    doc.file_url = f"/api/documents/{doc_id}/file"
+    db_session.add(doc)
+    db_session.commit()
+
+    try:
+        # First approval
+        resp1 = client.post(
+            "/api/workflows/approve",
+            json={
+                "invoiceId": doc_id,
+                "expected_stage": 1,
+                "expected_version": 1,
+                "comments": "Initial sign-off"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp1.status_code == 200, f"Expected 200 on first approval, got {resp1.status_code}: {resp1.text}"
+
+        # Count audit logs after first approval
+        initial_logs_count = db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).count()
+        assert initial_logs_count >= 1
+
+        # Second identical approval (re-trigger / double click)
+        resp2 = client.post(
+            "/api/workflows/approve",
+            json={
+                "invoiceId": doc_id,
+                "expected_stage": 1,
+                "expected_version": 1,
+                "comments": "Duplicate sign-off"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp2.status_code == 409, f"Expected 409 Conflict on double approval, got {resp2.status_code}: {resp2.text}"
+
+        # Verify no duplicate AuditLogs created
+        second_logs_count = db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).count()
+        assert second_logs_count == initial_logs_count, f"Duplicate AuditLog created! Expected {initial_logs_count}, got {second_logs_count}"
+    finally:
+        if pdf.exists():
+            try:
+                pdf.unlink()
+            except Exception:
+                pass
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
+        db_session.delete(doc)
+        db_session.delete(step1)
+        db_session.delete(wf)
+        db_session.commit()
+
+
+
 

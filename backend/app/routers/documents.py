@@ -1749,7 +1749,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Rejected']:
-        raise HTTPException(status_code=400, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
+        raise HTTPException(status_code=409, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
     is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
 
@@ -2190,6 +2190,9 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
     stage_name = f'Stage {inv.current_stage or 1}'
     prev_stage_num = inv.current_stage or 1
     current_version = inv.version or 1
+    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     if 'approve' in act_lower or 'pass' in act_lower:
         next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
         next_stage_val = prev_stage_num
@@ -2322,6 +2325,10 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
         raise HTTPException(status_code=400, detail='Missing invoiceId in rejection payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
+    current_version = inv.version or 1
+    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     approver_name = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record rejected / returned to previous approver.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject')
@@ -2335,6 +2342,10 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
 def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
+    current_version = inv.version or 1
+    expected_ver = (payload.get('expected_version') or payload.get('expectedVersion')) if payload else None
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record rejected / returned to previous approver.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject')
@@ -2350,6 +2361,10 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
         raise HTTPException(status_code=400, detail='Missing invoiceId in hold payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
+    current_version = inv.version or 1
+    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record placed on temporary hold.'
     inv.status = 'On Hold'
@@ -2367,6 +2382,10 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
         raise HTTPException(status_code=400, detail='Missing invoiceId in sendback payload')
     inv = find_invoice_by_identifier(db, doc_id)
     check_approval_authorization(inv, user, db=db, require_compliance=False)
+    current_version = inv.version or 1
+    expected_ver = payload.get('expected_version') or payload.get('expectedVersion')
+    if expected_ver is not None and expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record returned to previous stage.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back')
