@@ -563,6 +563,15 @@ def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends
         client_ip = extract_client_ip(req)
         current_user.active_session_id = None
         current_user.active_device_info = None
+        db.add(current_user)
+        try:
+            db.commit()
+            db.refresh(current_user)
+        except Exception as exc:
+            db.rollback()
+            logger.error("Failed to commit user session invalidation on logout: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to log out")
+
         try:
             db.add(UserAccessLog(
                 username=current_user.username,

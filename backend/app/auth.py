@@ -83,6 +83,7 @@ def decode_token(token: str) -> dict:
         token,
         settings.SECRET_KEY,
         algorithms=[settings.ALGORITHM],
+        options={"require": ["exp"], "verify_exp": True},
     )
 
 
@@ -139,6 +140,16 @@ async def get_current_user(
             detail="User account is deactivated. Access denied.",
         )
 
+    # SEC-03: Compare token session_id with active_session_id in database
+    token_session_id = payload.get("session_id")
+    if token_session_id is not None:
+        if not user.active_session_id or user.active_session_id != token_session_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has been invalidated or displaced by another login. Please sign in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     return user
 
 
@@ -173,6 +184,10 @@ async def get_current_user_optional(
     )
 
     if user and user.is_active:
+        token_session_id = payload.get("session_id")
+        if token_session_id is not None:
+            if not user.active_session_id or user.active_session_id != token_session_id:
+                return None
         return user
     return None
 
