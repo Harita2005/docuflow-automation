@@ -34,6 +34,7 @@ def test_users():
                 employee_id="TEST_LOCK_01",
                 email="locked.user@example.com",
                 employee_name="Locked User",
+                name="Locked User",
                 password_hash="testhash",
                 mfa_enabled=True,
                 is_active=True,

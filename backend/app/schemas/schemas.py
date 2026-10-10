@@ -207,7 +207,6 @@ class InvoiceUpdate(BaseModel):
     plant: Optional[str] = None
     payment_terms: Optional[str] = None
     checklist_state: Optional[str] = None
-    assigned_approver: Optional[str] = None
     notes: Optional[str] = None
 
 class InvoiceActionRequest(BaseModel):

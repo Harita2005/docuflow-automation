@@ -161,11 +161,10 @@ def update_user_master(
 
     update_data = payload.model_dump(exclude_unset=True)
 
-    # Prevent non-admin privilege escalation
+    # Prevent non-admin privilege escalation & mass assignment
     if not is_admin:
-        update_data.pop('role', None)
-        update_data.pop('is_active', None)
-        update_data.pop('division', None)
+        for sensitive_f in ['role', 'role_id', 'is_active', 'is_deleted', 'division', 'mfa_enabled', 'mfa_secret', 'active_session_id', 'created_by', 'user_uid']:
+            update_data.pop(sensitive_f, None)
 
     if 'employee_id' in update_data and update_data['employee_id'] and (update_data['employee_id'] != user.employee_id):
         existing_emp = db.query(User).filter(User.employee_id == update_data['employee_id'], User.id != user_id).first()

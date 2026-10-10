@@ -1163,7 +1163,7 @@ def save_doc_type_more_info_config(
 
     return MoreInfoConfigResponse(
         document_type=norm_type,
-        scope=scope,
+        scope="GLOBAL" if payload.save_as_default else scope,
         has_user_override=has_user_override,
         can_manage_default=is_admin,
         admin_default_fields=admin_defaults,
@@ -1374,7 +1374,7 @@ def save_document_more_info_config(
 
     return MoreInfoConfigResponse(
         document_type=doc_type,
-        scope=scope,
+        scope="GLOBAL" if payload.save_as_default else scope,
         has_user_override=has_user_override,
         can_manage_default=is_admin,
         admin_default_fields=admin_defaults,

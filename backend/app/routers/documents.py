@@ -1201,12 +1201,41 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
     inv_dict['active_approval_log'] = {'current_stage_number': inv.current_stage or 1, 'stage_name': current_step_name, 'status': 'Pending'}
     return inv_dict
 
+FORBIDDEN_DOCUMENT_UPDATE_FIELDS = {
+    'status', 'assigned_approver', 'assigned_role', 'workflow_stage',
+    'current_stage', 'total_stages', 'workflow_profile_id', 'workflow_code',
+    'is_locked', 'locked_by', 'locked_at', 'version',
+    'source_system', 'source_application', 'source_id', 'doc_key', 'document_key',
+    'created_by', 'id', 'created_at', 'deleted_at', 'is_deleted'
+}
+
 @router.put('/api/records/{invoice_id}')
 @router.put('/api/documents/{invoice_id}')
 @router.put('/api/invoices/{invoice_id}')
-def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
-    update_data = payload.dict(exclude_unset=True)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
+        raise HTTPException(status_code=403, detail='Access Denied: You are not authorized to update this document.')
+
+    # SEC-01: Check raw JSON payload for forbidden workflow/status/lock fields
+    try:
+        raw_json = await req.json()
+        if isinstance(raw_json, dict):
+            for field in raw_json:
+                if field in FORBIDDEN_DOCUMENT_UPDATE_FIELDS:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Mass Assignment Protection: Field '{field}' cannot be modified directly. Status and workflow changes are only permitted through workflow approval endpoints."
+                    )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    update_data = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
 
     # Protect synced ERP data during Attachment Status
     is_synced = bool(inv.doc_key or getattr(inv, 'source_application', None))
@@ -1230,7 +1259,7 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session=Depends(
         inv.total_stages = len(steps) if steps else 1
         if (inv.current_stage or 1) == 1 and steps:
             inv.assigned_approver = steps[0].approver_target
-    db.add(AuditLog(invoice_id=str(inv.id), user=user.name if user else 'Reviewer', action='Invoice Fields Updated', stage=f'Stage {inv.current_stage or 1}', notes='Document header/line-items edited and saved.'))
+    db.add(AuditLog(invoice_id=str(inv.id), user=user.employee_name or user.name or user.username, action='Invoice Fields Updated', stage=f'Stage {inv.current_stage or 1}', notes='Document header/line-items edited and saved.'))
     db.commit()
     db.refresh(inv)
     return inv
