@@ -203,27 +203,13 @@ def is_user_in_approver_pool(user: Optional[User], pool_str: Optional[str], db: 
         except Exception as err:
             logger.debug('Role handle lookup failed: %s', err)
 
-    user_handles = [h for h in set(raw_handles) if h]
-
-    def tokenize(s: str) -> List[str]:
-        return [t for t in re.split(r'[^a-zA-Z0-9]+', s.lower()) if len(t) >= 3]
-
-    user_tokens = set()
-    for h in user_handles:
-        for t in tokenize(h):
-            user_tokens.add(t)
+    user_handles = {h for h in raw_handles if h}
 
     for target in pool:
         t_clean = target.strip().lower()
         if not t_clean:
             continue
         if t_clean in user_handles:
-            return True
-        for h in user_handles:
-            if h == t_clean or (len(h) >= 4 and h in t_clean) or (len(t_clean) >= 4 and t_clean in h):
-                return True
-        target_tokens = tokenize(t_clean)
-        if any(t in user_tokens for t in target_tokens if t not in ['and', 'the', 'for']):
             return True
 
     return False
@@ -1806,7 +1792,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     is_authorized = is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
     if not is_authorized:
         for handle in user_handles:
-            if handle in approvers or any((handle == app or handle in app or app in handle for app in approvers)):
+            if handle in approvers:
                 is_authorized = True
                 break
     
@@ -1818,7 +1804,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             for st in steps:
                 step_targets = [s.strip().lower() for s in (st.approver_target or '').split(',') if s.strip()]
                 for handle in user_handles:
-                    if handle in step_targets or any((handle == t or handle in t or t in handle for t in step_targets)):
+                    if handle in step_targets:
                         user_stages.append(st.stage_number)
                         break
             if user_stages:
