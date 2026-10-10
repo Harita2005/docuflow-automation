@@ -7,6 +7,8 @@ import uuid
 import hmac
 import hashlib
 import datetime
+import urllib.request
+import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication
@@ -151,14 +153,18 @@ def evaluate_rule_conditions(conditions_json: Optional[str], doc_context: Dict[s
         return True
     return True
 
-def validate_url_ssrf(url_str: str):
-    """Protects against SSRF by validating URI scheme and blocking unsafe protocols."""
-    parsed = urllib.parse.urlparse(url_str)
-    scheme = (parsed.scheme or '').lower()
-    if scheme not in ['http', 'https']:
-        raise ValueError(f"Disallowed URL protocol '{scheme}'. Only HTTP and HTTPS callbacks are supported.")
-    if url_str.startswith('file://') or url_str.startswith('ftp://') or url_str.startswith('data:'):
-        raise ValueError(f"Dangerous URL protocol in '{url_str}' is blocked for security.")
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError(f"HTTP redirects are prohibited for security (attempted redirect to {newurl})")
+
+def validate_url_ssrf(url_str: str) -> str:
+    """Protects against SSRF by validating URI scheme, blocking loopback/link-local/private IPs, and validating resolved DNS."""
+    from app.services.security_service import validate_and_reconstruct_url
+    from fastapi import HTTPException
+    try:
+        return validate_and_reconstruct_url(url_str)
+    except HTTPException as exc:
+        raise ValueError(f"SSRF Protection: {exc.detail}")
 
 def mask_sensitive_headers(headers: Dict[str, str]) -> Dict[str, str]:
     """Masks secret values in headers dictionary for secure display and logging."""
@@ -224,12 +230,22 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
         logger.debug('Handled exception: %s', e)
     return headers
 
+ALLOWED_STORED_PROCEDURES = {
+    "sp_GetApprovalCallbackPayload",
+    "sp_GetInvoiceCallbackPayload",
+    "sp_DocuFlow_CallbackPayload",
+}
+
 def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key: str, doc_context: Dict[str, Any]) -> str:
     """
     Executes a SQL Stored Procedure (e.g. sp_GetApprovalCallbackPayload) passing @DocKey as parameter.
-    Executes `EXEC {sp_name} @DocKey = :doc_key` and returns the SQL FOR JSON string, or constructs line items payload dynamically.
+    Validates against allowed stored procedure whitelist.
     """
-    clean_sp_name = re.sub('[^a-zA-Z0-9_]', '', (sp_name or 'sp_GetApprovalCallbackPayload').strip()) or 'sp_GetApprovalCallbackPayload'
+    raw_sp = (sp_name or 'sp_GetApprovalCallbackPayload').strip()
+    if raw_sp not in ALLOWED_STORED_PROCEDURES:
+        logger.warning("Stored procedure '%s' not in allowed whitelist. Falling back to default.", raw_sp)
+        raw_sp = 'sp_GetApprovalCallbackPayload'
+    clean_sp_name = re.sub('[^a-zA-Z0-9_]', '', raw_sp)
     if db:
         try:
             from sqlalchemy import text
@@ -416,7 +432,8 @@ def execute_callback_event(db: Session, event_id: int) -> Dict[str, Any]:
         method, final_url, final_headers, body_bytes = build_callback_request(rule, app, doc_context, db=db)
         timeout = rule.timeout_seconds or 30
         req = urllib.request.Request(url=final_url, data=body_bytes, headers=final_headers, method=method)
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        opener = urllib.request.build_opener(NoRedirectHandler)
+        with opener.open(req, timeout=timeout) as response:
             status_code = response.status
             resp_bytes = response.read()
             resp_body = resp_bytes.decode('utf-8', errors='ignore')

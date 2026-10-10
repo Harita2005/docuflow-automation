@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, IntegrationAuditHistory, ThirdPartyApplication, User
 from app.schemas import ThirdPartyApplicationCreate, ThirdPartyApplicationUpdate, CallbackRuleCreate, CallbackRuleUpdate, TestCallbackRequest
-from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers
+from app.services.callback_service import build_callback_request, execute_callback_event, mask_sensitive_headers, ALLOWED_STORED_PROCEDURES
+from app.services.security_service import validate_and_reconstruct_url
 from app.auth import get_current_active_user
 from app.services.rbac_service import check_permission
 
@@ -156,6 +157,15 @@ def create_callback_rule(body: CallbackRuleCreate, db: Session=Depends(get_db)):
     app_obj = db.query(ThirdPartyApplication).filter(ThirdPartyApplication.id == body.application_id).first()
     if not app_obj:
         raise HTTPException(status_code=400, detail=f'Target Application #{body.application_id} does not exist.')
+    if body.stored_procedure_name:
+        sp_clean = body.stored_procedure_name.strip()
+        if sp_clean not in ALLOWED_STORED_PROCEDURES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Disallowed stored procedure '{sp_clean}'. Allowed procedures: {sorted(list(ALLOWED_STORED_PROCEDURES))}"
+            )
+    if body.custom_url:
+        validate_and_reconstruct_url(body.custom_url)
     rule = CallbackRule(rule_name=body.rule_name.strip(), description=body.description, application_id=body.application_id, status=body.status or 'ACTIVE', priority=body.priority if body.priority is not None else 100, trigger_event=body.trigger_event or 'FDO_FINAL_DECISION', run_when=body.run_when or 'BOTH', conditions_json=helper_serialize_json_field(body.conditions_json), http_method=(body.http_method or 'POST').upper(), url_mode=body.url_mode or 'INHERIT_BASE', endpoint_path=body.endpoint_path, custom_url=body.custom_url, body_type=body.body_type or 'JSON', payload_source=body.payload_source or 'MAPPING', stored_procedure_name=body.stored_procedure_name, content_type=body.content_type or 'application/json', payload_mapping_json=helper_serialize_json_field(body.payload_mapping_json), raw_payload_template=body.raw_payload_template, query_params_json=helper_serialize_json_field(body.query_params_json), headers_json=helper_serialize_json_field(body.headers_json), auth_override_type=body.auth_override_type or 'INHERIT', auth_override_config_json=helper_serialize_json_field(body.auth_override_config_json), timeout_seconds=body.timeout_seconds or 30, success_criteria_json=helper_serialize_json_field(body.success_criteria_json), follow_redirects=bool(body.follow_redirects), retry_config_json=helper_serialize_json_field(body.retry_config_json), created_at=datetime.datetime.utcnow(), updated_at=datetime.datetime.utcnow())
     db.add(rule)
     db.commit()
@@ -202,13 +212,24 @@ def update_callback_rule(rule_id: int, body: CallbackRuleUpdate, db: Session=Dep
     if body.endpoint_path is not None:
         rule.endpoint_path = body.endpoint_path
     if body.custom_url is not None:
+        if body.custom_url:
+            validate_and_reconstruct_url(body.custom_url)
         rule.custom_url = body.custom_url
     if body.body_type is not None:
         rule.body_type = body.body_type
     if body.payload_source is not None:
         rule.payload_source = body.payload_source
     if body.stored_procedure_name is not None:
-        rule.stored_procedure_name = body.stored_procedure_name
+        if body.stored_procedure_name:
+            sp_clean = body.stored_procedure_name.strip()
+            if sp_clean not in ALLOWED_STORED_PROCEDURES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Disallowed stored procedure '{sp_clean}'. Allowed procedures: {sorted(list(ALLOWED_STORED_PROCEDURES))}"
+                )
+            rule.stored_procedure_name = sp_clean
+        else:
+            rule.stored_procedure_name = None
     if body.content_type is not None:
         rule.content_type = body.content_type
     if body.payload_mapping_json is not None:
