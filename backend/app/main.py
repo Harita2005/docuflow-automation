@@ -63,9 +63,24 @@ async def lifespan(app: FastAPI):
                 invalidate_legacy_and_all_tickets()
             except Exception as mfa_clean_err:
                 logger.warning(f"MFA cache invalidation on startup deferred: {mfa_clean_err}")
+
+            # Start background outbound sync retry worker
+            try:
+                from .services.integration_service import start_background_retry_worker
+                start_background_retry_worker(poll_interval=60)
+            except Exception as retry_err:
+                logger.warning(f"Starting background retry worker deferred: {retry_err}")
         except Exception as exc: 
             logger.warning(f"Startup tasks deferred: {exc}")
     yield
+
+    # Graceful shutdown tasks
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            from .services.integration_service import stop_background_retry_worker
+            stop_background_retry_worker()
+        except Exception as shutdown_err:
+            logger.warning(f"Shutdown retry worker cleanup: {shutdown_err}")
 
 
 is_production = (settings.ENVIRONMENT or "").strip().lower() in ("production", "prod")

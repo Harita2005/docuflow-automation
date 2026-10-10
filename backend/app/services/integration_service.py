@@ -213,19 +213,28 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
     finally:
         db.close()
 
+# Global handle for background retry thread
+_retry_worker_thread = None
+_retry_worker_stop_event = None
+
 def process_pending_sync_retries() -> int:
     """
-    Background worker that scans for documents in PENDING or FAILED sync status,
-    checks if next_retry_at has arrived, and retries the outbound push.
+    Worker that scans for documents in PENDING or FAILED sync status,
+    checks if next_retry_at has arrived, atomically claims the row (PROCESSING)
+    to prevent duplicate delivery across multiple concurrent workers,
+    and retries the outbound push.
     """
     db: Session = SessionLocal()
     retried_count = 0
     try:
         now = datetime.datetime.utcnow()
+        # Find candidates eligible for retry
         docs = db.query(Document).filter(
             Document.external_sync_status.in_(['PENDING', 'FAILED']),
             Document.is_deleted == False
         ).all()
+
+        candidate_ids = []
         for d in docs:
             meta = get_sync_retry_meta(d)
             next_retry_str = meta.get('next_retry_at')
@@ -240,10 +249,77 @@ def process_pending_sync_retries() -> int:
                 except Exception:
                     should_retry = True
             if should_retry:
-                dispatch_outgoing_webhook(document_id=d.id)
-                retried_count += 1
+                candidate_ids.append(d.id)
+
+        # Multi-worker safe atomic claim:
+        # Atomically transition from PENDING/FAILED -> PROCESSING.
+        # Only the worker that updates 1 row proceeds with dispatch.
+        for doc_id in candidate_ids:
+            claimed_rows = db.query(Document).filter(
+                Document.id == doc_id,
+                Document.external_sync_status.in_(['PENDING', 'FAILED']),
+                Document.is_deleted == False
+            ).update(
+                {Document.external_sync_status: 'PROCESSING'},
+                synchronize_session=False
+            )
+            db.commit()
+
+            if claimed_rows == 1:
+                try:
+                    dispatch_outgoing_webhook(document_id=doc_id)
+                    retried_count += 1
+                except Exception as dispatch_err:
+                    logger.error("[OutboundWebhook] Failed dispatch for claimed doc %s: %s", doc_id, dispatch_err)
+            else:
+                logger.debug("[OutboundWebhook] Doc %s already claimed by another worker; skipping.", doc_id)
+
     except Exception as exc:
         logger.error("[OutboundWebhook] Error processing pending sync retries: %s", exc)
     finally:
         db.close()
     return retried_count
+
+def run_retry_worker_loop(stop_event, poll_interval: int = 60):
+    """Loop that runs in a background thread to process sync retries at periodic intervals."""
+    import time
+    logger.info("[OutboundWebhook] Background retry worker loop started with poll_interval=%ss", poll_interval)
+    while not stop_event.is_set():
+        try:
+            process_pending_sync_retries()
+        except Exception as e:
+            logger.error("[OutboundWebhook] Unexpected error in retry loop: %s", e)
+        # Sleep in small slices to respond promptly to stop_event
+        for _ in range(poll_interval):
+            if stop_event.is_set():
+                break
+            time.sleep(1)
+    logger.info("[OutboundWebhook] Background retry worker loop stopped.")
+
+def start_background_retry_worker(poll_interval: int = 60):
+    """Starts the background retry worker thread if not already active."""
+    global _retry_worker_thread, _retry_worker_stop_event
+    import threading
+    if _retry_worker_thread is not None and _retry_worker_thread.is_alive():
+        logger.info("[OutboundWebhook] Background retry worker is already running.")
+        return
+    _retry_worker_stop_event = threading.Event()
+    _retry_worker_thread = threading.Thread(
+        target=run_retry_worker_loop,
+        args=(_retry_worker_stop_event, poll_interval),
+        daemon=True,
+        name="DocuFlow-SyncRetryWorker"
+    )
+    _retry_worker_thread.start()
+    logger.info("[OutboundWebhook] Started background retry worker thread.")
+
+def stop_background_retry_worker():
+    """Stops the background retry worker thread gracefully."""
+    global _retry_worker_thread, _retry_worker_stop_event
+    if _retry_worker_stop_event:
+        _retry_worker_stop_event.set()
+    if _retry_worker_thread and _retry_worker_thread.is_alive():
+        _retry_worker_thread.join(timeout=5)
+    _retry_worker_thread = None
+    _retry_worker_stop_event = None
+    logger.info("[OutboundWebhook] Stopped background retry worker.")

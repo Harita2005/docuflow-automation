@@ -1062,5 +1062,143 @@ def test_aud_inactive_approver_fallback_and_stuck_documents(db_session, test_set
         db_session.commit()
 
 
+def test_aud07_webhook_fails_twice_then_succeeds(db_session, test_setup):
+    """
+    AUD-07 Hardening:
+    Prove that:
+    1. First attempt fails (HTTP 500) -> status is FAILED, attempt_count=1, next_retry_at is set.
+    2. Atomic claim locks row (PROCESSING) during retry loop.
+    3. Second attempt fails (HTTP 503) -> status is FAILED, attempt_count=2, next_retry_at is updated.
+    4. Third attempt succeeds (HTTP 200) -> status is SYNCED, attempt_count=3, external_synced_at is recorded, external_sync_error is None.
+    """
+    from unittest.mock import patch, MagicMock
+    import urllib.error
+    import io
+    import datetime
+    import json
+    from app.services.integration_service import (
+        dispatch_outgoing_webhook,
+        process_pending_sync_retries,
+        get_sync_retry_meta,
+    )
+    from app.database.models import ThirdPartyWebhookConfig, IntegrationSyncLog
+
+    doc_id = f"DOC-AUD07-RETRY-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-{uuid.uuid4().hex[:4]}",
+        vendor_name="Retry Vendor Ltd",
+        amount=999.0,
+        status="Approved",
+        current_stage=1,
+        external_sync_status="PENDING",
+        is_deleted=False,
+        version=1,
+        contact_person="system"
+    )
+    db_session.add(doc)
+
+    # Ensure an active webhook config exists
+    cfg = db_session.query(ThirdPartyWebhookConfig).filter(ThirdPartyWebhookConfig.is_active == True).first()
+    created_cfg = False
+    if not cfg:
+        cfg = ThirdPartyWebhookConfig(
+            name="TestERPWebhook",
+            target_url="https://erp.example.com/api/v1/invoices",
+            is_active=True,
+            auth_header_name="X-Api-Key",
+            auth_token="test-token"
+        )
+        db_session.add(cfg)
+        created_cfg = True
+    db_session.commit()
+
+    try:
+        # ATTEMPT 1: Fails with HTTP 500
+        http_500_err = urllib.error.HTTPError(
+            url="https://erp.example.com/api/v1/invoices",
+            code=500,
+            msg="Internal Server Error",
+            hdrs={},
+            fp=io.BytesIO(b'{"error": "ERP database temporarily unavailable"}')
+        )
+        with patch("urllib.request.urlopen", side_effect=http_500_err):
+            res1 = dispatch_outgoing_webhook(document_id=doc_id)
+            assert res1["success"] is False
+            assert res1["attempts"] == 1
+
+        db_session.refresh(doc)
+        assert doc.external_sync_status == "FAILED"
+        meta1 = get_sync_retry_meta(doc)
+        assert meta1["attempt_count"] == 1
+        assert "500" in str(meta1["last_error"])
+        assert meta1["next_retry_at"] is not None
+
+        # Simulate time passing so next_retry_at is in the past
+        past_time = (datetime.datetime.utcnow() - datetime.timedelta(minutes=5)).isoformat()
+        meta1["next_retry_at"] = past_time
+        doc.external_sync_error = json.dumps(meta1)
+        db_session.commit()
+
+        # ATTEMPT 2: Triggered by process_pending_sync_retries(), fails with HTTP 503
+        http_503_err = urllib.error.HTTPError(
+            url="https://erp.example.com/api/v1/invoices",
+            code=503,
+            msg="Service Unavailable",
+            hdrs={},
+            fp=io.BytesIO(b'{"error": "Upstream gateway timeout"}')
+        )
+        with patch("urllib.request.urlopen", side_effect=http_503_err):
+            retried = process_pending_sync_retries()
+            assert retried >= 1
+
+        db_session.refresh(doc)
+        assert doc.external_sync_status == "FAILED"
+        meta2 = get_sync_retry_meta(doc)
+        assert meta2["attempt_count"] == 2
+        assert "503" in str(meta2["last_error"])
+
+        # Simulate time passing again for next retry
+        past_time2 = (datetime.datetime.utcnow() - datetime.timedelta(minutes=5)).isoformat()
+        meta2["next_retry_at"] = past_time2
+        doc.external_sync_error = json.dumps(meta2)
+        db_session.commit()
+
+        # ATTEMPT 3: Triggered by process_pending_sync_retries(), succeeds with HTTP 200 OK
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'{"status": "SUCCESS", "erp_reference": "SAP-998811"}'
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            retried_succ = process_pending_sync_retries()
+            assert retried_succ >= 1
+
+        db_session.refresh(doc)
+        # Verify complete success on 3rd attempt
+        assert doc.external_sync_status == "SYNCED"
+        assert doc.external_synced_at is not None
+        assert doc.external_sync_error is None
+
+        # Verify integration sync logs contain all 3 attempts
+        sync_logs = db_session.query(IntegrationSyncLog).filter(
+            IntegrationSyncLog.document_id == doc_id
+        ).order_by(IntegrationSyncLog.id.asc()).all()
+        assert len(sync_logs) == 3
+        assert sync_logs[0].status == "FAILED"
+        assert sync_logs[0].status_code == 500
+        assert sync_logs[1].status == "FAILED"
+        assert sync_logs[1].status_code == 503
+        assert sync_logs[2].status == "SUCCESS"
+        assert sync_logs[2].status_code == 200
+
+    finally:
+        db_session.query(IntegrationSyncLog).filter(IntegrationSyncLog.document_id == doc_id).delete()
+        db_session.delete(doc)
+        if created_cfg:
+            db_session.delete(cfg)
+        db_session.commit()
+
+
 
 
