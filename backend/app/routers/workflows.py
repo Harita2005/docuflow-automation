@@ -365,6 +365,62 @@ def get_single_workflow_profile_user(
     return _get_single_workflow_profile_data(profile_name, db)
 
 
+@router.get('/api/admin/workflows/stuck-documents')
+def list_documents_stuck_with_inactive_approver(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    List documents stuck at an in-progress workflow stage because their assigned approver
+    is inactive, deleted, or unresolvable.
+    """
+    user_role = (getattr(current_user, 'role', '') or '').strip().lower()
+    if user_role not in {'admin', 'administrator', 'system_admin', 'superadmin'} and not check_permission(current_user, 'workflow:admin', db):
+        raise HTTPException(status_code=403, detail="Forbidden: Admin privileges required to inspect stuck documents.")
+
+    docs = db.query(Invoice).filter(
+        Invoice.is_deleted == False,
+        (Invoice.status.ilike('%In Progress%') | Invoice.status.ilike('%Initiated%'))
+    ).all()
+
+    stuck_docs = []
+    for doc in docs:
+        if not doc.assigned_approver or not doc.assigned_approver.strip():
+            stuck_docs.append({
+                "document_id": doc.id,
+                "invoice_number": doc.invoice_number,
+                "current_stage": doc.current_stage,
+                "status": doc.status,
+                "assigned_approver": doc.assigned_approver,
+                "reason": "Approver target is empty or unassigned."
+            })
+            continue
+
+        targets = [t.strip().lower() for t in doc.assigned_approver.split(',') if t.strip()]
+        active_match = False
+        for t in targets:
+            matching_user = db.query(User).filter(
+                (User.username.ilike(t) | User.email.ilike(t) | User.employee_id.ilike(t) | User.employee_name.ilike(t) | User.role.ilike(t)),
+                User.is_active == True,
+                User.is_deleted == False
+            ).first()
+            if matching_user:
+                active_match = True
+                break
+
+        if not active_match:
+            stuck_docs.append({
+                "document_id": doc.id,
+                "invoice_number": doc.invoice_number,
+                "current_stage": doc.current_stage,
+                "status": doc.status,
+                "assigned_approver": doc.assigned_approver,
+                "reason": f"Assigned approver '{doc.assigned_approver}' is inactive, deleted, or missing."
+            })
+
+    return {"count": len(stuck_docs), "stuck_documents": stuck_docs}
+
+
 @router.get('/api/admin/workflows/{profile_name}', response_model=WorkflowProfileSchema)
 def get_single_workflow_profile_admin(
     profile_name: str,
@@ -611,3 +667,128 @@ def execute_invoice_escalation(
     user_name = current_user.employee_name or current_user.name or current_user.username or 'Escalation Engine'
     reason = payload.get('reason') or 'SLA Threshold Exceeded'
     return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)
+
+
+@router.post('/api/admin/workflows/{invoice_id}/fallback-reassign')
+def fallback_reassign_or_override(
+    invoice_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Fallback mechanism for stuck documents:
+    Allows an admin to reassign, delegate, or override with mandatory reason logged in the audit trail.
+    """
+    from app.routers.documents import find_invoice_by_identifier
+    user_role = (getattr(current_user, 'role', '') or '').strip().lower()
+    if user_role not in {'admin', 'administrator', 'system_admin', 'superadmin'} and not check_permission(current_user, 'workflow:admin', db):
+        raise HTTPException(status_code=403, detail="Forbidden: Admin privileges required for fallback intervention.")
+
+    inv = find_invoice_by_identifier(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+
+    action = str(payload.get('action') or 'REASSIGN').strip().upper()
+    target_approver = str(payload.get('target_approver') or '').strip()
+    reason = str(payload.get('reason') or '').strip()
+
+    if not reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mandatory fallback reason required: You must supply a detailed reason for admin intervention."
+        )
+
+    actor_name = current_user.employee_name or current_user.name or current_user.username or 'Admin Operator'
+
+    if action in ['REASSIGN', 'DELEGATE']:
+        if not target_approver:
+            raise HTTPException(status_code=400, detail="Target approver username/email is required for reassignment or delegation.")
+
+        target_user = db.query(User).filter(
+            (User.username.ilike(target_approver) | User.email.ilike(target_approver) | User.employee_id.ilike(target_approver)),
+            User.is_active == True,
+            User.is_deleted == False
+        ).first()
+        if not target_user:
+            raise HTTPException(status_code=400, detail=f"Target approver '{target_approver}' does not exist or is inactive.")
+
+        old_approver = inv.assigned_approver
+        inv.assigned_approver = target_user.username
+        inv.updated_at = datetime.datetime.utcnow()
+        inv.version = (inv.version or 1) + 1
+
+        db.add(AuditLog(
+            invoice_id=str(inv.id),
+            user=actor_name,
+            action=f"Fallback {action.capitalize()}",
+            stage=f"Stage {inv.current_stage or 1}",
+            notes=f"Admin {action.lower()}: '{old_approver}' ➔ '{target_user.username}'. Reason: {reason}",
+            remarks=reason
+        ))
+        db.commit()
+        db.refresh(inv)
+        return {"success": True, "action": action, "assigned_approver": inv.assigned_approver, "document_id": inv.id}
+
+    elif action == 'OVERRIDE_APPROVE':
+        from app.routers.documents import complete_document_lifecycle, record_approval_assignment_transition
+        prev_stage_num = inv.current_stage or 1
+        current_version = inv.version or 1
+        stage_name = f"Stage {prev_stage_num}"
+
+        next_step = None
+        if inv.workflow_profile_id:
+            next_step = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
+            ).first()
+
+        if next_step and next_step.approver_target and next_step.approver_target.strip():
+            next_stage_val = prev_stage_num + 1
+            next_status_val = f"In Progress (Stage {next_stage_val})"
+            next_assigned_val = next_step.approver_target.strip()
+            inv.current_stage = next_stage_val
+            inv.status = next_status_val
+            inv.assigned_approver = next_assigned_val
+            inv.version = current_version + 1
+            inv.updated_at = datetime.datetime.utcnow()
+
+            record_approval_assignment_transition(
+                db=db,
+                inv=inv,
+                completed_stage_num=prev_stage_num,
+                action="ADMIN_OVERRIDE",
+                approver_handle=actor_name,
+                remarks=reason,
+                next_stage_num=next_stage_val,
+                next_stage_name=next_step.step_name,
+                next_approver_handle=next_assigned_val
+            )
+            db.add(AuditLog(
+                invoice_id=str(inv.id),
+                user=actor_name,
+                action=f"Admin Override Approved ({stage_name})",
+                stage=stage_name,
+                notes=f"Admin override approval due to inactive approver: {reason}",
+                remarks=reason
+            ))
+            db.commit()
+            db.refresh(inv)
+            return {"success": True, "action": "OVERRIDE_ADVANCE", "current_stage": inv.current_stage, "status": inv.status}
+        else:
+            inv.status = "Approved"
+            inv.version = current_version + 1
+            inv.updated_at = datetime.datetime.utcnow()
+            complete_document_lifecycle(
+                db=db,
+                inv=inv,
+                approver_name=actor_name,
+                remarks=f"Admin override final approval: {reason}",
+                prev_stage_num=prev_stage_num,
+                stage_name=stage_name,
+                next_assigned_info="Admin override final settlement"
+            )
+            return {"success": True, "action": "OVERRIDE_FINAL_APPROVE", "status": inv.status}
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported fallback action '{action}'. Choose REASSIGN, DELEGATE, or OVERRIDE_APPROVE.")

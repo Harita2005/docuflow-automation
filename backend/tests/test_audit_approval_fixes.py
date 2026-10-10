@@ -581,5 +581,118 @@ def test_aud05_deterministic_rule_ordering_priority_desc_id_asc(db_session, test
         db_session.commit()
 
 
+def test_aud_inactive_approver_fallback_and_stuck_documents(db_session, test_setup):
+    """
+    Risk map: Inactive or deleted approver
+    - Documents stuck with inactive or deleted approver are surfaced in /api/admin/workflows/stuck-documents
+    - Admin can perform fallback (REASSIGN, DELEGATE, or OVERRIDE_APPROVE) with mandatory reason logged in AuditLog.
+    """
+    token = test_setup["token_admin"]
+    admin_user = test_setup["admin"]
+
+    # Inactive approver user
+    inactive_u = User(
+        user_uid=f"UID-INACT-{uuid.uuid4().hex[:6]}",
+        employee_id=f"EMP-INACT-{uuid.uuid4().hex[:6]}",
+        employee_name="Inactive Approver",
+        name="Inactive Approver",
+        username=f"inactive_{uuid.uuid4().hex[:6]}",
+        email=f"inactive_{uuid.uuid4().hex[:6]}@example.com",
+        password_hash="dummyhash_for_test",
+        role="manager",
+        is_active=False,
+        is_deleted=False
+    )
+    # Active fallback approver user
+    fallback_u = User(
+        user_uid=f"UID-FALL-{uuid.uuid4().hex[:6]}",
+        employee_id=f"EMP-FALL-{uuid.uuid4().hex[:6]}",
+        employee_name="Fallback Approver",
+        name="Fallback Approver",
+        username=f"active_fallback_{uuid.uuid4().hex[:6]}",
+        email=f"fallback_{uuid.uuid4().hex[:6]}@example.com",
+        password_hash="dummyhash_for_test",
+        role="manager",
+        is_active=True,
+        is_deleted=False
+    )
+    db_session.add_all([inactive_u, fallback_u])
+    db_session.commit()
+
+    doc_id = f"DOC-STUCK-{uuid.uuid4().hex[:6]}"
+    doc = Invoice(
+        id=doc_id,
+        invoice_number=f"INV-STUCK-{uuid.uuid4().hex[:4]}",
+        vendor_name="Stuck Approver Vendor",
+        amount=500.0,
+        status="In Progress (Stage 1)",
+        current_stage=1,
+        assigned_approver=inactive_u.username,
+        is_deleted=False,
+        contact_person="system"
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    try:
+        # 1. Admin lists stuck documents
+        stuck_resp = client.get(
+            "/api/admin/workflows/stuck-documents",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert stuck_resp.status_code == 200
+        stuck_data = stuck_resp.json()
+        matching_stuck = [d for d in stuck_data["stuck_documents"] if d["document_id"] == doc_id]
+        assert len(matching_stuck) == 1, "Document stuck with inactive approver was not detected in /api/admin/workflows/stuck-documents"
+
+        # 2. Validation: Fallback without reason must be rejected (400)
+        fail_resp = client.post(
+            f"/api/admin/workflows/{doc_id}/fallback-reassign",
+            json={
+                "action": "REASSIGN",
+                "target_approver": fallback_u.username,
+                "reason": ""
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert fail_resp.status_code == 400
+
+        # 3. Successful fallback reassignment with mandatory reason
+        reassign_resp = client.post(
+            f"/api/admin/workflows/{doc_id}/fallback-reassign",
+            json={
+                "action": "REASSIGN",
+                "target_approver": fallback_u.username,
+                "reason": "Original manager left company; reassigned to backup manager"
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert reassign_resp.status_code == 200
+        assert reassign_resp.json()["assigned_approver"] == fallback_u.username
+
+        # 4. Verify audit trail was logged with mandatory reason
+        from app.database.models import AuditLog
+        audit = db_session.query(AuditLog).filter(
+            AuditLog.invoice_id == doc_id,
+            AuditLog.action.ilike("%Fallback Reassign%")
+        ).first()
+        assert audit is not None
+        assert "reassigned to backup manager" in audit.notes
+
+        # 5. Document is no longer stuck with an inactive approver
+        stuck_resp_after = client.get(
+            "/api/admin/workflows/stuck-documents",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        still_stuck = [d for d in stuck_resp_after.json()["stuck_documents"] if d["document_id"] == doc_id]
+        assert len(still_stuck) == 0, "Document should no longer be marked as stuck"
+    finally:
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
+        db_session.delete(doc)
+        db_session.delete(inactive_u)
+        db_session.delete(fallback_u)
+        db_session.commit()
+
+
 
 
