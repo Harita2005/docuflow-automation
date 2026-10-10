@@ -13,8 +13,8 @@ from app.services.rbac_service import check_permission
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/admin/roles", tags=["Role & Permission Management"])
-permission_router = APIRouter(prefix="/api/admin/permissions", tags=["Role & Permission Management"])
+router = APIRouter(prefix="/api/admin/roles", tags=["Role & Permission Management"], dependencies=[Depends(get_current_active_user)])
+permission_router = APIRouter(prefix="/api/admin/permissions", tags=["Role & Permission Management"], dependencies=[Depends(get_current_active_user)])
 
 # ---------------------------------------------------------------------------
 # Registered Application Resources Catalogue
@@ -430,7 +430,7 @@ def delete_custom_permission(
 # ---------------------------------------------------------------------------
 @router.get("", response_model=List[RoleResponse])
 def get_all_roles(
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """List all roles and their assigned permissions for application RBAC mapping."""

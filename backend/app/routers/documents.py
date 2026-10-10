@@ -3095,7 +3095,7 @@ async def upload_invoice_version(
 
 @router.get('/api/documents/{id}/comments')
 @router.get('/api/records/{id}/comments')
-def get_document_comments(id: str, db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user_optional)):
+def get_document_comments(id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, id)
     logs = db.query(AuditLog).filter(
         (AuditLog.invoice_id == str(inv.id)) | (AuditLog.invoice_id == f'DOC-{inv.id}'),
@@ -3286,9 +3286,7 @@ def is_notification_for_user_handles(n: InAppNotification, user_handles: list[st
     return False
 
 @router.get('/api/notifications')
-def get_notifications(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user_optional)):
-    if not current_user:
-        return []
+def get_notifications(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     user_handles = get_user_notification_handles(current_user)
     all_notifs = db.query(InAppNotification).order_by(InAppNotification.created_at.desc()).limit(150).all()
     filtered = []
@@ -3306,7 +3304,7 @@ def get_notifications(db: Session=Depends(get_db), current_user: Optional[User]=
     return filtered
 
 @router.put('/api/notifications/{notification_id}/read')
-def mark_notification_read(notification_id: str, db: Session=Depends(get_db)):
+def mark_notification_read(notification_id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     notif = db.query(InAppNotification).filter(InAppNotification.notification_id == notification_id).first()
     if not notif:
         notif = db.query(InAppNotification).filter(InAppNotification.id == notification_id).first()
@@ -3316,9 +3314,7 @@ def mark_notification_read(notification_id: str, db: Session=Depends(get_db)):
     return {'success': True}
 
 @router.put('/api/notifications/read-all')
-def mark_all_notifications_read(db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user_optional)):
-    if not current_user:
-        return {'success': True}
+def mark_all_notifications_read(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     user_handles = get_user_notification_handles(current_user)
     unread_notifs = db.query(InAppNotification).filter(InAppNotification.is_read == False).all()
     for n in unread_notifs:
@@ -3328,7 +3324,7 @@ def mark_all_notifications_read(db: Session=Depends(get_db), current_user: Optio
     return {'success': True}
 
 @router.get('/api/templates')
-def get_templates(db: Session=Depends(get_db)):
+def get_templates(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     return []
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app_config.json')
 

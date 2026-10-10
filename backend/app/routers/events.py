@@ -293,7 +293,7 @@ def issue_stream_ticket(
     ticket = stream_ticket_manager.create_ticket(current_user)
     return {"ticket": ticket, "expires_in": 30}
 
-@router.get('/api/events/stream')
+@router.get('/api/events/stream', dependencies=[Depends(get_current_user_for_stream)])
 async def event_stream(
     request: Request,
     current_user: User = Depends(get_current_user_for_stream),
