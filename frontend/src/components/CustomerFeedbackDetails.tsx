@@ -438,9 +438,9 @@ export default function CustomerFeedbackDetails({
   }, [activeDoc?.id, activeDoc?.due_date, document?.id]);
 
   const { targetDatePart, targetHour12Part, targetMinutePart, targetAmPmPart } = useMemo(() => {
-    let d = "";
-    let h24Str = "12";
-    let mStr = "00";
+    let d: string;
+    let h24Str: string;
+    let mStr: string;
 
     if (!targetCompletionDate || !targetCompletionDate.includes("T")) {
       const now = new Date();
