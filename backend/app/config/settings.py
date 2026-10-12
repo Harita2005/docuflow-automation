@@ -13,7 +13,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-ROOT_DIR = BASE_DIR.parent
+# In Docker container (WORKDIR /app), BASE_DIR is /app and parent is / (root).
+# In host repository, BASE_DIR is <repo>/backend and parent is <repo>.
+if BASE_DIR.parent == Path(BASE_DIR.parent.root) or BASE_DIR.parent == BASE_DIR:
+    ROOT_DIR = BASE_DIR
+elif BASE_DIR.name == "backend" and (BASE_DIR.parent / "backend").exists():
+    ROOT_DIR = BASE_DIR.parent
+else:
+    ROOT_DIR = BASE_DIR
 
 ENV_FILE = ROOT_DIR / ".env"
 if not ENV_FILE.exists():
@@ -141,7 +148,9 @@ class Settings(BaseSettings):
 
     # Storage
     PDF_STORAGE_DIR: Path = ROOT_DIR / "stored_pdfs"
+    PDF_STORAGE_PATH: Optional[Path] = None
     APPROVED_PDF_DIR: Path = ROOT_DIR / "stored_pdfs" / "approved"
+    APPROVED_PDF_PATH: Optional[Path] = None
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     DATA_DIR: Path = BASE_DIR / "data"
     EXCEL_PATH: Path = BASE_DIR / "data" / "SD Checklists.xlsx"
@@ -191,38 +200,64 @@ class Settings(BaseSettings):
         always resolve to canonical, absolute system paths regardless of the
         current working directory or relative path strings in .env.
         """
+        # Upload Directory
         if isinstance(self.UPLOAD_DIR, (str, Path)):
             raw_upload = str(self.UPLOAD_DIR).replace('\\', '/').strip('./')
             if raw_upload.endswith('uploads'):
                 self.UPLOAD_DIR = (BASE_DIR / 'uploads').resolve()
             elif not Path(self.UPLOAD_DIR).is_absolute():
                 self.UPLOAD_DIR = (ROOT_DIR / self.UPLOAD_DIR).resolve()
+            elif Path(self.UPLOAD_DIR).parts == ('/', 'uploads') or str(self.UPLOAD_DIR).startswith('/uploads/'):
+                self.UPLOAD_DIR = (BASE_DIR / str(self.UPLOAD_DIR).lstrip('/')).resolve()
             else:
                 self.UPLOAD_DIR = Path(self.UPLOAD_DIR).resolve()
         else:
             self.UPLOAD_DIR = (BASE_DIR / 'uploads').resolve()
 
-        if isinstance(self.PDF_STORAGE_DIR, (str, Path)):
-            p = Path(self.PDF_STORAGE_DIR)
+        # PDF Storage Directory (supports PDF_STORAGE_PATH or PDF_STORAGE_DIR)
+        raw_pdf = self.PDF_STORAGE_PATH or self.PDF_STORAGE_DIR
+        if isinstance(raw_pdf, (str, Path)):
+            p = Path(raw_pdf)
             if not p.is_absolute():
                 self.PDF_STORAGE_DIR = (ROOT_DIR / p).resolve()
+            elif p.parts == ('/', 'stored_pdfs') or str(p).startswith('/stored_pdfs/'):
+                # Avoid accidentally pointing to system root /stored_pdfs when ROOT_DIR is /app
+                self.PDF_STORAGE_DIR = (ROOT_DIR / str(p).lstrip('/')).resolve()
             else:
                 self.PDF_STORAGE_DIR = p.resolve()
         else:
             self.PDF_STORAGE_DIR = (ROOT_DIR / 'stored_pdfs').resolve()
 
-        if isinstance(self.APPROVED_PDF_DIR, (str, Path)):
-            p = Path(self.APPROVED_PDF_DIR)
-            if not p.is_absolute():
+        # Approved PDF Directory (supports APPROVED_PDF_PATH or APPROVED_PDF_DIR)
+        raw_approved = self.APPROVED_PDF_PATH or self.APPROVED_PDF_DIR
+        if isinstance(raw_approved, (str, Path)):
+            p = Path(raw_approved)
+            raw_app_str = str(p).replace('\\', '/').strip('./')
+            if raw_app_str.endswith('approved'):
+                self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / 'approved').resolve()
+            elif not p.is_absolute():
+                self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / p).resolve()
+            elif p.parts == ('/', 'stored_pdfs', 'approved') or str(p).startswith('/stored_pdfs/approved'):
                 self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / 'approved').resolve()
             else:
                 self.APPROVED_PDF_DIR = p.resolve()
         else:
             self.APPROVED_PDF_DIR = (self.PDF_STORAGE_DIR / 'approved').resolve()
 
-        self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
+        # Safely ensure directories exist
+        try:
+            self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        try:
+            self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        try:
+            self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        return self
 
 # Global settings instance
 # ---------------------------------------------------------------------------
@@ -234,10 +269,11 @@ settings = Settings()
 # Required directories
 # ---------------------------------------------------------------------------
 
-settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-settings.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-settings.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
-settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+for d in (settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_DIR, settings.DATA_DIR):
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------------------------
