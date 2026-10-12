@@ -1,3 +1,4 @@
+import logging
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -12,7 +13,6 @@ try:
     db.commit()
     print(f'[Cleanup] Removed {deleted} redundant VCC category rules.')
 except Exception as e:
-    import logging
     logging.getLogger(__name__).debug('Handled exception: %s', e)
 vcc_attachment_items = ['Bill Amount Verified', 'Bill No ,Date & Address Verified', 'Documents Attached', 'Debit/Credit Note Verified', 'Gofrugal Entry with narration Verified', 'PO Verified', 'Showroom Inward details', 'Tax portion verified (GST, TDS, etc..)', 'Vendor GST no, Signaure Verified', 'Vendor Name', 'Showroom Name Verified']
 vcc_first_approval_items = ['IA Final Audit & Sign-off', 'Tax portion verified (GST, TDS)', 'PO & Invoice Amounts Reconciled']
@@ -24,7 +24,6 @@ try:
     db.commit()
     print(f'[Success] Simplified VCC Checklist Matrix down to 5 clean Global Rules!')
 except Exception as e:
-    import logging
     logging.getLogger(__name__).debug('Handled exception: %s', e)
 total_count = db.query(ChecklistRule).count()
 print(f'[Checklist Matrix Table] Total active rules remaining in database: {total_count}')

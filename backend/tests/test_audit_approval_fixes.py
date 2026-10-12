@@ -1,3 +1,5 @@
+import json
+import urllib.error
 import pytest
 import uuid
 from fastapi.testclient import TestClient
@@ -541,7 +543,6 @@ def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, ca
     """
     import logging
     from unittest.mock import patch
-    import urllib.error
     from app.services.integration_service import dispatch_outgoing_webhook, get_sync_retry_meta
     from app.database.models import ThirdPartyWebhookConfig
 
@@ -893,7 +894,6 @@ def test_aud05_deterministic_rule_ordering_priority_desc_id_asc(db_session, test
     - Rule ordering must be deterministic: .order_by(BusinessRule.priority.desc(), BusinessRule.id.asc())
     - When two rules have identical priority, the one with lower ID (created earlier) wins deterministically.
     """
-    import json
     from app.services.rules_engine import evaluate_business_rules_full
     from app.database.models import BusinessRule, WorkflowProfile
 
@@ -1075,10 +1075,8 @@ def test_aud07_webhook_fails_twice_then_succeeds(db_session, test_setup):
     4. Third attempt succeeds (HTTP 200) -> status is SYNCED, attempt_count=3, external_synced_at is recorded, external_sync_error is None.
     """
     from unittest.mock import patch, MagicMock
-    import urllib.error
     import io
     import datetime
-    import json
     from app.services.integration_service import (
         dispatch_outgoing_webhook,
         process_pending_sync_retries,

@@ -563,7 +563,6 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
     if user.active_session_id and (not request.force_login):
         return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 0, 'user': None, 'mfa_required': False, 'active_session_conflict': True, 'active_device_info': user.active_device_info or 'Another Browser / Device', 'session_created_at': user.session_created_at.isoformat() + 'Z' if user.session_created_at else None, 'message': f"User '{user.employee_name or user.username}' is currently logged in on another device/browser."}
     client_ip = extract_client_ip(req)
-    import uuid
     new_session_id = str(uuid.uuid4())
     device_label = request.device_info or 'Web Browser'
     had_prior_session = bool(user.active_session_id)

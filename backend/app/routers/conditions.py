@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import List, Any
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -132,7 +133,6 @@ def save_business_rule(
         if raw_conds is None:
             conds = '[]'
         elif isinstance(raw_conds, (list, dict)):
-            import json
             conds = json.dumps(raw_conds)
         else:
             conds = str(raw_conds)
@@ -141,7 +141,6 @@ def save_business_rule(
         parsed_conds = None
         if isinstance(raw_conds, str):
             try:
-                import json
                 parsed_conds = json.loads(raw_conds)
             except Exception:
                 parsed_conds = None

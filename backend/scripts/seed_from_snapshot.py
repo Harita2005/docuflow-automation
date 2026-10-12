@@ -1,3 +1,4 @@
+import logging
 import sys
 import json
 from pathlib import Path
@@ -25,7 +26,6 @@ def parse_val(v):
             try:
                 return datetime.fromisoformat(v.replace('Z', '+00:00'))
             except Exception as exc:
-                import logging
                 logging.getLogger(__name__).debug('Handled exception: %s', exc)
     return v
 
@@ -54,20 +54,17 @@ def run_seeder():
             try:
                 conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all'"))
             except Exception as e:
-                import logging
                 logging.getLogger(__name__).debug('Handled exception: %s', e)
             for tbl in ALL_WIPE_TABLES:
                 try:
                     conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}]"))
                 except Exception as e:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', e)
         else:
             for tbl in ALL_WIPE_TABLES:
                 try:
                     conn.execute(text(f'DELETE FROM {tbl}'))
                 except Exception as exc:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', exc)
     print('    [OK] Tables cleaned.')
     print('\n[Step 3/3] Inserting records from snapshot...')
@@ -87,7 +84,6 @@ def run_seeder():
                     check_q = text(f"SELECT OBJECTPROPERTY(OBJECT_ID('{tbl_name}'), 'TableHasIdentity')")
                     has_identity = bool(conn.execute(check_q).scalar())
                 except Exception as exc:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', exc)
             cleaned_rows = []
             for r in rows:
@@ -101,7 +97,6 @@ def run_seeder():
                 try:
                     conn.execute(text(f'SET IDENTITY_INSERT [{tbl_name}] ON'))
                 except Exception as exc:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', exc)
             for i in range(0, len(cleaned_rows), chunk_size):
                 chunk = cleaned_rows[i:i + chunk_size]
@@ -110,14 +105,12 @@ def run_seeder():
                 try:
                     conn.execute(text(f'SET IDENTITY_INSERT [{tbl_name}] OFF'))
                 except Exception as exc:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', exc)
             print(f'    [OK] {tbl_name:30s} : {len(cleaned_rows):,} rows inserted')
         if is_mssql:
             try:
                 conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
             except Exception as e:
-                import logging
                 logging.getLogger(__name__).debug('Handled exception: %s', e)
     print('\n' + '=' * 70)
     print('>>> DATABASE SEEDING COMPLETED SUCCESSFULLY!')

@@ -2552,7 +2552,6 @@ def parse_and_validate_scheduled_clock_time(val: Any) -> Optional[str]:
     if not s or s.lower() == 'not specified':
         return None
 
-    import re
     lower = s.lower()
     # Reject duration-like formats e.g. "3 hours", "3 hrs", "2 hr", "45 mins"
     for kw in ['hour', 'hours', 'hr', 'hrs', 'minute', 'minutes', 'min', 'mins', 'day', 'days']:
@@ -2653,7 +2652,6 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
     
     target_val = payload.get('target_completion_date') or payload.get('scheduled_time')
     if not target_val and remarks:
-        import re
         iso_found = re.search(r'\[TARGET_ISO:\s*([^\]]+)\]', remarks)
         if iso_found:
             target_val = iso_found.group(1).strip()
@@ -2757,7 +2755,6 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
                  (getattr(action, 'scheduled_time', None) if action else None)
 
     if not target_val and remarks:
-        import re
         iso_found = re.search(r'\[TARGET_ISO:\s*([^\]]+)\]', remarks)
         if iso_found:
             target_val = iso_found.group(1).strip()

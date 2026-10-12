@@ -80,21 +80,24 @@ def extract_raw_text(file_path: Path) -> str:
     if not file_path.exists():
         return text_content
 
+    try:
+        import fitz
+    except ImportError:
+        fitz = None
+
     suffix = file_path.suffix.lower()
     image_suffixes = {".jpg", ".jpeg", ".png", ".tiff", ".bmp", ".webp"}
     
-    if suffix == ".pdf":
+    if suffix == ".pdf" and fitz:
         try:
-            import fitz
             doc = fitz.open(str(file_path))
             for page in doc:
                 text_content += page.get_text() + "\n"
             doc.close()
         except Exception as e:
             logger.warning("[OCR] fitz text extraction failed: %s", e)
-    elif suffix in image_suffixes:
+    elif suffix in image_suffixes and fitz:
         try:
-            import fitz
             doc = fitz.open(str(file_path))
             for page in doc:
                 text_content += page.get_text() + "\n"
@@ -105,9 +108,8 @@ def extract_raw_text(file_path: Path) -> str:
     # If text extracted is short/empty (scanned PDF or raw image), attempt fast OCR fallback
     if len(text_content.strip()) < 30:
         ocr = get_ocr_engine()
-        if ocr:
+        if ocr and fitz:
             try:
-                import fitz
                 doc = fitz.open(str(file_path))
                 # Render max first 2 pages at 96 DPI for ultra-fast OCR processing
                 max_pages = min(len(doc), 2)

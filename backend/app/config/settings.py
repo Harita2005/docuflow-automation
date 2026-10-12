@@ -1,3 +1,5 @@
+import re
+import socket
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote_plus
@@ -62,7 +64,6 @@ class Settings(BaseSettings):
 
         Enforces connection to 192.168.179.22:1443 and avoids localhost defaults.
         """
-        import socket
         def _is_host_live(h: str, p: int) -> bool:
             try:
                 with socket.create_connection((h, int(p)), timeout=0.8):
@@ -75,7 +76,6 @@ class Settings(BaseSettings):
             db_url = self.DATABASE_URL.strip()
             forbidden = ["@db:", "sqlite", "postgresql", "mysql"]
             if not any(f in db_url.lower() for f in forbidden):
-                import re
                 host_port_match = re.search(r"@([^:/]+)(?::(\d+))?", db_url)
                 if host_port_match:
                     target_h = host_port_match.group(1)
@@ -100,7 +100,6 @@ class Settings(BaseSettings):
         trust_cert = "yes" if self.trust_server_certificate else "no"
 
         # If remote host is not reachable on the network, fallback to localhost trusted connection
-        import socket
         try:
             with socket.create_connection((host, int(port)), timeout=0.8):
                 is_remote_live = True

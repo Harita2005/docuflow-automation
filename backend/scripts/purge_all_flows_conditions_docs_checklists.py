@@ -1,3 +1,4 @@
+import logging
 import sys
 import os
 from pathlib import Path
@@ -36,7 +37,6 @@ try:
     db.commit()
     print('\n[Database Clean] All workflow flows, condition rules, checklists, documents, and logs successfully deleted from database!')
 except Exception as e:
-    import logging
     logging.getLogger(__name__).debug('Handled exception: %s', e)
 finally:
     db.close()
@@ -51,7 +51,6 @@ for folder in storage_dirs:
                     os.remove(file_path)
                     deleted_file_count += 1
                 except Exception as e:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', e)
 print(f'[Storage Clean] Removed {deleted_file_count} physical document files from storage directories.')
 print('\n=========================================================================')

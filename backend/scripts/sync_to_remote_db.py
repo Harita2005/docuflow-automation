@@ -1,3 +1,4 @@
+import logging
 """
 DocuFlow Database Migration & Remote Push Utility
 -------------------------------------------------
@@ -27,7 +28,6 @@ def push_local_to_remote(remote_db_url: str):
         with remote_engine.connect() as conn:
             print('[+] Successfully connected to Remote Database.')
     except Exception as e:
-        import logging
         logging.getLogger(__name__).debug('Handled exception: %s', e)
         return False
     print('\n[Step 1/3] Cleaning existing tables & data on Remote Server...')
@@ -38,7 +38,6 @@ def push_local_to_remote(remote_db_url: str):
                 try:
                     conn.execute(text(f"IF OBJECT_ID('{tbl}', 'U') IS NOT NULL DELETE FROM [{tbl}];"))
                 except Exception as wipe_err:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', wipe_err)
             conn.execute(text("EXEC sp_MSforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all'"))
             conn.commit()
@@ -47,7 +46,6 @@ def push_local_to_remote(remote_db_url: str):
                 try:
                     conn.execute(text(f'DROP TABLE IF EXISTS {tbl} CASCADE;'))
                 except Exception as exc:
-                    import logging
                     logging.getLogger(__name__).debug('Handled exception: %s', exc)
             conn.commit()
     print('    [OK] Remote tables cleaned.')
@@ -80,7 +78,6 @@ def push_local_to_remote(remote_db_url: str):
                         conn.execute(text(f'SET IDENTITY_INSERT [{table_name}] ON;'))
                         has_identity = True
                     except Exception as exc:
-                        import logging
                         logging.getLogger(__name__).debug('Handled exception: %s', exc)
                 batch_size = 500
                 for i in range(0, len(dict_rows), batch_size):
@@ -90,7 +87,6 @@ def push_local_to_remote(remote_db_url: str):
                     try:
                         conn.execute(text(f'SET IDENTITY_INSERT [{table_name}] OFF;'))
                     except Exception as exc:
-                        import logging
                         logging.getLogger(__name__).debug('Handled exception: %s', exc)
                 conn.commit()
             print(f'    -> {table_name.ljust(30)}: Transferred {str(row_count).rjust(6)} records [OK]')

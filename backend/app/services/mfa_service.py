@@ -1,6 +1,7 @@
 
 import base64
 import io
+import json
 import logging
 import os
 from email.utils import formatdate, make_msgid
@@ -81,7 +82,6 @@ def _sync_cache_load() -> None:
 
     if os.path.exists(_CACHE_PATH):
         try:
-            import json
             with open(_CACHE_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
@@ -98,7 +98,6 @@ def _sync_cache_load() -> None:
 
 def _sync_cache_save() -> None:
     try:
-        import json
         os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
         # Security: ensure no plaintext OTP is written to disk
         sanitized: Dict[str, Dict[str, Any]] = {}
