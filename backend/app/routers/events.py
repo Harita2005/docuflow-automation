@@ -14,7 +14,7 @@ from app.auth import get_current_active_user, decode_token
 from app.services.rbac_service import authorize_document_access
 from app.routers.documents import find_invoice_by_identifier, is_user_in_approver_pool
 from app.services.lock_service import lock_manager
-from jose import JWTError
+from jwt.exceptions import PyJWTError as JWTError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Real-Time Events & Collision Locks'])

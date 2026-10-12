@@ -1764,7 +1764,7 @@ def stream_document_file(
 @router.get('/api/documents/{invoice_id}/signed-url')
 def get_document_signed_url(
     invoice_id: str,
-    disp: str = Query('inline', regex='^(inline|attachment)$'),
+    disp: str = Query('inline', pattern='^(inline|attachment)$'),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1790,7 +1790,7 @@ def serve_signed_document_file(
     expires: int = Query(..., description="Unix expiration timestamp"),
     sig: str = Query(..., description="HMAC-SHA256 signature"),
     uid: str = Query(..., description="User ID"),
-    disp: str = Query("inline", regex="^(inline|attachment)$"),
+    disp: str = Query("inline", pattern="^(inline|attachment)$"),
     db: Session = Depends(get_db),
 ):
     if not re.match(r'^[a-zA-Z0-9_\-\.]+$', document_id) or '..' in document_id or document_id.startswith('.'):
