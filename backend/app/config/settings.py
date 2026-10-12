@@ -112,6 +112,7 @@ class Settings(BaseSettings):
                 with socket.create_connection(("localhost", 1433), timeout=0.5):
                     return f"mssql+pyodbc://@localhost/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
             except Exception:
+                # Ignore connection check failure and proceed with configured connection parameters
                 pass
 
         if self.DB_USER and self.DB_PASSWORD:

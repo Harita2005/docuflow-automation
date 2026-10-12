@@ -126,4 +126,5 @@ class TestSSRFAndWebhooks:
                 validate_url_ssrf(url)
                 pytest.fail(f"VULNERABILITY CONFIRMED: validate_url_ssrf permitted dangerous internal URL: {url}")
             except (ValueError, Exception):
+                # Expected: SSRF validation blocked dangerous URL
                 pass

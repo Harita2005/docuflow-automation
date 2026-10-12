@@ -988,6 +988,7 @@ def remap_unrouted_documents(db: Session) -> List[Dict[str, Any]]:
             from app.routers.events import broadcast_event
             broadcast_event('DOCUMENTS_AUTO_REMAPPED', {'count': len(remapped_results), 'documents': [r['document_id'] for r in remapped_results]})
         except Exception:
+            # Broadcast is non-critical; suppress errors during event emission
             pass
 
     return remapped_results

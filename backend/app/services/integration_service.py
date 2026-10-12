@@ -31,6 +31,7 @@ def get_sync_retry_meta(inv: Document) -> Dict[str, Any]:
                     "max_attempts": int(parsed.get('max_attempts', MAX_RETRY_ATTEMPTS))
                 }
         except Exception:
+            # Fall back to default retry status if error text is not JSON-formatted
             pass
     return {
         "attempt_count": 1 if err_text else 0,

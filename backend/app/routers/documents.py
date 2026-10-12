@@ -1050,6 +1050,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                         if resolved_cand.is_file():
                             cand_resolved = str(resolved_cand)
                     except Exception:
+                        # Silently ignore candidate path resolution errors
                         pass
                     if not cand_resolved:
                         cand_resolved = cand_path
@@ -1065,6 +1066,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                         elif approved_candidate.file_size:
                             inv.file_size = approved_candidate.file_size
                     except Exception:
+                        # Ignore error reading candidate file size
                         pass
                     try:
                         db.commit()
@@ -1156,6 +1158,7 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
     except HTTPException:
         raise
     except Exception:
+        # Request body may not be JSON; proceed with payload model validation
         pass
 
     update_data = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
@@ -1828,6 +1831,7 @@ def serve_signed_document_file(
             if cand.is_file():
                 safe_path = cand
         except Exception:
+            # Fall back to alternative file lookup if target_ref is invalid
             pass
 
     if not safe_path and getattr(inv, 'file_name', None):
@@ -1836,6 +1840,7 @@ def serve_signed_document_file(
             if cand.is_file():
                 safe_path = cand
         except Exception:
+            # Fall back to default filename pattern if inv.file_name resolution fails
             pass
 
     raw_fname = inv.file_name or (safe_path.name if safe_path else f"{inv.id}.pdf")
@@ -2929,6 +2934,7 @@ def serve_temp_preview(
                     (User.username == uname) | (User.email == uname) | (User.employee_id == uname)
                 ).filter(User.is_deleted == False, User.is_active == True).first()
         except Exception:
+            # Ignore invalid or expired token query parameter; authentication check follows below
             pass
 
     if not current_user:
@@ -3445,6 +3451,7 @@ async def upload_document_auto_workflow(
             try:
                 file_path.unlink()
             except Exception:
+                # Silently ignore failure to remove uploaded temporary file
                 pass
         raise HTTPException(
             status_code=422,
@@ -3461,6 +3468,7 @@ async def upload_document_auto_workflow(
             try:
                 file_path.unlink()
             except Exception:
+                # Silently ignore failure to remove uploaded temporary file
                 pass
         rule_names = [f"'{r['rule_name']}' -> {r['target_workflow_id']}" for r in top_tier_matches]
         raise HTTPException(
@@ -3479,6 +3487,7 @@ async def upload_document_auto_workflow(
             try:
                 file_path.unlink()
             except Exception:
+                # Silently ignore failure to remove uploaded temporary file
                 pass
         raise HTTPException(
             status_code=422,

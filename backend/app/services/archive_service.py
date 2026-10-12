@@ -291,6 +291,7 @@ def execute_database_archival(batch_size: int = 200, forced: bool = False) -> Di
                 setting.last_run_details = err_msg
                 db_prod.commit()
             except Exception:
+                # Silently ignore failure when saving error status to settings
                 pass
         return {"status": "FAILED", "error": err_msg}
     finally:

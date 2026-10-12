@@ -442,6 +442,7 @@ def staged_preview_file(file_security_setup):
         if file_path.exists():
             file_path.unlink()
     except Exception:
+        # Silently ignore cleanup error for temporary staged test file
         pass
 
 

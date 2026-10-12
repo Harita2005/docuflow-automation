@@ -703,6 +703,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                         if resolved_cand.is_file():
                             attached_path = str(resolved_cand)
                     except Exception:
+                        # Silently ignore candidate path resolution errors
                         pass
                     if not attached_path:
                         attached_path = cand_path
@@ -742,6 +743,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                     elif approved_candidate and approved_candidate.file_size:
                         target_inv.file_size = approved_candidate.file_size
                 except Exception:
+                    # Ignore error determining attached file size
                     pass
                 db.add(AuditLog(
                     invoice_id=target_inv.id,

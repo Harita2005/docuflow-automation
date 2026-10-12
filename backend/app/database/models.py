@@ -427,6 +427,7 @@ class Document(Base):
                 if isinstance(data, dict) and "storage_status" in data:
                     return data.get("storage_status")
         except Exception:
+            # Fall back to default storage status if custom_data parsing fails
             pass
         return getattr(self, "_storage_status", "PENDING")
 
@@ -442,6 +443,7 @@ class Document(Base):
             data["storage_status"] = val
             self.custom_data = json.dumps(data)
         except Exception:
+            # Silently ignore serialization error on custom_data
             pass
 
     __table_args__ = (

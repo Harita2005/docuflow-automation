@@ -63,6 +63,7 @@ def resolve_client_ip(request: Request) -> str:
                 ipaddress.ip_address(real_ip.strip())
                 return real_ip.strip()
             except ValueError:
+                # Invalid IP address in X-Real-IP header; fallback to direct peer IP
                 pass
 
     return direct_peer
