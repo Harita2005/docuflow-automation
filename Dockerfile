@@ -9,8 +9,13 @@ ENV PYTHONUNBUFFERED=1 \
 # Install system dependencies & Node.js for frontend building
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    gnupg2 \
     build-essential \
+    unixodbc \
+    unixodbc-dev \
     libpq-dev \
+    libgl1 \
+    libglib2.0-0 \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
