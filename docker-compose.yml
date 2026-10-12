@@ -9,24 +9,25 @@ services:
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - DB_HOST=${DB_HOST}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - FRONTEND_URL=${FRONTEND_URL:-http://192.168.179.22:8085}
+      - DB_HOST=${DB_HOST:-192.168.179.22}
       - DB_PORT=${DB_PORT:-1443}
       - DB_NAME=${DB_NAME:-DocuFlowDB}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_USER=${DB_USER:-sa}
+      - DB_PASSWORD=${DB_PASSWORD:-Admin@1234}
+      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://sa:Admin%401234@192.168.179.22:1443/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes}
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
-      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.office365.com}
       - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-${SMTP_USERNAME:-}}
-      - SMTP_USERNAME=${SMTP_USERNAME:-${SMTP_USER:-}}
-      - SMTP_PASS=${SMTP_PASS:-${SMTP_PASSWORD:-}}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-${SMTP_PASS:-}}
-      - SMTP_FROM=${SMTP_FROM:-${SMTP_SENDER_EMAIL:-}}
-      - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL:-${SMTP_FROM:-}}
-      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME:-DocuFlow Security}
+      - SMTP_USER=${SMTP_USER:-${SMTP_USERNAME:-communication@ramrajcotton.net}}
+      - SMTP_USERNAME=${SMTP_USERNAME:-${SMTP_USER:-communication@ramrajcotton.net}}
+      - SMTP_PASS=${SMTP_PASS:-${SMTP_PASSWORD:-QDjuS8BvQWq6bY}}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-${SMTP_PASS:-QDjuS8BvQWq6bY}}
+      - SMTP_FROM=${SMTP_FROM:-${SMTP_SENDER_EMAIL:-communication@ramrajcotton.net}}
+      - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL:-${SMTP_FROM:-communication@ramrajcotton.net}}
+      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME:-Ramraj Cotton}
       - SMS_PROVIDER=${SMS_PROVIDER:-generic}
       - SMS_API_URL=${SMS_API_URL:-}
       - SMS_API_KEY=${SMS_API_KEY:-}
@@ -37,10 +38,10 @@ services:
       - FAST2SMS_API_KEY=${FAST2SMS_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
@@ -56,5 +57,6 @@ services:
     ports:
       - "8085:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
