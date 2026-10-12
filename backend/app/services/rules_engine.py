@@ -653,6 +653,64 @@ def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
 
     return resolved_users
 
+def resolve_matching_rules(db: Session, invoice: Invoice) -> List[Dict[str, Any]]:
+    """
+    Evaluates all active business rules against the given invoice/document and returns
+    all matching rule resolutions.
+    Used for strict automatic workflow routing to prevent picking the wrong workflow
+    when multiple conflicting rules match with equal or ambiguous priority.
+    """
+    matched = []
+    rules = db.query(BusinessRule).filter(
+        BusinessRule.is_active == True,
+        BusinessRule.is_deleted == False
+    ).order_by(BusinessRule.priority.desc(), BusinessRule.id.asc()).all()
+
+    for rule in rules:
+        try:
+            matched_conditions = False
+            if rule.conditions_json and rule.conditions_json.strip() and rule.conditions_json.strip() != "{}":
+                conds = json.loads(rule.conditions_json)
+                matched_conditions = evaluate_rule_conditions(conds, invoice)
+            elif rule.document_type:
+                # Direct document_type matching when no specific granular conditions are configured
+                doc_type_val = getattr(invoice, 'document_type', None) or getattr(invoice, 'category', None)
+                matched_conditions = (str(rule.document_type).strip().upper() == str(doc_type_val or '').strip().upper())
+
+            if matched_conditions:
+                canonical_target_wf = None
+                profile = None
+                if rule.target_workflow_id:
+                    profile = db.query(WorkflowProfile).filter(
+                        (WorkflowProfile.profile_name == rule.target_workflow_id) |
+                        (WorkflowProfile.workflow_code == rule.target_workflow_id)
+                    ).filter(WorkflowProfile.is_deleted == False).first()
+                    if not profile:
+                        logger.warning("[RulesEngine] Skipping rule '%s' because target workflow '%s' is inactive or deleted.", rule.rule_name, rule.target_workflow_id)
+                        continue
+                    canonical_target_wf = profile.profile_name
+
+                effective_action = rule.rule_action or 'WORKFLOW_ROUTE'
+                effective_cancel_reason = rule.cancel_reason
+                if effective_action == 'WORKFLOW_ROUTE' and profile:
+                    if profile.rule_action and (profile.rule_action != 'WORKFLOW_ROUTE'):
+                        effective_action = profile.rule_action
+                        effective_cancel_reason = profile.cancel_reason or f'Auto-cancelled via Workflow Profile: {profile.profile_name}'
+
+                matched.append({
+                    'rule_id': rule.id,
+                    'rule_name': rule.rule_name,
+                    'priority': rule.priority,
+                    'target_workflow_id': canonical_target_wf,
+                    'rule_action': effective_action,
+                    'cancel_reason': effective_cancel_reason
+                })
+        except Exception as e:
+            logger.debug('Handled exception in resolve_matching_rules: %s', e)
+
+    return matched
+
+
 def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
     res = evaluate_business_rules_full(db, invoice)
     return res.get('target_workflow_id') if res else None
@@ -660,11 +718,16 @@ def evaluate_business_rules(db: Session, invoice: Invoice) -> Optional[str]:
 def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict[str, Any]]:
     rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc(), BusinessRule.id.asc()).all()
     for rule in rules:
-        if not rule.conditions_json:
-            continue
         try:
-            conds = json.loads(rule.conditions_json)
-            if evaluate_rule_conditions(conds, invoice):
+            matched_conditions = False
+            if rule.conditions_json and rule.conditions_json.strip() and rule.conditions_json.strip() != "{}":
+                conds = json.loads(rule.conditions_json)
+                matched_conditions = evaluate_rule_conditions(conds, invoice)
+            elif rule.document_type:
+                doc_type_val = getattr(invoice, 'document_type', None) or getattr(invoice, 'category', None)
+                matched_conditions = (str(rule.document_type).strip().upper() == str(doc_type_val or '').strip().upper())
+
+            if matched_conditions:
                 if rule.target_workflow_id:
                     profile = db.query(WorkflowProfile).filter(
                         (WorkflowProfile.profile_name == rule.target_workflow_id) |

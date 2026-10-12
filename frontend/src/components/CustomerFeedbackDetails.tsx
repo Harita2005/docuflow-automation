@@ -362,6 +362,37 @@ export default function CustomerFeedbackDetails({
   const [targetCompletionDate, setTargetCompletionDate] = useState<string>("");
   const [autoEscalated, setAutoEscalated] = useState<boolean>(false);
 
+  const PERMITTED_MINUTES = useMemo(() => ["00", "15", "30", "45"], []);
+  const HOURS_12_LIST = useMemo(() => ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], []);
+
+  const to12Hour = (h24Str: string): { hour12: string; ampm: "AM" | "PM" } => {
+    const h = parseInt(h24Str || "12", 10);
+    if (isNaN(h)) return { hour12: "12", ampm: "PM" };
+    const ampm: "AM" | "PM" = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return {
+      hour12: String(h12).padStart(2, "0"),
+      ampm,
+    };
+  };
+
+  const to24Hour = (hour12Str: string, ampm: "AM" | "PM"): string => {
+    const h = parseInt(hour12Str || "12", 10);
+    if (isNaN(h)) return "12";
+    let h24: number;
+    if (ampm === "AM") {
+      h24 = h === 12 ? 0 : h;
+    } else {
+      h24 = h === 12 ? 12 : h + 12;
+    }
+    return String(h24).padStart(2, "0");
+  };
+
+  const formatClockTime = (hour12Str: string, minuteStr: string, ampm: string): string => {
+    const h = parseInt(hour12Str || "12", 10);
+    return `${h}:${minuteStr} ${ampm}`;
+  };
+
   useEffect(() => {
     const docId = activeDoc?.id || document?.id;
     if (!docId) return;
@@ -371,13 +402,106 @@ export default function CustomerFeedbackDetails({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.selectedAction) setSelectedAction(parsed.selectedAction);
-        if (parsed.targetCompletionDate) setTargetCompletionDate(parsed.targetCompletionDate);
+        if (parsed.targetCompletionDate) {
+          const raw = String(parsed.targetCompletionDate);
+          if (raw.includes("T")) {
+            const [d, t] = raw.split("T");
+            const [h, m] = (t || "12:00").split(":");
+            const safeM = ["00", "15", "30", "45"].includes(m)
+              ? m
+              : String(Math.round(parseInt(m || "0", 10) / 15) * 15 % 60).padStart(2, "0");
+            setTargetCompletionDate(`${d}T${(h || "12").padStart(2, "0")}:${safeM}`);
+          } else {
+            setTargetCompletionDate(raw);
+          }
+        }
+      } else if (activeDoc?.due_date) {
+        const raw = String(activeDoc.due_date);
+        if (raw.includes("T")) {
+          const [d, t] = raw.split("T");
+          const [h, m] = (t || "12:00").split(":");
+          const safeM = ["00", "15", "30", "45"].includes(m)
+            ? m
+            : String(Math.round(parseInt(m || "0", 10) / 15) * 15 % 60).padStart(2, "0");
+          setTargetCompletionDate(`${d}T${(h || "12").padStart(2, "0")}:${safeM}`);
+        } else {
+          setTargetCompletionDate(raw);
+        }
       } else {
         const defaultDate = new Date(Date.now() + 24 * 3600 * 1000);
+        const rawMins = defaultDate.getMinutes();
+        const snappedMins = Math.round(rawMins / 15) * 15;
+        defaultDate.setMinutes(snappedMins % 60, 0, 0);
         setTargetCompletionDate(defaultDate.toISOString().slice(0, 16));
       }
     } catch {}
-  }, [activeDoc?.id, document?.id]);
+  }, [activeDoc?.id, activeDoc?.due_date, document?.id]);
+
+  const { targetDatePart, targetHour12Part, targetMinutePart, targetAmPmPart } = useMemo(() => {
+    let d = "";
+    let h24Str = "12";
+    let mStr = "00";
+
+    if (!targetCompletionDate || !targetCompletionDate.includes("T")) {
+      const now = new Date();
+      d = now.toISOString().slice(0, 10);
+      h24Str = String(now.getHours()).padStart(2, "0");
+      const rawMins = now.getMinutes();
+      const snappedMins = Math.round(rawMins / 15) * 15;
+      mStr = String(snappedMins % 60).padStart(2, "0");
+    } else {
+      const [dPart, tPart] = targetCompletionDate.split("T");
+      d = dPart || "";
+      const timeParts = (tPart || "12:00").split(":");
+      h24Str = (timeParts[0] || "12").padStart(2, "0");
+      mStr = (timeParts[1] || "00").slice(0, 2);
+    }
+
+    const safeM = PERMITTED_MINUTES.includes(mStr)
+      ? mStr
+      : String(Math.round(parseInt(mStr || "0", 10) / 15) * 15 % 60).padStart(2, "0");
+
+    const { hour12, ampm } = to12Hour(h24Str);
+
+    return {
+      targetDatePart: d,
+      targetHour12Part: hour12,
+      targetMinutePart: safeM,
+      targetAmPmPart: ampm,
+    };
+  }, [targetCompletionDate, PERMITTED_MINUTES]);
+
+  const handlePickerDateChange = (newDate: string) => {
+    if (!newDate) {
+      setTargetCompletionDate("");
+      return;
+    }
+    const h24 = to24Hour(targetHour12Part, targetAmPmPart);
+    setTargetCompletionDate(`${newDate}T${h24}:${targetMinutePart}`);
+    setAutoEscalated(false);
+  };
+
+  const handlePickerHour12Change = (newHour12: string) => {
+    const curDate = targetDatePart || new Date().toISOString().slice(0, 10);
+    const h24 = to24Hour(newHour12, targetAmPmPart);
+    setTargetCompletionDate(`${curDate}T${h24}:${targetMinutePart}`);
+    setAutoEscalated(false);
+  };
+
+  const handlePickerMinuteChange = (newMinute: string) => {
+    const safeMin = PERMITTED_MINUTES.includes(newMinute) ? newMinute : "00";
+    const curDate = targetDatePart || new Date().toISOString().slice(0, 10);
+    const h24 = to24Hour(targetHour12Part, targetAmPmPart);
+    setTargetCompletionDate(`${curDate}T${h24}:${safeMin}`);
+    setAutoEscalated(false);
+  };
+
+  const handlePickerAmPmChange = (newAmPm: "AM" | "PM") => {
+    const curDate = targetDatePart || new Date().toISOString().slice(0, 10);
+    const h24 = to24Hour(targetHour12Part, newAmPm);
+    setTargetCompletionDate(`${curDate}T${h24}:${targetMinutePart}`);
+    setAutoEscalated(false);
+  };
 
   useEffect(() => {
     const docId = activeDoc?.id || document?.id;
@@ -641,7 +765,7 @@ export default function CustomerFeedbackDetails({
   const typeOfComplaint = getFieldValueByKey("type_of_complaint");
   const subtypeOfComplaint = getFieldValueByKey("subtype_of_complaint");
   const additionalComments = getFieldValueByKey("additional_comments");
-  const invoiceNumber = getFieldValueByKey("invoice_number") || activeDoc?.invoice_number || activeDoc?.document_number || "INV-TEST-2026-999";
+  const invoiceNumber = getFieldValueByKey("invoice_number") || activeDoc?.invoice_number || activeDoc?.doc_num || "";
   const invoiceDate = activeDoc?.invoice_date || activeDoc?.date || surveyDate || "-";
 
   const image1 = getFieldValueByKey("image_1") || getFieldValueByKey("image1");
@@ -931,14 +1055,30 @@ export default function CustomerFeedbackDetails({
     setActionError(null);
     setActionSuccess(null);
     try {
+      const clockTime = formatClockTime(targetHour12Part, targetMinutePart, targetAmPmPart);
       const formattedTarget = targetCompletionDate 
-        ? new Date(targetCompletionDate).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
+        ? `${targetDatePart} ${clockTime}`
         : 'Not Specified';
-      const holdNote = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${approvalComment.trim()}`;
+      const holdNote = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] [TARGET_ISO: ${targetCompletionDate}] ${approvalComment.trim()}`;
 
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const isReturn = selectedAction.toLowerCase().includes("return") || selectedAction.toLowerCase().includes("revision");
       const targetEndpoint = isReturn ? `/api/workflows/sendback` : `/api/documents/${encodeURIComponent(activeDoc.id)}/hold`;
+
+      const requestPayload = isReturn
+        ? {
+            invoiceId: activeDoc.id,
+            comments: holdNote,
+            target_completion_date: targetCompletionDate,
+            scheduled_time: clockTime,
+            expected_version: activeDoc.version || 1
+          }
+        : {
+            remarks: holdNote,
+            target_completion_date: targetCompletionDate,
+            scheduled_time: clockTime,
+            expected_version: activeDoc.version || 1
+          };
 
       const res = await fetch(targetEndpoint, {
         method: "POST",
@@ -946,7 +1086,7 @@ export default function CustomerFeedbackDetails({
           "Content-Type": "application/json",
           Authorization: token ? `Bearer ${token}` : "",
         },
-        body: JSON.stringify(isReturn ? { invoiceId: activeDoc.id, comments: holdNote } : { remarks: holdNote }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (res.ok) {
@@ -1699,18 +1839,58 @@ export default function CustomerFeedbackDetails({
 
                     {/* Target Completion Date & Time Picker */}
                     <div>
-                      <label className="text-[8.5px] uppercase font-bold text-slate-600 block mb-0.5">
-                        Target Completion Date & Time:
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={targetCompletionDate}
-                        onChange={(e) => {
-                          setTargetCompletionDate(e.target.value);
-                          setAutoEscalated(false);
-                        }}
-                        className="w-full text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
-                      />
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[8.5px] uppercase font-bold text-slate-600 block">
+                          Target Completion Date & Time:
+                        </label>
+                        {targetCompletionDate && (
+                          <span className="text-[9px] font-mono font-black text-[#003F28] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300 flex items-center gap-1 shadow-3xs" title="Scheduled Clock Time">
+                            <Clock className="h-2.5 w-2.5 text-[#006747]" />
+                            <span>{formatClockTime(targetHour12Part, targetMinutePart, targetAmPmPart)}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="date"
+                          value={targetDatePart}
+                          onChange={(e) => handlePickerDateChange(e.target.value)}
+                          className="flex-1 text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 focus-within:border-[#003F28] focus-within:ring-1 focus-within:ring-[#003F28]/20">
+                          <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                          <select
+                            aria-label="Hour selector"
+                            value={targetHour12Part}
+                            onChange={(e) => handlePickerHour12Change(e.target.value)}
+                            className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
+                          >
+                            {HOURS_12_LIST.map((h) => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                          <span className="text-[10px] font-bold text-slate-400">:</span>
+                          <select
+                            aria-label="Minute selector"
+                            value={targetMinutePart}
+                            onChange={(e) => handlePickerMinuteChange(e.target.value)}
+                            className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
+                          >
+                            {PERMITTED_MINUTES.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="AM/PM selector"
+                            value={targetAmPmPart}
+                            onChange={(e) => handlePickerAmPmChange(e.target.value as "AM" | "PM")}
+                            className="text-[10px] font-mono font-black py-0.5 px-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded outline-none cursor-pointer text-[#003F28] transition-colors"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1922,15 +2102,17 @@ export default function CustomerFeedbackDetails({
                     isDragOverPdf ? "bg-emerald-50/90 border-2 border-dashed border-emerald-500" : "bg-slate-50/80"
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center mb-2 shadow-2xs border border-emerald-200">
-                    <FileText className="h-5 w-5" />
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center mb-2 shadow-2xs border border-amber-200">
+                    <FileText className="h-5 w-5 text-amber-700" />
                   </div>
 
                   <h4 className="text-xs font-extrabold text-slate-900 mb-0.5">
-                    Invoice Physical Document Space
+                    {invoiceNumber ? "Approved invoice not found" : "Invoice Physical Document Space"}
                   </h4>
                   <p className="text-[10.5px] text-slate-500 max-w-xs mb-3 leading-tight">
-                    Attach or view the physical invoice PDF associated with this record.
+                    {invoiceNumber
+                      ? `No approved document found in registry matching invoice number ${invoiceNumber}. You may attach a physical invoice PDF below.`
+                      : "Attach or view the physical invoice PDF associated with this record."}
                   </p>
 
                   <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#003F28] hover:bg-[#002e1d] text-white font-extrabold text-[11px] rounded-lg shadow-xs cursor-pointer transition active:scale-95">

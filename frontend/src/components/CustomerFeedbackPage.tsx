@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   MessageSquare,
   Search,
@@ -14,6 +14,8 @@ import {
   ListFilter,
   CheckCheck,
   X,
+  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 import { DbInvoice } from "../types";
 import { formatDate, getCanonicalDocumentType } from "../utils/formatters";
@@ -42,6 +44,81 @@ export default function CustomerFeedbackPage({
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED">("PENDING");
   const [viewMode, setViewMode] = useState<"TRACKER" | "REGISTRY">("TRACKER");
   const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!previewImageModal?.url) {
+      setPreviewBlobUrl(null);
+      return;
+    }
+    let isMounted = true;
+    let createdBlobUrl: string | null = null;
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+
+    let raw = previewImageModal.url.trim();
+    if (raw.includes("/api/documents/temp-preview/")) {
+      raw = raw.substring(raw.indexOf("/api/documents/temp-preview/"));
+    } else if (raw.includes("/api/files/")) {
+      raw = raw.substring(raw.indexOf("/api/files/"));
+    } else if (!raw.startsWith("http") && !raw.startsWith("/") && !raw.startsWith("blob:") && !raw.startsWith("data:")) {
+      if (raw.toLowerCase().endsWith(".jpg") || raw.toLowerCase().endsWith(".png") || raw.toLowerCase().endsWith(".jpeg") || raw.startsWith("TEMP_STAGE_")) {
+        raw = `/api/documents/temp-preview/${raw}`;
+      }
+    }
+
+    if (raw.startsWith("blob:") || raw.startsWith("data:")) {
+      setPreviewBlobUrl(raw);
+    } else {
+      const sep = raw.includes("?") ? "&" : "?";
+      const directWithToken = token ? `${raw}${sep}token=${encodeURIComponent(token)}` : raw;
+
+      fetch(raw, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          if (isMounted) {
+            createdBlobUrl = URL.createObjectURL(blob);
+            setPreviewBlobUrl(createdBlobUrl);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setPreviewBlobUrl(directWithToken);
+          }
+        });
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPreviewImageModal(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      isMounted = false;
+      if (createdBlobUrl) {
+        URL.revokeObjectURL(createdBlobUrl);
+      }
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [previewImageModal]);
+
+  const handleOpenEvidence = (e: React.MouseEvent, doc: DbInvoice) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const firstImg = doc.image_1 || doc.image_2 || doc.image_3 || doc.image_4 || doc.image_5;
+    if (firstImg) {
+      setPreviewImageModal({
+        url: String(firstImg),
+        title: `${doc.document_number || doc.id} - EVIDENCE`,
+      });
+    }
+  };
 
   // Filter only Customer Feedback documents
   const feedbackDocs = useMemo(() => {
@@ -82,6 +159,103 @@ export default function CustomerFeedbackPage({
     );
   }, [selectedDocId, feedbackDocs, documents]);
 
+  // Filter Popup open/close state & ref for click outside
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterPopupRef = useRef<HTMLDivElement>(null);
+
+  // Applied Filters for Cleared / Resolved feedback
+  const [appliedYear, setAppliedYear] = useState<string>("all");
+  const [appliedMonth, setAppliedMonth] = useState<string>("all");
+  const [appliedDateMode, setAppliedDateMode] = useState<"specific" | "range">("specific");
+  const [appliedDate, setAppliedDate] = useState<string>("");
+  const [appliedFromDate, setAppliedFromDate] = useState<string>("");
+  const [appliedToDate, setAppliedToDate] = useState<string>("");
+  const [appliedDocType, setAppliedDocType] = useState<string>("all");
+
+  // Draft Filters (Inside popup before user clicks "Apply Filters")
+  const [draftYear, setDraftYear] = useState<string>("all");
+  const [draftMonth, setDraftMonth] = useState<string>("all");
+  const [draftDateMode, setDraftDateMode] = useState<"specific" | "range">("specific");
+  const [draftDate, setDraftDate] = useState<string>("");
+  const [draftFromDate, setDraftFromDate] = useState<string>("");
+  const [draftToDate, setDraftToDate] = useState<string>("");
+  const [draftDocType, setDraftDocType] = useState<string>("all");
+
+  // Sync draft filters when popup opens
+  const handleOpenFilter = () => {
+    if (!isFilterOpen) {
+      setDraftDocType(appliedDocType);
+      setDraftYear(appliedYear);
+      setDraftMonth(appliedMonth);
+      setDraftDateMode(appliedDateMode);
+      setDraftDate(appliedDate);
+      setDraftFromDate(appliedFromDate);
+      setDraftToDate(appliedToDate);
+    }
+    setIsFilterOpen(!isFilterOpen);
+  };
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterPopupRef.current && !filterPopupRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFilterOpen]);
+
+  // Date helpers matching ApprovedDocumentsPage
+  const getFeedbackDocDate = (doc: DbInvoice): Date | null => {
+    const dateVal = doc.survey_date || doc.feedback_date || doc.invoice_date || doc.created_at;
+    if (!dateVal) return null;
+    if (typeof dateVal === "string") {
+      const match = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+      }
+    }
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const parseDateInput = (val: string): Date | null => {
+    if (!val) return null;
+    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDateForInput = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyDraftDatePreset = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    setDraftFromDate(formatDateForInput(start));
+    setDraftToDate(formatDateForInput(end));
+  };
+
+  const applyDraftThisMonthPreset = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    setDraftFromDate(formatDateForInput(start));
+    setDraftToDate(formatDateForInput(now));
+  };
+
   // Helper to categorize document status into Pending, Progress, Hold, Rejected, Cleared
   const getFeedbackCategory = (doc: DbInvoice): "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED" => {
     const st = (doc.status || "").toLowerCase().trim();
@@ -100,7 +274,136 @@ export default function CustomerFeedbackPage({
     return "PENDING";
   };
 
-  // Filtered feedback list based on search and status tabs
+  // Cleared documents base list for extracting filter options
+  const clearedFeedbackDocs = useMemo(() => {
+    return feedbackDocs.filter((d) => getFeedbackCategory(d) === "CLEARED");
+  }, [feedbackDocs]);
+
+  // Available Years dynamically extracted from Cleared records
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    clearedFeedbackDocs.forEach((d) => {
+      const dt = getFeedbackDocDate(d);
+      if (dt) years.add(String(dt.getFullYear()));
+    });
+    return Array.from(years).sort().reverse();
+  }, [clearedFeedbackDocs]);
+
+  // Available Document/Complaint Types dynamically extracted from Cleared records
+  const availableDocTypes = useMemo(() => {
+    const set = new Set<string>();
+    clearedFeedbackDocs.forEach((d) => {
+      const t = (d.type_of_complaint || d.subtype_of_complaint || d.category || d.document_type || "").trim();
+      if (t) set.add(t);
+    });
+    return Array.from(set).sort();
+  }, [clearedFeedbackDocs]);
+
+  // Available Months dynamically extracted from Cleared records
+  const MONTH_LABELS: Record<string, string> = {
+    "1": "January", "2": "February", "3": "March", "4": "April",
+    "5": "May", "6": "June", "7": "July", "8": "August",
+    "9": "September", "10": "October", "11": "November", "12": "December"
+  };
+
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    clearedFeedbackDocs.forEach((d) => {
+      const dt = getFeedbackDocDate(d);
+      if (dt) months.add(String(dt.getMonth() + 1));
+    });
+    return Array.from(months)
+      .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+      .map((m) => ({ value: m, label: MONTH_LABELS[m] || `Month ${m}` }));
+  }, [clearedFeedbackDocs]);
+
+  const selectedMonthLabel = useMemo(() => {
+    if (appliedMonth === "all") return "";
+    return MONTH_LABELS[appliedMonth] || `Month ${appliedMonth}`;
+  }, [appliedMonth]);
+
+  // Apply filters from Popup
+  const handleApplyFilters = () => {
+    setAppliedYear(draftYear);
+    setAppliedMonth(draftMonth);
+    setAppliedDateMode(draftDateMode);
+    setAppliedDate(draftDate);
+    setAppliedFromDate(draftFromDate);
+    setAppliedToDate(draftToDate);
+    setAppliedDocType(draftDocType);
+    setIsFilterOpen(false);
+  };
+
+  // Clear all inside Popup
+  const handleClearDraftFilters = () => {
+    setDraftYear("all");
+    setDraftMonth("all");
+    setDraftDateMode("specific");
+    setDraftDate("");
+    setDraftFromDate("");
+    setDraftToDate("");
+    setDraftDocType("all");
+  };
+
+  // Clear all active filters
+  const handleClearAllFilters = () => {
+    setAppliedYear("all");
+    setAppliedMonth("all");
+    setAppliedDateMode("specific");
+    setAppliedDate("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
+    setAppliedDocType("all");
+    handleClearDraftFilters();
+    setIsFilterOpen(false);
+  };
+
+  // Remove individual filter chip
+  const handleRemoveFilter = (filterKey: "year" | "month" | "date" | "docType") => {
+    if (filterKey === "year") {
+      setAppliedYear("all");
+      setDraftYear("all");
+    } else if (filterKey === "month") {
+      setAppliedMonth("all");
+      setDraftMonth("all");
+    } else if (filterKey === "date") {
+      setAppliedDate("");
+      setAppliedFromDate("");
+      setAppliedToDate("");
+      setDraftDate("");
+      setDraftFromDate("");
+      setDraftToDate("");
+    } else if (filterKey === "docType") {
+      setAppliedDocType("all");
+      setDraftDocType("all");
+    }
+  };
+
+  // Active filter count (Year, Month, Date, Doc/Complaint Type)
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedYear !== "all") count++;
+    if (appliedMonth !== "all") count++;
+    if (appliedDateMode === "specific" && appliedDate) count++;
+    if (appliedDateMode === "range" && (appliedFromDate || appliedToDate)) count++;
+    if (appliedDocType !== "all") count++;
+    return count;
+  }, [appliedYear, appliedMonth, appliedDateMode, appliedDate, appliedFromDate, appliedToDate, appliedDocType]);
+
+  // Cascading Filter Change Handlers:
+  const handleDraftDocTypeChange = (newType: string) => {
+    setDraftDocType(newType);
+  };
+
+  const handleDraftYearChange = (newYear: string) => {
+    setDraftYear(newYear);
+  };
+
+  const handleDraftMonthChange = (newMonth: string) => {
+    setDraftMonth(newMonth);
+  };
+
+  // Filtered feedback list based on search, status tabs, and CLEARED filters
   const filteredDocs = useMemo(() => {
     return feedbackDocs.filter((doc) => {
       const category = getFeedbackCategory(doc);
@@ -110,7 +413,56 @@ export default function CustomerFeedbackPage({
         if (statusFilter !== category) return false;
       }
 
-      // 2. Search Term
+      // 2. CLEARED / RESOLVED Specific Filters (applies strictly to Cleared / Resolved records)
+      if (category === "CLEARED") {
+        const dt = getFeedbackDocDate(doc);
+
+        // Year filter
+        if (appliedYear !== "all") {
+          if (!dt || String(dt.getFullYear()) !== appliedYear) return false;
+        }
+
+        // Month filter
+        if (appliedMonth !== "all") {
+          if (!dt || String(dt.getMonth() + 1) !== appliedMonth) return false;
+        }
+
+        // Date filter
+        if (appliedDateMode === "specific" && appliedDate) {
+          if (!dt || formatDateForInput(dt) !== appliedDate) return false;
+        } else if (appliedDateMode === "range") {
+          if (appliedFromDate) {
+            const from = parseDateInput(appliedFromDate);
+            if (from) {
+              from.setHours(0, 0, 0, 0);
+              if (!dt || dt.getTime() < from.getTime()) return false;
+            }
+          }
+          if (appliedToDate) {
+            const to = parseDateInput(appliedToDate);
+            if (to) {
+              to.setHours(23, 59, 59, 999);
+              if (!dt || dt.getTime() > to.getTime()) return false;
+            }
+          }
+        }
+
+        // Document / Complaint Type Filter
+        if (appliedDocType !== "all") {
+          const typeCandidates = [
+            (doc.type_of_complaint || "").toLowerCase().trim(),
+            (doc.subtype_of_complaint || "").toLowerCase().trim(),
+            (doc.category || "").toLowerCase().trim(),
+            (doc.document_type || "").toLowerCase().trim(),
+          ];
+          const target = appliedDocType.toLowerCase().trim();
+          if (!typeCandidates.includes(target)) return false;
+        }
+      } else if (activeFilterCount > 0 && statusFilter === "ALL") {
+        // If filters are active while on "ALL" view, non-cleared records pass through unhindered
+      }
+
+      // 3. Search Term
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase().trim();
       return (
@@ -124,7 +476,19 @@ export default function CustomerFeedbackPage({
         (doc.bp_code || "").toLowerCase().includes(term)
       );
     });
-  }, [feedbackDocs, statusFilter, searchTerm]);
+  }, [
+    feedbackDocs,
+    statusFilter,
+    searchTerm,
+    appliedYear,
+    appliedMonth,
+    appliedDateMode,
+    appliedDate,
+    appliedFromDate,
+    appliedToDate,
+    appliedDocType,
+    activeFilterCount,
+  ]);
 
   // KPI Calculations
   const totalCount = feedbackDocs.length;
@@ -132,7 +496,7 @@ export default function CustomerFeedbackPage({
   const progressCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "PROGRESS").length;
   const holdCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "HOLD").length;
   const rejectedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "REJECTED").length;
-  const clearedCount = feedbackDocs.filter((d) => getFeedbackCategory(d) === "CLEARED").length;
+  const clearedCount = filteredDocs.filter((d) => getFeedbackCategory(d) === "CLEARED").length;
 
   // Render Details view if a record is selected
   if (selectedDocId) {
@@ -301,19 +665,330 @@ export default function CustomerFeedbackPage({
 
         <div 
           onClick={() => setStatusFilter(statusFilter === "CLEARED" ? "ALL" : "CLEARED")}
-          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all ${
+          className={`bg-white border rounded-xl p-2.5 shadow-2xs flex items-center justify-between cursor-pointer transition-all relative ${
             statusFilter === "CLEARED" ? "border-emerald-600 ring-2 ring-emerald-500/20 bg-emerald-50/20" : "border-slate-200 hover:border-emerald-400"
           }`}
         >
           <div>
-            <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800">CLEARED / RESOLVED</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800">CLEARED / RESOLVED</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-[#003F28] text-white text-[8px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </div>
             <div className="text-lg font-black text-slate-900 mt-0.5">{clearedCount}</div>
           </div>
-          <div className="h-7 w-7 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center">
-            <CheckCheck className="h-3.5 w-3.5 text-emerald-800" />
+          <div className="flex items-center gap-1.5">
+            {/* Filter Trigger on CLEARED card */}
+            <div className="relative" ref={filterPopupRef} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={handleOpenFilter}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-extrabold transition cursor-pointer shadow-2xs ${
+                  isFilterOpen || activeFilterCount > 0
+                    ? "bg-emerald-100/80 border-emerald-300 text-[#003F28]"
+                    : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+                title="Filter Cleared / Resolved records"
+              >
+                <Filter className="h-3 w-3" />
+                <span className="hidden sm:inline">Filter</span>
+                {activeFilterCount > 0 && (
+                  <span className="px-1 py-0.2 rounded-full bg-[#003F28] text-white text-[8px] font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              {/* FILTER POPUP PANEL (Year, Month, Date, Complaint/Document Type) */}
+              {isFilterOpen && (
+                <div 
+                  className="absolute right-0 top-full mt-1.5 z-50 w-80 sm:w-96 bg-white border border-slate-200 rounded-lg shadow-xl p-3.5 animate-in fade-in slide-in-from-top-1 duration-150 text-left font-sans cursor-default"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-[#003F28]" />
+                      <h3 className="text-xs font-bold text-slate-800">Filter Cleared / Resolved</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsFilterOpen(false)}
+                      className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* 1. COMPLAINT / DOCUMENT TYPE FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Complaint / Document Type
+                      </label>
+                      <select
+                        value={draftDocType}
+                        onChange={(e) => handleDraftDocTypeChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Types</option>
+                        {availableDocTypes.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. YEAR FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Year
+                      </label>
+                      <select
+                        value={draftYear}
+                        onChange={(e) => handleDraftYearChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Years</option>
+                        {availableYears.map((year) => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. MONTH FILTER */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                        Month
+                      </label>
+                      <select
+                        value={draftMonth}
+                        onChange={(e) => handleDraftMonthChange(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="all">All Months</option>
+                        {availableMonths.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 4. DATE FILTER (Supports Specific Date or Date Range) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                          Date
+                        </label>
+                        <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setDraftDateMode("specific")}
+                            className={`px-2 py-0.5 text-[9.5px] font-bold rounded transition cursor-pointer ${
+                              draftDateMode === "specific"
+                                ? "bg-white text-slate-900 shadow-2xs font-extrabold"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            Specific Date
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDraftDateMode("range")}
+                            className={`px-2 py-0.5 text-[9.5px] font-bold rounded transition cursor-pointer ${
+                              draftDateMode === "range"
+                                ? "bg-white text-[#003F28] shadow-2xs font-extrabold"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                          >
+                            Date Range
+                          </button>
+                        </div>
+                      </div>
+
+                      {draftDateMode === "specific" ? (
+                        <input
+                          type="date"
+                          value={draftDate}
+                          onChange={(e) => setDraftDate(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                        />
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">From</span>
+                              <input
+                                type="date"
+                                value={draftFromDate}
+                                onChange={(e) => setDraftFromDate(e.target.value)}
+                                className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10.5px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">To</span>
+                              <input
+                                type="date"
+                                value={draftToDate}
+                                onChange={(e) => setDraftToDate(e.target.value)}
+                                className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10.5px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                          {/* Quick presets */}
+                          <div className="flex items-center gap-1 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => applyDraftDatePreset(7)}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              7 Days
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => applyDraftDatePreset(30)}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              30 Days
+                            </button>
+                            <button
+                              type="button"
+                              onClick={applyDraftThisMonthPreset}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                            >
+                              This Month
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* POPUP ACTION BUTTONS: [ Clear All ] and [ Apply Filters ] */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleClearDraftFilters}
+                      className="px-2.5 py-1 text-[10.5px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleApplyFilters();
+                        setStatusFilter("CLEARED");
+                      }}
+                      className="px-3.5 py-1.5 bg-[#003F28] hover:bg-[#002F1E] text-white text-[11px] font-semibold rounded-md transition shadow-2xs cursor-pointer"
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="h-7 w-7 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center">
+              <CheckCheck className="h-3.5 w-3.5 text-emerald-800" />
+            </div>
           </div>
         </div>
       </div>
+
+      {/* 3. ACTIVE FILTER CHIPS FOR CLEARED / RESOLVED (Matching ApprovedDocumentsPage) */}
+      {activeFilterCount > 0 && (
+        <div className="bg-white rounded-xl border border-emerald-200/90 px-3 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-[10.5px]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <Filter className="h-3 w-3 text-emerald-700" />
+              <span>Cleared Records Filters:</span>
+            </span>
+
+            {/* Year Chip */}
+            {appliedYear !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Year: <strong className="font-bold">{appliedYear}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("year")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Year filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Month Chip */}
+            {appliedMonth !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Month: <strong className="font-bold">{selectedMonthLabel}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("month")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Month filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Specific Date Chip */}
+            {appliedDateMode === "specific" && appliedDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Date: <strong className="font-bold">{appliedDate}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("date")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Date filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Date Range Chip */}
+            {appliedDateMode === "range" && (appliedFromDate || appliedToDate) && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Date: <strong className="font-bold">{appliedFromDate || "..."} to {appliedToDate || "..."}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("date")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Date Range filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Document/Complaint Type Chip */}
+            {appliedDocType !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                <span>Type: <strong className="font-bold">{appliedDocType}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter("docType")}
+                  className="hover:text-emerald-950 p-0.5 cursor-pointer"
+                  title="Remove Type filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleClearAllFilters}
+            className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+          >
+            Clear All
+          </button>
+        </div>
+      )}
 
       {/* 4. CONTENT VIEW: WORK TRACKER BOARD (Default) OR REGISTRY TABLE */}
       {viewMode === "TRACKER" ? (
@@ -348,10 +1023,15 @@ export default function CustomerFeedbackPage({
                             {doc.document_number || doc.id}
                           </span>
                           {hasImages && (
-                            <span className="text-[8.5px] bg-emerald-50 text-emerald-800 font-extrabold px-1 py-0 rounded border border-emerald-200 flex items-center gap-0.5">
-                              <ImageIcon className="h-2 w-2 text-emerald-700" />
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenEvidence(e, doc)}
+                              className="text-[8.5px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                              title="Preview attached image"
+                            >
+                              <ImageIcon className="h-2.5 w-2.5 text-emerald-700" />
                               <span>Evidence</span>
-                            </span>
+                            </button>
                           )}
                         </div>
                         <h4 className="text-[11px] font-bold text-slate-900 truncate leading-tight">
@@ -486,7 +1166,20 @@ export default function CustomerFeedbackPage({
                       >
                         {/* ID */}
                         <td className="py-3 px-4 font-black text-emerald-900 group-hover:text-emerald-700 whitespace-nowrap font-mono">
-                          {doc.document_number || doc.id}
+                          <div className="flex items-center gap-1.5">
+                            <span>{doc.document_number || doc.id}</span>
+                            {Boolean(doc.image_1 || doc.image_2 || doc.image_3 || doc.image_4 || doc.image_5) && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenEvidence(e, doc)}
+                                className="text-[8px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-0.5 cursor-pointer transition shadow-2xs font-sans"
+                                title="Preview attached image"
+                              >
+                                <ImageIcon className="h-2 w-2 text-emerald-700" />
+                                <span>Evidence</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Complaint Type */}
@@ -599,7 +1292,7 @@ export default function CustomerFeedbackPage({
             </div>
             <div className="flex-1 bg-slate-950 p-4 flex items-center justify-center overflow-auto min-h-[360px]">
               <img
-                src={previewImageModal.url}
+                src={previewBlobUrl || previewImageModal.url}
                 alt="Feedback Image"
                 className="max-h-[65vh] max-w-full object-contain rounded shadow-lg"
               />

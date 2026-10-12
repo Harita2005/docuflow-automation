@@ -903,6 +903,83 @@ def get_doc_type_more_info_config(
         )
 
 
+
+def _parse_custom_data_dict(custom_data_raw: Any) -> Dict[str, Any]:
+    if not custom_data_raw:
+        return {}
+    if isinstance(custom_data_raw, dict):
+        return custom_data_raw
+    if isinstance(custom_data_raw, str):
+        try:
+            val = json.loads(custom_data_raw)
+            return val if isinstance(val, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _resolve_document_custom_config(
+    doc: Invoice,
+    available_fields: List[MoreInfoFieldConfigItem],
+    admin_defaults: List[MoreInfoFieldConfigItem],
+) -> Optional[List[MoreInfoFieldConfigItem]]:
+    """
+    Checks if this specific document has its own saved more_info_config in custom_data.
+    If found, builds and returns the ordered field items list.
+    """
+    custom_dict = _parse_custom_data_dict(getattr(doc, "custom_data", None))
+    stored_config = custom_dict.get("more_info_config")
+    if not stored_config or not isinstance(stored_config, list):
+        return None
+
+    avail_map = {f.field_key.lower().strip(): f for f in available_fields}
+    admin_default_keys = {f.field_key.lower().strip() for f in admin_defaults}
+
+    result: List[MoreInfoFieldConfigItem] = []
+    seen = set()
+
+    for idx, item in enumerate(stored_config):
+        if not isinstance(item, dict):
+            continue
+        raw_key = item.get("field_key")
+        if not raw_key:
+            continue
+        clean_key = str(raw_key).strip()
+        key_lower = clean_key.lower()
+        if key_lower in seen:
+            continue
+        seen.add(key_lower)
+
+        is_visible = item.get("is_visible", True)
+        if not is_visible:
+            continue
+
+        base = avail_map.get(key_lower)
+        std_meta = STANDARD_FIELD_MAP.get(clean_key, {})
+        col_meta = ALL_COLUMN_LABELS.get(key_lower, {})
+
+        label = item.get("label") or (base.label if base else None) or std_meta.get("label") or col_meta.get("label") or clean_key.replace("_", " ").title()
+        category = item.get("category") or (base.category if base else None) or std_meta.get("category") or col_meta.get("category") or "OTHER"
+        source = item.get("source") or (base.source if base else None) or std_meta.get("source") or col_meta.get("source") or "ERP"
+        sample_value = base.sample_value if base else None
+
+        result.append(
+            MoreInfoFieldConfigItem(
+                field_key=clean_key,
+                label=label,
+                category=category,
+                source=source,
+                display_order=item.get("display_order") or (idx + 1),
+                is_visible=True,
+                is_admin_default=clean_key in admin_default_keys,
+                is_user_selected=True,
+                sample_value=sample_value,
+            )
+        )
+
+    return result
+
+
 @router.get("/api/documents/{document_id}/more-info/config", response_model=MoreInfoConfigResponse)
 @router.get("/api/invoices/{document_id}/more-info/config", response_model=MoreInfoConfigResponse)
 def get_document_more_info_config(
@@ -912,8 +989,8 @@ def get_document_more_info_config(
 ):
     """
     Retrieves the effective More Info field configuration for a given document.
-    Dynamically discovers all synced real SQL columns for the document's type.
-    Resolves multi-user override hierarchy: Admin Default Fields -> User Selected Fields -> Available Fields.
+    Prioritizes document-specific configuration saved in doc.custom_data["more_info_config"].
+    If no document-specific config exists, falls back to the document-type default / user override.
     """
     raw_str = str(document_id).strip()
     doc = None
@@ -961,6 +1038,20 @@ def get_document_more_info_config(
             u_role = (current_user.role or "").lower().strip()
             is_admin = u_role in ["admin", "administrator", "system_admin", "superadmin"] or check_permission(
                 current_user, "role:manage", db
+            )
+
+        # Check for per-document specific config override
+        doc_specific_fields = _resolve_document_custom_config(doc, available_fields, admin_defaults)
+        if doc_specific_fields is not None:
+            return MoreInfoConfigResponse(
+                document_type=doc_type,
+                scope="DOCUMENT",
+                has_user_override=True,
+                can_manage_default=is_admin,
+                admin_default_fields=admin_defaults,
+                user_selected_fields=doc_specific_fields,
+                selected_fields=doc_specific_fields,
+                available_fields=available_fields,
             )
 
         return MoreInfoConfigResponse(
@@ -1206,6 +1297,14 @@ def save_document_more_info_config(
     )
 
     if payload.reset_to_default:
+        # Clear document-level custom configuration if any
+        custom_dict = _parse_custom_data_dict(getattr(doc, "custom_data", None))
+        if "more_info_config" in custom_dict:
+            del custom_dict["more_info_config"]
+            doc.custom_data = json.dumps(custom_dict) if custom_dict else None
+            db.add(doc)
+
+        # Also remove personal document-type overrides if present for current_user
         db.query(DocumentTypeFieldConfiguration).filter(
             DocumentTypeFieldConfiguration.document_type == doc_type,
             DocumentTypeFieldConfiguration.user_id == current_user.id,
@@ -1226,30 +1325,99 @@ def save_document_more_info_config(
             available_fields=available_fields,
         )
 
-    if payload.save_as_default and not is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privilege required to modify organization default configuration.",
-        )
-
-    target_user_id = None if payload.save_as_default else current_user.id
-    target_scope = "GLOBAL" if payload.save_as_default else "USER"
-
     if payload.save_as_default:
+        if not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privilege required to modify organization default configuration.",
+            )
+
         db.query(DocumentTypeFieldConfiguration).filter(
             DocumentTypeFieldConfiguration.document_type == doc_type,
             DocumentTypeFieldConfiguration.user_id.is_(None),
         ).delete()
-    else:
-        db.query(DocumentTypeFieldConfiguration).filter(
-            DocumentTypeFieldConfiguration.document_type == doc_type,
-            DocumentTypeFieldConfiguration.user_id == current_user.id,
-        ).delete()
 
-    new_keys = []
+        new_keys = []
+        seen_saved_keys = set()
+        for idx, item in enumerate(payload.fields):
+            if not item.field_key:
+                continue
+            clean_key = str(item.field_key).strip()
+            if clean_key.lower() in seen_saved_keys:
+                continue
+            seen_saved_keys.add(clean_key.lower())
+
+            base_meta = avail_map.get(clean_key)
+            std_meta = STANDARD_FIELD_MAP.get(clean_key, {})
+            col_meta = ALL_COLUMN_LABELS.get(clean_key.lower(), ALL_COLUMN_LABELS.get(clean_key, {}))
+
+            def _pick(attr: str, fallback: str) -> str:
+                if getattr(item, attr, None):
+                    return getattr(item, attr)
+                if base_meta and getattr(base_meta, attr, None):
+                    return getattr(base_meta, attr)
+                if std_meta.get(attr):
+                    return std_meta[attr]
+                if col_meta.get(attr):
+                    return col_meta[attr]
+                return fallback
+
+            new_row = DocumentTypeFieldConfiguration(
+                document_type=doc_type,
+                field_key=clean_key,
+                field_label=_pick("label", clean_key.replace("_", " ").title()),
+                category=_pick("category", "OTHER"),
+                source=_pick("source", "ERP"),
+                display_order=item.display_order if item.display_order > 0 else (idx + 1),
+                is_visible=item.is_visible,
+                configuration_scope="GLOBAL",
+                user_id=None,
+                created_by=current_user.username,
+                updated_by=current_user.username,
+            )
+            db.add(new_row)
+            if item.is_visible:
+                new_keys.append(clean_key)
+
+        try:
+            audit_entry = AuditLog(
+                invoice_id=doc.id,
+                user=current_user.username,
+                action="MORE_INFO_CONFIG_UPDATE",
+                stage="MoreInfoConfig",
+                notes=f"Updated organization default More Info configuration for {doc_type}",
+                ip_address="127.0.0.1",
+            )
+            db.add(audit_entry)
+        except Exception as exc:
+            logger.debug("Failed to record More Info audit log: %s", exc)
+
+        db.commit()
+
+        admin_defaults, user_selected, combined, scope, has_user_override = resolve_effective_configuration(
+            db, doc_type, current_user, available_fields
+        )
+
+        return MoreInfoConfigResponse(
+            document_type=doc_type,
+            scope="GLOBAL",
+            has_user_override=has_user_override,
+            can_manage_default=is_admin,
+            admin_default_fields=admin_defaults,
+            user_selected_fields=user_selected,
+            selected_fields=combined,
+            available_fields=available_fields,
+        )
+
+    # Standard per-document configuration save
+    # Persist the user's selected fields and explicit order directly into doc.custom_data["more_info_config"]
+    # This guarantees per-document isolation without altering underlying invoice/financial data columns.
+    custom_dict = _parse_custom_data_dict(getattr(doc, "custom_data", None))
     seen_saved_keys = set()
+    stored_field_configs: List[Dict[str, Any]] = []
+
     for idx, item in enumerate(payload.fields):
-        if not item.field_key:
+        if not item.field_key or not item.is_visible:
             continue
         clean_key = str(item.field_key).strip()
         if clean_key.lower() in seen_saved_keys:
@@ -1260,33 +1428,22 @@ def save_document_more_info_config(
         std_meta = STANDARD_FIELD_MAP.get(clean_key, {})
         col_meta = ALL_COLUMN_LABELS.get(clean_key.lower(), ALL_COLUMN_LABELS.get(clean_key, {}))
 
-        def _pick(attr: str, fallback: str) -> str:
-            if getattr(item, attr, None):
-                return getattr(item, attr)
-            if base_meta and getattr(base_meta, attr, None):
-                return getattr(base_meta, attr)
-            if std_meta.get(attr):
-                return std_meta[attr]
-            if col_meta.get(attr):
-                return col_meta[attr]
-            return fallback
+        label = item.label or (base_meta.label if base_meta else None) or std_meta.get("label") or col_meta.get("label") or clean_key.replace("_", " ").title()
+        category = item.category or (base_meta.category if base_meta else None) or std_meta.get("category") or col_meta.get("category") or "OTHER"
+        source = item.source or (base_meta.source if base_meta else None) or std_meta.get("source") or col_meta.get("source") or "ERP"
 
-        new_row = DocumentTypeFieldConfiguration(
-            document_type=doc_type,
-            field_key=clean_key,
-            field_label=_pick("label", clean_key.replace("_", " ").title()),
-            category=_pick("category", "OTHER"),
-            source=_pick("source", "ERP"),
-            display_order=item.display_order if item.display_order > 0 else (idx + 1),
-            is_visible=item.is_visible,
-            configuration_scope=target_scope,
-            user_id=target_user_id,
-            created_by=current_user.username,
-            updated_by=current_user.username,
-        )
-        db.add(new_row)
-        if item.is_visible:
-            new_keys.append(clean_key)
+        stored_field_configs.append({
+            "field_key": clean_key,
+            "label": label,
+            "category": category,
+            "source": source,
+            "display_order": item.display_order if item.display_order > 0 else (idx + 1),
+            "is_visible": True,
+        })
+
+    custom_dict["more_info_config"] = stored_field_configs
+    doc.custom_data = json.dumps(custom_dict)
+    db.add(doc)
 
     try:
         audit_entry = AuditLog(
@@ -1294,92 +1451,31 @@ def save_document_more_info_config(
             user=current_user.username,
             action="MORE_INFO_CONFIG_UPDATE",
             stage="MoreInfoConfig",
-            notes=f"Updated More Info configuration for document {doc.id} (scope: {target_scope})",
+            notes=f"Updated More Info configuration for document {doc.id} (scope: DOCUMENT)",
             ip_address="127.0.0.1",
         )
         db.add(audit_entry)
-
-        sys_log = SystemEngineLog(
-            module_name="MoreInfoConfig",
-            log_level="INFO",
-            message=f"Saved More Info config for document {doc.id} by user {current_user.username} (scope: {target_scope})",
-            details=json.dumps({"document_id": doc.id, "scope": target_scope, "fields_count": len(new_keys)}),
-        )
-        db.add(sys_log)
     except Exception as exc:
         logger.debug("Failed to record More Info audit log: %s", exc)
 
-    try:
-        db.commit()
-    except Exception as exc:
-        logger.warning("Commit failed with audit log: %s. Retrying pure config save...", exc)
-        try:
-            db.rollback()
-        except Exception:
-            # Intentionally ignored: rollback error on already-aborted transaction is benign
-            pass
-
-        try:
-            if payload.save_as_default:
-                db.query(DocumentTypeFieldConfiguration).filter(
-                    DocumentTypeFieldConfiguration.document_type == doc_type,
-                    DocumentTypeFieldConfiguration.user_id.is_(None),
-                ).delete()
-            else:
-                db.query(DocumentTypeFieldConfiguration).filter(
-                    DocumentTypeFieldConfiguration.document_type == doc_type,
-                    DocumentTypeFieldConfiguration.user_id == current_user.id,
-                ).delete()
-
-            seen_retry_keys = set()
-            for idx, item in enumerate(payload.fields):
-                if not item.field_key:
-                    continue
-                clean_key = str(item.field_key).strip()
-                if clean_key.lower() in seen_retry_keys:
-                    continue
-                seen_retry_keys.add(clean_key.lower())
-
-                base_meta = avail_map.get(clean_key)
-                std_meta = STANDARD_FIELD_MAP.get(clean_key, {})
-                col_meta = ALL_COLUMN_LABELS.get(clean_key.lower(), ALL_COLUMN_LABELS.get(clean_key, {}))
-
-                retry_row = DocumentTypeFieldConfiguration(
-                    document_type=doc_type,
-                    field_key=clean_key,
-                    field_label=item.label or std_meta.get("label") or col_meta.get("label") or clean_key.replace("_", " ").title(),
-                    category=item.category or std_meta.get("category") or col_meta.get("category") or "OTHER",
-                    source=item.source or std_meta.get("source") or col_meta.get("source") or "ERP",
-                    display_order=item.display_order if item.display_order > 0 else (idx + 1),
-                    is_visible=item.is_visible,
-                    configuration_scope=target_scope,
-                    user_id=target_user_id,
-                    created_by=current_user.username,
-                    updated_by=current_user.username,
-                )
-                db.add(retry_row)
-            db.commit()
-        except Exception as retry_err:
-            logger.error("Failed to save More Info configuration: %s", retry_err, exc_info=True)
-            try:
-                db.rollback()
-            except Exception:
-                # Intentionally ignored: rollback error during error handling is benign
-                pass
-            raise HTTPException(status_code=400, detail="Could not save configuration.")
+    db.commit()
+    db.refresh(doc)
 
     admin_defaults, user_selected, combined, scope, has_user_override = resolve_effective_configuration(
         db, doc_type, current_user, available_fields
     )
 
+    doc_specific_fields = _resolve_document_custom_config(doc, available_fields, admin_defaults)
+    effective_fields = doc_specific_fields if doc_specific_fields is not None else combined
+
     return MoreInfoConfigResponse(
         document_type=doc_type,
-        scope="GLOBAL" if payload.save_as_default else scope,
-        has_user_override=has_user_override,
+        scope="DOCUMENT",
+        has_user_override=True,
         can_manage_default=is_admin,
         admin_default_fields=admin_defaults,
-        user_selected_fields=user_selected,
-        selected_fields=combined,
+        user_selected_fields=effective_fields,
+        selected_fields=effective_fields,
         available_fields=available_fields,
     )
 

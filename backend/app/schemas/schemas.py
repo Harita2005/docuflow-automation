@@ -60,12 +60,14 @@ class UserMasterCreate(BaseModel):
     username: Optional[str] = Field(None, description='Login handle (defaults to employee_id if omitted)')
     email: str = Field(..., description='Official Company Email')
     phone_number: Optional[str] = Field(None, description='Mobile number for SMS OTP')
-    password: str = Field(..., description='Plain password (will be automatically bcrypt-hashed)')
+    password: Optional[str] = Field(None, description='Plain password (will be automatically bcrypt-hashed if provided, or generated securely)')
     role: Optional[str] = Field(
             None,
             description='Role code from the dynamic roles table'
     )
     division: Optional[str] = Field('VCC', description='Company Division')
+    division_id: Optional[int] = Field(None, description='Division database primary key ID')
+    approval_divisions: Optional[str] = Field(None, description='Comma-separated or JSON list of authorized approval divisions')
     department: Optional[str] = Field(None, description='Department (Finance, Audit, Operations)')
     plant: Optional[str] = Field(None, description='Assigned Plant / Branch (e.g. TN-SIVAKASI)')
     is_active: bool = Field(True, description='Active or Inactive status')
@@ -83,6 +85,8 @@ class UserMasterUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     division: Optional[str] = None
+    division_id: Optional[int] = None
+    approval_divisions: Optional[str] = None
     department: Optional[str] = None
     plant: Optional[str] = None
     is_active: Optional[bool] = None
@@ -102,6 +106,8 @@ class UserResponse(BaseModel):
     email: str
     phone_number: Optional[str] = None
     division: Optional[str] = 'VCC'
+    division_id: Optional[int] = None
+    approval_divisions: Optional[str] = None
     department: Optional[str] = None
     plant: Optional[str] = None
 
@@ -214,6 +220,8 @@ class InvoiceActionRequest(BaseModel):
     remarks: Optional[str] = None
     stage_name: Optional[str] = None
     expected_version: Optional[int] = None
+    target_completion_date: Optional[str] = None
+    scheduled_time: Optional[str] = None
 
 class InvoiceResponse(InvoiceBase):
     id: str

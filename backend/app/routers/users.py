@@ -1,7 +1,10 @@
+import json
 import logging
+import os
 import random
+import secrets
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.auth import get_current_active_user, get_password_hash
@@ -23,14 +26,72 @@ def generate_random_user_uid() -> str:
     rand_num = random.randint(100000, 999999)
     return f'USR-{rand_num}'
 
-def resolve_user_foreign_keys(db: Session, division_code: Optional[str], department_name: Optional[str], role_code: Optional[str]):
+def ensure_enterprise_divisions(db: Session):
+    """
+    Ensures that all 53+ enterprise divisions are present and active in dbo.divisions.
+    Synchronizes from matrix configuration if divisions table has fewer than 53 active entries.
+    """
+    try:
+        if db.query(Division).count() >= 53:
+            return
+    except Exception:
+        return
+
+    div_list = []
+    possible_paths = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "src", "matrix_options.json")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "matrix_options.json")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "matrix_options.json")),
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    div_list = data.get("divisions", [])
+                    if div_list:
+                        break
+            except Exception:
+                pass
+
+    if not div_list:
+        div_list = [
+            "ACC", "ACC_ER", "ACC_MDU", "ACC_MKT", "ACC_PROD", "ACC_STALL", "ACM", "ACM_ER",
+            "ACM_ERODE", "ACM_ERODE-LOT WH", "ACM_ERODE-RAPIER", "ACM_ERODE-STALL", "ACM_KARUMATHAMPATTY",
+            "ACM_SALEM", "ACM_SALEM-SILK", "ACM_SIPCOT", "ACM_THINDAL", "ACM_UDAYAPATTY", "ACM_VENSUN",
+            "AKG", "AKG_ER", "AT", "ATC", "ATC_ER", "ATC_MKT", "ATC_PROD", "ATC_UNIT-4", "AT_ER", "BB",
+            "BB_BLR", "BB_BR", "ENES", "ENES_ER", "RHL", "RHL_ER", "RHL_MKT", "RR", "RRF", "RRF_ER",
+            "RRF_MKT", "RRF_PROD", "RR_MKT", "RR_PROD", "RR_UT", "RandR_ER", "TARA", "TEST", "VCC", "VG",
+            "VPM", "VPM_VENSUN", "VT", "VT_ER", "HQ", "SD", "GLOBAL"
+        ]
+
+    try:
+        existing = {d.code.strip(): d for d in db.query(Division).all()}
+        inserted = False
+        for c in div_list:
+            code_str = str(c).strip()
+            if code_str and code_str not in existing:
+                db.add(Division(code=code_str, name=f"{code_str} Division", is_active=True))
+                inserted = True
+        if inserted:
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("ensure_enterprise_divisions check deferred: %s", exc)
+
+def resolve_user_foreign_keys(db: Session, division_code_or_id: Optional[Union[str, int]], department_name: Optional[str], role_code: Optional[str]):
     """Resolves and returns (division_id, department_id, role_id) from normalized tables."""
     div_id = None
     dept_id = None
     role_id = None
 
-    if division_code:
-        div = db.query(Division).filter(Division.code.ilike(division_code.strip())).first()
+    if division_code_or_id is not None:
+        if isinstance(division_code_or_id, int):
+            div = db.query(Division).filter(Division.id == division_code_or_id).first()
+        elif str(division_code_or_id).strip().isdigit():
+            div = db.query(Division).filter(Division.id == int(str(division_code_or_id).strip())).first()
+        else:
+            div = db.query(Division).filter(Division.code.ilike(str(division_code_or_id).strip())).first()
         if div:
             div_id = div.id
 
@@ -42,7 +103,7 @@ def resolve_user_foreign_keys(db: Session, division_code: Optional[str], departm
             dept_id = dept.id
 
     if role_code:
-        r = db.query(Role).filter(Role.code.ilike(role_code.strip())).first()
+        r = db.query(Role).filter((Role.code.ilike(role_code.strip())) | (Role.name.ilike(role_code.strip()))).first()
         if r:
             role_id = r.id
 
@@ -113,8 +174,23 @@ def create_user_master(
     while db.query(User).filter(User.user_uid == user_uid).first():
         user_uid = generate_random_user_uid()
 
-    hashed_pwd = get_password_hash(payload.password)
-    div_id, dept_id, role_id = resolve_user_foreign_keys(db, payload.division, payload.department, payload.role)
+    if payload.password and payload.password.strip():
+        hashed_pwd = get_password_hash(payload.password.strip())
+    else:
+        # Cryptographically secure unguessable random token, hashed with bcrypt (never plaintext, never predictable)
+        hashed_pwd = get_password_hash(secrets.token_urlsafe(32))
+
+    div_id, dept_id, role_id = resolve_user_foreign_keys(db, payload.division_id or payload.division, payload.department, payload.role)
+
+    effective_div_code = payload.division
+    if div_id and not effective_div_code:
+        matched_div = db.query(Division).filter(Division.id == div_id).first()
+        if matched_div:
+            effective_div_code = matched_div.code
+
+    effective_approval_divs = payload.approval_divisions
+    if not effective_approval_divs and effective_div_code:
+        effective_approval_divs = effective_div_code
 
     new_user = User(
         user_uid=user_uid,
@@ -124,11 +200,12 @@ def create_user_master(
         username=effective_username,
         email=payload.email,
         phone_number=payload.phone_number,
-        division=payload.division or 'VCC',
+        division=effective_div_code or 'VCC',
+        division_id=div_id,
+        approval_divisions=effective_approval_divs,
         department=payload.department,
         plant=payload.plant,
         role=payload.role or 'employee',
-
         role_id=role_id,
         password_hash=hashed_pwd,
         is_active=payload.is_active,
@@ -141,6 +218,25 @@ def create_user_master(
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@router.get('/divisions/list')
+@admin_router.get('/divisions/list')
+def get_available_divisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Returns active divisions from the database for dropdown selection."""
+    ensure_enterprise_divisions(db)
+    divs = db.query(Division).filter(Division.is_active == True).order_by(Division.code.asc()).all()
+    if divs:
+        return [{"id": d.id, "code": d.code, "name": d.name or d.code} for d in divs]
+    
+    # Fallback to distinct divisions present in users or documents table
+    from app.database.models import Invoice
+    user_divs = [r[0] for r in db.query(User.division).filter(User.is_deleted == False, User.division.isnot(None)).distinct().all() if r[0] and r[0].strip()]
+    doc_divs = [r[0] for r in db.query(Invoice.division).filter(Invoice.is_deleted == False, Invoice.division.isnot(None)).distinct().all() if r[0] and r[0].strip()]
+    distinct_codes = sorted(list(set(user_divs + doc_divs)))
+    return [{"id": None, "code": code.strip(), "name": f"{code.strip()} Division"} for code in distinct_codes]
 
 @router.put('/{user_id}', response_model=UserResponse)
 @admin_router.put('/{user_id}', response_model=UserResponse)
@@ -197,9 +293,18 @@ def update_user_master(
         setattr(user, field, value)
 
     # Sync foreign keys
-    div_id, dept_id, role_id = resolve_user_foreign_keys(db, user.division, user.department, user.role)
+    target_div = user.division_id or user.division
+    div_id, dept_id, role_id = resolve_user_foreign_keys(db, target_div, user.department, user.role)
     if div_id:
         user.division_id = div_id
+        if not user.division:
+            matched_div = db.query(Division).filter(Division.id == div_id).first()
+            if matched_div:
+                user.division = matched_div.code
+    elif user.division:
+        matched_div = db.query(Division).filter(Division.code.ilike(str(user.division).strip())).first()
+        if matched_div:
+            user.division_id = matched_div.id
     if role_id:
         user.role_id = role_id
 

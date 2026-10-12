@@ -652,6 +652,7 @@ def check_invoice_escalation_status(
 
 
 @router.post('/api/workflows/{invoice_id}/escalate')
+@router.post('/api/documents/{invoice_id}/escalate')
 def execute_invoice_escalation(
     invoice_id: str,
     payload: dict = {},

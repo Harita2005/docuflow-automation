@@ -276,10 +276,15 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserEmpId, setNewUserEmpId] = useState("");
-  const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState("employee");
+  const [newUserRole, setNewUserRole] = useState("");
   const [newUserDept, setNewUserDept] = useState("Finance");
-  const [newUserDivision, setNewUserDivision] = useState("VCC");
+  const [newUserDivision, setNewUserDivision] = useState("");
+  const [newUserApprovalDivisions, setNewUserApprovalDivisions] = useState([]);
+  const [availableDivisions, setAvailableDivisions] = useState([]);
+  const [divisionsLoading, setDivisionsLoading] = useState(false);
+  const [divisionsError, setDivisionsError] = useState("");
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState("");
   const [newUserPlant, setNewUserPlant] = useState("");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
@@ -393,11 +398,36 @@ export default function AdminRBAC({ onRefreshSignal }) {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const headers = token ? { "Authorization": `Bearer ${token}` } : {};
 
-      const [configRes, usersRes, rolesRes] = await Promise.all([
+      setDivisionsLoading(true);
+      setRolesLoading(true);
+      setDivisionsError("");
+      setRolesError("");
+
+      const [configRes, usersRes, rolesRes, divsRes] = await Promise.all([
         fetch("/api/admin/config", { headers }),
         fetch("/api/admin/users", { headers }),
-        fetch("/api/admin/roles", { headers })
+        fetch("/api/admin/roles", { headers }).catch(err => ({ ok: false, error: err })),
+        fetch("/api/admin/users/divisions/list", { headers }).catch(err => ({ ok: false, error: err }))
       ]);
+
+      setDivisionsLoading(false);
+      setRolesLoading(false);
+
+      if (divsRes.ok) {
+        const divsData = await divsRes.json();
+        if (Array.isArray(divsData)) {
+          setAvailableDivisions(divsData);
+          if (divsData.length > 0) {
+            setNewUserDivision(prev => prev || divsData[0].code);
+            setNewUserApprovalDivisions(prev => (prev && prev.length > 0) ? prev : [divsData[0].code]);
+          }
+        } else {
+          setAvailableDivisions([]);
+        }
+      } else {
+        setAvailableDivisions([]);
+        setDivisionsError("Failed to load divisions from database.");
+      }
 
       if (rolesRes.ok) {
         const rolesData = await rolesRes.json();
@@ -412,6 +442,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             permissions: r.permissions || []
           }));
           setRoles(loadedRoles);
+          setNewUserRole(prev => prev || loadedRoles[0].code || loadedRoles[0].id);
 
           setRolePermissions(prev => {
             const updated = { ...prev };
@@ -428,7 +459,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
             });
             return updated;
           });
+        } else {
+          setRoles([]);
         }
+      } else {
+        setRoles([]);
+        setRolesError("Failed to load roles from database.");
       }
 
       if (configRes.ok) {
@@ -493,6 +529,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
             role: u.role || 'employee',
             dept: u.department || u.dept || 'General Operations',
             division: u.division || 'VCC',
+            approval_divisions: u.approval_divisions || u.division || 'VCC',
+            plant: u.plant || '',
             is_active: u.is_active !== undefined ? u.is_active : true,
             status: u.is_active ? "Active" : "Inactive",
             created_on: u.created_on || u.created_at || new Date().toISOString()
@@ -993,8 +1031,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const handleAddUser = async (e) => {
     e.preventDefault();
-    if (!newUserName.trim() || !newUserEmail.trim() || !newUserEmpId.trim() || !newUserPassword.trim()) {
-      setErrorMsg("Please fill in all required fields (Emp ID, Name, Email, Password).");
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserEmpId.trim()) {
+      setErrorMsg("Please fill in all required fields (Emp ID, Name, Email).");
       return;
     }
     setIsCreatingUser(true);
@@ -1006,6 +1044,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
         "Content-Type": "application/json",
         ...(token ? { "Authorization": `Bearer ${token}` } : {})
       };
+      const primaryDiv = newUserDivision || (availableDivisions.length > 0 ? availableDivisions[0].code : "");
+      const selectedDivObj = availableDivisions.find(d => d.code === primaryDiv || d.id === primaryDiv);
+      const approvalDivs = (newUserApprovalDivisions && newUserApprovalDivisions.length > 0)
+        ? newUserApprovalDivisions.join(",")
+        : primaryDiv;
+      const primaryRole = newUserRole || (roles.length > 0 ? (roles[0].code || roles[0].id) : "employee");
+
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers,
@@ -1014,9 +1059,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
           employee_name: newUserName.trim(),
           username: newUserEmpId.trim(),
           email: newUserEmail.trim(),
-          password: newUserPassword,
-          role: newUserRole,
-          division: newUserDivision || "VCC",
+          role: primaryRole,
+          division: primaryDiv,
+          division_id: selectedDivObj?.id || null,
+          approval_divisions: approvalDivs,
           department: newUserDept || "Finance",
           plant: newUserPlant || null,
           is_active: true,
@@ -1031,10 +1077,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
         setNewUserName("");
         setNewUserEmail("");
         setNewUserEmpId("");
-        setNewUserPassword("");
-        setNewUserRole("employee");
+        const defaultRole = roles.length > 0 ? (roles[0].code || roles[0].id) : "";
+        const defaultDiv = availableDivisions.length > 0 ? availableDivisions[0].code : "";
+        setNewUserRole(defaultRole);
         setNewUserDept("Finance");
-        setNewUserDivision("VCC");
+        setNewUserDivision(defaultDiv);
+        setNewUserApprovalDivisions(defaultDiv ? [defaultDiv] : []);
         setNewUserPlant("");
         setShowAddUserModal(false);
       } else {
@@ -1056,6 +1104,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
       const token = localStorage.getItem("authToken");
       const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
       
+      const approvalDivsStr = Array.isArray(editingUserModal.approval_divisions)
+        ? editingUserModal.approval_divisions.join(",")
+        : (editingUserModal.approval_divisions || editingUserModal.division || "");
+
+      const selectedDivCode = editingUserModal.division || (availableDivisions.length > 0 ? availableDivisions[0].code : "");
+      const selectedDivObj = availableDivisions.find(d => d.code === selectedDivCode || d.id === selectedDivCode);
+
       const payload = {
         employee_id: editingUserModal.employee_id,
         employee_name: editingUserModal.employee_name || editingUserModal.name,
@@ -1063,8 +1118,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
         username: editingUserModal.username || editingUserModal.employee_id,
         email: editingUserModal.email,
         phone_number: editingUserModal.phone_number,
-        role: editingUserModal.role,
-        division: editingUserModal.division || "VCC",
+        role: editingUserModal.role || (roles.length > 0 ? (roles[0].code || roles[0].id) : "employee"),
+        division: selectedDivCode,
+        division_id: selectedDivObj?.id || editingUserModal.division_id || null,
+        approval_divisions: approvalDivsStr,
         department: editingUserModal.department || editingUserModal.dept,
         plant: editingUserModal.plant
       };
@@ -1821,6 +1878,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                               <button 
                                 type="button" 
                                 onClick={() => {
+                                  const fallbackDiv = availableDivisions.length > 0 ? availableDivisions[0].code : "";
+                                  const rawApproval = u.approval_divisions || u.division || fallbackDiv;
+                                  const approvalArray = typeof rawApproval === "string" 
+                                    ? rawApproval.split(",").map(d => d.trim()).filter(Boolean)
+                                    : (Array.isArray(rawApproval) ? rawApproval : (fallbackDiv ? [fallbackDiv] : []));
                                   setEditingUserModal({
                                     id: u.id,
                                     employee_id: u.employee_id || u.username || "",
@@ -1829,10 +1891,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     username: u.username || "",
                                     email: u.email || "",
                                     phone_number: u.phone_number || "",
-                                    division: u.division || "VCC",
+                                    division: u.division || fallbackDiv,
+                                    approval_divisions: approvalArray,
                                     department: u.department || u.dept || "Finance",
                                     plant: u.plant || "",
-                                    role: u.role || "employee",
+                                    role: u.role || (roles.length > 0 ? (roles[0].code || roles[0].id) : "employee"),
                                     password: ""
                                   });
                                 }}
@@ -1856,6 +1919,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    const fallbackDiv = availableDivisions.length > 0 ? availableDivisions[0].code : "";
+                                    const rawApproval = u.approval_divisions || u.division || fallbackDiv;
+                                    const approvalArray = typeof rawApproval === "string" 
+                                      ? rawApproval.split(",").map(d => d.trim()).filter(Boolean)
+                                      : (Array.isArray(rawApproval) ? rawApproval : (fallbackDiv ? [fallbackDiv] : []));
                                     setEditingUserModal({
                                       id: u.id,
                                       employee_id: u.employee_id || u.username || "",
@@ -1864,10 +1932,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                       username: u.username || "",
                                       email: u.email || "",
                                       phone_number: u.phone_number || "",
-                                      division: u.division || "VCC",
+                                      division: u.division || fallbackDiv,
+                                      approval_divisions: approvalArray,
                                       department: u.department || u.dept || "Finance",
                                       plant: u.plant || "",
-                                      role: u.role || "employee",
+                                      role: u.role || (roles.length > 0 ? (roles[0].code || roles[0].id) : "employee"),
                                       password: ""
                                     });
                                     setMenuOpenUserId(null);
@@ -2133,56 +2202,126 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email (Required)</label>
-                  <input 
-                    type="email"
-                    required
-                    value={newUserEmail}
-                    onChange={e => setNewUserEmail(e.target.value)}
-                    placeholder="e.g. ram@company.com"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Password (Required)</label>
-                  <input 
-                    type="password"
-                    required
-                    value={newUserPassword}
-                    onChange={e => setNewUserPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Official Email (Required)</label>
+                <input 
+                  type="email"
+                  required
+                  value={newUserEmail}
+                  onChange={e => setNewUserEmail(e.target.value)}
+                  placeholder="e.g. ram@company.com"
+                  className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                />
+                <span className="text-[9px] text-slate-400 mt-0.5 block">Account activation and secure login OTP will be sent to this email address.</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
-                  <select
-                    value={newUserRole}
-                    onChange={e => setNewUserRole(e.target.value)}
-                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
-                  >
-                    {roles.map(r => (
-                      <option key={r.code || r.id} value={r.code || r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                  {rolesLoading ? (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                      <span>Loading roles...</span>
+                    </div>
+                  ) : rolesError ? (
+                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
+                      {rolesError}
+                    </div>
+                  ) : roles.length === 0 ? (
+                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                      No roles configured in database.
+                    </div>
+                  ) : (
+                    <select
+                      value={newUserRole || (roles[0].code || roles[0].id)}
+                      onChange={e => setNewUserRole(e.target.value)}
+                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
+                    >
+                      {roles.map(r => (
+                        <option key={r.code || r.id} value={r.code || r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Division</label>
-                  <input 
-                    type="text"
-                    value={newUserDivision}
-                    onChange={e => setNewUserDivision(e.target.value)}
-                    placeholder="e.g. VCC"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Main Division</label>
+                  {divisionsLoading ? (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                      <span>Loading divisions...</span>
+                    </div>
+                  ) : divisionsError ? (
+                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
+                      {divisionsError}
+                    </div>
+                  ) : availableDivisions.length === 0 ? (
+                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                      No active divisions in database.
+                    </div>
+                  ) : (
+                    <select
+                      value={newUserDivision || availableDivisions[0].code}
+                      onChange={e => {
+                        const newDiv = e.target.value;
+                        setNewUserDivision(newDiv);
+                        if (newDiv && !newUserApprovalDivisions.includes(newDiv)) {
+                          setNewUserApprovalDivisions(prev => [...prev, newDiv]);
+                        }
+                      }}
+                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
+                    >
+                      {availableDivisions.map(d => (
+                        <option key={d.code} value={d.code}>
+                          {d.name ? `${d.name} (${d.code})` : d.code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Approval Divisions</label>
+                {divisionsLoading ? (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 p-2.5 border border-slate-200 rounded-lg bg-slate-50">
+                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                    <span>Loading approval divisions...</span>
+                  </div>
+                ) : divisionsError ? (
+                  <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2">
+                    {divisionsError}
+                  </div>
+                ) : availableDivisions.length === 0 ? (
+                  <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                    No divisions available to assign.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-50/70 rounded-lg border border-slate-200 max-h-48 overflow-y-auto pr-1">
+                    {availableDivisions.map(d => {
+                      const isChecked = newUserApprovalDivisions.includes(d.code);
+                      return (
+                        <label key={d.code} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setNewUserApprovalDivisions(prev => [...prev, d.code]);
+                              } else {
+                                setNewUserApprovalDivisions(prev => prev.filter(x => x !== d.code));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                          />
+                          <span className="text-[11px] font-medium">{d.name ? `${d.name} (${d.code})` : d.code}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <span className="text-[9px] text-slate-400 mt-0.5 block">Select all divisions this user is authorized to review or approve documents for.</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -2325,14 +2464,44 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Division</label>
-                  <input 
-                    type="text"
-                    value={editingUserModal.division || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, division: e.target.value })}
-                    placeholder="e.g. VCC, ACC"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Main Division</label>
+                  {divisionsLoading ? (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : divisionsError ? (
+                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
+                      {divisionsError}
+                    </div>
+                  ) : availableDivisions.length === 0 ? (
+                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                      No active divisions in database.
+                    </div>
+                  ) : (
+                    <select
+                      value={editingUserModal.division || availableDivisions[0].code}
+                      onChange={e => {
+                        const newDiv = e.target.value;
+                        const currApprovals = Array.isArray(editingUserModal.approval_divisions) 
+                          ? editingUserModal.approval_divisions 
+                          : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
+                        const nextApprovals = currApprovals.includes(newDiv) ? currApprovals : [...currApprovals, newDiv];
+                        setEditingUserModal({ 
+                          ...editingUserModal, 
+                          division: newDiv,
+                          approval_divisions: nextApprovals
+                        });
+                      }}
+                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
+                    >
+                      {availableDivisions.map(d => (
+                        <option key={d.code} value={d.code}>
+                          {d.name ? `${d.name} (${d.code})` : d.code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
@@ -2354,6 +2523,56 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Approval Divisions</label>
+                {divisionsLoading ? (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 p-2.5 border border-slate-200 rounded-lg bg-slate-50">
+                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                    <span>Loading approval divisions...</span>
+                  </div>
+                ) : divisionsError ? (
+                  <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2">
+                    {divisionsError}
+                  </div>
+                ) : availableDivisions.length === 0 ? (
+                  <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                    No divisions available to assign.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-50/70 rounded-lg border border-slate-200 max-h-48 overflow-y-auto pr-1">
+                    {availableDivisions.map(d => {
+                      const currentList = Array.isArray(editingUserModal.approval_divisions)
+                        ? editingUserModal.approval_divisions
+                        : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
+                      const isChecked = currentList.includes(d.code);
+                      return (
+                        <label key={d.code} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              let nextList;
+                              if (e.target.checked) {
+                                nextList = [...currentList, d.code];
+                              } else {
+                                nextList = currentList.filter(x => x !== d.code);
+                              }
+                              setEditingUserModal({
+                                ...editingUserModal,
+                                approval_divisions: nextList
+                              });
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                          />
+                          <span className="text-[11px] font-medium">{d.name ? `${d.name} (${d.code})` : d.code}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <span className="text-[9px] text-slate-400 mt-0.5 block">Select all divisions this user is authorized to review or approve documents for.</span>
               </div>
 
               <div>

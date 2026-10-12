@@ -602,7 +602,12 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         for itm in req.line_items:
             db.add(InvoiceLineItem(invoice_id=target_inv.id, description=itm.get('description') or itm.get('item_description') or 'Line Item', quantity=float(itm.get('quantity') or 1.0), unit_price=float(itm.get('unit_price') or itm.get('amount') or 0.0), amount=float(itm.get('amount') or 0.0), warranty_text=itm.get('warranty_text'), serial_numbers=','.join(itm.get('serial_numbers')) if isinstance(itm.get('serial_numbers'), list) else itm.get('serial_numbers')))
     db.commit()
-    if req.auto_route and target_inv.status not in ['Approved', 'Cancelled', 'Settled', 'Paid', 'Ready for Payment']:
+    already_started = bool(
+        str(target_inv.status).startswith('Initiated')
+        or target_inv.status in ['Approved', 'Cancelled', 'Settled', 'Paid', 'Ready for Payment', 'Rejected']
+        or (target_inv.workflow_profile_id and target_inv.current_stage and target_inv.current_stage > 1)
+    )
+    if req.auto_route and not already_started:
         from app.services.rules_engine import evaluate_business_rules_full
         rule_eval_res = evaluate_business_rules_full(db, target_inv)
         target_wf = rule_eval_res.get('target_workflow_id') if rule_eval_res else None
@@ -615,7 +620,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if profile:
             from app.services.rules_engine import infer_document_type
             target_inv.workflow_profile_id = profile.profile_name
-            if req.document_type and req.document_type.strip():
+            if target_inv.document_type and target_inv.document_type.upper() in ('CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'):
+                pass  # Preserve existing feedback document type
+            elif req.document_type and req.document_type.strip():
                 target_inv.document_type = req.document_type
             elif profile.workflow_type and profile.workflow_type.upper().strip() not in ("GENERAL RECORDS", "AP INVOICE", ""):
                 target_inv.document_type = profile.workflow_type
@@ -672,7 +679,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     if is_feedback_doc and not getattr(target_inv, 'file_path', None) and not target_inv.file_url:
         lookup_invoice_num = (target_inv.invoice_number or target_inv.doc_num or '').strip()
         if lookup_invoice_num:
-            # 1. Look for approved/settled document in DB matching invoice_number
+            # 1. Look strictly for approved/settled document in DB matching invoice_number
             approved_candidate = (
                 db.query(Invoice)
                 .filter(
@@ -685,20 +692,6 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 .order_by(Invoice.id.desc())
                 .first()
             )
-
-            # If no approved invoice found, fallback to any valid invoice record that has an attached file
-            if not approved_candidate:
-                approved_candidate = (
-                    db.query(Invoice)
-                    .filter(
-                        (Invoice.invoice_number == lookup_invoice_num) | (Invoice.doc_num == lookup_invoice_num),
-                        Invoice.id != target_inv.id,
-                        Invoice.is_deleted == False
-                    )
-                    .filter((Invoice.file_path != None) | (Invoice.file_url != None))
-                    .order_by(Invoice.id.desc())
-                    .first()
-                )
 
             attached_path = None
             attached_filename = None
@@ -721,12 +714,18 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                     target_inv.file_size = approved_candidate.file_size
 
             # 2. Check filesystem under stored_pdfs/approved/ if not found in DB
-            if not attached_path:
+            if not attached_path and not target_inv.file_url:
                 try:
                     approved_root = settings.APPROVED_PDF_DIR.resolve()
                     if approved_root.exists():
+                        lookup_lower = lookup_invoice_num.lower()
                         for p in approved_root.rglob("*.pdf"):
-                            if lookup_invoice_num.lower() in p.name.lower():
+                            stem_lower = p.stem.lower()
+                            if (
+                                stem_lower == lookup_lower
+                                or stem_lower.startswith(f"{lookup_lower}_")
+                                or stem_lower.endswith(f"_{lookup_lower}")
+                            ):
                                 attached_path = str(p)
                                 attached_filename = p.name
                                 break
@@ -754,6 +753,17 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 db.commit()
                 db.refresh(target_inv)
                 logger.info(f"[Sync] Auto-attached approved invoice {attached_path} to feedback {target_inv.id}")
+            elif target_inv.file_url:
+                db.add(AuditLog(
+                    invoice_id=target_inv.id,
+                    user='Sync Engine (Auto-Attach)',
+                    action='Invoice Attached',
+                    stage='Intake (ERP)',
+                    notes=f"Auto-attached approved invoice PDF '{target_inv.file_name or lookup_invoice_num}' matching invoice number {lookup_invoice_num}."
+                ))
+                db.commit()
+                db.refresh(target_inv)
+                logger.info(f"[Sync] Auto-attached approved invoice URL {target_inv.file_url} to feedback {target_inv.id}")
 
     _sync_to_production_schema(req, db, target_inv)
     return target_inv

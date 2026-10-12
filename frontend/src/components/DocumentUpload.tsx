@@ -18,7 +18,9 @@ import {
   ZoomIn,
   ZoomOut,
   Download,
-  Printer
+  Printer,
+  Zap,
+  Cpu
 } from "lucide-react";
 
 interface DocumentUploadProps {
@@ -85,6 +87,9 @@ export default function DocumentUpload({
 
   // PDF Viewer Zoom state for staged preview (Default: 100%, View-only)
   const [previewZoomLevel, setPreviewZoomLevel] = useState(100);
+
+  // Processing Mode: 'manual' (Manual Workflow Start) vs 'auto' (Automatic OCR & Workflow Start)
+  const [processingMode, setProcessingMode] = useState<"manual" | "auto">("manual");
 
   // Document Type & Workflow Selection
   const [selectedDocType, setSelectedDocType] = useState<string>("AP Invoice");
@@ -495,6 +500,51 @@ export default function DocumentUpload({
       clearInterval(interval);
       console.error("Confirmation failed:", err);
       setErrorMsg(err.message || "Failed to confirm document. Check network connection.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoWorkflowStart = async (fileToProcess?: File) => {
+    let file = fileToProcess || pendingFile;
+    if (!file) {
+      triggerFileInput();
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg(null);
+    const interval = startReassuranceRotation();
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("document_type", selectedDocType || "AP Invoice");
+
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const response = await fetch("/api/documents/auto-workflow", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      });
+
+      clearInterval(interval);
+
+      if (response.ok) {
+        const data = await response.json();
+        const newDoc = data.invoice || data;
+        onUploadSuccess(newDoc);
+        setUploadedDoc(newDoc);
+        setStagedDoc(null);
+        setPendingFile(null);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setErrorMsg(err.detail || "Automatic workflow routing failed. Please review errors and try again.");
+      }
+    } catch (err: any) {
+      clearInterval(interval);
+      console.error("Auto-workflow execution failed:", err);
+      setErrorMsg(err.message || "Failed to execute automatic workflow pipeline. Check connection.");
     } finally {
       setLoading(false);
     }
@@ -1072,8 +1122,65 @@ export default function DocumentUpload({
             </div>
           </div>
         ) : (
-
           <>
+            {/* Mode Selector: Manual Workflow Start vs Automatic OCR & Workflow Start */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-[#003F28]" />
+                    <span>Processing Mode</span>
+                  </h3>
+                  <p className="text-[10.5px] text-slate-500">
+                    Choose how the approval workflow is selected and initiated.
+                  </p>
+                </div>
+
+                <div className="inline-flex p-1 bg-white border border-slate-200 rounded-lg shadow-2xs gap-1 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProcessingMode("manual");
+                      setErrorMsg(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      processingMode === "manual"
+                        ? "bg-[#003F28] text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>Manual Workflow Start</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProcessingMode("auto");
+                      setErrorMsg(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      processingMode === "auto"
+                        ? "bg-gradient-to-r from-emerald-700 to-teal-800 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-300" />
+                    <span>Automatic OCR &amp; Workflow Start</span>
+                  </button>
+                </div>
+              </div>
+
+              {processingMode === "auto" && (
+                <div className="p-2 bg-emerald-50/80 border border-emerald-200 rounded-lg flex items-start gap-2 text-[11px] text-emerald-950">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Automatic Mode:</strong> Upload a PDF and select Document Type. The engine will run OCR text recognition, LLM extraction, evaluate your active Condition Engine rules, and automatically start the matched workflow.
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Row 1: Document Configuration */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
@@ -1085,7 +1192,7 @@ export default function DocumentUpload({
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                 {/* Document Type Dropdown */}
-                <div className="md:col-span-6 space-y-1">
+                <div className={`${processingMode === "manual" ? "md:col-span-6" : "md:col-span-12"} space-y-1`}>
                   <div className="flex items-center justify-between">
                     <label className="block text-[11px] font-semibold text-slate-800">
                       Document Type <span className="text-red-500">*</span>
@@ -1144,133 +1251,139 @@ export default function DocumentUpload({
                   </div>
                 </div>
 
-                {/* Approval Workflow Dropdown */}
-                <div className="md:col-span-6 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[11px] font-semibold text-slate-800">
-                      Approval Workflow <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleGoToFlowBuilder}
-                      className="text-[10.5px] font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline inline-flex items-center gap-1"
-                    >
-                      <span>Build Flow</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                      <Layers className="w-3.5 h-3.5" />
+                {/* Approval Workflow Dropdown (Shown ONLY in Manual Mode) */}
+                {processingMode === "manual" && (
+                  <div className="md:col-span-6 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-semibold text-slate-800">
+                        Approval Workflow <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleGoToFlowBuilder}
+                        className="text-[10.5px] font-semibold text-emerald-800 hover:text-emerald-950 cursor-pointer hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>Build Flow</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
                     </div>
-                    <select
-                      value={selectedWorkflowProfile}
-                      onChange={(e) => {
-                        if (e.target.value === "__FLOW_BUILDER__") {
-                          handleGoToFlowBuilder();
-                        } else {
-                          setSelectedWorkflowProfile(e.target.value);
-                        }
-                      }}
-                      className="w-full bg-white border border-slate-200 text-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs truncate"
-                    >
-                      {availableWorkflows.length > 0 ? (
-                        <optgroup label="Available Workflows">
-                          {availableWorkflows.map((w: any) => (
-                            <option key={w.id || w.profile_name} value={w.profile_name}>
-                              {w.profile_name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : (
-                        <optgroup label="Standard Workflows">
-                          <option value="Standard AP Invoice Approval Workflow">Standard AP Invoice Approval Workflow</option>
-                          <option value="CAPEX & Fixed Asset Multi-Tier Workflow">CAPEX & Fixed Asset Multi-Tier Workflow</option>
-                          <option value="Utility & Rent Fast-Track Approval">Utility & Rent Fast-Track Approval</option>
-                          <option value="HR & Staff Welfare Approval Stream">HR & Staff Welfare Approval Stream</option>
-                          <option value="PO & Purchase Matching Workflow">PO & Purchase Matching Workflow</option>
-                        </optgroup>
-                      )}
-                      <option value="__FLOW_BUILDER__" className="text-emerald-700 font-bold">
-                        Build Flow in Flow Builder
-                      </option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Info alert banner under dropdowns */}
-              <div className="p-2 bg-emerald-50/70 border border-emerald-200/80 rounded-lg flex items-center gap-2 text-[11px] text-emerald-900">
-                <AlertCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>This workflow will be used to determine the approval route for the uploaded document.</span>
-              </div>
-            </div>
-
-            {/* Row 2: Approval Route Stepper Cards */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-slate-700" />
-                  <h3 className="text-xs font-bold text-slate-900">
-                    Approval Route ({activeWorkflowData.stages.length} Stages)
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowStagesModal(true)}
-                  className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition cursor-pointer"
-                >
-                  <span>View All Stages &amp; Approvers</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Responsive Horizontal Pipeline of Stage Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-center">
-                {activeWorkflowData.stages.map((stage, idx) => {
-                  return (
-                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-2.5 relative">
-                      {/* Number Badge */}
-                      <div className="w-5 h-5 rounded-full bg-[#005A36] text-white flex items-center justify-center text-[11px] font-bold shrink-0">
-                        {stage.stageNum || idx + 1}
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                        <Layers className="w-3.5 h-3.5" />
                       </div>
-
-                      {/* Icon */}
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800 shrink-0">
-                        {idx === 0 ? (
-                          <FileText className="w-3.5 h-3.5" />
-                        ) : idx === 1 ? (
-                          <Users className="w-3.5 h-3.5" />
-                        ) : idx === 2 ? (
-                          <BarChart2 className="w-3.5 h-3.5" />
+                      <select
+                        value={selectedWorkflowProfile}
+                        onChange={(e) => {
+                          if (e.target.value === "__FLOW_BUILDER__") {
+                            handleGoToFlowBuilder();
+                          } else {
+                            setSelectedWorkflowProfile(e.target.value);
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 text-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-600 transition appearance-none cursor-pointer shadow-2xs truncate"
+                      >
+                        {availableWorkflows.length > 0 ? (
+                          <optgroup label="Available Workflows">
+                            {availableWorkflows.map((w: any) => (
+                              <option key={w.id || w.profile_name} value={w.profile_name}>
+                                {w.profile_name}
+                              </option>
+                            ))}
+                          </optgroup>
                         ) : (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <optgroup label="Standard Workflows">
+                            <option value="Standard AP Invoice Approval Workflow">Standard AP Invoice Approval Workflow</option>
+                            <option value="CAPEX & Fixed Asset Multi-Tier Workflow">CAPEX & Fixed Asset Multi-Tier Workflow</option>
+                            <option value="Utility & Rent Fast-Track Approval">Utility & Rent Fast-Track Approval</option>
+                            <option value="HR & Staff Welfare Approval Stream">HR & Staff Welfare Approval Stream</option>
+                            <option value="PO & Purchase Matching Workflow">PO & Purchase Matching Workflow</option>
+                          </optgroup>
                         )}
-                      </div>
-
-                      {/* Titles */}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11.5px] font-bold text-slate-900 truncate" title={stage.name}>
-                          {stage.name}
-                        </div>
-                        <div className="text-[10px] text-slate-500 truncate" title={stage.subtitle}>
-                          {stage.subtitle}
-                        </div>
-                        <div className="mt-0.5">
-                          <span className="inline-block px-1.5 py-0.2 bg-emerald-50 text-[#005A36] border border-emerald-200 text-[9.5px] font-semibold rounded">
-                            Approver
-                          </span>
-                        </div>
+                        <option value="__FLOW_BUILDER__" className="text-emerald-700 font-bold">
+                          Build Flow in Flow Builder
+                        </option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                        <ChevronDown className="w-3.5 h-3.5" />
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                )}
               </div>
+
+              {/* Info alert banner under dropdowns in Manual Mode */}
+              {processingMode === "manual" && (
+                <div className="p-2 bg-emerald-50/70 border border-emerald-200/80 rounded-lg flex items-center gap-2 text-[11px] text-emerald-900">
+                  <AlertCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>This workflow will be used to determine the approval route for the uploaded document.</span>
+                </div>
+              )}
             </div>
+
+            {/* Row 2: Approval Route Stepper Cards (Shown ONLY in Manual Mode) */}
+            {processingMode === "manual" && (
+              <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-slate-700" />
+                    <h3 className="text-xs font-bold text-slate-900">
+                      Approval Route ({activeWorkflowData.stages.length} Stages)
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowStagesModal(true)}
+                    className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <span>View All Stages &amp; Approvers</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Responsive Horizontal Pipeline of Stage Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-center">
+                  {activeWorkflowData.stages.map((stage, idx) => {
+                    return (
+                      <div key={idx} className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs hover:border-emerald-300 transition-all flex items-center gap-2.5 relative">
+                        {/* Number Badge */}
+                        <div className="w-5 h-5 rounded-full bg-[#005A36] text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                          {stage.stageNum || idx + 1}
+                        </div>
+
+                        {/* Icon */}
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800 shrink-0">
+                          {idx === 0 ? (
+                            <FileText className="w-3.5 h-3.5" />
+                          ) : idx === 1 ? (
+                            <Users className="w-3.5 h-3.5" />
+                          ) : idx === 2 ? (
+                            <BarChart2 className="w-3.5 h-3.5" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                        </div>
+
+                        {/* Titles */}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11.5px] font-bold text-slate-900 truncate" title={stage.name}>
+                            {stage.name}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate" title={stage.subtitle}>
+                            {stage.subtitle}
+                          </div>
+                          <div className="mt-0.5">
+                            <span className="inline-block px-1.5 py-0.2 bg-emerald-50 text-[#005A36] border border-emerald-200 text-[9.5px] font-semibold rounded">
+                              Approver
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Row 3: Upload Document Dropzone */}
             <div className="space-y-1.5 pt-1 border-t border-slate-100">
@@ -1384,13 +1497,13 @@ export default function DocumentUpload({
 
             {/* Error Message */}
             {errorMsg && (
-              <div className="bg-red-50 border border-red-200 p-2 rounded-lg flex items-start gap-1.5 text-red-800 text-xs">
-                <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
+              <div className="bg-red-50 border border-red-200 p-2.5 rounded-lg flex items-start gap-2 text-red-800 text-xs">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span className="font-medium leading-relaxed">{errorMsg}</span>
               </div>
             )}
 
-            {/* Row 4: Action Buttons (Cancel & Upload) */}
+            {/* Row 4: Action Buttons (Cancel & Submit) */}
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
@@ -1406,16 +1519,29 @@ export default function DocumentUpload({
                 Cancel
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleExtractPreview()}
-                disabled={!pendingFile || extracting}
-                className="px-5 py-2 text-xs font-semibold text-white bg-[#005A36] hover:bg-[#00472b] rounded-lg shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-                <span>Analyze &amp; Verify Document</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              {processingMode === "manual" ? (
+                <button
+                  type="button"
+                  onClick={() => handleExtractPreview()}
+                  disabled={!pendingFile || extracting}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-[#005A36] hover:bg-[#00472b] rounded-lg shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Analyze &amp; Verify Document</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleAutoWorkflowStart()}
+                  disabled={!pendingFile || loading}
+                  className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-[#005A36] to-teal-800 hover:from-[#00472b] hover:to-teal-900 rounded-lg shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Analyze &amp; Start Workflow</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </>
         )}

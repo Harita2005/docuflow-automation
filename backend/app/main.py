@@ -70,6 +70,13 @@ async def lifespan(app: FastAPI):
                 start_background_retry_worker(poll_interval=60)
             except Exception as retry_err:
                 logger.warning(f"Starting background retry worker deferred: {retry_err}")
+
+            # Start background database archival scheduler
+            try:
+                from .services.archive_service import start_archive_scheduler
+                start_archive_scheduler()
+            except Exception as arch_err:
+                logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
         except Exception as exc: 
             logger.warning(f"Startup tasks deferred: {exc}")
     yield
@@ -81,6 +88,12 @@ async def lifespan(app: FastAPI):
             stop_background_retry_worker()
         except Exception as shutdown_err:
             logger.warning(f"Shutdown retry worker cleanup: {shutdown_err}")
+
+        try:
+            from .services.archive_service import stop_archive_scheduler
+            stop_archive_scheduler()
+        except Exception as arch_stop_err:
+            logger.warning(f"Shutdown archive scheduler cleanup: {arch_stop_err}")
 
 
 is_production = (settings.ENVIRONMENT or "").strip().lower() in ("production", "prod")

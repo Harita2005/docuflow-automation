@@ -655,7 +655,7 @@ export default function LoginPage({
                       onChange={(e) =>
                         setEmployeeId(e.target.value)
                       }
-                      placeholder="e.g. admin or YUVASREE"
+                      placeholder="Enter your employee ID or username"
                       required
                       autoFocus
                       autoComplete="username"

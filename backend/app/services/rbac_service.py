@@ -166,6 +166,21 @@ def require_role(allowed_roles: List[str]):
 # ---------------------------------------------------------------------------
 # DOCUMENT ACCESS AUTHORIZATION
 # ---------------------------------------------------------------------------
+def get_user_approval_divisions(user: User) -> set[str]:
+    """
+    Returns the set of uppercase division codes the user is authorized for.
+    Reads user.approval_divisions, falling back to user.division.
+    """
+    if not user:
+        return set()
+    raw = (getattr(user, "approval_divisions", None) or getattr(user, "division", "") or "").strip()
+    if not raw:
+        return set()
+    # Support comma-delimited strings and JSON lists
+    cleaned = raw.replace('"', '').replace('[', '').replace(']', '').replace("'", "")
+    return {d.strip().upper() for d in cleaned.split(',') if d.strip()}
+
+
 def authorize_document_access(
     user: User,
     doc: Document,
@@ -209,16 +224,17 @@ def authorize_document_access(
     # Strict Division Boundary
     #
     # Users from a specific division cannot access documents belonging to
-    # another division.
+    # another division unless it is in their authorized approval divisions.
     # -----------------------------------------------------------------------
     user_div = (user.division or "").strip().upper()
     doc_div = (doc.division or "").strip().upper()
+    user_approval_divs = get_user_approval_divisions(user)
 
     if (
-        user_div
-        and doc_div
-        and user_div not in {"HQ", "GLOBAL", "ALL"}
-        and doc_div != user_div
+        doc_div
+        and user_approval_divs
+        and not any(d in {"HQ", "GLOBAL", "ALL"} for d in user_approval_divs)
+        and doc_div not in user_approval_divs
     ):
         return False
 
@@ -241,8 +257,8 @@ def authorize_document_access(
 
         # Division scope
         if (
-            user_div in {"HQ", "GLOBAL", "", "ALL"}
-            or doc_div == user_div
+            any(d in {"HQ", "GLOBAL", "", "ALL"} for d in user_approval_divs)
+            or doc_div in user_approval_divs
         ):
             return True
 
@@ -252,8 +268,8 @@ def authorize_document_access(
     if u_role == "manager":
 
         if (
-            doc_div == user_div
-            or user_div in {"HQ", "GLOBAL"}
+            doc_div in user_approval_divs
+            or any(d in {"HQ", "GLOBAL"} for d in user_approval_divs)
         ):
             return True
 

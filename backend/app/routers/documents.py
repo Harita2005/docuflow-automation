@@ -1,5 +1,5 @@
 import logging
-from app.services.rules_engine import infer_document_type, evaluate_business_rules_full
+from app.services.rules_engine import infer_document_type, evaluate_business_rules_full, resolve_matching_rules
 import os
 import re
 import json
@@ -37,7 +37,7 @@ from app.auth import get_current_user, get_current_user_optional, get_current_ac
 from app.services.rules_engine import evaluate_business_rules, generate_document_id
 from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
-from app.services.rbac_service import authorize_document_access, check_permission
+from app.services.rbac_service import authorize_document_access, check_permission, get_user_approval_divisions
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
 
 logger = logging.getLogger(__name__)
@@ -711,10 +711,11 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
 
         # Division scoping check
         if not is_curr and not has_approved_this_doc and not is_member_of_flow:
-            user_div = (current_user.division or '').strip().upper()
+            user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
-            if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
-                continue
+            if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+                if doc_div not in user_approval_divs:
+                    continue
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
@@ -862,10 +863,11 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         # Division check
         if not is_curr and not has_approved_any_stage:
-            user_div = (current_user.division or '').strip().upper()
+            user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
-            if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
-                continue
+            if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+                if doc_div not in user_approval_divs:
+                    continue
 
         if not user_is_admin:
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
@@ -995,10 +997,11 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
         
         if not is_curr and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
-            user_div = (current_user.division or '').strip().upper()
+            user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
-            if user_div and doc_div and user_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div not in ['HQ', 'GLOBAL', 'ALL', ''] and doc_div != user_div:
-                raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
+            if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+                if doc_div not in user_approval_divs:
+                    raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'. Documents are scoped to your assigned division/department.")
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
@@ -1015,6 +1018,71 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                     status_code=403, 
                     detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
                 )
+
+    # For Customer Feedback records: dynamically ensure matching approved invoice PDF is attached if not yet set
+    is_feedback_doc = (
+        (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+        or str(inv.id).startswith('CMP')
+        or str(inv.id).startswith('CF')
+        or bool(getattr(inv, 'type_of_complaint', None))
+        or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+    )
+    if is_feedback_doc and not getattr(inv, 'file_path', None) and not inv.file_url:
+        lookup_invoice_num = (inv.invoice_number or inv.doc_num or '').strip()
+        if lookup_invoice_num:
+            approved_candidate = (
+                db.query(Invoice)
+                .filter(
+                    (Invoice.invoice_number == lookup_invoice_num) | (Invoice.doc_num == lookup_invoice_num),
+                    Invoice.id != inv.id,
+                    Invoice.is_deleted == False,
+                    Invoice.status.in_(['Approved', 'Settled', 'Ready for Payment', 'Paid'])
+                )
+                .filter((Invoice.file_path != None) | (Invoice.file_url != None))
+                .order_by(Invoice.id.desc())
+                .first()
+            )
+            if approved_candidate and (approved_candidate.file_path or approved_candidate.file_url):
+                cand_path = approved_candidate.file_path
+                cand_resolved = None
+                if cand_path:
+                    try:
+                        resolved_cand = Path(cand_path)
+                        if resolved_cand.is_file():
+                            cand_resolved = str(resolved_cand)
+                    except Exception:
+                        pass
+                    if not cand_resolved:
+                        cand_resolved = cand_path
+
+                cand_filename = approved_candidate.file_name or (Path(cand_path).name if cand_path else f"{lookup_invoice_num}.pdf")
+                if cand_resolved:
+                    inv.file_path = cand_resolved
+                    inv.file_name = cand_filename
+                    inv.file_url = f"/api/documents/{inv.id}/file"
+                    try:
+                        if os.path.isfile(cand_resolved):
+                            inv.file_size = os.path.getsize(cand_resolved)
+                        elif approved_candidate.file_size:
+                            inv.file_size = approved_candidate.file_size
+                    except Exception:
+                        pass
+                    try:
+                        db.commit()
+                        db.refresh(inv)
+                    except Exception as db_err:
+                        logger.debug("Failed saving auto-attached invoice to DB on load: %s", db_err)
+                        db.rollback()
+                elif approved_candidate.file_url:
+                    inv.file_url = approved_candidate.file_url
+                    inv.file_name = cand_filename
+                    inv.file_size = approved_candidate.file_size
+                    try:
+                        db.commit()
+                        db.refresh(inv)
+                    except Exception as db_err:
+                        logger.debug("Failed saving auto-attached file_url on load: %s", db_err)
+                        db.rollback()
 
     try:
         from sqlalchemy import text
@@ -1813,6 +1881,18 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Rejected']:
         raise HTTPException(status_code=409, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
+    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    # Enforce Division Authorization: user can only approve documents matching their authorized approval divisions
+    if not is_admin and inv.division:
+        user_approval_divs = get_user_approval_divisions(user)
+        doc_div = (inv.division or '').strip().upper()
+        if doc_div and user_approval_divs and not any(d in {'HQ', 'GLOBAL', 'ALL'} for d in user_approval_divs):
+            if doc_div not in user_approval_divs:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access Denied: You are not authorized to approve documents for division '{inv.division}'."
+                )
+
     is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
 
     # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document
@@ -2455,6 +2535,98 @@ def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=N
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'invoice': inv, **result}
 
+def parse_and_validate_scheduled_clock_time(val: Any) -> Optional[str]:
+    """
+    Validates and normalizes a scheduled clock time/datetime string.
+    Ensures the value is an actual clock time (e.g. '5:30 PM', '2026-10-12T17:30:00'), NOT a duration (e.g. '3 hours').
+    Restricts minute component to 00, 15, 30, 45.
+    Returns normalized string (e.g. '2026-10-12T17:30:00') or raises HTTPException.
+    """
+    if not val:
+        return None
+    s = str(val).strip()
+    if not s or s.lower() == 'not specified':
+        return None
+
+    import re
+    lower = s.lower()
+    # Reject duration-like formats e.g. "3 hours", "3 hrs", "2 hr", "45 mins"
+    for kw in ['hour', 'hours', 'hr', 'hrs', 'minute', 'minutes', 'min', 'mins', 'day', 'days']:
+        if re.search(r'\b\d+\s*' + kw + r'\b', lower) or re.search(r'\b' + kw + r'\b', lower):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Duration-style time '{s}' is not permitted. Please select a specific scheduled clock time (e.g. 5:30 PM)."
+            )
+
+    # Match ISO or Date + Time: 2026-10-12T17:30, 2026-10-12 17:30, 2026-10-12 5:30 PM
+    iso_match = re.search(r'(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?', s, re.IGNORECASE)
+    if iso_match:
+        date_part = iso_match.group(1)
+        h_part = int(iso_match.group(2))
+        m_part = int(iso_match.group(3))
+        ampm_part = iso_match.group(5)
+
+        if m_part not in [0, 15, 30, 45]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m_part:02d}."
+            )
+
+        if ampm_part:
+            ampm_upper = ampm_part.upper()
+            if not (1 <= h_part <= 12):
+                raise HTTPException(status_code=400, detail=f"Invalid 12-hour value: {h_part}")
+            if ampm_upper == 'AM':
+                h24 = 0 if h_part == 12 else h_part
+            else:
+                h24 = 12 if h_part == 12 else h_part + 12
+        else:
+            h24 = h_part
+
+        if not (0 <= h24 <= 23):
+            raise HTTPException(status_code=400, detail=f"Invalid hour: {h_part}")
+
+        return f"{date_part}T{h24:02d}:{m_part:02d}:00"
+
+    # Match 12-hour clock time only: e.g. "5:30 PM", "05:30 PM", "12:00 AM"
+    time_12_match = re.match(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', s, re.IGNORECASE)
+    if time_12_match:
+        h12 = int(time_12_match.group(1))
+        m = int(time_12_match.group(2))
+        ampm = time_12_match.group(3).upper()
+
+        if not (1 <= h12 <= 12):
+            raise HTTPException(status_code=400, detail=f"Invalid 12-hour value: {h12}")
+        if m not in [0, 15, 30, 45]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m:02d}."
+            )
+
+        h24 = 0 if h12 == 12 and ampm == 'AM' else (12 if h12 == 12 and ampm == 'PM' else (h12 if ampm == 'AM' else h12 + 12))
+        today_str = datetime.date.today().isoformat()
+        return f"{today_str}T{h24:02d}:{m:02d}:00"
+
+    # Match 24-hour clock time only: e.g. "17:30"
+    time_24_match = re.match(r'^(\d{1,2}):(\d{2})$', s)
+    if time_24_match:
+        h24 = int(time_24_match.group(1))
+        m = int(time_24_match.group(2))
+        if not (0 <= h24 <= 23):
+            raise HTTPException(status_code=400, detail=f"Invalid hour: {h24}")
+        if m not in [0, 15, 30, 45]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m:02d}."
+            )
+        today_str = datetime.date.today().isoformat()
+        return f"{today_str}T{h24:02d}:{m:02d}:00"
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid scheduled clock time format: '{s}'. Expected 12-hour AM/PM format (e.g. 5:30 PM) or ISO date-time."
+    )
+
 @router.post('/api/workflows/hold')
 @router.post('/api/workflow/hold')
 def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
@@ -2474,15 +2646,34 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record placed on temporary hold.'
+    
+    target_val = payload.get('target_completion_date') or payload.get('scheduled_time')
+    if not target_val and remarks:
+        import re
+        iso_found = re.search(r'\[TARGET_ISO:\s*([^\]]+)\]', remarks)
+        if iso_found:
+            target_val = iso_found.group(1).strip()
+        else:
+            sla_found = re.search(r'\[TARGET SLA:\s*([^\]]+)\]', remarks)
+            if sla_found and sla_found.group(1).strip() != 'Not Specified':
+                target_val = sla_found.group(1).strip()
+
+    normalized_target_iso = parse_and_validate_scheduled_clock_time(target_val) if target_val else None
+
+    update_fields = {
+        Invoice.status: 'On Hold',
+        Invoice.version: current_version + 1,
+        Invoice.updated_at: datetime.datetime.utcnow()
+    }
+    if normalized_target_iso:
+        update_fields[Invoice.due_date] = normalized_target_iso
+        inv.due_date = normalized_target_iso
+
     inv.status = 'On Hold'
     rows_affected = db.query(Invoice).filter(
         Invoice.id == inv.id,
         Invoice.version == current_version
-    ).update({
-        Invoice.status: 'On Hold',
-        Invoice.version: current_version + 1,
-        Invoice.updated_at: datetime.datetime.utcnow()
-    }, synchronize_session=False)
+    ).update(update_fields, synchronize_session=False)
 
     if rows_affected == 0:
         db.rollback()
@@ -2555,15 +2746,38 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = (user.employee_name or user.name) if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record placed on temporary administrative hold.'
+    
+    target_val = (payload.get('target_completion_date') if payload else None) or \
+                 (payload.get('scheduled_time') if payload else None) or \
+                 (getattr(action, 'target_completion_date', None) if action else None) or \
+                 (getattr(action, 'scheduled_time', None) if action else None)
+
+    if not target_val and remarks:
+        import re
+        iso_found = re.search(r'\[TARGET_ISO:\s*([^\]]+)\]', remarks)
+        if iso_found:
+            target_val = iso_found.group(1).strip()
+        else:
+            sla_found = re.search(r'\[TARGET SLA:\s*([^\]]+)\]', remarks)
+            if sla_found and sla_found.group(1).strip() != 'Not Specified':
+                target_val = sla_found.group(1).strip()
+
+    normalized_target_iso = parse_and_validate_scheduled_clock_time(target_val) if target_val else None
+
     inv.status = 'On Hold'
-    rows_affected = db.query(Invoice).filter(
-        Invoice.id == inv.id,
-        Invoice.version == current_version
-    ).update({
+    update_fields = {
         Invoice.status: 'On Hold',
         Invoice.version: current_version + 1,
         Invoice.updated_at: datetime.datetime.utcnow()
-    }, synchronize_session=False)
+    }
+    if normalized_target_iso:
+        update_fields[Invoice.due_date] = normalized_target_iso
+        inv.due_date = normalized_target_iso
+
+    rows_affected = db.query(Invoice).filter(
+        Invoice.id == inv.id,
+        Invoice.version == current_version
+    ).update(update_fields, synchronize_session=False)
 
     if rows_affected == 0:
         db.rollback()
@@ -3128,6 +3342,228 @@ async def upload_document(
     safe_broadcast_event('DOCUMENT_CREATED', {'document_id': str(new_inv.id), 'status': new_inv.status, 'current_stage': new_inv.current_stage, 'assigned_approver': new_inv.assigned_approver})
     return {'success': True, 'invoice': new_inv}
 
+
+@router.post('/api/documents/auto-workflow')
+async def upload_document_auto_workflow(
+    file: UploadFile = File(...),
+    document_type: Optional[str] = Form('AP INVOICE'),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Automatic OCR & Workflow Start Mode:
+    1. Uploads PDF and executes OCR, LLM extraction, and validation pipeline.
+    2. Resolves active workflow using existing matching rules and conditions.
+    3. If no matching rule/workflow is found or if multiple ambiguous unresolved matches exist,
+       aborts with a clear error and prevents starting the wrong workflow.
+    4. Upon unique resolution, creates the document, commits it, starts the workflow,
+       and assigns to Stage 1 approver.
+    """
+    from app.services.rbac_service import check_permission
+    if not check_permission(current_user, 'doc:create', db):
+        raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")
+
+    content = await file.read()
+    unique_filename, detected_type = validate_uploaded_file(file, content)
+    file_path = settings.UPLOAD_DIR / unique_filename
+    with open(file_path, 'wb') as buffer:
+        buffer.write(content)
+
+    final_file_size = process_and_validate_pdf_size(file_path, detected_type)
+
+    ocr_data = {}
+    try:
+        from starlette.concurrency import run_in_threadpool
+        from app.services.ocr_service import extract_document_for_verification, OCRConcurrencyError
+        ocr_data = (await run_in_threadpool(extract_document_for_verification, file_path)) or {}
+    except OCRConcurrencyError as err:
+        logger.warning("[Auto Workflow] OCR concurrency limit reached: %s", err)
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(
+            status_code=503,
+            detail="Server is currently busy processing document OCR/LLM extractions. Please retry shortly."
+        )
+    except Exception as exc:
+        logger.warning('Handled OCR/LLM extraction exception in upload_document_auto_workflow: %s', exc)
+
+    timestamp = int(datetime.datetime.utcnow().timestamp())
+
+    final_amount = float(ocr_data.get('amount') or 0.0)
+    final_base = float(ocr_data.get('base_amount') or (round(final_amount / 1.18, 2) if final_amount else 0.0))
+    final_tax = float(ocr_data.get('tax_amount') or (round(final_amount - final_base, 2) if final_amount else 0.0))
+    final_cgst = float(ocr_data.get('cgst') or 0.0)
+    final_sgst = float(ocr_data.get('sgst') or 0.0)
+    final_igst = float(ocr_data.get('igst') or 0.0)
+    final_vendor = (ocr_data.get('vendor_name') or 'Direct Upload Supplier').strip()
+    final_inv_no = (ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}').strip()
+    final_gstin = (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
+    final_po = (ocr_data.get('po_number') or '').strip() or None
+    user_div = (ocr_data.get('division') or current_user.division or 'VCC').strip()
+    user_plant = 'MAIN'
+    final_doc_type = (document_type or ocr_data.get('document_type') or 'AP INVOICE').strip()
+    final_inv_date = ocr_data.get('invoice_date') or ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d')
+
+    new_id = generate_document_id(db, doc_type=final_doc_type, category=final_doc_type)
+
+    candidate_doc = Invoice(
+        id=new_id,
+        vendor_name=final_vendor,
+        invoice_number=final_inv_no,
+        invoice_date=final_inv_date,
+        amount=final_amount,
+        base_amount=final_base,
+        tax_amount=final_tax,
+        cgst=final_cgst,
+        sgst=final_sgst,
+        igst=final_igst,
+        vendor_gstin=final_gstin,
+        gstin=final_gstin,
+        po_number=final_po,
+        division=user_div,
+        plant=user_plant,
+        contact_person=current_user.username,
+        employee_id=current_user.employee_id,
+        employee_name=current_user.employee_name,
+        category=final_doc_type,
+        document_type=final_doc_type,
+        file_url=f'/api/documents/{new_id}/file',
+        file_path=str(file_path),
+        file_name=file.filename,
+        file_size=final_file_size,
+        status='Pending Approval',
+        current_stage=1,
+        total_stages=2,
+        version=1,
+        source_application='DocuFlow Automatic Workflow'
+    )
+
+    # Automatic Workflow Matching with strict ambiguity and missing checks
+    matched_rules = resolve_matching_rules(db, candidate_doc)
+
+    if not matched_rules:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+        raise HTTPException(
+            status_code=422,
+            detail=f"Automatic Workflow Matching Failed: No active business rule matched document criteria (Type: '{final_doc_type}', Division: '{user_div}', Amount: ₹{final_amount:,.2f}). Please verify business rules or use Manual Workflow Start."
+        )
+
+    # Check top priority level
+    top_priority = matched_rules[0]['priority']
+    top_tier_matches = [r for r in matched_rules if r['priority'] == top_priority]
+    distinct_target_wfs = {r['target_workflow_id'] for r in top_tier_matches if r.get('target_workflow_id')}
+
+    if len(distinct_target_wfs) > 1:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+        rule_names = [f"'{r['rule_name']}' -> {r['target_workflow_id']}" for r in top_tier_matches]
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ambiguous Workflow Match: Multiple conflicting business rules with equal priority ({top_priority}) matched this document: {', '.join(rule_names)}. Workflow start aborted to prevent incorrect routing. Please adjust rule priorities or select a workflow manually."
+        )
+
+    chosen_rule = top_tier_matches[0]
+    matched_wf = chosen_rule.get('target_workflow_id')
+    rule_act = chosen_rule.get('rule_action', 'WORKFLOW_ROUTE')
+    cancel_res = chosen_rule.get('cancel_reason')
+    rule_name = chosen_rule.get('rule_name', 'Default Rule')
+
+    if not matched_wf and rule_act not in ['AUTO_APPROVE', 'AUTO_CANCEL']:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+        raise HTTPException(
+            status_code=422,
+            detail=f"Automatic Workflow Matching Failed: Rule '{rule_name}' matched but has no target workflow configured. Workflow start aborted."
+        )
+
+    uploader_name = current_user.username or current_user.employee_id or "system"
+    candidate_doc.workflow_profile_id = matched_wf
+    candidate_doc.document_type = infer_document_type(category=candidate_doc.category, wf_name=matched_wf or '', doc_type=final_doc_type)
+
+    steps = []
+    if matched_wf:
+        steps = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == matched_wf
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    candidate_doc.total_stages = len(steps) if steps else 2
+
+    if rule_act == 'AUTO_APPROVE':
+        candidate_doc.status = 'Approved'
+        candidate_doc.current_stage = candidate_doc.total_stages
+        candidate_doc.assigned_approver = 'System Auto-Approved'
+        db.add(AuditLog(
+            invoice_id=candidate_doc.id,
+            user='Policy Engine (STP)',
+            action='AUTO_APPROVED',
+            stage='Straight-Through Processing',
+            notes=f"Automatic workflow match: Auto-approved by rule '{rule_name}'."
+        ))
+        archive_approved_pdf(candidate_doc)
+    elif rule_act == 'AUTO_CANCEL':
+        candidate_doc.status = 'Cancelled'
+        candidate_doc.current_stage = 1
+        candidate_doc.assigned_approver = 'System Auto-Cancelled'
+        db.add(AuditLog(
+            invoice_id=candidate_doc.id,
+            user='Policy Engine (Auto-Reject)',
+            action='AUTO_CANCELLED',
+            stage='Auto-Rejection Guard',
+            notes=f"Automatic workflow match: Auto-cancelled by rule '{rule_name}'. Reason: {cancel_res or 'Policy Violation'}"
+        ))
+        archive_rejected_pdf(candidate_doc)
+    else:
+        candidate_doc.current_stage = 1
+        if steps and steps[0].approver_target:
+            candidate_doc.assigned_approver = steps[0].approver_target.strip()
+            candidate_doc.status = f'Initiated ({steps[0].step_name})'
+        else:
+            candidate_doc.assigned_approver = 'Unassigned (No Step Approvers)'
+            candidate_doc.status = 'Initiated (Stage 1)'
+        dispatch_assignment_inapp_notification(db, candidate_doc)
+        db.add(AuditLog(
+            invoice_id=candidate_doc.id,
+            user=uploader_name,
+            action='Auto Workflow Started',
+            stage='Stage 1',
+            notes=f"Document analyzed via OCR/LLM & automatically routed under rule '{rule_name}' to workflow '{matched_wf}' (Assigned: '{candidate_doc.assigned_approver}')."
+        ))
+
+    first_stage = 'Attachment Status'
+    if steps and len(steps) > 0 and steps[0].step_name:
+        first_stage = steps[0].step_name
+    checklist_items = resolve_checklist_items(db, candidate_doc, first_stage)
+    candidate_doc.checklist_state = json.dumps({item: False for item in checklist_items})
+
+    db.add(candidate_doc)
+    db.commit()
+    db.refresh(candidate_doc)
+
+    safe_broadcast_event('DOCUMENT_CREATED', {
+        'document_id': str(candidate_doc.id),
+        'status': candidate_doc.status,
+        'current_stage': candidate_doc.current_stage,
+        'assigned_approver': candidate_doc.assigned_approver
+    })
+
+    return {
+        'success': True,
+        'invoice': candidate_doc,
+        'matched_rule': rule_name,
+        'matched_workflow': matched_wf,
+        'extracted_data': ocr_data
+    }
+
+
 @router.post('/api/documents/trigger-workflow/excel')
 async def trigger_workflow_from_excel(
     file: UploadFile = File(...),
@@ -3673,6 +4109,36 @@ def save_erp_master_data(items: list):
 def get_admin_erp_master(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     _require_docs_admin(current_user, db)
     return load_erp_master_data()
+
+@router.get('/api/admin/archive/settings')
+def get_admin_archive_settings(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
+    from app.services.archive_service import get_archive_settings
+    return get_archive_settings(db)
+
+@router.post('/api/admin/archive/settings')
+def update_admin_archive_settings(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
+    from app.services.archive_service import update_archive_settings
+    try:
+        return update_archive_settings(
+            db=db,
+            enabled=bool(payload.get('enabled', False)),
+            retention_value=int(payload.get('retention_value', 90)),
+            retention_unit=str(payload.get('retention_unit', 'Days')),
+            frequency=str(payload.get('frequency', 'Daily')),
+            scheduled_time=str(payload.get('scheduled_time', '02:00')),
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+@router.post('/api/admin/archive/trigger')
+def trigger_admin_archive(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    _require_docs_admin(current_user, db)
+    from app.services.archive_service import execute_database_archival
+    res = execute_database_archival(forced=True)
+    return res
+
 
 @router.post('/api/admin/erp-master')
 def post_admin_erp_master(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):

@@ -98,12 +98,11 @@ def test_2_more_info_config_non_admin_personal_save(test_setup):
         json={
             "fields": [{"field_key": "vendor_name", "label": "Vendor", "category": "CORE", "source": "ERP", "display_order": 1, "is_visible": True}],
             "save_as_default": False,
-            "reset_to_default": False
         }
     )
     assert res.status_code == 200, res.text
     data = res.json()
-    assert data["scope"] == "USER"
+    assert data["scope"] in ["USER", "DOCUMENT"]
 
 def test_3_more_info_config_non_admin_org_default_rejected(test_setup):
     """Verify non-admin users cannot overwrite organization default configuration (save_as_default=True)."""

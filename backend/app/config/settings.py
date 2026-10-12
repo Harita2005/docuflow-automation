@@ -124,6 +124,13 @@ class Settings(BaseSettings):
             f"mssql+pyodbc://@{host}:{port}/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
         )
 
+    ARCHIVE_DB_NAME: str = "DocuFlowArchiveDB"
+
+    def get_archive_database_url(self) -> str:
+        """Build the SQL Server connection URL for DocuFlowArchiveDB on the same instance."""
+        primary_url = self.get_database_url()
+        return primary_url.replace(f"/{self.DB_NAME}?", f"/{self.ARCHIVE_DB_NAME}?")
+
     # Authentication
     SECRET_KEY: str = ""
     SERVICE_API_KEY: str = "DocuFlow-M2M-Integration-Secret-2026"

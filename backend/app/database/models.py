@@ -183,8 +183,15 @@ class User(Base):
         nullable=True,
         index=True,
     )
+    division_id = Column(
+        Integer,
+        ForeignKey("divisions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     division = Column(String(100), default="VCC", index=True)
+    approval_divisions = Column(String(500), nullable=True)
     department = Column(String(100), nullable=True)
     plant = Column(String(100), nullable=True, index=True)
     role = Column(String(100), default="employee", index=True)
@@ -1343,3 +1350,28 @@ class DocumentTypeFieldConfiguration(Base):
             "field_key",
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Database Archival Settings
+# ---------------------------------------------------------------------------
+
+class ArchiveSetting(Base):
+    __tablename__ = "archive_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    enabled = Column(Boolean, default=False, nullable=False)
+    retention_value = Column(Integer, default=90, nullable=False)
+    retention_unit = Column(String(20), default="Days", nullable=False)
+    frequency = Column(String(20), default="Daily", nullable=False)
+    scheduled_time = Column(String(10), default="02:00", nullable=False)
+    last_run_status = Column(String(50), nullable=True)
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
+

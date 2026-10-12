@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Server, BrainCircuit, Zap, Check, Sliders, FolderArchive } from 'lucide-react';
+import { Settings, Save, Server, BrainCircuit, Zap, Check, Sliders, FolderArchive, Database, Clock, RefreshCw, Play, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+
 
 // Default editable keys with their human readable info
 const SYSTEM_KEYS = [
@@ -30,9 +31,88 @@ export default function AdminSystem() {
   );
   const [_loading, _setLoading] = useState(false);
 
+  const [archiveSettings, setArchiveSettings] = useState({
+    enabled: false,
+    retention_value: 90,
+    retention_unit: "Days",
+    frequency: "Daily",
+    scheduled_time: "02:00",
+    last_run_status: "Not run yet",
+    last_run_at: null,
+    last_run_details: null,
+  });
+  const [archiveSaving, setArchiveSaving] = useState(false);
+  const [archiveTriggering, setArchiveTriggering] = useState(false);
+  const [archiveMessage, setArchiveMessage] = useState(null);
+
   useEffect(() => { 
     fetchConfigs(); 
+    fetchArchiveSettings();
   }, []);
+
+  const fetchArchiveSettings = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/archive/settings', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setArchiveSettings(data);
+      }
+    } catch (e) {
+      console.error("Archive settings fetch error:", e);
+    }
+  };
+
+  const saveArchiveSettings = async () => {
+    setArchiveSaving(true);
+    setArchiveMessage(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/archive/settings', {
+        method: 'POST',
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(archiveSettings)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setArchiveSettings(updated);
+        setArchiveMessage({ type: 'success', text: 'Database Archival settings saved successfully!' });
+      } else {
+        setArchiveMessage({ type: 'error', text: 'Failed to save Database Archival settings.' });
+      }
+    } catch (e) {
+      setArchiveMessage({ type: 'error', text: e.message || 'Error saving archival settings.' });
+    } finally {
+      setArchiveSaving(false);
+    }
+  };
+
+  const triggerArchiveNow = async () => {
+    setArchiveTriggering(true);
+    setArchiveMessage(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch('/api/admin/archive/trigger', {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchArchiveSettings();
+        setArchiveMessage({ 
+          type: 'success', 
+          text: data.details || `Archival executed successfully! (${data.archived_count || 0} archived)` 
+        });
+      } else {
+        setArchiveMessage({ type: 'error', text: 'Archival run failed.' });
+      }
+    } catch (e) {
+      setArchiveMessage({ type: 'error', text: e.message || 'Error triggering archival.' });
+    } finally {
+      setArchiveTriggering(false);
+    }
+  };
 
   const fetchConfigs = async () => {
     try {
@@ -198,6 +278,198 @@ export default function AdminSystem() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* DATABASE ARCHIVAL SECTION */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden mt-3">
+        <div className="bg-slate-50/80 px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Database className="h-3.5 w-3.5 text-indigo-600" />
+            <h3 className="text-[9px] font-black text-slate-800 uppercase tracking-wider">
+              DATABASE ARCHIVAL (DocuFlowArchiveDB)
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={triggerArchiveNow}
+              disabled={archiveTriggering}
+              className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[9px] uppercase tracking-wide rounded-md transition border border-indigo-200 cursor-pointer disabled:opacity-50"
+              title="Run archival immediately on eligible completed records"
+            >
+              {archiveTriggering ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 fill-current" />}
+              <span>Run Archival Now</span>
+            </button>
+            <button
+              onClick={saveArchiveSettings}
+              disabled={archiveSaving}
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#003F28] hover:bg-[#002e1d] text-white font-bold text-[9.5px] uppercase tracking-wide rounded-md transition shadow-2xs cursor-pointer disabled:opacity-50"
+            >
+              {archiveSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+              <span>Save Archival Settings</span>
+            </button>
+          </div>
+        </div>
+
+        {archiveMessage && (
+          <div className={`mx-3 mt-2.5 p-2 rounded-lg text-[10px] font-medium flex items-center gap-2 border ${
+            archiveMessage.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}>
+            {archiveMessage.type === 'success' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />}
+            <span>{archiveMessage.text}</span>
+          </div>
+        )}
+
+        <div className="p-3.5 space-y-3.5 text-[10px]">
+          {/* Row 1: Enable/Disable Toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 bg-slate-50/50 rounded-lg border border-slate-100">
+            <div>
+              <span className="font-extrabold text-slate-800 text-[10.5px]">Automated Archival Service</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">
+                Automatically transfers completed records older than the retention threshold to <code className="font-mono text-indigo-600">DocuFlowArchiveDB</code>.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={archiveSettings.enabled}
+                onChange={(e) => setArchiveSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#003F28]"></div>
+              <span className="ml-2 text-[10px] font-bold text-slate-700">
+                {archiveSettings.enabled ? "Enabled" : "Disabled"}
+              </span>
+            </label>
+          </div>
+
+          {/* Row 2: Parameters Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Archive After */}
+            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Archive After (Retention Period)
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min="1"
+                  value={archiveSettings.retention_value}
+                  onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_value: parseInt(e.target.value) || 1 }))}
+                  className="w-20 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28]"
+                />
+                <select
+                  value={archiveSettings.retention_unit}
+                  onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_unit: e.target.value }))}
+                  className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded font-bold text-[10px] text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                >
+                  <option value="Days">Days</option>
+                  <option value="Months">Months</option>
+                  <option value="Years">Years</option>
+                </select>
+              </div>
+              <p className="text-[8.5px] text-slate-400 mt-1">Eligible: Approved, Settled, Paid, Rejected, or Cancelled records.</p>
+            </div>
+
+            {/* Frequency */}
+            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Archival Frequency
+              </label>
+              <select
+                value={archiveSettings.frequency}
+                onChange={(e) => setArchiveSettings(prev => ({ ...prev, frequency: e.target.value }))}
+                className="w-full px-2 py-1 bg-white border border-slate-200 rounded font-bold text-[10px] text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+              >
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+              </select>
+              <p className="text-[8.5px] text-slate-400 mt-1">Periodic recurrence interval for the background task.</p>
+            </div>
+
+            {/* Scheduled Time */}
+            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                <Clock className="h-2.5 w-2.5 text-slate-500" />
+                <span>Scheduled Time (UTC)</span>
+              </label>
+              <div className="flex items-center gap-1.5">
+                <select
+                  aria-label="Scheduled hour selector"
+                  value={archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02'}
+                  onChange={(e) => {
+                    const h = e.target.value;
+                    const m = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[1] || '00') : '00';
+                    const safeM = ['00', '15', '30', '45'].includes(m) ? m : '00';
+                    setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${safeM}` }));
+                  }}
+                  className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                >
+                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
+                    <option key={h} value={h}>{h} hr</option>
+                  ))}
+                </select>
+                <span className="font-bold text-slate-400">:</span>
+                <select
+                  aria-label="Scheduled minute selector"
+                  value={['00', '15', '30', '45'].includes(archiveSettings.scheduled_time?.split(':')[1]) ? archiveSettings.scheduled_time.split(':')[1] : '00'}
+                  onChange={(e) => {
+                    const m = e.target.value;
+                    const h = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02';
+                    setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${m}` }));
+                  }}
+                  className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                >
+                  {["00", "15", "30", "45"].map(m => (
+                    <option key={m} value={m}>{m} min</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[8.5px] text-slate-400 mt-1">Off-peak execution recommended in 15-min intervals (e.g. 02:00 UTC).</p>
+            </div>
+          </div>
+
+          {/* Row 3: Last Run Status & Date */}
+          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider">Last Run Status:</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide border ${
+                archiveSettings.last_run_status === 'SUCCESS' || archiveSettings.last_run_status === 'COMPLETED'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : archiveSettings.last_run_status === 'FAILED'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {archiveSettings.last_run_status || 'Not run yet'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 text-[9px] text-slate-500">
+              <div>
+                <span className="font-semibold text-slate-400">Last Executed: </span>
+                <span className="font-mono font-bold text-slate-700">
+                  {archiveSettings.last_run_at ? new Date(archiveSettings.last_run_at).toLocaleString() : '—'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchArchiveSettings}
+                className="p-1 hover:bg-slate-200 rounded text-slate-600 transition"
+                title="Refresh archival status"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {archiveSettings.last_run_details && (
+            <div className="text-[8.5px] font-mono text-slate-500 bg-white p-2 rounded border border-slate-100 break-words">
+              <strong>Execution Trace: </strong>{archiveSettings.last_run_details}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
