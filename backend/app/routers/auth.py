@@ -1,6 +1,5 @@
 import logging
 import os
-from app.routers.events import broadcast_event
 import uuid
 import time
 import datetime
@@ -283,46 +282,6 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
         'active_session_conflict': False,
         'message': 'Please complete verification to sign in.',
     }
-
-    new_session_id = str(uuid.uuid4())
-    device_label = request.device_info or 'Web Browser'
-    had_prior_session = bool(user.active_session_id)
-    user.active_session_id = new_session_id
-    user.active_device_info = device_label
-    user.session_created_at = datetime.datetime.utcnow()
-    user.last_activity_at = datetime.datetime.utcnow()
-    user.last_login = datetime.datetime.utcnow()
-    if had_prior_session:
-        try:
-            broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
-            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was transferred to [{device_label}]. Prior session terminated.', ip_address=client_ip))
-        except Exception as e:
-            logger.debug('Handled exception: %s', e)
-    try:
-        db.add(UserAccessLog(
-            username=user.username,
-            event_type="LOGIN",
-            status="SUCCESS",
-            ip_address=client_ip,
-            user_agent=req.headers.get("user-agent", "")[:255],
-            timestamp=datetime.datetime.utcnow()
-        ))
-        db.add(AuditLog(
-            invoice_id=None,
-            user=user.employee_name or user.name or user.username,
-            action='User Logged In',
-            stage='Authentication',
-            notes=f'User {user.employee_name or user.username} logged in successfully from {client_ip}. Device: {device_label}',
-            ip_address=client_ip
-        ))
-    except Exception as e:
-        logger.debug('Handled exception: %s', e)
-    db.commit()
-    db.refresh(user)
-    logger.info(f"Login successful: User '{user.username}' ({user.employee_name or user.name}) logged in from IP: {client_ip} [Device: {device_label}]")
-    expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    access_token = create_access_token(data={'sub': user.username, 'user_id': user.id, 'role': user.role, 'session_id': new_session_id}, expires_delta=datetime.timedelta(minutes=expires_minutes))
-    return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
 @router.post('/mfa/send-otp')
 def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
