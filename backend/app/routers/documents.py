@@ -505,6 +505,22 @@ def get_filter_options(
     3. Month (existing in DB for selected Document Type + Year)
     4. Date (existing in DB for selected Document Type + Year + Month)
     """
+    # --- Input sanitization (CodeQL: Uncontrolled data used in path expression) ---
+    # Validate year: must be exactly 4 digits (e.g. "2024")
+    if year is not None:
+        year = year.strip()
+        if not re.fullmatch(r'\d{4}', year):
+            raise HTTPException(status_code=400, detail="Invalid year format. Expected YYYY.")
+    # Validate month: must be 1 or 2 digits representing 1-12
+    if month is not None:
+        month = month.strip()
+        if not re.fullmatch(r'\d{1,2}', month) or not (1 <= int(month) <= 12):
+            raise HTTPException(status_code=400, detail="Invalid month. Expected 1-12.")
+    # Sanitize document_type: allow only alphanumeric, spaces, hyphens, underscores, dots
+    if document_type is not None:
+        document_type = re.sub(r'[^a-zA-Z0-9 \-_\.]', '', document_type).strip()
+    # -------------------------------------------------------------------------------
+
     approved_filter = and_(
         Invoice.status.ilike('approved'),
         ~Invoice.status.ilike('%stage%'),
