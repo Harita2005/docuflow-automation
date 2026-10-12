@@ -5,11 +5,9 @@ import {
   Shield,
   Users,
   BarChart2,
-  Check,
   ArrowRight,
   ChevronDown,
   X,
-  FileCheck,
   CheckCircle2,
   AlertCircle,
   Layers,
@@ -18,9 +16,7 @@ import {
   ZoomIn,
   ZoomOut,
   Download,
-  Printer,
-  Zap,
-  Cpu
+  Printer
 } from "lucide-react";
 
 interface DocumentUploadProps {

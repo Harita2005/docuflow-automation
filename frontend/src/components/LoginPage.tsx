@@ -39,7 +39,6 @@ export default function LoginPage({
   onClearKickedReason,
 }: LoginPageProps) {
   const [employeeId, setEmployeeId] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   // 1 = Employee ID, 2 = Choose MFA Method, 3 = Verification (Code or QR Scan)
@@ -162,7 +161,7 @@ export default function LoginPage({
         },
         body: JSON.stringify({
           username: identifier,
-          password: password,
+          password: "",
           device_info: getDeviceLabel(),
         }),
       });
