@@ -64,7 +64,7 @@ def isolated_db_transaction():
     session = TestSession()
 
     # Begin first savepoint
-    nested = conn.begin_nested()
+    conn.begin_nested()
 
     @event.listens_for(session, "after_transaction_end")
     def restart_savepoint(db_sess, transaction):

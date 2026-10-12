@@ -56,7 +56,6 @@ class TestAuthenticationAndSessions:
             pytest.skip("Admin login requires MFA or different password in this environment")
             
         token1 = res1.json()["access_token"]
-        session1 = res1.json().get("session_id")
         
         # Verify token 1 works
         res_me1 = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token1}"})

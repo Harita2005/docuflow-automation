@@ -207,9 +207,9 @@ def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, tes
         call_order.append("notifications")
 
     try:
-        with patch("app.routers.documents.archive_approved_pdf", side_effect=mock_archive) as p_arch, \
-             patch("app.routers.documents.trigger_async_integration_push", side_effect=mock_push) as p_push, \
-             patch("app.routers.documents.dispatch_approval_inapp_notifications", side_effect=mock_notify) as p_notif:
+        with patch("app.routers.documents.archive_approved_pdf", side_effect=mock_archive), \
+             patch("app.routers.documents.trigger_async_integration_push", side_effect=mock_push), \
+             patch("app.routers.documents.dispatch_approval_inapp_notifications", side_effect=mock_notify):
 
             # First execution
             success = complete_document_lifecycle(
@@ -226,7 +226,7 @@ def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, tes
 
             # Second execution (Idempotency test)
             call_order.clear()
-            success_again = complete_document_lifecycle(
+            complete_document_lifecycle(
                 db=db_session,
                 inv=inv,
                 approver_name=test_setup["approver"].username,
@@ -463,7 +463,6 @@ def test_aud03_override_approve_and_fallback_reassign_call_lifecycle(db_session,
     from unittest.mock import patch
     token_admin = test_setup["token_admin"]
     approver = test_setup["approver"]
-    admin = test_setup["admin"]
 
     # 1. Test OVERRIDE_APPROVE invoking lifecycle on single stage document
     doc1_id = f"DOC-AUD03-OVR-{uuid.uuid4().hex[:6]}"
@@ -589,7 +588,7 @@ def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, ca
     try:
         with caplog.at_level(logging.ERROR):
             with patch("urllib.request.urlopen", side_effect=mock_urlopen_fail):
-                res = dispatch_outgoing_webhook(document_id=doc_id)
+                dispatch_outgoing_webhook(document_id=doc_id)
 
         # 1. Failure was logged at ERROR level
         assert any("503" in rec.message or "Service Unavailable" in rec.message or "failure" in rec.message.lower() for rec in caplog.records if rec.levelno >= logging.ERROR), "Back sync failure was NOT logged at ERROR level!"
@@ -961,7 +960,6 @@ def test_aud_inactive_approver_fallback_and_stuck_documents(db_session, test_set
     - Admin can perform fallback (REASSIGN, DELEGATE, or OVERRIDE_APPROVE) with mandatory reason logged in AuditLog.
     """
     token = test_setup["token_admin"]
-    admin_user = test_setup["admin"]
 
     # Inactive approver user
     inactive_u = User(

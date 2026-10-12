@@ -261,7 +261,7 @@ def get_current_user_for_stream(
                     if not user.is_active:
                         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated")
                     return user
-            except (JWTError, Exception) as exc:
+            except (JWTError, Exception):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
     # 3. Check single-use stream ticket

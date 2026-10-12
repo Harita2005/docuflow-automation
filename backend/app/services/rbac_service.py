@@ -226,7 +226,6 @@ def authorize_document_access(
     # Users from a specific division cannot access documents belonging to
     # another division unless it is in their authorized approval divisions.
     # -----------------------------------------------------------------------
-    user_div = (user.division or "").strip().upper()
     doc_div = (doc.division or "").strip().upper()
     user_approval_divs = get_user_approval_divisions(user)
 

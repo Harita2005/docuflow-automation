@@ -14,7 +14,6 @@ def render_markdown_to_pdf(md_path: Path, output_pdf_path: Path):
     MARGIN_RIGHT = 40
     MARGIN_TOP = 45
     MARGIN_BOTTOM = 45
-    USABLE_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
     current_page = doc.new_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
     current_y = MARGIN_TOP

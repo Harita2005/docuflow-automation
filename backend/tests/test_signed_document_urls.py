@@ -170,8 +170,6 @@ def test_4_verify_signed_url_success(test_setup):
 
 def test_5_verify_signed_url_expired_rejected(test_setup):
     """Expired signature timestamps are rejected with 403."""
-    now = int(time.time())
-    expired_ts = now - 10
     token_data = generate_signed_file_token(
         document_id=test_setup["doc_id"],
         user_id=test_setup["user_auth"].id,
