@@ -3,7 +3,7 @@ from unittest.mock import patch
 import socket
 from fastapi import HTTPException
 
-from app.services.security_service import validate_and_reconstruct_url, is_ip_blocked
+from app.services.security_service import validate_and_reconstruct_url
 
 def test_loopback_prohibited():
     for target in [

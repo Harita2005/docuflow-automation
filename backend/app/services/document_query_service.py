@@ -6,12 +6,12 @@ Extracted from documents.py as part of SEC-14 code quality modularization.
 import json
 import logging
 import re
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 from fastapi import HTTPException
-from sqlalchemy import or_, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.database.models import Invoice, Role, User, WorkflowStepDefinition
+from app.database.models import Invoice, Role, User
 
 logger = logging.getLogger(__name__)
 

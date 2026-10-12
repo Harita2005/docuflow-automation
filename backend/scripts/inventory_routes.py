@@ -1,6 +1,5 @@
 import sys
 import os
-from pathlib import Path
 
 # Add backend to path
 sys.path.insert(0, os.path.abspath("backend"))

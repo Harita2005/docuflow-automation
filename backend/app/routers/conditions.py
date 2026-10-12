@@ -1,16 +1,15 @@
 import logging
-from typing import List, Optional, Any
+from typing import List, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.auth import (
-    get_current_active_user,
     get_current_user_or_service_key,
     require_permission_or_service,
 )
 from app.database.connection import get_db
-from app.database.models import BusinessRule, Document, User, WorkflowProfile, WorkflowStepDefinition
+from app.database.models import BusinessRule, User, WorkflowProfile
 from app.schemas import BusinessRuleSchema
-from app.services.rbac_service import check_permission, require_permission
+from app.services.rbac_service import require_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=['Policy Matrix & Conditions'])

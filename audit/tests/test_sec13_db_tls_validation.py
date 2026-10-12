@@ -1,4 +1,3 @@
-import pytest
 from app.config.settings import Settings
 
 

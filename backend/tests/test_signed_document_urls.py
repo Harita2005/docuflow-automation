@@ -1,6 +1,5 @@
 import time
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -10,8 +9,6 @@ from app.database.connection import SessionLocal, engine, get_db
 from app.database.models import User, Role, Document
 from app.services.signed_file_service import (
     generate_signed_file_token,
-    verify_signed_file_token,
-    get_signing_secret,
 )
 
 client = TestClient(app)

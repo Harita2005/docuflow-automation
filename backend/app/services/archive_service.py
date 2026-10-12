@@ -2,7 +2,7 @@ import datetime
 import logging
 import threading
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from app.config.settings import settings

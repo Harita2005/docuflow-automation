@@ -27,7 +27,6 @@ from app.database.models import (
     InvoiceChecklistState,
     NotificationProviderConfig,
     NotificationRaciMatrix,
-    Role,
     User,
     WorkflowStepDefinition,
 )

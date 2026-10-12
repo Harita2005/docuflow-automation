@@ -1,4 +1,3 @@
-import pytest
 from app.database.connection import SessionLocal
 from app.database.models import Division, User
 from app.routers.users import get_available_divisions, create_user_master, update_user_master, resolve_user_foreign_keys

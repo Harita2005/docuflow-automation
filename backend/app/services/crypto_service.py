@@ -3,7 +3,7 @@ import base64
 import json
 import hashlib
 import logging
-from typing import Optional, Union, Any, Dict
+from typing import Optional, Union, Any
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 logger = logging.getLogger(__name__)

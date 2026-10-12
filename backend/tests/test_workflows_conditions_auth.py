@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from fastapi.security import HTTPAuthorizationCredentials

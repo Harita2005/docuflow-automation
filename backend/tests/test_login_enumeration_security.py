@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.auth import get_password_hash
 from app.database.connection import SessionLocal, engine, get_db
-from app.database.models import User, Role, AuditLog, UserAccessLog
+from app.database.models import User, Role, UserAccessLog
 
 client = TestClient(app)
 

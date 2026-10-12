@@ -5,7 +5,7 @@ import hashlib
 import datetime
 import urllib.request
 import urllib.error
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.database.models import Document, IntegrationSyncLog, ThirdPartyWebhookConfig

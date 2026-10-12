@@ -1,6 +1,6 @@
 import pytest
 from app.database.models import User, Invoice
-from app.services.rbac_service import get_user_approval_divisions, authorize_document_access
+from app.services.rbac_service import get_user_approval_divisions
 from app.routers.documents import check_approval_authorization
 from fastapi import HTTPException
 

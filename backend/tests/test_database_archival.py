@@ -2,9 +2,8 @@ import uuid
 import datetime
 from sqlalchemy import text
 from app.database.connection import SessionLocal
-from app.database.models import Invoice, InvoiceLineItem, AuditLog, ArchiveSetting
+from app.database.models import Invoice, InvoiceLineItem, AuditLog
 from app.services.archive_service import (
-    get_archive_settings,
     update_archive_settings,
     execute_database_archival,
     get_archive_engine,

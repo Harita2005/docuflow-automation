@@ -1,8 +1,5 @@
-import io
-import os
 import uuid
 import pytest
-from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app

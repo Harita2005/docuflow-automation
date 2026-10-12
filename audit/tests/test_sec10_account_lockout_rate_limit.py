@@ -1,9 +1,6 @@
-import pytest
-from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-from fastapi import FastAPI, Request
-from starlette.responses import JSONResponse
-from app.services.security_middleware import RateLimiterMiddleware, resolve_client_ip
+from fastapi import FastAPI
+from app.services.security_middleware import RateLimiterMiddleware
 from app.database.models import User, UserAccessLog
 from app.auth import get_password_hash
 

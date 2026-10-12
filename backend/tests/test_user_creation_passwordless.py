@@ -1,11 +1,7 @@
-import pytest
-import secrets
 from unittest.mock import MagicMock, patch
-from fastapi import HTTPException
-from pydantic import ValidationError
 
-from app.schemas.schemas import UserMasterCreate, LoginRequest
-from app.auth import get_password_hash, verify_password
+from app.schemas.schemas import UserMasterCreate
+from app.auth import verify_password
 from app.database.models import User
 from app.routers.users import create_user_master
 

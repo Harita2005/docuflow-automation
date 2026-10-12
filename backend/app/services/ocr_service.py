@@ -18,7 +18,6 @@ _ocr_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_OCR)
 
 class OCRConcurrencyError(RuntimeError):
     """Raised when the maximum concurrent OCR/LLM extraction limit is saturated."""
-    pass
 
 
 @contextmanager

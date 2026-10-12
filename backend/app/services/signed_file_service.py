@@ -2,7 +2,6 @@ import hmac
 import hashlib
 import secrets
 import time
-import re
 import logging
 from typing import Optional, Tuple, Dict, Any
 from app.config.settings import settings

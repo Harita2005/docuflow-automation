@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database.connection import SessionLocal
 from app.database.models import User
-from app.auth import get_password_hash
 
 client = TestClient(app)
 

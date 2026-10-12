@@ -169,7 +169,6 @@ def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, tes
     from unittest.mock import patch
     from app.routers.documents import complete_document_lifecycle, get_archived_pdf_path
     from app.config.settings import settings
-    from app.database.models import AuditLog
 
     doc_id = f"DOC-AUD03-{uuid.uuid4().hex[:6]}"
     inv = Invoice(
@@ -538,7 +537,7 @@ def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, ca
     - GET /api/integrations/failed-syncs lists failed syncs for admin retry.
     """
     import logging
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
     import urllib.error
     from app.services.integration_service import dispatch_outgoing_webhook, get_sync_retry_meta
     from app.database.models import ThirdPartyWebhookConfig
@@ -891,7 +890,7 @@ def test_aud05_deterministic_rule_ordering_priority_desc_id_asc(db_session, test
     """
     import json
     from app.services.rules_engine import evaluate_business_rules_full
-    from app.database.models import BusinessRule, WorkflowProfile, WorkflowStepDefinition
+    from app.database.models import BusinessRule, WorkflowProfile
 
     wf1 = WorkflowProfile(profile_name=f"WF-P1-{uuid.uuid4().hex[:6]}", workflow_code="WFP1", is_deleted=False)
     wf2 = WorkflowProfile(profile_name=f"WF-P2-{uuid.uuid4().hex[:6]}", workflow_code="WFP2", is_deleted=False)
@@ -1272,7 +1271,6 @@ def test_auto_attach_only_applies_to_feedback_documents(db_session, test_setup):
     Verify that standard AP Invoices or general documents do NOT trigger
     invoice auto-attachment - it is strictly scoped to customer feedback / complaints.
     """
-    from pathlib import Path
     from app.routers.sync import _upsert_single_document
     from app.schemas.schemas import DocumentSyncRequest
     from app.database.models import Invoice, AuditLog

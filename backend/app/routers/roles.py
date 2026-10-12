@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_active_user, get_current_user_optional
+from app.auth import get_current_active_user
 from app.database.connection import get_db
 from app.database.models import Role, Permission, RolePermission, User, AuditLog
 from app.services.rbac_service import check_permission

@@ -1,6 +1,4 @@
-import pytest
 from app.config.settings import settings
-from app.database.connection import SessionLocal
 from app.database.models import User
 
 

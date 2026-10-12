@@ -1,5 +1,4 @@
 import pytest
-import urllib.request
 from app.services.callback_service import validate_url_ssrf, execute_sp_for_callback_payload, NoRedirectHandler, ALLOWED_STORED_PROCEDURES
 
 def test_ssrf_blocks_private_and_cloud_metadata_ips():

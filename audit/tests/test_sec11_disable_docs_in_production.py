@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from app.config.settings import settings

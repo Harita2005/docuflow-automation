@@ -1,19 +1,17 @@
 import pytest
 import os
 import sys
-import json
 
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 # Ensure we import the app
 from app.main import app
-from app.database.connection import get_db, SessionLocal
-from app.database.models import User, Invoice, Role, Permission
+from app.database.connection import SessionLocal
+from app.database.models import User
 
 client = TestClient(app)
 

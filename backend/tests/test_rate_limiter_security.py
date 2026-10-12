@@ -6,7 +6,6 @@ from fastapi import Request
 from app.services.security_middleware import (
     RateLimiterMiddleware,
     resolve_client_ip,
-    is_trusted_proxy_ip,
 )
 from app.config.settings import (
     validate_production_service_api_key,

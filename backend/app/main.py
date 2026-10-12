@@ -4,17 +4,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import Response
 
 from .config.settings import (
     settings,
     validate_production_service_api_key,
     validate_production_file_url_signing_secret,
 )
-from .database.connection import SessionLocal, engine
+from .database.connection import SessionLocal
 from .services.mfa_service import invalidate_legacy_and_all_tickets
-from sqlalchemy import text
-from .database.models import Base
 from .routers.audit import prune_expired_audit_logs, router as audit_router
 from .routers.auth import router as auth_router
 from .routers.callback_integrations import router as callback_integrations_router

@@ -2,7 +2,6 @@ import io
 import time
 import uuid
 import threading
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -17,7 +16,6 @@ from app.services.ocr_service import (
     OCRConcurrencyError,
     set_ocr_semaphore,
     get_ocr_semaphore,
-    MAX_CONCURRENT_OCR,
 )
 
 client = TestClient(app)

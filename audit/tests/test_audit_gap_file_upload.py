@@ -1,8 +1,6 @@
-import io
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from app.services.file_security import (
-    validate_uploaded_file,
     get_safe_file_path,
     detect_file_type_and_validate_magic,
     sanitize_filename,
