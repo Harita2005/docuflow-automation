@@ -253,14 +253,17 @@ class Settings(BaseSettings):
         try:
             self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
+            # Benign: directory may already exist or environment may be read-only
             pass
         try:
             self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
+            # Benign: directory may already exist or environment may be read-only
             pass
         try:
             self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
+            # Benign: directory may already exist or environment may be read-only
             pass
         return self
 
@@ -278,6 +281,7 @@ for d in (settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_D
     try:
         d.mkdir(parents=True, exist_ok=True)
     except OSError:
+        # Benign: directory creation may fail if path is read-only or in container test environment
         pass
 
 

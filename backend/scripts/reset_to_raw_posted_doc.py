@@ -25,7 +25,7 @@ if rule:
                 c['value'] = 'IT-HARDWARE'
         rule.conditions_json = json.dumps(conds)
         db.commit()
-        print(f"[Reverted Rule] VCC_FLOW condition reverted back to 'IT-HARDWARE'.")
+        print("[Reverted Rule] VCC_FLOW condition reverted back to 'IT-HARDWARE'.")
     except Exception as e:
         import logging
         logging.getLogger(__name__).debug('Handled exception: %s', e)

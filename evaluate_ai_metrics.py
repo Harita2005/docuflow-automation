@@ -27,12 +27,11 @@ status BLOCKED pending annotation and does not synthesize or hallucinate metrics
 """
 
 import os
-import sys
 import re
 import argparse
 import statistics
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any
 
 try:
     import openpyxl
@@ -134,7 +133,8 @@ def normalize_date(val: Any) -> str:
             dt = datetime.strptime(s, fmt)
             return dt.strftime("%Y-%m-%d")
         except ValueError:
-            pass
+            # Value does not match this date format; attempt next pattern
+            continue
     return s
 
 

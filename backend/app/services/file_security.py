@@ -8,6 +8,20 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "RAW_UPLOAD_MAX_BYTES",
+    "FINAL_MAX_PDF_SIZE_BYTES",
+    "MAX_FILE_SIZE_BYTES",
+    "ALLOWED_EXTENSIONS",
+    "MAGIC_BYTES",
+    "DANGEROUS_EXTENSIONS",
+    "sanitize_filename",
+    "detect_file_type_and_validate_magic",
+    "check_pdf_safety",
+    "validate_uploaded_file",
+    "get_safe_file_path",
+]
+
 RAW_UPLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100MB buffer for compression attempt
 FINAL_MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024  # 10MB maximum accepted final PDF size
 MAX_FILE_SIZE_BYTES = RAW_UPLOAD_MAX_BYTES

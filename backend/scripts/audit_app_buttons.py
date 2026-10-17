@@ -4,7 +4,6 @@ Tests all core button actions, API endpoints, permissions, database integrity, a
 """
 import sys
 import os
-import json
 import datetime
 from fastapi.testclient import TestClient
 
@@ -13,8 +12,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.main import app
 from app.database.connection import SessionLocal
-from app.database.models import User, Role, Division, Invoice, AuditLog
-from app.auth import get_password_hash, create_access_token
+from app.database.models import User, Invoice
+from app.auth import create_access_token
 
 client = TestClient(app)
 
@@ -47,17 +46,8 @@ if not admin_user:
     # Use any active user as admin or create test admin
     admin_user = db.query(User).filter(User.is_deleted == False).first()
 
-manager_user = db.query(User).filter(User.role.ilike("manager"), User.is_deleted == False).first()
-employee_user = db.query(User).filter(User.role.ilike("employee"), User.is_deleted == False).first()
-
 admin_token = create_access_token(data={"sub": admin_user.employee_id or admin_user.username, "role": "admin"}) if admin_user else ""
 admin_headers = {"Authorization": f"Bearer {admin_token}"}
-
-manager_token = create_access_token(data={"sub": manager_user.employee_id or manager_user.username, "role": "manager"}) if manager_user else ""
-manager_headers = {"Authorization": f"Bearer {manager_token}"}
-
-emp_token = create_access_token(data={"sub": employee_user.employee_id or employee_user.username, "role": "employee"}) if employee_user else ""
-emp_headers = {"Authorization": f"Bearer {emp_token}"}
 
 # ==========================================
 # SECTION 1: AUTHENTICATION & LOGIN BUTTONS

@@ -2,11 +2,8 @@ import hmac
 import hashlib
 import secrets
 import time
-import logging
 from typing import Optional, Tuple, Dict, Any
 from app.config.settings import settings
-
-logger = logging.getLogger(__name__)
 
 
 def get_signing_secret() -> str:

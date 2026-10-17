@@ -18,6 +18,46 @@ from sqlalchemy.orm import relationship
 
 from app.database.connection import Base
 
+__all__ = [
+    "Division",
+    "Department",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "DocumentLock",
+    "User",
+    "Document",
+    "Invoice",
+    "DocumentLineItem",
+    "InvoiceLineItem",
+    "WorkflowProfile",
+    "WorkflowStepDefinition",
+    "BusinessRule",
+    "ChecklistTemplate",
+    "ChecklistRule",
+    "DocumentChecklistState",
+    "InvoiceChecklistState",
+    "UserAccessLog",
+    "DocumentApprovalLog",
+    "AuditLog",
+    "ApprovalAssignment",
+    "SystemEngineLog",
+    "SystemLog",
+    "NotificationRaciMatrix",
+    "NotificationProviderConfig",
+    "OTPVerification",
+    "InAppNotification",
+    "ThirdPartyWebhookConfig",
+    "IntegrationSyncLog",
+    "ThirdPartyApplication",
+    "CallbackRule",
+    "CallbackEvent",
+    "CallbackAttempt",
+    "IntegrationAuditHistory",
+    "DocumentTypeFieldConfiguration",
+    "ArchiveSetting",
+]
+
 
 # ---------------------------------------------------------------------------
 # Organization
@@ -768,7 +808,6 @@ class DocumentApprovalLog(Base):
 
 
 AuditLog = DocumentApprovalLog
-ApprovalAudit = DocumentApprovalLog
 
 
 # ---------------------------------------------------------------------------
@@ -810,9 +849,6 @@ class ApprovalAssignment(Base):
 
     document = relationship("Document", back_populates="approval_assignments")
     approver_user = relationship("User")
-
-
-ApprovalInstance = ApprovalAssignment
 
 
 class SystemEngineLog(Base):

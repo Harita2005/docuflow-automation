@@ -69,7 +69,7 @@ def run_test():
             cdata = json.loads(custom_data_raw) if isinstance(custom_data_raw, str) else custom_data_raw
             for forbidden_field in ["Account Name", "BP Code", "Employee Name", "Expense Type", "Department", "account_name", "bp_code", "employee_name", "expense_type", "department"]:
                 assert forbidden_field not in cdata, f"Field '{forbidden_field}' should NOT be in custom_data!"
-            print(f"  -> Verified: Real column fields are NOT duplicated inside custom_data!")
+            print("  -> Verified: Real column fields are NOT duplicated inside custom_data!")
             print(f"  -> Remaining custom_data contains only legacy metadata: {cdata}")
         else:
             print("  -> Verified: custom_data is clean / None!")

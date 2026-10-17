@@ -233,7 +233,7 @@ def run_sustained_test(duration_seconds: int = 180, concurrency: int = 100):
     print(f"Total Timeouts:            {total_timeouts}")
     print(f"Overall Throughput:        {overall_rps:.2f} req/s")
     print(f"Overall Latencies:         P50={overall_p50:.1f}ms | P95={overall_p95:.1f}ms | P99={overall_p99:.1f}ms | Max={overall_max:.1f}ms | Avg={overall_avg:.1f}ms")
-    print(f"CPU Utilization:           Initial={init_cpu}% | Avg={avg_cpu:.1f}% | Peak={peak_cpu}%")
+    print(f"CPU Utilization:           Initial={init_cpu}% | Avg={avg_cpu:.1f}% | Peak={peak_cpu}% | Final={final_cpu}%")
     print(f"Memory Drift:              Initial={init_mem['memory_load_pct']}% -> Final={final_mem['memory_load_pct']}% (Delta: {final_mem['memory_load_pct'] - init_mem['memory_load_pct']:+.1f}%)")
     print(f"SQL Sessions:              Initial={init_conn} -> Peak={peak_sql} -> Final={final_conn} (Zero connection leaks)")
 

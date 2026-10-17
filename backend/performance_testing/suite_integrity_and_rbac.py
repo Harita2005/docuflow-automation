@@ -1,12 +1,10 @@
 import os
 import sys
-import time
 import json
 import uuid
 import datetime
 import threading
 import concurrent.futures
-from typing import List, Dict, Any
 from sqlalchemy import or_
 
 # Ensure backend root is on sys.path
@@ -15,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database.connection import SessionLocal
-from app.database.models import Document, User, AuditLog, WorkflowProfile, WorkflowStepDefinition
+from app.database.models import Document, AuditLog, WorkflowProfile, WorkflowStepDefinition
 from app.auth import create_access_token
 
 
@@ -243,7 +241,8 @@ def test_simultaneous_approval_and_rejection():
     if pdf.exists():
         try:
             pdf.unlink()
-        except Exception:
+        except OSError:
+            # Benign: temporary test artifact was already unlinked or cleaned up
             pass
     db.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
     db.delete(final_doc)

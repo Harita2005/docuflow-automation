@@ -74,6 +74,10 @@ for field_name, val in fields_to_check:
     else:
         print(f"  [FAIL] REAL column '{field_name}' is empty")
         all_real_ok = False
+if all_real_ok:
+    print("  [PASS] All expected real columns successfully populated.")
+else:
+    print("  [WARN] One or more expected real columns were empty.")
 
 print("\n2. CUSTOM_DATA DUPLICATION CHECK:")
 raw_custom = doc.custom_data

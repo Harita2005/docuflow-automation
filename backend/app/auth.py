@@ -146,8 +146,9 @@ async def get_current_user(
     if user is not None:
         try:
             user = db.merge(user, load=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Benign: database session already contains an instance or detached merge is unsupported
+            logger.debug("Database merge for cached user ignored: %s", exc)
     else:
         # Fast direct index seek on username first with joinedload for role_rel
         user = (
@@ -173,16 +174,18 @@ async def get_current_user(
 
         try:
             db.expunge(user)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Benign: user may already be detached from the active session
+            logger.debug("Database expunge for cached user ignored: %s", exc)
 
         with _USER_CACHE_LOCK:
             _USER_CACHE[u_key] = {"user": user, "timestamp": now}
 
         try:
             user = db.merge(user, load=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Benign: re-attaching user to active session ignored if already bound
+            logger.debug("Database re-merge for user ignored: %s", exc)
 
     if not user.is_active:
         raise HTTPException(
@@ -233,8 +236,9 @@ async def get_current_user_optional(
     if user is not None:
         try:
             user = db.merge(user, load=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Benign: database session already contains an instance or detached merge is unsupported
+            logger.debug("Database merge for optional cached user ignored: %s", exc)
     else:
         user = (
             db.query(User)
@@ -255,14 +259,16 @@ async def get_current_user_optional(
         if user:
             try:
                 db.expunge(user)
-            except Exception:
-                pass
+            except Exception as exc:
+                # Benign: user may already be detached from the active session
+                logger.debug("Database expunge for optional user ignored: %s", exc)
             with _USER_CACHE_LOCK:
                 _USER_CACHE[u_key] = {"user": user, "timestamp": now}
             try:
                 user = db.merge(user, load=False)
-            except Exception:
-                pass
+            except Exception as exc:
+                # Benign: re-attaching user to active session ignored if already bound
+                logger.debug("Database re-merge for optional user ignored: %s", exc)
 
     if user and user.is_active:
         token_session_id = payload.get("session_id")

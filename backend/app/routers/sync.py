@@ -998,6 +998,7 @@ async def sync_attachment_upload(
         except OCRConcurrencyError as ocr_err:
             logging.getLogger(__name__).warning("OCR concurrency limit reached in upload_attachment: %s", ocr_err)
             ocr_data = {}
+    file_url = f'/api/documents/{inv.id}/file'
     inv.file_url = file_url
     inv.file_path = str(file_path)
     inv.file_size = file_size

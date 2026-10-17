@@ -34,7 +34,7 @@ try:
     except Exception as sql_err:
         logging.getLogger(__name__).debug('Handled exception: %s', sql_err)
     db.commit()
-    print(f'\nSUCCESSFULLY DELETED:')
+    print('\nSUCCESSFULLY DELETED:')
     print(f'  -> {deleted_docs} Documents deleted')
     print(f'  -> {deleted_items} Line items deleted')
     print(f'  -> {deleted_logs} Approval logs deleted')

@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database.connection import SessionLocal
-from app.database.models import Document, User
+from app.database.models import Document
 from app.auth import create_access_token
 
 

@@ -4,7 +4,6 @@ import time
 import json
 import uuid
 import datetime
-from typing import Dict, Any
 
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,10 +11,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database.connection import SessionLocal
-from app.database.models import Document, User, WorkflowStepDefinition, Role
+from app.database.models import Document
 from app.auth import create_access_token, invalidate_user_cache, _USER_CACHE
 from app.routers.documents import invalidate_invoices_cache, _ADMIN_INVOICES_CACHE, _BASE_DOC_CACHE, _WORKFLOW_STEPS_CACHE
-from app.routers.roles import invalidate_roles_cache, _ROLES_CACHE
+from app.routers.roles import invalidate_roles_cache
 
 
 def test_document_action_cache_invalidation():
@@ -92,6 +91,7 @@ def test_user_deactivation_cache_invalidation():
     print("\n[TEST 2] User Authentication & Deactivation Cache Invalidation")
     test_user_sub = f"testuser_{uuid.uuid4().hex[:6]}"
     token = create_access_token(data={"sub": test_user_sub, "role": "employee"})
+    assert token is not None
 
     # Prime user cache
     _USER_CACHE[test_user_sub.lower()] = (time.time(), {"username": test_user_sub, "is_active": True})

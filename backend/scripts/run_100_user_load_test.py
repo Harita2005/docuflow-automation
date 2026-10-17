@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import asyncio
 import statistics
 import concurrent.futures
 from typing import List, Dict, Any
@@ -11,8 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database.connection import engine, SessionLocal
-from app.database.models import User, Document
+from app.database.connection import SessionLocal
+from app.database.models import Document
 
 def get_admin_token(client: TestClient) -> str:
     """Helper to fetch or generate a valid test auth token for admin."""
@@ -97,7 +96,7 @@ def simulate_user_session(user_id: int, auth_token: str, doc_ids: List[str]) -> 
 
 def run_concurrent_load_test(num_users: int = 100):
     print("=" * 75)
-    print(f"  DOCUFLOW AUTOMATION — 100 CONCURRENT USERS LOAD & STRESS TEST")
+    print("  DOCUFLOW AUTOMATION — 100 CONCURRENT USERS LOAD & STRESS TEST")
     print(f"  Target: {num_users} simultaneous active users executing live database queries")
     print("=" * 75)
 

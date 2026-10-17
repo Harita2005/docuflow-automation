@@ -130,7 +130,7 @@ def seed_sd_workflow_matrix():
         print(f'  [OK] Synced {synced_p} new profiles and {synced_s} step definitions (actual stages from Excel).')
         print(f'  Total Profiles in table: {db.query(WorkflowProfile).count()}')
         print(f'  Total Step Definitions in table: {db.query(WorkflowStepDefinition).count()}')
-        print(f'\n[2/3] Generating consolidated condition rules (grouping common conditions together)...')
+        print('\n[2/3] Generating consolidated condition rules (grouping common conditions together)...')
         consolidated_groups = defaultdict(lambda: {'companies': set(), 'categories': set(), 'branches': set(), 'costcenters': set(), 'doc_type': ''})
         for (cat_name, company, category), data in rule_groups.items():
             parent_comp = company.split('_')[0].split('-')[0].strip().upper()

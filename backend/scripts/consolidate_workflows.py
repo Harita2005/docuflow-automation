@@ -41,7 +41,7 @@ def consolidate():
         remaining_profiles = conn.execute(text('SELECT COUNT(*) FROM workflow_profiles')).scalar()
         remaining_steps = conn.execute(text('SELECT COUNT(*) FROM workflow_step_definitions')).scalar()
         remaining_rules = conn.execute(text('SELECT COUNT(*) FROM business_rules')).scalar()
-        print(f'\n[SUCCESS] Consolidation complete!')
+        print('\n[SUCCESS] Consolidation complete!')
         print(f'  - Active Workflow Profiles : {remaining_profiles}')
         print(f'  - Workflow Step Definitions: {remaining_steps}')
         print(f'  - Routing Rules in Matrix  : {remaining_rules}')

@@ -2,6 +2,8 @@ import time
 import threading
 from typing import Dict, Any, Optional
 
+__all__ = ["DocumentLockManager", "lock_manager"]
+
 class DocumentLockManager:
     """
     Thread-safe in-memory review lock manager with TTL lease expiration.

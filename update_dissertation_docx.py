@@ -5,8 +5,6 @@ Update dissertation Word documents with verified testing results:
 3. DAAS_Revised_Complete_Dissertation_Oct2026.docx (Table 4.15 / Table 35: 52 cases)
 """
 import docx
-import shutil
-import os
 
 table_4_9_data = [
     ('Functional', '10', '10', '0', '0'),

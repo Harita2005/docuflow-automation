@@ -52,7 +52,6 @@ def invalidate_legacy_and_all_tickets() -> None:
     2. Clears in-memory ticket store and disk cache file on startup to invalidate
        any previously stored plaintext tickets/OTPs.
     """
-    global _MFA_TICKETS
     _MFA_TICKETS.clear()
 
     # 1. Purge legacy uploads file if it exists

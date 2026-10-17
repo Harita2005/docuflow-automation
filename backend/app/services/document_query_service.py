@@ -8,7 +8,6 @@ import logging
 import re
 from typing import Any, Optional
 from fastapi import HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database.models import Invoice, Role, User
@@ -179,8 +178,8 @@ def is_user_in_approver_pool(
         user_handles = {h for h in raw_handles if h}
         try:
             user._cached_handles = user_handles
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to set cached handles on user: %s", exc)
 
     for target in pool:
         t_clean = target.strip().lower()

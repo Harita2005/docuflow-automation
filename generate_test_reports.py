@@ -4,14 +4,12 @@ Reconciles the 41-case core plan (Table 4.9) and 52-case extended plan (Table 4.
 """
 import csv
 import openpyxl
-from datetime import datetime
 
 workbook_path = 'C:/Users/TempAdmin/Downloads/DAAS_Test_and_Evaluation_Workbook.xlsx'
 wb = openpyxl.load_workbook(workbook_path, data_only=True)
 ws = wb['Test_Register']
 
 rows = list(ws.iter_rows(values_only=True))
-header = rows[0]
 
 # Execution timestamp for the verified test run
 run_timestamp = "2026-10-14 14:24:30"

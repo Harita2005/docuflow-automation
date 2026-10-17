@@ -57,7 +57,7 @@ def main():
         print(f"[!] No access token returned in login response: {auth_data}")
         sys.exit(1)
 
-    print(f"[+] Authentication successful! Token acquired (expires in 60 min).")
+    print("[+] Authentication successful! Token acquired (expires in 60 min).")
     print(f"    Token snippet: {token[:25]}...{token[-10:]}")
 
     headers = {
@@ -138,7 +138,7 @@ def main():
             print(f"    HTTP Status: {sync_resp.status_code}")
             if sync_resp.status_code == 200:
                 res_json = sync_resp.json()
-                print(f"    [+] Sync Successful!")
+                print("    [+] Sync Successful!")
                 print(f"        Generated Doc ID: {res_json.get('document_id')}")
                 print(f"        Doc Key:          {res_json.get('doc_key')}")
                 print(f"        Assigned Status:  {res_json.get('status')}")

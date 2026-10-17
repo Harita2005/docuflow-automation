@@ -14,6 +14,22 @@ from sqlalchemy.orm import Session
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "DYNAMIC_VARIABLES",
+    "build_document_context",
+    "resolve_dynamic_variables",
+    "evaluate_single_condition",
+    "evaluate_rule_conditions",
+    "validate_url_ssrf",
+    "mask_sensitive_headers",
+    "build_auth_headers",
+    "execute_sp_for_callback_payload",
+    "build_callback_request",
+    "execute_callback_event",
+    "dispatch_approval_callback_events",
+]
+
 DYNAMIC_VARIABLES = ['primaryKey', 'documentNumber', 'approvalStatus', 'documentType', 'applicationCode', 'company', 'category', 'branch', 'costCenter', 'approvedBy', 'approvalDate', 'rejectionReason', 'eventId']
 
 def build_document_context(doc: Document, decision: str='APPROVED', event_id: str='') -> Dict[str, Any]:

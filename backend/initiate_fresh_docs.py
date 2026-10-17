@@ -12,8 +12,8 @@ db = SessionLocal()
 # Create 2 fresh unapproved documents in "Initiated (Stage 1)" status
 timestamp_id = int(time.time())
 
-doc1_id = f"INV-SYNC-2026-001"
-doc2_id = f"CMP-SYNC-2026-002"
+doc1_id = "INV-SYNC-2026-001"
+doc2_id = "CMP-SYNC-2026-002"
 
 # Remove existing if any
 db.query(Invoice).filter(Invoice.id.in_([doc1_id, doc2_id])).delete()

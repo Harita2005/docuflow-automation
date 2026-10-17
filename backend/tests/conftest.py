@@ -14,8 +14,6 @@ from app.database import connection
 from app.database.connection import get_db
 from app.main import app
 
-REAL_PRODUCTION_DB_NAMES = {"docuflowdb", "docuflow_prod", "docuflow_production"}
-
 # ---------------------------------------------------------------------------
 # Configure Database for Pytest Run (Using Main DocuFlowDB per user instruction)
 # ---------------------------------------------------------------------------

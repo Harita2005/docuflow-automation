@@ -113,6 +113,7 @@ def get_cached_workflow_steps(db: Session, profile_name: Optional[str]) -> list:
         try:
             db.expunge(s)
         except Exception:
+            # Benign: step object may already be detached or expunged from session
             pass
     with _WORKFLOW_STEPS_LOCK:
         _WORKFLOW_STEPS_CACHE[clean_prof] = {"steps": steps, "timestamp": now}
@@ -742,6 +743,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
             try:
                 db.expunge(inv)
             except Exception:
+                # Benign: invoice object may already be detached or expunged from session
                 pass
         with _ADMIN_INVOICES_LOCK:
             _ADMIN_INVOICES_CACHE[cache_key] = {"data": invoices, "timestamp": now}
@@ -1080,6 +1082,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         try:
             db.expunge(inv)
         except Exception:
+            # Benign: invoice object may already be detached or expunged from session
             pass
 
         cached_payload = (inv, steps, steps_data, current_step_name, audit_logs_tuples, audit_trail_list, inv_dict_base)

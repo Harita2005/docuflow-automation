@@ -164,7 +164,7 @@ def test_workflow_lifecycle_progression(client, db_session, test_setup):
     }
     appr_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_1, json={"remarks": "Stage 1 approved"})
     if appr_res.status_code != 200:
-        appr_res = client.post(f"/api/workflows/approve", headers=headers_1, json=approve_payload)
+        appr_res = client.post("/api/workflows/approve", headers=headers_1, json=approve_payload)
     assert appr_res.status_code == 200, f"Approval failed: {appr_res.text}"
 
     db_session.refresh(test_doc)
@@ -196,7 +196,7 @@ def test_workflow_lifecycle_progression(client, db_session, test_setup):
     # 5. Approver 2 approves Stage 2 (Final Approval)
     appr_2_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_2, json={"remarks": "Final approval completed"})
     if appr_2_res.status_code != 200:
-        appr_2_res = client.post(f"/api/workflows/approve", headers=headers_2, json={"invoiceId": doc_id, "expected_stage": 2, "comments": "Final pass", "checklistVerified": True})
+        appr_2_res = client.post("/api/workflows/approve", headers=headers_2, json={"invoiceId": doc_id, "expected_stage": 2, "comments": "Final pass", "checklistVerified": True})
     assert appr_2_res.status_code == 200
 
     db_session.refresh(test_doc)

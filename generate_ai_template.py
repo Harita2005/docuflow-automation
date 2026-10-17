@@ -2,7 +2,7 @@
 Script to generate ai_evaluation_template.xlsx for DocuFlow Automation
 """
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 wb = openpyxl.Workbook()

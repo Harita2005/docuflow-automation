@@ -335,8 +335,9 @@ def save_workflow_profile(
         try:
             from app.routers.documents import invalidate_workflow_steps_cache
             invalidate_workflow_steps_cache()
-        except Exception:
-            pass
+        except Exception as exc:
+            # Cache invalidation failure is non-fatal and should not abort the transaction
+            logger.debug("Failed to invalidate workflow steps cache: %s", exc)
         return {'success': True, 'id': existing.id, 'profile_name': existing.profile_name, 'workflow_code': wf_code}
     except Exception as e:
         db.rollback()
@@ -515,8 +516,9 @@ def delete_workflow_profile(
     try:
         from app.routers.documents import invalidate_workflow_steps_cache
         invalidate_workflow_steps_cache()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Cache invalidation failure is non-fatal and should not abort the transaction
+        logger.debug("Failed to invalidate workflow steps cache: %s", exc)
     return {'success': True, 'deleted': profile_name}
 
 @router.post('/api/admin/workflow-steps')
@@ -569,8 +571,9 @@ def save_workflow_step(
     try:
         from app.routers.documents import invalidate_workflow_steps_cache
         invalidate_workflow_steps_cache()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Cache invalidation failure is non-fatal and should not abort the transaction
+        logger.debug("Failed to invalidate workflow steps cache: %s", exc)
     return {'success': True, 'step': step_obj}
 
 @router.delete('/api/admin/workflow-steps/{step_id}')
@@ -592,8 +595,9 @@ def delete_workflow_step(
     try:
         from app.routers.documents import invalidate_workflow_steps_cache
         invalidate_workflow_steps_cache()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Cache invalidation failure is non-fatal and should not abort the transaction
+        logger.debug("Failed to invalidate workflow steps cache: %s", exc)
     return {'success': True, 'deleted_id': step_id}
 
 @router.post('/api/admin/publish')

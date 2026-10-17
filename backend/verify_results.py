@@ -37,6 +37,11 @@ for field in req_fields:
         print(f"  [FAIL] REAL column '{field}': IS EMPTY/NONE")
         all_real_cols_populated = False
 
+if all_real_cols_populated:
+    print("  [PASS] All real columns populated successfully.")
+else:
+    print("  [WARN] Some real columns missing.")
+
 print("\n2. CUSTOM_DATA VERIFICATION:")
 custom_data = cc_doc.custom_data
 print(f"  Raw custom_data value: {custom_data}")

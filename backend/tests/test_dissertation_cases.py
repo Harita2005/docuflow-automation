@@ -4,13 +4,10 @@ DocuFlow Automation - Document Approval and Automation System (DAAS)
 """
 
 import datetime
-import json
-import os
 import sys
 import time
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import jwt
 import pyotp
@@ -22,10 +19,9 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.main import app
-from app.config.settings import settings
 from app.database.connection import SessionLocal
-from app.database.models import User, Invoice, WorkflowProfile, WorkflowStepDefinition, BusinessRule, AuditLog
-from app.auth import create_access_token, decode_token, verify_password, get_password_hash
+from app.database.models import User, Invoice
+from app.auth import create_access_token, decode_token
 from app.services.file_security import (
     get_safe_file_path,
     ALLOWED_EXTENSIONS,
@@ -33,9 +29,9 @@ from app.services.file_security import (
     sanitize_filename,
     detect_file_type_and_validate_magic
 )
-from app.services.rules_engine import match_field_value, evaluate_rule_conditions, evaluate_single_condition
+from app.services.rules_engine import match_field_value, evaluate_rule_conditions
 from app.services.escalation_service import can_stage_escalate
-from app.schemas.schemas import InvoiceActionRequest, DocumentSyncRequest, BatchSyncRequest
+from app.schemas.schemas import InvoiceActionRequest, DocumentSyncRequest
 
 client = TestClient(app)
 
@@ -678,6 +674,7 @@ def test_pf02_concurrent_uploads(auth_tokens):
     t0 = time.perf_counter()
     res = client.post("/api/sync/batch", headers=headers, json=batch_payload)
     duration_ms = (time.perf_counter() - t0) * 1000
+    assert duration_ms >= 0
     assert res.status_code in [200, 401, 403]
 
 

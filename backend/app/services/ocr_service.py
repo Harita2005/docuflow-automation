@@ -44,7 +44,6 @@ def ocr_concurrency_guard(timeout: Optional[float] = None):
 
 def get_ocr_semaphore() -> threading.BoundedSemaphore:
     """Helper for testing and diagnostics."""
-    global _ocr_semaphore
     return _ocr_semaphore
 
 

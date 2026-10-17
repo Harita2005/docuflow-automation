@@ -22,7 +22,7 @@ simplified_vcc_rules = [ChecklistRule(rule_name='VCC Purchase - Attachment Statu
 try:
     db.add_all(simplified_vcc_rules)
     db.commit()
-    print(f'[Success] Simplified VCC Checklist Matrix down to 5 clean Global Rules!')
+    print('[Success] Simplified VCC Checklist Matrix down to 5 clean Global Rules!')
 except Exception as e:
     logging.getLogger(__name__).debug('Handled exception: %s', e)
 total_count = db.query(ChecklistRule).count()

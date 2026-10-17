@@ -118,7 +118,7 @@ def run_test():
         excel_buffer = io.BytesIO()
         wb.save(excel_buffer)
         excel_bytes = excel_buffer.getvalue()
-        print(f"  [OK] Generated test Excel workbook with 3 data rows")
+        print("  [OK] Generated test Excel workbook with 3 data rows")
 
         # 5. Process via process_excel_workflow_trigger
         response = process_excel_workflow_trigger(
@@ -147,7 +147,7 @@ def run_test():
 
         # 7. Verify Document A DB State
         db.refresh(doc_a)
-        print(f"\n>>> Verified Document A in Database:")
+        print("\n>>> Verified Document A in Database:")
         print(f"  ID: {doc_a.id}")
         print(f"  Invoice Number: {doc_a.invoice_number}")
         print(f"  Status: {doc_a.status}")
@@ -159,7 +159,7 @@ def run_test():
         # 8. Verify AuditLog
         logs = db.query(AuditLog).filter(AuditLog.invoice_id == doc_a.id).all()
         assert len(logs) > 0, "Expected AuditLog entry for Doc A"
-        print(f"\n>>> Verified AuditLog Entry for Document A:")
+        print("\n>>> Verified AuditLog Entry for Document A:")
         print(f"  Action: {logs[0].action}")
         print(f"  User: {logs[0].user}")
         print(f"  Stage: {logs[0].stage}")

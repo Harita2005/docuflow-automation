@@ -10,6 +10,16 @@ from app.database.models import Document, Permission, RolePermission, User
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "check_permission",
+    "user_has_permission",
+    "require_permission",
+    "require_role",
+    "get_user_approval_divisions",
+    "authorize_document_access",
+    "check_document_owner_or_assigned",
+]
+
 
 # ---------------------------------------------------------------------------
 # RBAC PERMISSION CHECK

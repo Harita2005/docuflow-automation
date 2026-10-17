@@ -16,7 +16,6 @@ from app.services.rules_engine import match_condition
 from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("test_5_docs")
 
 def run_tests():
     print("=" * 70)
