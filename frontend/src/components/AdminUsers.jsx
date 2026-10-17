@@ -240,22 +240,22 @@ useEffect(() => {
             employee_id: u.employee_id || `EMP-${u.id}`,
             name: u.employee_name || u.name || u.username,
             employee_name: u.employee_name || u.name || u.username,
-            username: u.username || u.employee_id,
-            email: u.email || `${u.username || 'user'}@labourlink.com`,
-            phone_number: u.phone_number || "+91 98400 00000",
+            username: u.username || u.employee_id || "",
+            email: u.email || "",
+            phone_number: u.phone_number || "",
             role: u.role,
             role_id: u.role_id,
             role_code: u.role_code || u.role,
             role_name: u.role_name,
-            department: u.department || 'General Operations',
-            division: u.division || 'VCC',
+            department: u.department || "",
+            division: u.division || "",
             is_active: u.is_active !== undefined ? u.is_active : true,
             status: u.is_active ? "Active" : "Inactive",
             mfa_enabled: u.mfa_enabled !== undefined ? u.mfa_enabled : false,
             mfa_type: u.mfa_type || 'EMAIL',
             created_by: u.created_by || 'System Admin',
-            created_on: u.created_on || u.created_at || new Date().toISOString(),
-            created_at: u.created_at || u.created_on || new Date().toISOString()
+            created_on: u.created_on || u.created_at || null,
+            created_at: u.created_at || u.created_on || null
           }));
 
           setUsers(dbUsers);
@@ -675,7 +675,7 @@ const handlePanelGroupChange = (newRole) => {
                 name: '', 
                 email: '', 
                 username: '', 
-                phone_number: '+91 98400 00000',
+                phone_number: '',
                 employee_id: (() => {
                   const buf = new Uint32Array(1);
                   window.crypto.getRandomValues(buf);
@@ -683,8 +683,8 @@ const handlePanelGroupChange = (newRole) => {
                 })(), 
                 role:
                 roles.find(role => role.is_active !== false)?.code || "",
-                department: 'General Operations', 
-                division: 'VCC',
+                department: '', 
+                division: '',
                 is_active: true,
                 mfa_enabled: true,
                 mfa_type: 'EMAIL',
@@ -767,7 +767,7 @@ const handlePanelGroupChange = (newRole) => {
                   defaultValue={editingUser.email} 
                   required 
                   className="w-full p-2 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none text-slate-800" 
-                  placeholder="jane@labourlink.com" 
+                  placeholder="jane@company.com" 
                 />
               </div>
 
@@ -776,7 +776,7 @@ const handlePanelGroupChange = (newRole) => {
                 <input 
                   name="phone_number" 
                   type="tel"
-                  defaultValue={editingUser.phone_number || '+91 98400 00000'} 
+                  defaultValue={editingUser.phone_number || ''} 
                   className="w-full p-2 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none text-slate-800 font-mono" 
                   placeholder="+91 98401 23456" 
                 />
@@ -1059,7 +1059,7 @@ const handlePanelGroupChange = (newRole) => {
 
                         {/* Date Added */}
                         <td className="px-4 py-3 text-slate-400 font-medium align-middle">
-                          {u.created_on ? new Date(u.created_on).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : "24 Jan 2022"}
+                          {u.created_on ? new Date(u.created_on).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : "—"}
                         </td>
 
                         {/* Actions menu */}

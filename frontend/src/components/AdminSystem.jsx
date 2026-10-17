@@ -344,90 +344,82 @@ export default function AdminSystem() {
             </label>
           </div>
 
-          {/* Row 2: Parameters Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Archive After */}
-            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
-              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Archive After (Retention Period)
-              </label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min="1"
-                  value={archiveSettings.retention_value}
-                  onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_value: parseInt(e.target.value) || 1 }))}
-                  className="w-20 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28]"
-                />
-                <select
-                  value={archiveSettings.retention_unit}
-                  onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_unit: e.target.value }))}
-                  className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded font-bold text-[10px] text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
-                >
-                  <option value="Days">Days</option>
-                  <option value="Months">Months</option>
-                  <option value="Years">Years</option>
-                </select>
+          {/* Row 2: Parameters Grid (Only Retention Threshold & Scheduled Time) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Archive After (Retention Period) */}
+            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg flex flex-col justify-between">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Database className="h-2.5 w-2.5 text-indigo-600" />
+                  <span>Archive Data Older Than (Retention Threshold)</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    value={archiveSettings.retention_value}
+                    onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_value: parseInt(e.target.value) || 1 }))}
+                    className="w-24 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28]"
+                  />
+                  <select
+                    value={archiveSettings.retention_unit}
+                    onChange={(e) => setArchiveSettings(prev => ({ ...prev, retention_unit: e.target.value }))}
+                    className="flex-1 px-2.5 py-1 bg-white border border-slate-200 rounded font-bold text-[10px] text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                  >
+                    <option value="Days">Days</option>
+                    <option value="Months">Months</option>
+                    <option value="Years">Years</option>
+                  </select>
+                </div>
               </div>
-              <p className="text-[8.5px] text-slate-400 mt-1">Eligible: Approved, Settled, Paid, Rejected, or Cancelled records.</p>
+              <p className="text-[8.5px] text-slate-400 mt-2">
+                Eligible completed records (Approved, Settled, Paid, Rejected, or Cancelled) older than this will be pushed to archive.
+              </p>
             </div>
 
-            {/* Frequency */}
-            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
-              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Archival Frequency
-              </label>
-              <select
-                value={archiveSettings.frequency}
-                onChange={(e) => setArchiveSettings(prev => ({ ...prev, frequency: e.target.value }))}
-                className="w-full px-2 py-1 bg-white border border-slate-200 rounded font-bold text-[10px] text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
-              >
-                <option value="Daily">Daily</option>
-                <option value="Weekly">Weekly</option>
-                <option value="Monthly">Monthly</option>
-              </select>
-              <p className="text-[8.5px] text-slate-400 mt-1">Periodic recurrence interval for the background task.</p>
-            </div>
-
-            {/* Scheduled Time */}
-            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
-              <label className="block text-[9px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5 text-slate-500" />
-                <span>Scheduled Time (UTC)</span>
-              </label>
-              <div className="flex items-center gap-1.5">
-                <select
-                  aria-label="Scheduled hour selector"
-                  value={archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02'}
-                  onChange={(e) => {
-                    const h = e.target.value;
-                    const m = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[1] || '00') : '00';
-                    const safeM = ['00', '15', '30', '45'].includes(m) ? m : '00';
-                    setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${safeM}` }));
-                  }}
-                  className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
-                >
-                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
-                    <option key={h} value={h}>{h} hr</option>
-                  ))}
-                </select>
-                <span className="font-bold text-slate-400">:</span>
-                <select
-                  aria-label="Scheduled minute selector"
-                  value={['00', '15', '30', '45'].includes(archiveSettings.scheduled_time?.split(':')[1]) ? archiveSettings.scheduled_time.split(':')[1] : '00'}
-                  onChange={(e) => {
-                    const m = e.target.value;
-                    const h = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02';
-                    setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${m}` }));
-                  }}
-                  className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
-                >
-                  {["00", "15", "30", "45"].map(m => (
-                    <option key={m} value={m}>{m} min</option>
-                  ))}
-                </select>
+            {/* Scheduled Execution Time */}
+            <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg flex flex-col justify-between">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Clock className="h-2.5 w-2.5 text-slate-500" />
+                  <span>Scheduled Archival Time (UTC)</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <select
+                    aria-label="Scheduled hour selector"
+                    value={archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02'}
+                    onChange={(e) => {
+                      const h = e.target.value;
+                      const m = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[1] || '00') : '00';
+                      const safeM = ['00', '15', '30', '45'].includes(m) ? m : '00';
+                      setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${safeM}` }));
+                    }}
+                    className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
+                      <option key={h} value={h}>{h} hr</option>
+                    ))}
+                  </select>
+                  <span className="font-bold text-slate-400">:</span>
+                  <select
+                    aria-label="Scheduled minute selector"
+                    value={['00', '15', '30', '45'].includes(archiveSettings.scheduled_time?.split(':')[1]) ? archiveSettings.scheduled_time.split(':')[1] : '00'}
+                    onChange={(e) => {
+                      const m = e.target.value;
+                      const h = archiveSettings.scheduled_time ? (archiveSettings.scheduled_time.split(':')[0] || '02') : '02';
+                      setArchiveSettings(prev => ({ ...prev, scheduled_time: `${h}:${m}` }));
+                    }}
+                    className="w-1/2 px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-[10px] text-slate-900 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                  >
+                    {["00", "15", "30", "45"].map(m => (
+                      <option key={m} value={m}>{m} min</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <p className="text-[8.5px] text-slate-400 mt-1">Off-peak execution recommended in 15-min intervals (e.g. 02:00 UTC).</p>
+              <p className="text-[8.5px] text-slate-400 mt-2">
+                Off-peak execution time when the automated background archival service runs.
+              </p>
             </div>
           </div>
 

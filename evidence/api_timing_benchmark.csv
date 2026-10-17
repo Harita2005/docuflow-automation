@@ -1,0 +1,7 @@
+endpoint,method,sample_count,min_ms,max_ms,mean_ms,median_ms,environment,timestamp
+/health,GET,10,8.31,23.29,10.46,9.19,Local Test Environment (FastAPI TestClient),2026-10-14T08:53:40Z
+/api/health,GET,10,7.52,8.80,8.13,8.22,Local Test Environment (FastAPI TestClient),2026-10-14T08:53:40Z
+/api/documents?limit=20,GET,10,823.90,1162.91,907.35,851.41,Local Test Environment (DocuFlowDB SQL Server),2026-10-14T08:53:40Z
+/api/workflows,GET,10,129.30,175.37,147.29,147.08,Local Test Environment (DocuFlowDB SQL Server),2026-10-14T08:53:40Z
+/api/admin/roles,GET,10,1333.66,1652.26,1449.40,1416.00,Local Test Environment (DocuFlowDB SQL Server),2026-10-14T08:53:40Z
+/api/admin/audit-logs?limit=20,GET,10,63.64,250.97,88.94,69.27,Local Test Environment (DocuFlowDB SQL Server),2026-10-14T08:53:40Z

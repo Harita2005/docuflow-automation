@@ -1,0 +1,106 @@
+{
+  "burst": {
+    "test_name": "100-USER INSTANT BURST TEST",
+    "total_requests": 500,
+    "successful_requests": 500,
+    "failed_requests": 0,
+    "duration_seconds": 9.53,
+    "rps": 52.49,
+    "min_latency_ms": 5.32,
+    "avg_latency_ms": 1677.65,
+    "p50_latency_ms": 734.09,
+    "p90_latency_ms": 5456.9,
+    "p95_latency_ms": 6077.36,
+    "p99_latency_ms": 7481.81,
+    "max_latency_ms": 8493.59,
+    "breakdown": {
+      "GET /api/admin/archive/settings": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 521.44,
+        "p50_ms": 420.95,
+        "p95_ms": 1197.44
+      },
+      "GET /api/admin/roles": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 1210.82,
+        "p50_ms": 136.81,
+        "p95_ms": 4515.05
+      },
+      "GET /api/integrations/v2/applications": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 194.98,
+        "p50_ms": 161.64,
+        "p95_ms": 872.22
+      },
+      "GET /api/invoices": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 4750.04,
+        "p50_ms": 4638.35,
+        "p95_ms": 7481.81
+      },
+      "GET /api/invoices/{id}": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 1710.96,
+        "p50_ms": 1593.72,
+        "p95_ms": 3584.67
+      }
+    }
+  },
+  "realistic": {
+    "test_name": "100-USER REALISTIC INTERACTIVE SESSION",
+    "total_requests": 500,
+    "successful_requests": 500,
+    "failed_requests": 0,
+    "duration_seconds": 11.09,
+    "rps": 45.09,
+    "min_latency_ms": 8.62,
+    "avg_latency_ms": 1275.51,
+    "p50_latency_ms": 344.41,
+    "p90_latency_ms": 4598.77,
+    "p95_latency_ms": 5271.57,
+    "p99_latency_ms": 5605.91,
+    "max_latency_ms": 7894.77,
+    "breakdown": {
+      "GET /api/admin/archive/settings (Realistic)": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 183.14,
+        "p50_ms": 150.01,
+        "p95_ms": 382.69
+      },
+      "GET /api/admin/roles (Realistic)": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 223.77,
+        "p50_ms": 184.08,
+        "p95_ms": 528.09
+      },
+      "GET /api/integrations/v2/applications (Realistic)": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 225.8,
+        "p50_ms": 204.5,
+        "p95_ms": 490.92
+      },
+      "GET /api/invoices (Realistic)": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 3826.14,
+        "p50_ms": 3677.56,
+        "p95_ms": 5605.91
+      },
+      "GET /api/invoices/{id} (Realistic)": {
+        "requests": 100,
+        "passed": 100,
+        "avg_ms": 1918.69,
+        "p50_ms": 1467.99,
+        "p95_ms": 3616.89
+      }
+    }
+  }
+}

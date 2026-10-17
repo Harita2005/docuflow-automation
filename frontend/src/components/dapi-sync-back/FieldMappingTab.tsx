@@ -10,7 +10,7 @@ import {
   Info
 } from 'lucide-react';
 import { FieldMapping } from '../../types/dapiSyncBack';
-import { SYSTEM_FIELDS } from './mockSyncBackData';
+import { SYSTEM_FIELDS } from './syncFields';
 
 interface FieldMappingTabProps {
   mappings: FieldMapping[];

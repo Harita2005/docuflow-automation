@@ -427,6 +427,17 @@ def delete_custom_permission(
 
 # ---------------------------------------------------------------------------
 # Role Endpoints
+_ROLES_CACHE = None
+_ROLES_CACHE_TIME = 0.0
+ROLES_CACHE_TTL = 300.0  # 5 minutes
+
+
+def invalidate_roles_cache():
+    global _ROLES_CACHE, _ROLES_CACHE_TIME
+    _ROLES_CACHE = None
+    _ROLES_CACHE_TIME = 0.0
+
+
 # ---------------------------------------------------------------------------
 @router.get("", response_model=List[RoleResponse])
 def get_all_roles(
@@ -434,18 +445,36 @@ def get_all_roles(
     db: Session = Depends(get_db)
 ):
     """List all roles and their assigned permissions for application RBAC mapping."""
-    roles = db.query(Role).order_by(Role.id.asc()).all()
+    global _ROLES_CACHE, _ROLES_CACHE_TIME
+    import time
+    now = time.time()
+    if _ROLES_CACHE is not None and (now - _ROLES_CACHE_TIME) < ROLES_CACHE_TTL:
+        return _ROLES_CACHE
+
+    roles = db.query(Role.id, Role.code, Role.name, Role.description, Role.is_active).order_by(Role.id.asc()).all()
+
+    # Fetch active permissions mapping in a single optimized query
+    perm_pairs = db.query(RolePermission.role_id, Permission.code).join(
+        Permission, Permission.id == RolePermission.permission_id
+    ).filter(Permission.is_active == True).all()
+
+    perm_map = {}
+    for role_id, code in perm_pairs:
+        perm_map.setdefault(role_id, []).append(code)
+
     result = []
     for r in roles:
-        perm_codes = [rp.permission.code for rp in r.permissions if rp.permission and rp.permission.is_active]
         result.append(RoleResponse(
             id=r.id,
             code=r.code,
             name=r.name,
             description=r.description,
             is_active=r.is_active,
-            permissions=perm_codes
+            permissions=perm_map.get(r.id, [])
         ))
+
+    _ROLES_CACHE = result
+    _ROLES_CACHE_TIME = now
     return result
 
 
@@ -514,6 +543,7 @@ def create_role(
 
         db.commit()
         db.refresh(new_role)
+        invalidate_roles_cache()
     except Exception:
         db.rollback()
         logger.exception("Failed to create role '%s'", code_clean)
@@ -597,6 +627,7 @@ def update_role_permissions(
 
         db.commit()
         db.refresh(role)
+        invalidate_roles_cache()
     except Exception:
         db.rollback()
         logger.exception("Failed to update permissions for role '%s'", role.code)

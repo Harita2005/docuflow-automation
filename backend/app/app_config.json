@@ -58,5 +58,10 @@
     "key": "INAPP_NOTIFICATIONS_CONFIG",
     "value": "[{\"trigger_event\": \"PENDING_APPROVAL\", \"enabled\": true, \"title_template\": \"Action Required: {{document_number}}\", \"message_template\": \"Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.\"}, {\"trigger_event\": \"ASSIGNED\", \"enabled\": true, \"title_template\": \"Task Assigned\", \"message_template\": \"Assigned Msg\"}, {\"trigger_event\": \"REJECTED\", \"enabled\": true, \"title_template\": \"REJECTED: {{document_number}}\", \"message_template\": \"Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.\"}, {\"trigger_event\": \"SENT_BACK\", \"enabled\": true, \"title_template\": \"SENT BACK: {{document_number}}\", \"message_template\": \"Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.\"}, {\"trigger_event\": \"COMPLETED\", \"enabled\": true, \"title_template\": \"COMPLETED: {{document_number}}\", \"message_template\": \"Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.\"}, {\"trigger_event\": \"CLARIFICATION\", \"enabled\": true, \"title_template\": \"CLARIFICATION: {{document_number}}\", \"message_template\": \"Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.\"}]",
     "description": "In-App Bell Notification Trigger Templates"
+  },
+  {
+    "key": "MAX_LINE_ITEMS_PER_DOC",
+    "value": "50",
+    "description": "Maximum line items displayed per document table"
   }
 ]

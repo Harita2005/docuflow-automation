@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # SQL Server
     DB_DRIVER: str = "ODBC Driver 17 for SQL Server"
     DB_TRUST_SERVER_CERTIFICATE: Optional[bool] = None
+    DB_POOL_SIZE: int = 25
+    DB_MAX_OVERFLOW: int = 25
+    DB_POOL_TIMEOUT: int = 45
+    DB_POOL_RECYCLE: int = 300
+
 
     @property
     def trust_server_certificate(self) -> bool:

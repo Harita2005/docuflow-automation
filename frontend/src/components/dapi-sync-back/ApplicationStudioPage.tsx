@@ -38,8 +38,8 @@ export default function ApplicationStudioPage({
   const [currentAppId, setCurrentAppId] = useState<string>(selectedAppId || apps[0]?.id || '');
   const selectedApp = apps.find(a => a.id === currentAppId) || apps[0];
 
-  // Application Master Edit State
-  const [showMasterConfig, setShowMasterConfig] = useState(true);
+  // Application Master Edit State (collapsible to maximize viewport space for rules)
+  const [showMasterConfig, setShowMasterConfig] = useState(false);
   const [appName, setAppName] = useState(selectedApp?.name || '');
   const [appCode, setAppCode] = useState(selectedApp?.code || '');
   const [environment, setEnvironment] = useState(selectedApp?.environment || 'Production');
@@ -223,14 +223,21 @@ export default function ApplicationStudioPage({
     setTesting(true);
     setTestResult(null);
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('authToken');
+      const appIdNum = parseInt(currentAppId);
+      const ruleIdNum = parseInt(selectedRuleId);
       const res = await fetch('/api/integrations/v2/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
-          application_id: selectedApp?.id || 1,
-          sample_primary_key: sampleDocKey,
-          sample_document_number: `INV-${sampleDocKey}`,
-          sample_approval_status: 'APPROVED'
+          application_id: isNaN(appIdNum) ? 1 : appIdNum,
+          rule_id: !isNaN(ruleIdNum) ? ruleIdNum : undefined,
+          sample_primary_key: sampleDocKey || 'TEST-DOC-001',
+          sample_document_number: sampleDocKey ? `INV-${sampleDocKey}` : 'INV-TEST-001',
+          sample_approval_status: decisionTrigger === 'REJECTED' ? 'REJECTED' : 'APPROVED'
         })
       });
       const data = await res.json();
@@ -246,10 +253,10 @@ export default function ApplicationStudioPage({
   };
 
   return (
-    <div className="space-y-3 font-sans text-[10.5px]">
+    <div className="h-full flex flex-col min-h-0 overflow-hidden space-y-2 font-sans text-[10.5px]">
       
       {/* Top Header Command Bar */}
-      <div className="bg-white p-2.5 px-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-3">
+      <div className="bg-white p-2 px-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2.5">
           <button
             onClick={onBackToApps}
@@ -302,7 +309,7 @@ export default function ApplicationStudioPage({
 
       {/* COMPACT MASTER APPLICATION CONFIGURATION CARD (Identity, Token API Endpoint 1, Auth, Callbacks) */}
       {showMasterConfig && (
-        <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs space-y-2.5 animate-fadeIn">
+        <div className="bg-white p-2.5 rounded-xl border border-blue-200 shadow-2xs space-y-2 animate-fadeIn shrink-0 max-h-52 overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
             <div className="flex items-center gap-2">
               <Shield className="h-3.5 w-3.5 text-amber-500" />
@@ -422,11 +429,11 @@ export default function ApplicationStudioPage({
       )}
 
       {/* Master-Detail Grid View */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
         
         {/* LEFT SIDEBAR: ENDPOINT RULES MASTER LIST (3 Cols) */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 shadow-2xs p-2.5 space-y-2 flex flex-col h-[600px]">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+        <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 shadow-2xs p-2.5 space-y-2 flex flex-col h-full min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 shrink-0">
             <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
               <Layers className="h-3 w-3 text-blue-600" />
               Endpoint Rules ({filteredRules.length})
@@ -439,7 +446,7 @@ export default function ApplicationStudioPage({
             </button>
           </div>
 
-          <div className="relative">
+          <div className="relative shrink-0">
             <Search className="absolute left-2 top-1.5 h-3 w-3 text-slate-400" />
             <input
               type="text"
@@ -450,7 +457,7 @@ export default function ApplicationStudioPage({
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5 custom-scrollbar">
             {filteredRules.length === 0 ? (
               <div className="p-3 text-center text-slate-400 font-bold text-[9.5px]">
                 No endpoint rules found. Click "+ New Rule" to create one.
@@ -500,10 +507,10 @@ export default function ApplicationStudioPage({
         </div>
 
         {/* RIGHT WORKSPACE: HIGH-DENSITY RULE STUDIO (9 Cols) */}
-        <div className="lg:col-span-9 bg-white rounded-xl border border-slate-200 shadow-2xs p-3 space-y-3 h-[600px] overflow-y-auto">
+        <div className="lg:col-span-9 bg-white rounded-xl border border-slate-200 shadow-2xs p-2.5 flex flex-col h-full min-h-0 overflow-hidden">
           
           {/* Header Action Bar */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2 shrink-0">
             <div className="flex items-center gap-2">
               <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 font-black rounded text-[9px]">
                 ACTIVE RULE WORKSPACE
@@ -523,6 +530,9 @@ export default function ApplicationStudioPage({
               </button>
             </div>
           </div>
+
+          {/* Internal Scrollable Workspace Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1.5 custom-scrollbar mt-2">
 
           {/* SECTION A: TARGET ENDPOINT CONFIGURATION */}
           <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
@@ -747,7 +757,7 @@ export default function ApplicationStudioPage({
               </div>
             )}
           </div>
-
+          </div>
         </div>
 
       </div>

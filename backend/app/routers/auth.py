@@ -6,7 +6,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, load_only
-from app.auth import create_access_token, get_current_user, verify_password
+from app.auth import create_access_token, get_current_user, verify_password, invalidate_user_cache
 from app.config.settings import settings
 from app.database.connection import get_db
 from app.database.models import AuditLog, NotificationProviderConfig, User, UserAccessLog
@@ -530,6 +530,7 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
     user.session_created_at = datetime.datetime.utcnow()
     user.last_activity_at = datetime.datetime.utcnow()
     user.last_login = datetime.datetime.utcnow()
+    invalidate_user_cache(user.username)
     if had_prior_session:
         try:
             from app.routers.events import broadcast_event
@@ -566,6 +567,7 @@ def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends
         try:
             db.commit()
             db.refresh(current_user)
+            invalidate_user_cache(current_user.username)
         except Exception as exc:
             db.rollback()
             logger.error("Failed to commit user session invalidation on logout: %s", exc)

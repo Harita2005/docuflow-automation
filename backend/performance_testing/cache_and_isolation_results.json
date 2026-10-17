@@ -1,0 +1,17 @@
+{
+  "cache_invalidation_verified": true,
+  "user_deactivation_cache_purged": true,
+  "workflow_and_roles_cache_purged": true,
+  "division_access_isolated": true,
+  "cross_user_isolation": true,
+  "multi_worker_semantics": {
+    "process_model": "Multi-process Uvicorn (shared-nothing heap)",
+    "cache_architecture": "In-memory process-local dict with short TTL",
+    "document_ttl_seconds": 3,
+    "user_auth_ttl_seconds": 10,
+    "roles_workflow_ttl_seconds": 30,
+    "inter_worker_invalidation_lag_max": "Bounded by respective TTL (max 3-10s)",
+    "recommended_for_large_horizontal_clusters": "Redis / Valkey distributed cache bus"
+  },
+  "timestamp": "2026-10-17T08:45:43.924335"
+}

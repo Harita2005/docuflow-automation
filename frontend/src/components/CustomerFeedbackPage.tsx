@@ -502,6 +502,7 @@ export default function CustomerFeedbackPage({
   if (selectedDocId) {
     return (
       <CustomerFeedbackDetails
+        key={selectedDocId}
         document={activeDocument}
         documentId={selectedDocId}
         currentUserRole={currentUserRole}

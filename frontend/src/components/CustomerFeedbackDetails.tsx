@@ -354,13 +354,17 @@ export default function CustomerFeedbackDetails({
     const updated = actionOptions.filter((a) => a !== actionToRemove);
     saveCustomActionsList(updated);
     if (selectedAction === actionToRemove) {
-      setSelectedAction(updated[0] || DEFAULT_FEEDBACK_ACTIONS[0]);
+      setSelectedAction(updated[0] || "");
     }
   };
 
-  const [selectedAction, setSelectedAction] = useState<string>("Awaiting Customer Clarification / Hold");
+  const [selectedAction, setSelectedAction] = useState<string>("");
   const [targetCompletionDate, setTargetCompletionDate] = useState<string>("");
   const [autoEscalated, setAutoEscalated] = useState<boolean>(false);
+  const [actionFieldError, setActionFieldError] = useState<"action" | "comment" | null>(null);
+
+  const actionSelectRef = useRef<HTMLSelectElement | null>(null);
+  const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const PERMITTED_MINUTES = useMemo(() => ["00", "15", "30", "45"], []);
   const HOURS_12_LIST = useMemo(() => ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], []);
@@ -394,47 +398,31 @@ export default function CustomerFeedbackDetails({
   };
 
   useEffect(() => {
+    // Action must ALWAYS be "No Action (Normal Feedback)" by default for review
+    setSelectedAction("");
+    setApprovalComment("");
+    setActionFieldError(null);
+    setActionError(null);
+    setActionSuccess(null);
+
     const docId = activeDoc?.id || document?.id;
     if (!docId) return;
-    const slaKey = `docuflow_sla_${docId}`;
-    try {
-      const saved = localStorage.getItem(slaKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.selectedAction) setSelectedAction(parsed.selectedAction);
-        if (parsed.targetCompletionDate) {
-          const raw = String(parsed.targetCompletionDate);
-          if (raw.includes("T")) {
-            const [d, t] = raw.split("T");
-            const [h, m] = (t || "12:00").split(":");
-            const safeM = ["00", "15", "30", "45"].includes(m)
-              ? m
-              : String(Math.round(parseInt(m || "0", 10) / 15) * 15 % 60).padStart(2, "0");
-            setTargetCompletionDate(`${d}T${(h || "12").padStart(2, "0")}:${safeM}`);
-          } else {
-            setTargetCompletionDate(raw);
-          }
-        }
-      } else if (activeDoc?.due_date) {
-        const raw = String(activeDoc.due_date);
-        if (raw.includes("T")) {
-          const [d, t] = raw.split("T");
-          const [h, m] = (t || "12:00").split(":");
-          const safeM = ["00", "15", "30", "45"].includes(m)
-            ? m
-            : String(Math.round(parseInt(m || "0", 10) / 15) * 15 % 60).padStart(2, "0");
-          setTargetCompletionDate(`${d}T${(h || "12").padStart(2, "0")}:${safeM}`);
-        } else {
-          setTargetCompletionDate(raw);
-        }
+
+    if (activeDoc?.due_date) {
+      const raw = String(activeDoc.due_date);
+      if (raw.includes("T")) {
+        const [d, t] = raw.split("T");
+        const [h, m] = (t || "12:00").split(":");
+        const safeM = ["00", "15", "30", "45"].includes(m)
+          ? m
+          : String((Math.round(parseInt(m || "0", 10) / 15) * 15) % 60).padStart(2, "0");
+        setTargetCompletionDate(`${d}T${(h || "12").padStart(2, "0")}:${safeM}`);
       } else {
-        const defaultDate = new Date(Date.now() + 24 * 3600 * 1000);
-        const rawMins = defaultDate.getMinutes();
-        const snappedMins = Math.round(rawMins / 15) * 15;
-        defaultDate.setMinutes(snappedMins % 60, 0, 0);
-        setTargetCompletionDate(defaultDate.toISOString().slice(0, 16));
+        setTargetCompletionDate(raw);
       }
-    } catch {}
+    } else {
+      setTargetCompletionDate("");
+    }
   }, [activeDoc?.id, activeDoc?.due_date, document?.id]);
 
   const { targetDatePart, targetHour12Part, targetMinutePart, targetAmPmPart } = useMemo(() => {
@@ -507,13 +495,17 @@ export default function CustomerFeedbackDetails({
     const docId = activeDoc?.id || document?.id;
     if (!docId) return;
     const slaKey = `docuflow_sla_${docId}`;
-    if (selectedAction || targetCompletionDate) {
+    if (selectedAction) {
       try {
         localStorage.setItem(slaKey, JSON.stringify({
           selectedAction,
           targetCompletionDate,
           updatedAt: new Date().toISOString()
         }));
+      } catch {}
+    } else {
+      try {
+        localStorage.removeItem(slaKey);
       } catch {}
     }
   }, [activeDoc?.id, document?.id, selectedAction, targetCompletionDate]);
@@ -1046,13 +1038,35 @@ export default function CustomerFeedbackDetails({
       setTimeout(() => setActionError(null), 4000);
       return;
     }
+    if (!selectedAction.trim()) {
+      setActionError("Action required for Hold: Please select an action from the dropdown above before placing this record on hold.");
+      setActionFieldError("action");
+      if (actionSelectRef.current) {
+        actionSelectRef.current.focus();
+        actionSelectRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setTimeout(() => {
+        setActionError(null);
+        setActionFieldError(null);
+      }, 5000);
+      return;
+    }
     if (!approvalComment.trim()) {
-      setActionError("Please enter a comment or hold reason in the remarks box.");
-      setTimeout(() => setActionError(null), 4000);
+      setActionError("Reviewer remarks required for Hold: Please enter your comment or hold reason in the remarks box before placing this record on hold.");
+      setActionFieldError("comment");
+      if (commentTextareaRef.current) {
+        commentTextareaRef.current.focus();
+        commentTextareaRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setTimeout(() => {
+        setActionError(null);
+        setActionFieldError(null);
+      }, 5000);
       return;
     }
     setActionLoading(true);
     setActionError(null);
+    setActionFieldError(null);
     setActionSuccess(null);
     try {
       const clockTime = formatClockTime(targetHour12Part, targetMinutePart, targetAmPmPart);
@@ -1091,7 +1105,14 @@ export default function CustomerFeedbackDetails({
 
       if (res.ok) {
         setActionSuccess(`✓ Record placed on hold. Action: ${selectedAction} (Target SLA: ${formattedTarget})`);
+        setSelectedAction("");
+        setTargetCompletionDate("");
         setApprovalComment("");
+        setActionFieldError(null);
+        try {
+          const docId = activeDoc.id || document?.id;
+          if (docId) localStorage.removeItem(`docuflow_sla_${docId}`);
+        } catch {}
         if (onRefreshDocument) onRefreshDocument();
       } else {
         const txt = await res.text();
@@ -1788,13 +1809,18 @@ export default function CustomerFeedbackDetails({
                       <Clock className="h-3.5 w-3.5 text-[#006747]" />
                       <span>Action & Target Completion Time</span>
                     </span>
-                    {targetCompletionDate && (
+                    {selectedAction !== "" && targetCompletionDate && (
                       <span className={`text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded border ${
                         new Date(targetCompletionDate) < new Date()
                           ? "bg-rose-100 text-rose-800 border-rose-300 animate-pulse"
                           : "bg-emerald-100 text-emerald-900 border-emerald-300"
                       }`}>
                         {new Date(targetCompletionDate) < new Date() ? "Auto-Escalated (Target SLA Exceeded)" : "SLA Active"}
+                      </span>
+                    )}
+                    {selectedAction === "" && (
+                      <span className="text-[8.5px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-300">
+                        No Action (Default)
                       </span>
                     )}
                   </div>
@@ -1804,7 +1830,7 @@ export default function CustomerFeedbackDetails({
                     <div>
                       <div className="flex items-center justify-between mb-0.5">
                         <label className="text-[8.5px] uppercase font-bold text-slate-600 block">
-                          Select Action:
+                          Select Action: <span className="text-slate-400 font-normal normal-case">(optional — required for hold)</span>
                         </label>
                         <button
                           type="button"
@@ -1816,16 +1842,29 @@ export default function CustomerFeedbackDetails({
                         </button>
                       </div>
                       <select
+                        ref={actionSelectRef}
                         value={selectedAction}
                         onChange={(e) => {
+                          setActionFieldError(null);
                           if (e.target.value === "__ADD_NEW_ACTION__") {
                             setShowAddActionModal(true);
                           } else {
-                            setSelectedAction(e.target.value);
+                            const newAction = e.target.value;
+                            setSelectedAction(newAction);
+                            // Clear target date/time when action is removed or set to a non-hold action
+                            if (newAction === "") {
+                              setTargetCompletionDate("");
+                              setAutoEscalated(false);
+                            }
                           }
                         }}
-                        className="w-full text-[10px] font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
+                        className={`w-full text-[10px] font-bold py-1 px-2 border rounded-lg outline-none transition-all ${
+                          actionFieldError === "action"
+                            ? "border-rose-500 ring-2 ring-rose-400 bg-rose-50/30 text-rose-900"
+                            : "border-slate-300 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white"
+                        }`}
                       >
+                        <option value="">— No Action (Normal Feedback) —</option>
                         {actionOptions.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
@@ -1835,78 +1874,114 @@ export default function CustomerFeedbackDetails({
                           + Add New Custom Action...
                         </option>
                       </select>
+                      {actionFieldError === "action" && (
+                        <p className="text-[9px] font-bold text-rose-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                          Please choose a hold action to place this document on hold.
+                        </p>
+                      )}
                     </div>
 
-                    {/* Target Completion Date & Time Picker */}
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <label className="text-[8.5px] uppercase font-bold text-slate-600 block">
-                          Target Completion Date & Time:
-                        </label>
-                        {targetCompletionDate && (
-                          <span className="text-[9px] font-mono font-black text-[#003F28] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300 flex items-center gap-1 shadow-3xs" title="Scheduled Clock Time">
-                            <Clock className="h-2.5 w-2.5 text-[#006747]" />
-                            <span>{formatClockTime(targetHour12Part, targetMinutePart, targetAmPmPart)}</span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="date"
-                          value={targetDatePart}
-                          onChange={(e) => handlePickerDateChange(e.target.value)}
-                          className="flex-1 text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white cursor-pointer"
-                        />
-                        <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 focus-within:border-[#003F28] focus-within:ring-1 focus-within:ring-[#003F28]/20">
-                          <Clock className="h-3 w-3 text-slate-400 shrink-0" />
-                          <select
-                            aria-label="Hour selector"
-                            value={targetHour12Part}
-                            onChange={(e) => handlePickerHour12Change(e.target.value)}
-                            className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
-                          >
-                            {HOURS_12_LIST.map((h) => (
-                              <option key={h} value={h}>{h}</option>
-                            ))}
-                          </select>
-                          <span className="text-[10px] font-bold text-slate-400">:</span>
-                          <select
-                            aria-label="Minute selector"
-                            value={targetMinutePart}
-                            onChange={(e) => handlePickerMinuteChange(e.target.value)}
-                            className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
-                          >
-                            {PERMITTED_MINUTES.map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                          <select
-                            aria-label="AM/PM selector"
-                            value={targetAmPmPart}
-                            onChange={(e) => handlePickerAmPmChange(e.target.value as "AM" | "PM")}
-                            className="text-[10px] font-mono font-black py-0.5 px-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded outline-none cursor-pointer text-[#003F28] transition-colors"
-                          >
-                            <option value="AM">AM</option>
-                            <option value="PM">PM</option>
-                          </select>
+                    {selectedAction !== "" ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[8.5px] uppercase font-bold text-slate-600 block">
+                            Target Completion Date &amp; Time:
+                          </label>
+                          {targetCompletionDate && (
+                            <span className="text-[9px] font-mono font-black text-[#003F28] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300 flex items-center gap-1 shadow-3xs" title="Scheduled Clock Time">
+                              <Clock className="h-2.5 w-2.5 text-[#006747]" />
+                              <span>{formatClockTime(targetHour12Part, targetMinutePart, targetAmPmPart)}</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="date"
+                            value={targetDatePart}
+                            onChange={(e) => handlePickerDateChange(e.target.value)}
+                            className="flex-1 text-[10px] font-mono font-bold py-1 px-2 border border-slate-300 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-white cursor-pointer"
+                          />
+                          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 focus-within:border-[#003F28] focus-within:ring-1 focus-within:ring-[#003F28]/20">
+                            <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                            <select
+                              aria-label="Hour selector"
+                              value={targetHour12Part}
+                              onChange={(e) => handlePickerHour12Change(e.target.value)}
+                              className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
+                            >
+                              {HOURS_12_LIST.map((h) => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <span className="text-[10px] font-bold text-slate-400">:</span>
+                            <select
+                              aria-label="Minute selector"
+                              value={targetMinutePart}
+                              onChange={(e) => handlePickerMinuteChange(e.target.value)}
+                              className="text-[10px] font-mono font-bold py-0.5 bg-transparent outline-none cursor-pointer text-slate-800"
+                            >
+                              {PERMITTED_MINUTES.map((m) => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="AM/PM selector"
+                              value={targetAmPmPart}
+                              onChange={(e) => handlePickerAmPmChange(e.target.value as "AM" | "PM")}
+                              className="text-[10px] font-mono font-black py-0.5 px-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded outline-none cursor-pointer text-[#003F28] transition-colors"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex items-center text-[9.5px] text-slate-500 italic font-medium p-1 leading-snug">
+                        Default: No Action (normal feedback). If you need to place on hold, select an action above and provide reviewer comments.
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 mb-1">
-                    <MessageSquare className="h-3 w-3 text-[#003F28]" />
-                    <span>Reviewer Comments & Remarks:</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <MessageSquare className="h-3 w-3 text-[#003F28]" />
+                      <span>Reviewer Comments &amp; Remarks:</span>
+                    </label>
+                    {selectedAction && (
+                      <span className="text-[8.5px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        Required for Hold
+                      </span>
+                    )}
+                  </div>
                   <textarea
+                    ref={commentTextareaRef}
                     value={approvalComment}
-                    onChange={(e) => setApprovalComment(e.target.value)}
-                    placeholder="Enter reviewer notes, approval comments, or hold/rejection reason..."
+                    onChange={(e) => {
+                      setApprovalComment(e.target.value);
+                      if (actionFieldError === "comment") setActionFieldError(null);
+                    }}
+                    placeholder={
+                      selectedAction
+                        ? "Enter mandatory hold reasons and reviewer notes..."
+                        : "Enter reviewer notes, approval comments, or hold/rejection reason..."
+                    }
                     rows={2}
-                    className="w-full text-[11px] font-medium p-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50 resize-none"
+                    className={`w-full text-[11px] font-medium p-2 border rounded-lg outline-none transition-all resize-none ${
+                      actionFieldError === "comment"
+                        ? "border-rose-500 ring-2 ring-rose-400 bg-rose-50/30 text-rose-900"
+                        : "border-slate-200 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 bg-slate-50/50"
+                    }`}
                   />
+                  {actionFieldError === "comment" && (
+                    <p className="text-[9px] font-bold text-rose-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                      Please enter a comment or hold reason in the remarks box.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1916,7 +1991,13 @@ export default function CustomerFeedbackDetails({
                     disabled={actionLoading}
                     onClick={handleWorkflowHold}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs transition shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-                    title="Hold / Send Back"
+                    title={
+                      !selectedAction
+                        ? "To hold: Select an action above & enter reviewer comments"
+                        : !approvalComment.trim()
+                        ? "To hold: Enter reviewer comments below"
+                        : "Hold / Send Back"
+                    }
                   >
                     <PauseCircle className="h-3.5 w-3.5" />
                     <span>Hold</span>

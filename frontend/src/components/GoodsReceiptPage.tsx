@@ -106,17 +106,17 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
     }
   };
 
-  // Enhance data to match the mockup structure and generate mock values for missing fields
+  // Enhance data using live invoice fields
   const enhancedInvoices = invoices.map((inv, idx) => {
     const isCompleted = inv.status !== 'Waiting for GRN';
     return {
       ...inv,
-      mockGrnNumber: `GRN${String(idx + 1).padStart(6, '0')}`,
-      accountNumber: (inv.custom_data?.accountNumber) || "12345",
-      poStatus: "In Progress",
+      mockGrnNumber: inv.grn_number || (inv.custom_data?.grn_number) || `GRN${String(inv.id || idx + 1).padStart(6, '0')}`,
+      accountNumber: (inv.custom_data?.accountNumber) || (inv.account_number) || "—",
+      poStatus: inv.po_status || "In Progress",
       grnStatus: isCompleted ? "Completed" : "Not Completed",
       invoiceStatus: inv.activeApprovalLog?.workflow_profile ? `${inv.status} - ${inv.activeApprovalLog.workflow_profile}` : inv.status || "Unknown",
-      invoiceValueExVat: 0.00
+      invoiceValueExVat: Number(inv.subtotal || inv.amount || 0.00)
     };
   });
 

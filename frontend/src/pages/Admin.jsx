@@ -570,7 +570,7 @@ export default function Admin() {
             </div>
           </div>
         )}
-      <div className="flex-1 min-h-0 flex flex-col gap-3 items-stretch relative overflow-y-auto custom-scrollbar pr-2">
+      <div className={`flex-1 min-h-0 flex flex-col relative ${activeTab === 'callbacks' ? 'overflow-hidden pr-0' : 'overflow-y-auto custom-scrollbar pr-2 gap-3 items-stretch'}`}>
         {publishing && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-50 rounded-xl flex items-center justify-center">
             <div className="bg-white p-4 rounded-xl shadow-xl flex items-center gap-3 font-bold text-slate-700">
@@ -1252,7 +1252,7 @@ export default function Admin() {
     )}
 
     {activeTab === "callbacks" && (
-      <div className="w-full animate-fadeIn transition-all">
+      <div className="w-full h-full flex-1 min-h-0 flex flex-col overflow-hidden animate-fadeIn transition-all">
         <DapiSyncBackHub />
       </div>
     )}

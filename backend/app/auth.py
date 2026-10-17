@@ -1,6 +1,8 @@
 import datetime
 import logging
 import secrets
+import threading
+import time
 from typing import Optional, Any
 
 import bcrypt
@@ -8,7 +10,7 @@ from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from jwt.exceptions import PyJWTError as JWTError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config.settings import settings
 from app.database.connection import get_db
@@ -88,8 +90,22 @@ def decode_token(token: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Current user
+# Current user & authentication cache
 # ---------------------------------------------------------------------------
+
+_USER_CACHE: dict = {}
+_USER_CACHE_LOCK = threading.Lock()
+_USER_CACHE_TTL = 10.0  # 10-second TTL for authenticated session lookups
+
+def invalidate_user_cache(username: Optional[str] = None):
+    """Purges cached authenticated user models upon logout or role changes."""
+    with _USER_CACHE_LOCK:
+        if username:
+            _USER_CACHE.pop(str(username).lower(), None)
+            _USER_CACHE.pop(str(username), None)
+        else:
+            _USER_CACHE.clear()
+
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
@@ -97,6 +113,7 @@ async def get_current_user(
 ) -> User:
     """
     Validate the JWT Bearer token and return the authenticated user.
+    Uses in-memory cache to eliminate repetitive DB queries under high concurrency.
     """
 
     credentials_exception = HTTPException(
@@ -110,29 +127,62 @@ async def get_current_user(
 
     try:
         payload = decode_token(credentials.credentials)
-
         username = payload.get("sub") or payload.get("username")
-
         if not username:
             raise credentials_exception
-
     except JWTError as exc:
         logger.debug("JWT decode error: %s", exc)
         raise credentials_exception
 
-    user = (
-        db.query(User)
-        .filter(
-            (User.username == username)
-            | (User.email == username)
-            | (User.employee_id == username)
-        )
-        .filter(User.is_deleted == False)
-        .first()
-    )
+    # Check cache first
+    now = time.monotonic()
+    user = None
+    u_key = str(username).lower()
+    with _USER_CACHE_LOCK:
+        entry = _USER_CACHE.get(u_key)
+        if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
+            user = entry["user"]
 
-    if user is None:
-        raise credentials_exception
+    if user is not None:
+        try:
+            user = db.merge(user, load=False)
+        except Exception:
+            pass
+    else:
+        # Fast direct index seek on username first with joinedload for role_rel
+        user = (
+            db.query(User)
+            .options(joinedload(User.role_rel))
+            .filter(User.username == username, User.is_deleted == False)
+            .first()
+        )
+        if not user:
+            # Fallback for employee_id or email
+            user = (
+                db.query(User)
+                .options(joinedload(User.role_rel))
+                .filter(
+                    (User.email == username) | (User.employee_id == username),
+                    User.is_deleted == False
+                )
+                .first()
+            )
+
+        if user is None:
+            raise credentials_exception
+
+        try:
+            db.expunge(user)
+        except Exception:
+            pass
+
+        with _USER_CACHE_LOCK:
+            _USER_CACHE[u_key] = {"user": user, "timestamp": now}
+
+        try:
+            user = db.merge(user, load=False)
+        except Exception:
+            pass
 
     if not user.is_active:
         raise HTTPException(
@@ -172,16 +222,47 @@ async def get_current_user_optional(
         logger.debug("Optional JWT decode error: %s", exc)
         return None
 
-    user = (
-        db.query(User)
-        .filter(
-            (User.username == username)
-            | (User.email == username)
-            | (User.employee_id == username)
+    now = time.monotonic()
+    user = None
+    u_key = str(username).lower()
+    with _USER_CACHE_LOCK:
+        entry = _USER_CACHE.get(u_key)
+        if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
+            user = entry["user"]
+
+    if user is not None:
+        try:
+            user = db.merge(user, load=False)
+        except Exception:
+            pass
+    else:
+        user = (
+            db.query(User)
+            .options(joinedload(User.role_rel))
+            .filter(User.username == username, User.is_deleted == False)
+            .first()
         )
-        .filter(User.is_deleted == False)
-        .first()
-    )
+        if not user:
+            user = (
+                db.query(User)
+                .options(joinedload(User.role_rel))
+                .filter(
+                    (User.email == username) | (User.employee_id == username),
+                    User.is_deleted == False
+                )
+                .first()
+            )
+        if user:
+            try:
+                db.expunge(user)
+            except Exception:
+                pass
+            with _USER_CACHE_LOCK:
+                _USER_CACHE[u_key] = {"user": user, "timestamp": now}
+            try:
+                user = db.merge(user, load=False)
+            except Exception:
+                pass
 
     if user and user.is_active:
         token_session_id = payload.get("session_id")

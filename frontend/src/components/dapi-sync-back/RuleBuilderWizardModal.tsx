@@ -20,7 +20,7 @@ import {
   HttpMethod,
   AuthType
 } from '../../types/dapiSyncBack';
-import { SYSTEM_FIELDS, DEFAULT_FIELD_MAPPINGS } from './mockSyncBackData';
+import { SYSTEM_FIELDS, DEFAULT_FIELD_MAPPINGS } from './syncFields';
 
 interface RuleBuilderWizardModalProps {
   apps: ThirdPartyApplication[];

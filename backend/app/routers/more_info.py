@@ -329,12 +329,15 @@ STANDARD_FIELD_MAP = {f["field_key"]: f for f in STANDARD_FIELD_CATALOG}
 DEFAULT_ADMIN_TOP3_FIELDS: Dict[str, List[str]] = {
     "CUSTOMER FEEDBACK":  ["account_name", "type_of_complaint", "dealer_name"],
     "CUSTOMER COMPLAINT": ["account_name", "type_of_complaint", "dealer_name"],
-    "HR EXPENSE":         ["employee_name", "expense_type", "department"],
-    "CREDIT NOTE":        ["credit_note_number", "reason_for_credit", "original_invoice_ref"],
-    "AP INVOICE":         ["vendor_name", "vendor_gstin", "payment_terms"],
+    "HR EXPENSE":         ["employee_name", "expense_type", "amount"],
+    "CREDIT NOTE":        ["credit_note_number", "original_invoice_ref", "amount"],
+    "DEBIT NOTE":         ["credit_note_number", "original_invoice_ref", "amount"],
+    "AP INVOICE":         ["vendor_name", "invoice_number", "amount"],
+    "GENERAL RECORDS":    ["vendor_name", "invoice_number", "amount"],
+    "PURCHASE ORDER":     ["vendor_name", "po_number", "amount"],
 }
 
-DEFAULT_FALLBACK_FIELDS = ["vendor_name", "vendor_gstin", "payment_terms"]
+DEFAULT_FALLBACK_FIELDS = ["vendor_name", "invoice_number", "amount"]
 
 
 def normalize_doc_type(doc_type: Optional[str]) -> str:

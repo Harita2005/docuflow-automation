@@ -332,6 +332,11 @@ def save_workflow_profile(
         except Exception as remap_err:
             logger.debug("[save_workflow_profile] Unrouted doc remap exception: %s", remap_err)
         wf_code = ensure_workflow_code(existing, db)
+        try:
+            from app.routers.documents import invalidate_workflow_steps_cache
+            invalidate_workflow_steps_cache()
+        except Exception:
+            pass
         return {'success': True, 'id': existing.id, 'profile_name': existing.profile_name, 'workflow_code': wf_code}
     except Exception as e:
         db.rollback()
@@ -507,6 +512,11 @@ def delete_workflow_profile(
         db.delete(p)
 
     db.commit()
+    try:
+        from app.routers.documents import invalidate_workflow_steps_cache
+        invalidate_workflow_steps_cache()
+    except Exception:
+        pass
     return {'success': True, 'deleted': profile_name}
 
 @router.post('/api/admin/workflow-steps')
@@ -556,6 +566,11 @@ def save_workflow_step(
     step_obj.sla_hours = int(payload.get('sla_hours') or 48)
     db.commit()
     db.refresh(step_obj)
+    try:
+        from app.routers.documents import invalidate_workflow_steps_cache
+        invalidate_workflow_steps_cache()
+    except Exception:
+        pass
     return {'success': True, 'step': step_obj}
 
 @router.delete('/api/admin/workflow-steps/{step_id}')
@@ -574,6 +589,11 @@ def delete_workflow_step(
         raise HTTPException(status_code=404, detail='Workflow step not found')
     db.delete(step)
     db.commit()
+    try:
+        from app.routers.documents import invalidate_workflow_steps_cache
+        invalidate_workflow_steps_cache()
+    except Exception:
+        pass
     return {'success': True, 'deleted_id': step_id}
 
 @router.post('/api/admin/publish')

@@ -67,17 +67,53 @@ def serialize_app_response(app_obj: ThirdPartyApplication, rules_count: int = 0,
         'updated_at': app_obj.updated_at.isoformat() if app_obj.updated_at else None,
     }
 
+_APPS_CACHE = None
+_APPS_CACHE_TIME = 0.0
+APPS_CACHE_TTL = 60.0  # 1 minute
+
+
+def invalidate_apps_cache():
+    global _APPS_CACHE, _APPS_CACHE_TIME
+    _APPS_CACHE = None
+    _APPS_CACHE_TIME = 0.0
+
+
 @router.get('/applications')
 def list_applications(db: Session=Depends(get_db)):
     """Returns list of configured third-party applications with rule counts and last activity."""
+    global _APPS_CACHE, _APPS_CACHE_TIME
+    now = time.time()
+    if _APPS_CACHE is not None and (now - _APPS_CACHE_TIME) < APPS_CACHE_TTL:
+        return _APPS_CACHE
+
+    from sqlalchemy import func
     apps = db.query(ThirdPartyApplication).order_by(ThirdPartyApplication.id.desc()).all()
+    
+    # Batch calculate rule counts per application
+    rule_counts = dict(
+        db.query(CallbackRule.application_id, func.count(CallbackRule.id))
+        .group_by(CallbackRule.application_id)
+        .all()
+    )
+    
+    # Batch calculate latest event timestamp per application
+    latest_events = dict(
+        db.query(CallbackEvent.application_id, func.max(CallbackEvent.created_at))
+        .group_by(CallbackEvent.application_id)
+        .all()
+    )
+    
     results = []
     for a in apps:
-        rules_count = db.query(CallbackRule).filter(CallbackRule.application_id == a.id).count()
-        last_evt = db.query(CallbackEvent).filter(CallbackEvent.application_id == a.id).order_by(CallbackEvent.created_at.desc()).first()
-        last_callback_str = last_evt.created_at.strftime('%I:%M %p') if last_evt and last_evt.created_at else None
+        rules_count = rule_counts.get(a.id, 0)
+        last_evt_time = latest_events.get(a.id)
+        last_callback_str = last_evt_time.strftime('%I:%M %p') if last_evt_time else None
         results.append(serialize_app_response(a, rules_count=rules_count, last_callback_str=last_callback_str))
-    return {'success': True, 'count': len(results), 'data': results}
+    
+    res = {'success': True, 'count': len(results), 'data': results}
+    _APPS_CACHE = res
+    _APPS_CACHE_TIME = now
+    return res
 
 @router.post('/applications')
 def create_application(body: ThirdPartyApplicationCreate, db: Session=Depends(get_db)):
@@ -92,6 +128,7 @@ def create_application(body: ThirdPartyApplicationCreate, db: Session=Depends(ge
     db.add(app_obj)
     db.commit()
     db.refresh(app_obj)
+    invalidate_apps_cache()
     record_audit(db, 'APPLICATION', app_obj.id, 'CREATED', new_val={'name': app_obj.name, 'code': app_obj.code})
     return {'success': True, 'data': serialize_app_response(app_obj)}
 
@@ -133,6 +170,7 @@ def update_application(app_id: int, body: ThirdPartyApplicationUpdate, db: Sessi
     app_obj.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(app_obj)
+    invalidate_apps_cache()
     record_audit(db, 'APPLICATION', app_obj.id, 'UPDATED', prev=prev_state, new_val={'name': app_obj.name, 'status': app_obj.status})
     return {'success': True, 'data': serialize_app_response(app_obj)}
 
@@ -145,6 +183,7 @@ def toggle_application_status(app_id: int, db: Session=Depends(get_db)):
     app_obj.status = new_status
     app_obj.updated_at = datetime.datetime.utcnow()
     db.commit()
+    invalidate_apps_cache()
     action_label = 'ENABLED' if new_status == 'Active' else 'DISABLED'
     record_audit(db, 'APPLICATION', app_obj.id, action_label, new_val={'status': new_status})
     return {'success': True, 'status': new_status, 'message': f'Application #{app_id} status set to {new_status}'}
@@ -157,6 +196,7 @@ def delete_application(app_id: int, db: Session=Depends(get_db)):
     name = app_obj.name
     db.delete(app_obj)
     db.commit()
+    invalidate_apps_cache()
     record_audit(db, 'APPLICATION', app_id, 'DELETED', prev={'name': name})
     return {'success': True, 'message': f"Application '{name}' deleted successfully"}
 
@@ -415,7 +455,8 @@ def list_integration_logs(application_id: Optional[int]=None, rule_id: Optional[
     if search:
         s = f'%{search.strip()}%'
         query = query.filter(CallbackEvent.event_id.ilike(s) | CallbackEvent.document_number.ilike(s) | CallbackEvent.source_primary_key.ilike(s))
-    events = query.order_by(CallbackEvent.created_at.desc()).limit(limit).all()
+    lim = int(limit) if isinstance(limit, (int, float)) or (isinstance(limit, str) and limit.isdigit()) else 50
+    events = query.order_by(CallbackEvent.created_at.desc()).limit(lim).all()
     data = []
     for e in events:
         data.append({'id': e.id, 'event_id': e.event_id, 'document_id': e.document_id, 'document_number': e.document_number or e.document_id, 'primary_key': e.source_primary_key or e.document_id, 'application_id': e.application_id, 'application_name': e.application.name if e.application else 'Unknown', 'rule_id': e.rule_id, 'rule_name': e.rule.rule_name if e.rule else 'Unknown', 'decision': e.decision, 'method': e.rule.http_method if e.rule else 'POST', 'status': e.status, 'attempt_count': e.attempt_count, 'max_attempts': e.max_attempts, 'next_retry_at': e.next_retry_at.isoformat() if e.next_retry_at else None, 'created_at': e.created_at.isoformat() if e.created_at else None, 'updated_at': e.updated_at.isoformat() if e.updated_at else None})

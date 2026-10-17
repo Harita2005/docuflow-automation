@@ -868,14 +868,14 @@ export default function DocumentDetails({
       return [
         { field_key: "employee_name", label: "Employee Name", category: "HR EXPENSE", source: "ERP" },
         { field_key: "expense_type", label: "Expense Type", category: "HR EXPENSE", source: "ERP" },
-        { field_key: "department", label: "Department", category: "HR EXPENSE", source: "ERP" },
+        { field_key: "amount", label: "Total Gross (₹)", category: "FINANCIAL INFORMATION", source: "Calculated" },
       ];
     }
     if (docTypeClean.includes("CREDIT")) {
       return [
         { field_key: "credit_note_number", label: "Credit Note Number", category: "CREDIT NOTE", source: "Document" },
-        { field_key: "reason_for_credit", label: "Reason For Credit", category: "CREDIT NOTE", source: "Document" },
         { field_key: "original_invoice_ref", label: "Original Invoice Ref", category: "CREDIT NOTE", source: "Document" },
+        { field_key: "amount", label: "Total Gross (₹)", category: "FINANCIAL INFORMATION", source: "Calculated" },
       ];
     }
     return [

@@ -5,6 +5,8 @@ import re
 import json
 import shutil
 import datetime
+import threading
+import time
 import smtplib
 import socket
 from email.mime.multipart import MIMEMultipart
@@ -81,6 +83,59 @@ from app.services.document_query_service import (
 )
 
 _unpack_custom_data_into_dict = unpack_custom_data_into_dict
+
+# ---------------------------------------------------------------------------
+# High-concurrency in-memory caches with thread safety
+# ---------------------------------------------------------------------------
+_WORKFLOW_STEPS_CACHE: dict = {}
+_WORKFLOW_STEPS_LOCK = threading.Lock()
+_WORKFLOW_STEPS_TTL = 30.0
+
+def invalidate_workflow_steps_cache():
+    with _WORKFLOW_STEPS_LOCK:
+        _WORKFLOW_STEPS_CACHE.clear()
+
+def get_cached_workflow_steps(db: Session, profile_name: Optional[str]) -> list:
+    if not profile_name or not str(profile_name).strip():
+        return []
+    clean_prof = str(profile_name).strip()
+    now = time.monotonic()
+    with _WORKFLOW_STEPS_LOCK:
+        entry = _WORKFLOW_STEPS_CACHE.get(clean_prof)
+        if entry and (now - entry["timestamp"] < _WORKFLOW_STEPS_TTL):
+            return entry["steps"]
+
+    steps = db.query(WorkflowStepDefinition).filter(
+        (WorkflowStepDefinition.profile_name == clean_prof) |
+        (WorkflowStepDefinition.profile_name.ilike(clean_prof))
+    ).order_by(WorkflowStepDefinition.stage_number.asc(), WorkflowStepDefinition.id.asc()).all()
+    for s in steps:
+        try:
+            db.expunge(s)
+        except Exception:
+            pass
+    with _WORKFLOW_STEPS_LOCK:
+        _WORKFLOW_STEPS_CACHE[clean_prof] = {"steps": steps, "timestamp": now}
+    return steps
+
+_ADMIN_INVOICES_CACHE: dict = {}
+_ADMIN_INVOICES_LOCK = threading.Lock()
+_ADMIN_INVOICES_TTL = 3.0
+
+_BASE_DOC_CACHE: dict = {}
+_BASE_DOC_LOCK = threading.Lock()
+_BASE_DOC_TTL = 3.0
+
+def invalidate_invoices_cache(doc_id: Optional[str] = None):
+    with _ADMIN_INVOICES_LOCK:
+        _ADMIN_INVOICES_CACHE.clear()
+    with _BASE_DOC_LOCK:
+        if doc_id:
+            _BASE_DOC_CACHE.pop(str(doc_id), None)
+            _BASE_DOC_CACHE.pop(f"DOC-{doc_id}", None)
+            _BASE_DOC_CACHE.pop(str(doc_id).replace("DOC-", ""), None)
+        else:
+            _BASE_DOC_CACHE.clear()
 
 def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
     """
@@ -670,46 +725,70 @@ def get_filter_options(
 @router.get('/api/documents', response_model=List[InvoiceResponse])
 @router.get('/api/invoices', response_model=List[InvoiceResponse])
 def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+    user_is_admin = bool(current_user and (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'])
+    if user_is_admin:
+        cache_key = f"admin_{status or 'all'}"
+        now = time.monotonic()
+        with _ADMIN_INVOICES_LOCK:
+            entry = _ADMIN_INVOICES_CACHE.get(cache_key)
+            if entry and (now - entry["timestamp"] < _ADMIN_INVOICES_TTL):
+                return entry["data"]
+
+        query = db.query(Invoice).filter(Invoice.is_deleted == False)
+        if status and str(status).strip():
+            query = query.filter(Invoice.status == str(status).strip())
+        invoices = query.order_by(Invoice.created_at.desc()).all()
+        for inv in invoices:
+            try:
+                db.expunge(inv)
+            except Exception:
+                pass
+        with _ADMIN_INVOICES_LOCK:
+            _ADMIN_INVOICES_CACHE[cache_key] = {"data": invoices, "timestamp": now}
+        return invoices
+
     query = db.query(Invoice).filter(Invoice.is_deleted == False)
+    if status and str(status).strip():
+        query = query.filter(Invoice.status == str(status).strip())
     invoices = query.order_by(Invoice.created_at.desc()).all()
-    
+
     approved_invoice_ids = set()
     rejected_invoice_ids = set()
     if current_user:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email, current_user.role]
         user_names = [name for name in user_names if name]
-        or_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names if name]
-        if or_filters:
-            audit_query = db.query(AuditLog.invoice_id, AuditLog.action).filter(or_(*or_filters)).all()
-            for row in audit_query:
-                raw_id = str(row[0] or '')
-                doc_id_clean = raw_id.replace('DOC-', '')
-                act = (row[1] or '').lower()
-                if 'approve' in act:
-                    approved_invoice_ids.add(raw_id)
-                    approved_invoice_ids.add(doc_id_clean)
-                if 'reject' in act or 'return' in act or 'cancel' in act:
-                    rejected_invoice_ids.add(raw_id)
-                    rejected_invoice_ids.add(doc_id_clean)
+        audit_query = db.query(AuditLog.invoice_id, AuditLog.action).filter(AuditLog.user.in_(user_names)).all()
+        for row in audit_query:
+            raw_id = str(row[0] or '')
+            doc_id_clean = raw_id.replace('DOC-', '')
+            act = (row[1] or '').lower()
+            if 'approve' in act:
+                approved_invoice_ids.add(raw_id)
+                approved_invoice_ids.add(doc_id_clean)
+            if 'reject' in act or 'return' in act or 'cancel' in act:
+                rejected_invoice_ids.add(raw_id)
+                rejected_invoice_ids.add(doc_id_clean)
 
-        wf_step_or = []
-        for name in user_names:
-            wf_step_or.append(WorkflowStepDefinition.approver_target.ilike(f'%{name}%'))
-            wf_step_or.append(WorkflowStepDefinition.delegate_approver.ilike(f'%{name}%'))
-        user_wf_profiles = set(row[0] for row in db.query(WorkflowStepDefinition.profile_name).filter(or_(*wf_step_or)).distinct().all() if row[0])
+        all_steps = db.query(WorkflowStepDefinition.profile_name, WorkflowStepDefinition.approver_target, WorkflowStepDefinition.delegate_approver).all()
+        user_wf_profiles = set()
+        user_names_lower = {n.lower() for n in user_names}
+        for prof, tgt, dlg in all_steps:
+            tgt_clean = (tgt or '').lower()
+            dlg_clean = (dlg or '').lower()
+            if any(n in tgt_clean or n in dlg_clean for n in user_names_lower):
+                if prof:
+                    user_wf_profiles.add(prof)
     else:
         user_wf_profiles = set()
 
-    user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     filtered_invoices = []
+    user_approval_divs = get_user_approval_divisions(current_user) if current_user else []
+    has_hq_division = any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs)
     
     for inv in invoices:
-        # Dynamically synchronize assigned_approver from workflow definition
-        sync_document_approver_from_workflow(db, inv)
-
-        if user_is_admin:
-            filtered_invoices.append(inv)
-            continue
+        # Dynamically synchronize assigned_approver from workflow definition if missing
+        if not inv.assigned_approver or str(inv.assigned_approver).strip() in ['', 'None']:
+            sync_document_approver_from_workflow(db, inv)
 
         doc_key_clean = str(inv.id).replace('DOC-', '')
         has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
@@ -726,9 +805,8 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
 
         # Division scoping check
         if not is_curr and not has_approved_this_doc and not is_member_of_flow:
-            user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
-            if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
+            if doc_div and user_approval_divs and not has_hq_division and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
                 if doc_div not in user_approval_divs:
                     continue
         
@@ -945,31 +1023,77 @@ def get_synced_pending_documents(db: Session=Depends(get_db), current_user: User
 @router.get('/api/documents/{invoice_id}')
 @router.get('/api/invoices/{invoice_id}')
 def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
-    inv = find_invoice_by_identifier(db, invoice_id)
-    steps_data = []
-    seen_stages = set()
-    if inv.workflow_profile_id:
-        steps = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id).order_by(WorkflowStepDefinition.stage_number.asc(), WorkflowStepDefinition.id.asc()).all()
-        for s in steps:
-            if s.stage_number not in seen_stages:
-                seen_stages.add(s.stage_number)
-                steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
-    current_step_name = 'Stage 1'
-    for s in steps_data:
-        if s['stage_number'] == (inv.current_stage or 1):
-            current_step_name = s['stage_name']
-            break
-    sync_document_approver_from_workflow(db, inv)
+    now = time.monotonic()
+    clean_id = str(invoice_id).strip()
+    cached_doc = None
+    with _BASE_DOC_LOCK:
+        entry = _BASE_DOC_CACHE.get(clean_id)
+        if entry and (now - entry["timestamp"] < _BASE_DOC_TTL):
+            cached_doc = entry["data"]
+
+    if cached_doc:
+        inv, steps, steps_data, current_step_name, audit_logs_tuples, audit_trail_list, inv_dict_base = cached_doc
+    else:
+        inv = find_invoice_by_identifier(db, invoice_id)
+        steps_data = []
+        seen_stages = set()
+        steps = []
+        if inv.workflow_profile_id:
+            steps = get_cached_workflow_steps(db, inv.workflow_profile_id)
+            for s in steps:
+                if s.stage_number not in seen_stages:
+                    seen_stages.add(s.stage_number)
+                    steps_data.append({'stage_number': s.stage_number, 'stage_name': s.step_name, 'approver_target': s.approver_target, 'action_required': s.action_required, 'permissions': s.permissions})
+        current_step_name = 'Stage 1'
+        for s in steps_data:
+            if s['stage_number'] == (inv.current_stage or 1):
+                current_step_name = s['stage_name']
+                break
+        if not inv.assigned_approver or str(inv.assigned_approver).strip() in ['', 'None']:
+            sync_document_approver_from_workflow(db, inv)
+
+        cand_doc_ids = [str(inv.id), f'DOC-{inv.id}', str(inv.id).replace('DOC-', '')]
+        audit_logs_db = db.query(AuditLog).filter(
+            AuditLog.invoice_id.in_(cand_doc_ids)
+        ).order_by(AuditLog.timestamp.asc()).all()
+
+        audit_logs_tuples = [
+            (al.user.lower() if al.user else '', (al.action or '').lower())
+            for al in audit_logs_db
+        ]
+
+        audit_trail_list = []
+        for al in audit_logs_db:
+            audit_trail_list.append({
+                'timestamp': al.timestamp.isoformat() if al.timestamp else (al.created_at.isoformat() if getattr(al, 'created_at', None) else ''),
+                'actor': al.user or 'System',
+                'user': al.user or 'System',
+                'action': al.action or 'Stage Approval',
+                'stage': al.stage,
+                'details': al.notes or al.remarks or 'Workflow action executed',
+                'comments': al.remarks or al.notes or ''
+            })
+
+        inv_dict_base = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
+        inv_dict_base = _unpack_custom_data_into_dict(inv_dict_base)
+
+        try:
+            db.expunge(inv)
+        except Exception:
+            pass
+
+        cached_payload = (inv, steps, steps_data, current_step_name, audit_logs_tuples, audit_trail_list, inv_dict_base)
+        with _BASE_DOC_LOCK:
+            _BASE_DOC_CACHE[clean_id] = {"data": cached_payload, "timestamp": now}
+            _BASE_DOC_CACHE[str(inv.id)] = {"data": cached_payload, "timestamp": now}
+
     has_appr = False
     has_rej = False
     if current_user:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
-        user_names = [name for name in user_names if name]
-        or_filters = [AuditLog.user.ilike(f'%{name}%') for name in user_names if name]
-        if or_filters:
-            audit_query = db.query(AuditLog.invoice_id, AuditLog.action).filter((AuditLog.invoice_id == str(inv.id)) | (AuditLog.invoice_id == f'DOC-{inv.id}'), or_(*or_filters)).all()
-            for row in audit_query:
-                act = (row[1] or '').lower()
+        user_names_set = {name.lower() for name in user_names if name}
+        for u_actor, act in audit_logs_tuples:
+            if u_actor in user_names_set:
                 if 'approve' in act:
                     has_appr = True
                 if 'reject' in act or 'return' in act or 'cancel' in act or 'hold' in act:
@@ -985,9 +1109,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
     is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
 
     if not is_admin and inv.workflow_profile_id:
-        all_steps = db.query(WorkflowStepDefinition).filter(
-            WorkflowStepDefinition.profile_name == inv.workflow_profile_id
-        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        all_steps = steps
         user_stages = [
             s.stage_number for s in all_steps 
             if s.approver_target and is_user_in_approver_pool(current_user, s.approver_target)
@@ -1101,35 +1223,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                         logger.debug("Failed saving auto-attached file_url on load: %s", db_err)
                         db.rollback()
 
-    try:
-        from sqlalchemy import text
-        row_mapping = db.execute(text("SELECT * FROM documents WHERE id = :id"), {"id": str(inv.id)}).mappings().first()
-        inv_dict = dict(row_mapping) if row_mapping else {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
-    except Exception:
-        inv_dict = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
-
-    # Promote fields from custom_data JSON into top-level response for legacy documents
-    # where real DB columns are NULL but data was stored inside the custom_data blob.
-    inv_dict = _unpack_custom_data_into_dict(inv_dict)
-
-    # Fetch real immutable audit log history from AuditLog table
-    doc_key_clean = str(inv.id).replace('DOC-', '')
-    audit_logs_db = db.query(AuditLog).filter(
-        (AuditLog.invoice_id == str(inv.id)) | (AuditLog.invoice_id == doc_key_clean) | (AuditLog.invoice_id == f'DOC-{inv.id}')
-    ).order_by(AuditLog.timestamp.asc()).all()
-
-    audit_trail_list = []
-    for al in audit_logs_db:
-        audit_trail_list.append({
-            'timestamp': al.timestamp.isoformat() if al.timestamp else (al.created_at.isoformat() if getattr(al, 'created_at', None) else ''),
-            'actor': al.user or 'System',
-            'user': al.user or 'System',
-            'action': al.action or 'Stage Approval',
-            'stage': al.stage,
-            'details': al.notes or al.remarks or 'Workflow action executed',
-            'comments': al.remarks or al.notes or ''
-        })
-
+    inv_dict = dict(inv_dict_base)
     if audit_trail_list:
         inv_dict['audit_trail'] = audit_trail_list
 
@@ -1204,6 +1298,7 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
     db.add(AuditLog(invoice_id=str(inv.id), user=user.employee_name or user.name or user.username, action='Invoice Fields Updated', stage=f'Stage {inv.current_stage or 1}', notes='Document header/line-items edited and saved.'))
     db.commit()
     db.refresh(inv)
+    invalidate_invoices_cache(str(inv.id))
     return inv
 
 def extract_date_components(date_str: Optional[str]):
@@ -1469,6 +1564,7 @@ def complete_document_lifecycle(
         'assigned_approver': inv.assigned_approver
     })
 
+    invalidate_invoices_cache(str(inv.id))
     return True
 
 def archive_rejected_pdf(inv: Invoice):
@@ -1639,6 +1735,7 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         inv.version = cur_ver + 1
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Placed on Hold', stage=f'Stage {current_stage}', notes=f'Placed on hold / returned for clarification: {remarks}'))
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
     else:
         inv.status = 'Cancelled'
@@ -1670,6 +1767,7 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         )
         db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Process Cancelled', stage='Stage 1 (Attachment Status)', notes=f'Workflow process cancelled/voided by {approver_name} at Stage 1. Reason: {remarks}'))
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
+        invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'message': 'Workflow process cancelled and voided at Attachment Stage.'}
 
 def generate_fallback_pdf_bytes(inv: Invoice, invoice_id: str = "") -> bytes:
@@ -2337,6 +2435,7 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
         db.refresh(inv)
         safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': username})
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        invalidate_invoices_cache(str(inv.id))
     return {
         'success': True,
         'status': inv.status,
@@ -2472,6 +2571,7 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             db.refresh(inv)
             safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
             safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+            invalidate_invoices_cache(str(inv.id))
         return {
             'success': True,
             'status': inv.status,

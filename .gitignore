@@ -30,3 +30,7 @@ uploads/
 scratch/
 *.mfa_tickets.json
 backend/data/.mfa_tickets.json
+.coverage
+pytest_report.txt
+test_results.csv
+test_summary.csv

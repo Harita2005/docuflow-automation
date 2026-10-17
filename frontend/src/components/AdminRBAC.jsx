@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   Shield, 
   Users, 
@@ -20,7 +21,8 @@ import {
   UserX,
   UserCheck,
   Edit2,
-  Eye
+  Eye,
+  UserPlus
 } from "lucide-react";
 
 // Standard Baseline Roles
@@ -227,13 +229,29 @@ export const INITIAL_GLOBAL_PERMISSIONS = {
   }
 };
 
-const DEFAULT_USERS = [
-  { id: "1", name: "Anbu Selvan", email: "admin@initech.com", username: "anbu", role: "admin", dept: "IT Governance" },
-  { id: "2", name: "Karthik Natarajan", email: "manager@initech.com", username: "karthik", role: "manager", dept: "Operations" },
-  { id: "3", name: "Surya Prakash", email: "executive@initech.com", username: "surya", role: "manager", dept: "Corporate Finance" },
-  { id: "4", name: "Priya Sundaram", email: "auditor@initech.com", username: "priya", role: "auditor", dept: "Internal Audit" },
-  { id: "5", name: "Vijay Kumar", email: "employee@initech.com", username: "vijay", role: "employee", dept: "General Processing" }
-];
+export const getDivisionPrefix = (code) => {
+  if (!code) return "";
+  const clean = String(code).trim().toUpperCase();
+  return clean.split('_')[0].split('-')[0].trim();
+};
+
+export const isDivisionInGroup = (divCode, mainDivCode) => {
+  if (!divCode || !mainDivCode) return false;
+  const mainUpper = String(mainDivCode).trim().toUpperCase();
+  const targetUpper = String(divCode).trim().toUpperCase();
+
+  if (mainUpper === "GLOBAL" || mainUpper === "ALL") return true;
+
+  const mainPrefix = getDivisionPrefix(mainUpper);
+  const targetPrefix = getDivisionPrefix(targetUpper);
+
+  if (targetUpper === mainUpper) return true;
+  if (mainPrefix && targetPrefix && mainPrefix === targetPrefix) return true;
+  if (mainPrefix && (targetUpper.startsWith(mainPrefix + "_") || targetUpper.startsWith(mainPrefix + "-"))) return true;
+  if (targetUpper.startsWith(mainUpper + "_") || targetUpper.startsWith(mainUpper + "-")) return true;
+
+  return false;
+};
 
 export default function AdminRBAC({ onRefreshSignal }) {
   const [activeTab, setActiveTab] = useState("roles"); // "roles" | "users" | "flac"
@@ -245,7 +263,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [roles, setRoles] = useState(INITIAL_ROLES);
+  const [roles, setRoles] = useState([]);
   const [permissionsList, setPermissionsList] = useState(INITIAL_PERMISSIONS);
   const [rolePermissions, setRolePermissions] = useState(INITIAL_ROLE_PERMS);
   
@@ -260,7 +278,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newFieldCategory, _setNewFieldCategory] = useState("Custom Extended");
   const [newFieldDesc, setNewFieldDesc] = useState("");
 
-  const [users, setUsers] = useState(DEFAULT_USERS);
+  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userOverrides, setUserOverrides] = useState({});
 
@@ -287,10 +305,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [rolesError, setRolesError] = useState("");
   const [newUserPlant, setNewUserPlant] = useState("");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [divSearch, setDivSearch] = useState("");
 
   // Edit User modal states
   const [editingUserModal, setEditingUserModal] = useState(null);
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const [editDivSearch, setEditDivSearch] = useState("");
 
   // States for adding dynamic permissions
   const [showAddPermissionModal, setShowAddPermissionModal] = useState(false);
@@ -328,6 +348,31 @@ export default function AdminRBAC({ onRefreshSignal }) {
     return rName.includes(term) || rBadge.includes(term) || rCode.includes(term) || rId.includes(term);
   });
 
+  // Filter approval divisions by Main Division for Add User modal
+  const activeAddMainDiv = newUserDivision || (availableDivisions[0]?.code || "");
+  const addGroupDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, activeAddMainDiv));
+  const addGroupList = addGroupDivs.length > 0 ? addGroupDivs : (activeAddMainDiv ? availableDivisions.filter(d => d.code === activeAddMainDiv) : availableDivisions);
+  const filteredAddDivs = addGroupList.filter(d =>
+    !divSearch.trim() ||
+    (d.name || "").toLowerCase().includes(divSearch.toLowerCase()) ||
+    d.code.toLowerCase().includes(divSearch.toLowerCase())
+  );
+  const allAddGroupSelected = addGroupList.length > 0 && addGroupList.every(d => newUserApprovalDivisions.includes(d.code));
+
+  // Filter approval divisions by Main Division for Edit User modal
+  const activeEditMainDiv = editingUserModal?.division || (availableDivisions[0]?.code || "");
+  const editGroupDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, activeEditMainDiv));
+  const editGroupList = editGroupDivs.length > 0 ? editGroupDivs : (activeEditMainDiv ? availableDivisions.filter(d => d.code === activeEditMainDiv) : availableDivisions);
+  const filteredEditDivs = editGroupList.filter(d =>
+    !editDivSearch.trim() ||
+    (d.name || "").toLowerCase().includes(editDivSearch.toLowerCase()) ||
+    d.code.toLowerCase().includes(editDivSearch.toLowerCase())
+  );
+  const currentEditApprovals = Array.isArray(editingUserModal?.approval_divisions)
+    ? editingUserModal.approval_divisions
+    : (editingUserModal?.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
+  const allEditGroupSelected = editGroupList.length > 0 && editGroupList.every(d => currentEditApprovals.includes(d.code));
+
   const getAvatarColor = (name = "") => {
     const colors = [
       "bg-blue-100 text-blue-700 border border-blue-200",
@@ -345,14 +390,20 @@ export default function AdminRBAC({ onRefreshSignal }) {
   };
 
   const getRoleDisplayName = (roleId) => {
+    if (!roleId) return "—";
+    const cleanId = String(roleId).trim().toLowerCase();
+    const matched = roles.find(r => 
+      String(r.code || '').trim().toLowerCase() === cleanId || 
+      String(r.id || '').trim().toLowerCase() === cleanId
+    );
+    if (matched && matched.name) return matched.name;
     const roleMap = {
-      admin: "Administrator",
-      manager: "Manager",
-      ap_specialist: "Consultant",
-      auditor: "Internal Auditor",
-      employee: "Employee"
+      admin: "System Administrator",
+      manager: "Operations Manager",
+      auditor: "Finance & Internal Auditor",
+      employee: "Standard Employee"
     };
-    return roleMap[roleId] || roleId;
+    return roleMap[cleanId] || String(roleId).replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   };
 
   const _handleSelectAllUsers = (e) => {
@@ -404,8 +455,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
       setRolesError("");
 
       const [configRes, usersRes, rolesRes, divsRes] = await Promise.all([
-        fetch("/api/admin/config", { headers }),
-        fetch("/api/admin/users", { headers }),
+        fetch("/api/admin/config", { headers }).catch(err => ({ ok: false, error: err })),
+        fetch("/api/admin/users", { headers }).catch(err => ({ ok: false, error: err })),
         fetch("/api/admin/roles", { headers }).catch(err => ({ ok: false, error: err })),
         fetch("/api/admin/users/divisions/list", { headers }).catch(err => ({ ok: false, error: err }))
       ]);
@@ -516,24 +567,24 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
       if (usersRes.ok) {
         const userData = await usersRes.json();
-        if (Array.isArray(userData) && userData.length > 0) {
+        if (Array.isArray(userData)) {
           const dbUsers = userData.map(u => ({
             id: String(u.id),
-            user_uid: u.user_uid || `USR-${100000 + Number(u.id)}`,
+            user_uid: u.user_uid || `USR-${u.id}`,
             employee_id: u.employee_id || `EMP-${u.id}`,
-            name: u.employee_name || u.name || u.username,
-            employee_name: u.employee_name || u.name || u.username,
-            username: u.username || u.employee_id,
-            email: u.email || `${u.username || 'user'}@labourlink.com`,
-            phone_number: u.phone_number || "+91 98400 00000",
+            name: u.employee_name || u.name || u.username || "",
+            employee_name: u.employee_name || u.name || u.username || "",
+            username: u.username || u.employee_id || "",
+            email: u.email || "",
+            phone_number: u.phone_number || "",
             role: u.role || 'employee',
-            dept: u.department || u.dept || 'General Operations',
-            division: u.division || 'VCC',
-            approval_divisions: u.approval_divisions || u.division || 'VCC',
+            dept: u.department || u.dept || '',
+            division: u.division || '',
+            approval_divisions: u.approval_divisions || u.division || '',
             plant: u.plant || '',
             is_active: u.is_active !== undefined ? u.is_active : true,
             status: u.is_active ? "Active" : "Inactive",
-            created_on: u.created_on || u.created_at || new Date().toISOString()
+            created_on: u.created_on || u.created_at || null
           }));
           
           setUsers(dbUsers);
@@ -545,9 +596,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
       } else {
         setUsers([]);
         setSelectedUser(null);
+        if (usersRes?.status === 401) {
+          setErrorMsg("Session expired. Please log in again.");
+        } else if (usersRes?.status === 403) {
+          setErrorMsg("Access Denied: Administrator role required to view users.");
+        }
       }
     } catch(e) {
-      console.error("Failed to load users from API:", e);
+      console.error("Failed to load data from API:", e);
       setUsers([]);
       setSelectedUser(null);
     } finally {
@@ -765,7 +821,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       await fetch(`/api/users/${user.id}/status`, {
         method: 'PATCH',
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
@@ -779,7 +835,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     if (!window.confirm(`Are you sure you want to deactivate and remove employee ${name} (${empId})?`)) return;
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       await fetch(`/api/users/${id}`, { method: 'DELETE', headers: token ? { "Authorization": `Bearer ${token}` } : {} });
       setUsers(prev => prev.filter(u => u.id !== id));
       if (selectedUser?.id === id) setSelectedUser(null);
@@ -1380,7 +1436,18 @@ export default function AdminRBAC({ onRefreshSignal }) {
               {activeTab === "users" && (
                 <button
                   type="button"
-                  onClick={() => setShowAddUserModal(true)}
+                  onClick={() => {
+                    const initDiv = newUserDivision || (availableDivisions[0]?.code || "");
+                    setDivSearch("");
+                    if (initDiv) {
+                      const matchingDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, initDiv)).map(d => d.code);
+                      setNewUserApprovalDivisions(prev => {
+                        const retained = prev.filter(c => matchingDivs.includes(c));
+                        return retained.length > 0 ? retained : [initDiv];
+                      });
+                    }
+                    setShowAddUserModal(true);
+                  }}
                   className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1532,8 +1599,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
           </div>
 
           {/* DIALOG: Role Permissions / Clearances Modal */}
-          {selectedRoleId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
+          {selectedRoleId && typeof document !== "undefined" && createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn">
               <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-[540px] w-full max-h-[80vh] flex flex-col overflow-hidden animate-scaleIn">
                 
                 {/* Panel Header */}
@@ -1746,7 +1813,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       )}
@@ -1883,6 +1951,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                   const approvalArray = typeof rawApproval === "string" 
                                     ? rawApproval.split(",").map(d => d.trim()).filter(Boolean)
                                     : (Array.isArray(rawApproval) ? rawApproval : (fallbackDiv ? [fallbackDiv] : []));
+                                  setEditDivSearch("");
                                   setEditingUserModal({
                                     id: u.id,
                                     employee_id: u.employee_id || u.username || "",
@@ -1924,6 +1993,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     const approvalArray = typeof rawApproval === "string" 
                                       ? rawApproval.split(",").map(d => d.trim()).filter(Boolean)
                                       : (Array.isArray(rawApproval) ? rawApproval : (fallbackDiv ? [fallbackDiv] : []));
+                                    setEditDivSearch("");
                                     setEditingUserModal({
                                       id: u.id,
                                       employee_id: u.employee_id || u.username || "",
@@ -1992,8 +2062,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {/* MODAL: ADD CUSTOM ROLE */}
       {/* ========================================================= */}
-      {showAddRoleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+      {showAddRoleModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xs w-full p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="text-[11px] font-black text-slate-900 uppercase">Add Role</h3>
@@ -2053,7 +2123,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================= */}
@@ -2062,8 +2133,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {/* MODAL: ADD CUSTOM PERMISSION (SIMPLIFIED & PROFESSIONAL) */}
       {/* ========================================================= */}
-      {showAddPermissionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+      {showAddPermissionModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -2157,85 +2228,404 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================= */}
       {/* MODAL: ADD NEW USER */}
       {/* ========================================================= */}
-      {showAddUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+      {/* ========================================================= */}
+      {/* MODAL: ADD NEW USER */}
+      {/* ========================================================= */}
+      {showAddUserModal && typeof document !== "undefined" && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-[#003F28] flex items-center justify-center shadow-xs">
+                    <UserPlus className="h-4 w-4 text-emerald-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 leading-tight">Add New Employee / User</h3>
+                    <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">Fill in the details below to create an account</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <form onSubmit={handleAddUser} className="flex flex-col flex-1 overflow-hidden min-h-0">
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+                  {/* Row 1: EMP ID + Full Name */}
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                        Employee ID <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newUserEmpId}
+                        onChange={e => setNewUserEmpId(e.target.value)}
+                        placeholder="e.g. 16220 or E22-02094"
+                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                        Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newUserName}
+                        onChange={e => setNewUserName(e.target.value)}
+                        placeholder="e.g. Ram Kumar"
+                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Official Email (full width) */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                      Official Email <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={newUserEmail}
+                      onChange={e => setNewUserEmail(e.target.value)}
+                      placeholder="e.g. ram.kumar@company.com"
+                      className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Account activation and secure login OTP will be sent to this email address.</p>
+                  </div>
+
+                  {/* Row 3: Role Group + Main Division */}
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Role Group</label>
+                      {rolesLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
+                          <span>Loading roles...</span>
+                        </div>
+                      ) : rolesError ? (
+                        <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{rolesError}</div>
+                      ) : roles.length === 0 ? (
+                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No roles configured.</div>
+                      ) : (
+                        <select
+                          value={newUserRole || (roles[0].code || roles[0].id)}
+                          onChange={e => setNewUserRole(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-semibold text-slate-800 cursor-pointer transition-all"
+                        >
+                          {roles.map(r => (
+                            <option key={r.code || r.id} value={r.code || r.id}>{r.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Main Division</label>
+                      {divisionsLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
+                          <span>Loading...</span>
+                        </div>
+                      ) : divisionsError ? (
+                        <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{divisionsError}</div>
+                      ) : availableDivisions.length === 0 ? (
+                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No divisions available.</div>
+                      ) : (
+                        <select
+                          value={newUserDivision || (availableDivisions[0]?.code || "")}
+                          onChange={e => {
+                            const newDiv = e.target.value;
+                            setNewUserDivision(newDiv);
+                            const matchingDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, newDiv)).map(d => d.code);
+                            setNewUserApprovalDivisions(prev => {
+                              const retained = prev.filter(c => matchingDivs.includes(c));
+                              if (newDiv && !retained.includes(newDiv) && matchingDivs.includes(newDiv)) {
+                                return [newDiv, ...retained];
+                              }
+                              return retained.length > 0 ? retained : (newDiv ? [newDiv] : []);
+                            });
+                          }}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-semibold text-slate-800 cursor-pointer transition-all"
+                        >
+                          {availableDivisions.map(d => (
+                            <option key={d.code} value={d.code}>
+                              {d.name ? `${d.name} (${d.code})` : d.code}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 4: Department + Plant */}
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Department</label>
+                      <input
+                        type="text"
+                        value={newUserDept}
+                        onChange={e => setNewUserDept(e.target.value)}
+                        placeholder="e.g. Finance"
+                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Plant / Branch</label>
+                      <input
+                        type="text"
+                        value={newUserPlant}
+                        onChange={e => setNewUserPlant(e.target.value)}
+                        placeholder="e.g. TN-SIVAKASI"
+                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 5: Approval Divisions (full width) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Approval Divisions
+                        {newUserApprovalDivisions.length > 0 && (
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-[#003F28]">
+                            {newUserApprovalDivisions.length} selected
+                          </span>
+                        )}
+                        {activeAddMainDiv && (
+                          <span className="ml-1.5 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                            {getDivisionPrefix(activeAddMainDiv)} Group ({addGroupList.length})
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {addGroupList.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (allAddGroupSelected) {
+                                setNewUserApprovalDivisions(prev => prev.filter(c => !addGroupList.some(d => d.code === c)));
+                              } else {
+                                setNewUserApprovalDivisions(prev => Array.from(new Set([...prev, ...addGroupList.map(d => d.code)])));
+                              }
+                            }}
+                            className="text-[10px] text-[#003F28] hover:underline font-bold transition-colors cursor-pointer"
+                          >
+                            {allAddGroupSelected ? "Deselect all" : "Select all"}
+                          </button>
+                        )}
+                        {newUserApprovalDivisions.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setNewUserApprovalDivisions([])}
+                            className="text-[10px] text-slate-400 hover:text-rose-500 font-medium transition-colors cursor-pointer"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {divisionsLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-3 border border-slate-200 rounded-lg bg-slate-50">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
+                        <span>Loading approval divisions...</span>
+                      </div>
+                    ) : divisionsError ? (
+                      <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{divisionsError}</div>
+                    ) : addGroupList.length === 0 ? (
+                      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No divisions available to assign for this group.</div>
+                    ) : (
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        {/* Search bar */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100 bg-slate-50">
+                          <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                          <input
+                            type="text"
+                            value={divSearch}
+                            onChange={e => setDivSearch(e.target.value)}
+                            placeholder={`Search ${getDivisionPrefix(activeAddMainDiv) || ""} divisions...`}
+                            className="flex-1 text-xs bg-transparent outline-none text-slate-700 placeholder:text-slate-300"
+                          />
+                          {divSearch && (
+                            <button type="button" onClick={() => setDivSearch("")} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                        {/* Grid of checkboxes */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 p-2 bg-white max-h-36 overflow-y-auto custom-scrollbar">
+                          {filteredAddDivs.length === 0 ? (
+                            <div className="col-span-full text-[10px] text-slate-400 text-center py-3">
+                              No divisions found in {getDivisionPrefix(activeAddMainDiv)} group matching "{divSearch}".
+                            </div>
+                          ) : filteredAddDivs.map(d => {
+                            const isChecked = newUserApprovalDivisions.includes(d.code);
+                            return (
+                              <label
+                                key={d.code}
+                                className={`flex items-center gap-1.5 text-xs cursor-pointer select-none py-1 px-1.5 rounded-md transition-colors ${isChecked ? "bg-emerald-50 text-[#003F28] font-bold border border-emerald-200" : "text-slate-600 hover:bg-slate-50 border border-transparent"}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setNewUserApprovalDivisions(prev => [...prev, d.code]);
+                                    } else {
+                                      setNewUserApprovalDivisions(prev => prev.filter(x => x !== d.code));
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-[#003F28] focus:ring-[#003F28] h-3.5 w-3.5 flex-shrink-0 cursor-pointer"
+                                />
+                                <span className="text-[11px] truncate" title={d.name ? `${d.name} (${d.code})` : d.code}>
+                                  {d.name || d.code}
+                                  {d.name && <span className="text-[9px] text-slate-400 ml-0.5 font-normal">({d.code})</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Filtered by Main Division ({activeAddMainDiv}). Select all sub-divisions this user is authorized to review or approve documents for.
+                    </p>
+                  </div>
+
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex-shrink-0">
+                  <p className="text-[10px] text-slate-400">Fields marked <span className="text-rose-500 font-bold">*</span> are required</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddUserModal(false)}
+                      className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isCreatingUser}
+                      className="px-5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    >
+                      {isCreatingUser && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      <span>{isCreatingUser ? "Creating..." : "Create User"}</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+            </div>
+          </div>,
+          document.body
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
+      {/* ========================================================= */}
+      {/* ========================================================= */}
+      {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
+      {/* ========================================================= */}
+      {editingUserModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
               <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5 text-blue-600" />
-                <span>Add New Employee / User</span>
+                <Edit2 className="h-3.5 w-3.5 text-[#003F28]" />
+                <span>Edit Employee Profile & Details</span>
               </h3>
-              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button type="button" onClick={() => setEditingUserModal(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddUser} className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Emp ID (Required)</label>
-                  <input 
-                    type="text"
-                    required
-                    value={newUserEmpId}
-                    onChange={e => setNewUserEmpId(e.target.value)}
-                    placeholder="e.g. 16220"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
+            <form onSubmit={handleSaveUserEdit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Emp ID (Editable) <span className="text-rose-500">*</span></label>
+                    <input 
+                      type="text"
+                      required
+                      value={editingUserModal.employee_id || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, employee_id: e.target.value })}
+                      placeholder="e.g. 16220 or E22-02094"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Full Name (Editable) <span className="text-rose-500">*</span></label>
+                    <input 
+                      type="text"
+                      required
+                      value={editingUserModal.employee_name || editingUserModal.name || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, employee_name: e.target.value, name: e.target.value })}
+                      placeholder="e.g. Ram Kumar"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Full Name (Required)</label>
-                  <input 
-                    type="text"
-                    required
-                    value={newUserName}
-                    onChange={e => setNewUserName(e.target.value)}
-                    placeholder="e.g. Ram Kumar"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email Address <span className="text-rose-500">*</span></label>
+                    <input 
+                      type="email"
+                      required
+                      value={editingUserModal.email || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, email: e.target.value })}
+                      placeholder="e.g. ram@company.com"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Username</label>
+                    <input 
+                      type="text"
+                      value={editingUserModal.username || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, username: e.target.value })}
+                      placeholder="e.g. ramk"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Official Email (Required)</label>
-                <input 
-                  type="email"
-                  required
-                  value={newUserEmail}
-                  onChange={e => setNewUserEmail(e.target.value)}
-                  placeholder="e.g. ram@company.com"
-                  className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-                <span className="text-[9px] text-slate-400 mt-0.5 block">Account activation and secure login OTP will be sent to this email address.</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
-                  {rolesLoading ? (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
-                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                      <span>Loading roles...</span>
-                    </div>
-                  ) : rolesError ? (
-                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
-                      {rolesError}
-                    </div>
-                  ) : roles.length === 0 ? (
-                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
-                      No roles configured in database.
-                    </div>
-                  ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Phone Number</label>
+                    <input 
+                      type="text"
+                      value={editingUserModal.phone_number || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, phone_number: e.target.value })}
+                      placeholder="e.g. +91 98765 43210"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
                     <select
-                      value={newUserRole || (roles[0].code || roles[0].id)}
-                      onChange={e => setNewUserRole(e.target.value)}
-                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
+                      value={editingUserModal.role || 'employee'}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, role: e.target.value })}
+                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 font-semibold text-slate-800"
                     >
                       {roles.map(r => (
                         <option key={r.code || r.id} value={r.code || r.id}>
@@ -2243,361 +2633,221 @@ export default function AdminRBAC({ onRefreshSignal }) {
                         </option>
                       ))}
                     </select>
-                  )}
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Main Division</label>
+                    {divisionsLoading ? (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
+                        <Loader2 className="h-3 w-3 animate-spin text-[#003F28]" />
+                        <span>Loading...</span>
+                      </div>
+                    ) : divisionsError ? (
+                      <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
+                        {divisionsError}
+                      </div>
+                    ) : availableDivisions.length === 0 ? (
+                      <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                        No active divisions.
+                      </div>
+                    ) : (
+                      <select
+                        value={editingUserModal.division || (availableDivisions[0]?.code || "")}
+                        onChange={e => {
+                          const newDiv = e.target.value;
+                          const currApprovals = Array.isArray(editingUserModal.approval_divisions) 
+                            ? editingUserModal.approval_divisions 
+                            : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
+                          const matchingDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, newDiv)).map(d => d.code);
+                          const retained = currApprovals.filter(code => matchingDivs.includes(code));
+                          const nextApprovals = (newDiv && !retained.includes(newDiv) && matchingDivs.includes(newDiv))
+                            ? [newDiv, ...retained]
+                            : (retained.length > 0 ? retained : (newDiv ? [newDiv] : []));
+                          setEditingUserModal({ 
+                            ...editingUserModal, 
+                            division: newDiv,
+                            approval_divisions: nextApprovals
+                          });
+                        }}
+                        className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 font-semibold text-slate-800"
+                      >
+                        {availableDivisions.map(d => (
+                          <option key={d.code} value={d.code}>
+                            {d.name ? `${d.name} (${d.code})` : d.code}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
+                    <input 
+                      type="text"
+                      value={editingUserModal.department || editingUserModal.dept || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, department: e.target.value })}
+                      placeholder="e.g. Finance"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Plant / Branch</label>
+                    <input 
+                      type="text"
+                      value={editingUserModal.plant || ''}
+                      onChange={e => setEditingUserModal({ ...editingUserModal, plant: e.target.value })}
+                      placeholder="e.g. TN-SIVAKASI"
+                      className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Main Division</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase">
+                      Approval Divisions
+                      {currentEditApprovals.length > 0 && (
+                        <span className="ml-1 inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-[#003F28]">
+                          {currentEditApprovals.length} selected
+                        </span>
+                      )}
+                      {activeEditMainDiv && (
+                        <span className="ml-1 text-[9px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded">
+                          {getDivisionPrefix(activeEditMainDiv)} Group ({editGroupList.length})
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {editGroupList.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (allEditGroupSelected) {
+                              const nextList = currentEditApprovals.filter(c => !editGroupList.some(d => d.code === c));
+                              setEditingUserModal({ ...editingUserModal, approval_divisions: nextList });
+                            } else {
+                              const nextList = Array.from(new Set([...currentEditApprovals, ...editGroupList.map(d => d.code)]));
+                              setEditingUserModal({ ...editingUserModal, approval_divisions: nextList });
+                            }
+                          }}
+                          className="text-[9px] text-[#003F28] hover:underline font-bold transition-colors cursor-pointer"
+                        >
+                          {allEditGroupSelected ? "Deselect all" : "Select all"}
+                        </button>
+                      )}
+                      {currentEditApprovals.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingUserModal({ ...editingUserModal, approval_divisions: [] })}
+                          className="text-[9px] text-slate-400 hover:text-rose-500 font-medium transition-colors cursor-pointer"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {divisionsLoading ? (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
-                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                      <span>Loading divisions...</span>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-2.5 border border-slate-200 rounded-lg bg-slate-50">
+                      <Loader2 className="h-3 w-3 animate-spin text-[#003F28]" />
+                      <span>Loading approval divisions...</span>
                     </div>
                   ) : divisionsError ? (
-                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
+                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2">
                       {divisionsError}
                     </div>
-                  ) : availableDivisions.length === 0 ? (
-                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
-                      No active divisions in database.
+                  ) : editGroupList.length === 0 ? (
+                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                      No divisions available to assign for this group.
                     </div>
                   ) : (
-                    <select
-                      value={newUserDivision || availableDivisions[0].code}
-                      onChange={e => {
-                        const newDiv = e.target.value;
-                        setNewUserDivision(newDiv);
-                        if (newDiv && !newUserApprovalDivisions.includes(newDiv)) {
-                          setNewUserApprovalDivisions(prev => [...prev, newDiv]);
-                        }
-                      }}
-                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
-                    >
-                      {availableDivisions.map(d => (
-                        <option key={d.code} value={d.code}>
-                          {d.name ? `${d.name} (${d.code})` : d.code}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      {/* Search bar inside edit modal */}
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 border-b border-slate-100 bg-slate-50">
+                        <Search className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                        <input
+                          type="text"
+                          value={editDivSearch}
+                          onChange={e => setEditDivSearch(e.target.value)}
+                          placeholder={`Search ${getDivisionPrefix(activeEditMainDiv) || ""} divisions...`}
+                          className="flex-1 text-xs bg-transparent outline-none text-slate-700 placeholder:text-slate-300"
+                        />
+                        {editDivSearch && (
+                          <button type="button" onClick={() => setEditDivSearch("")} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 p-2 bg-white max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                        {filteredEditDivs.length === 0 ? (
+                          <div className="col-span-full text-[10px] text-slate-400 text-center py-2">
+                            No divisions found in {getDivisionPrefix(activeEditMainDiv)} group matching "{editDivSearch}".
+                          </div>
+                        ) : filteredEditDivs.map(d => {
+                          const isChecked = currentEditApprovals.includes(d.code);
+                          return (
+                            <label
+                              key={d.code}
+                              className={`flex items-center gap-1.5 text-xs cursor-pointer select-none py-1 px-1.5 rounded-md transition-colors ${isChecked ? "bg-emerald-50 text-[#003F28] font-bold border border-emerald-200" : "text-slate-700 hover:bg-slate-50 border border-transparent"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={e => {
+                                  let nextList;
+                                  if (e.target.checked) {
+                                    nextList = [...currentEditApprovals, d.code];
+                                  } else {
+                                    nextList = currentEditApprovals.filter(x => x !== d.code);
+                                  }
+                                  setEditingUserModal({
+                                    ...editingUserModal,
+                                    approval_divisions: nextList
+                                  });
+                                }}
+                                className="rounded border-slate-300 text-[#003F28] focus:ring-[#003F28] h-3.5 w-3.5 flex-shrink-0 cursor-pointer"
+                              />
+                              <span className="text-[11px] truncate" title={d.name ? `${d.name} (${d.code})` : d.code}>
+                                {d.name || d.code}
+                                {d.name && <span className="text-[9px] text-slate-400 ml-0.5 font-normal">({d.code})</span>}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
+                  <span className="text-[9px] text-slate-400 mt-1 block">
+                    Filtered by Main Division ({activeEditMainDiv}). Select all divisions this user is authorized to review or approve documents for.
+                  </span>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Approval Divisions</label>
-                {divisionsLoading ? (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 p-2.5 border border-slate-200 rounded-lg bg-slate-50">
-                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                    <span>Loading approval divisions...</span>
-                  </div>
-                ) : divisionsError ? (
-                  <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2">
-                    {divisionsError}
-                  </div>
-                ) : availableDivisions.length === 0 ? (
-                  <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                    No divisions available to assign.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-50/70 rounded-lg border border-slate-200 max-h-48 overflow-y-auto pr-1">
-                    {availableDivisions.map(d => {
-                      const isChecked = newUserApprovalDivisions.includes(d.code);
-                      return (
-                        <label key={d.code} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none py-0.5">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setNewUserApprovalDivisions(prev => [...prev, d.code]);
-                              } else {
-                                setNewUserApprovalDivisions(prev => prev.filter(x => x !== d.code));
-                              }
-                            }}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-                          />
-                          <span className="text-[11px] font-medium">{d.name ? `${d.name} (${d.code})` : d.code}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                <span className="text-[9px] text-slate-400 mt-0.5 block">Select all divisions this user is authorized to review or approve documents for.</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Reset Password (Optional - leave blank to keep unchanged)</label>
                   <input 
-                    type="text"
-                    value={newUserDept}
-                    onChange={e => setNewUserDept(e.target.value)}
-                    placeholder="e.g. Finance"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Plant / Branch</label>
-                  <input 
-                    type="text"
-                    value={newUserPlant}
-                    onChange={e => setNewUserPlant(e.target.value)}
-                    placeholder="e.g. TN-SIVAKASI"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                    type="password"
+                    value={editingUserModal.password || ''}
+                    onChange={e => setEditingUserModal({ ...editingUserModal, password: e.target.value })}
+                    placeholder="New password (optional)"
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddUserModal(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingUser}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1"
-                >
-                  {isCreatingUser && <Loader2 className="h-3 w-3 animate-spin" />}
-                  <span>Create User</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
-      {/* ========================================================= */}
-      {editingUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
-                <Edit2 className="h-3.5 w-3.5 text-blue-600" />
-                <span>Edit Employee Profile & Details</span>
-              </h3>
-              <button onClick={() => setEditingUserModal(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveUserEdit} className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Emp ID (Editable) <span className="text-rose-500">*</span></label>
-                  <input 
-                    type="text"
-                    required
-                    value={editingUserModal.employee_id || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, employee_id: e.target.value })}
-                    placeholder="e.g. 16220 or E22-02094"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Full Name (Editable) <span className="text-rose-500">*</span></label>
-                  <input 
-                    type="text"
-                    required
-                    value={editingUserModal.employee_name || editingUserModal.name || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, employee_name: e.target.value, name: e.target.value })}
-                    placeholder="e.g. Ram Kumar"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email Address <span className="text-rose-500">*</span></label>
-                  <input 
-                    type="email"
-                    required
-                    value={editingUserModal.email || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, email: e.target.value })}
-                    placeholder="e.g. ram@company.com"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Username</label>
-                  <input 
-                    type="text"
-                    value={editingUserModal.username || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, username: e.target.value })}
-                    placeholder="e.g. ramk"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Phone Number</label>
-                  <input 
-                    type="text"
-                    value={editingUserModal.phone_number || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, phone_number: e.target.value })}
-                    placeholder="e.g. +91 98765 43210"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Group</label>
-                  <select
-                    value={editingUserModal.role || 'employee'}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, role: e.target.value })}
-                    className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
-                  >
-                    {roles.map(r => (
-                      <option key={r.code || r.id} value={r.code || r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Main Division</label>
-                  {divisionsLoading ? (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 p-1.5 border border-slate-200 rounded-lg bg-slate-50">
-                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                      <span>Loading...</span>
-                    </div>
-                  ) : divisionsError ? (
-                    <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5">
-                      {divisionsError}
-                    </div>
-                  ) : availableDivisions.length === 0 ? (
-                    <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-1.5">
-                      No active divisions in database.
-                    </div>
-                  ) : (
-                    <select
-                      value={editingUserModal.division || availableDivisions[0].code}
-                      onChange={e => {
-                        const newDiv = e.target.value;
-                        const currApprovals = Array.isArray(editingUserModal.approval_divisions) 
-                          ? editingUserModal.approval_divisions 
-                          : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
-                        const nextApprovals = currApprovals.includes(newDiv) ? currApprovals : [...currApprovals, newDiv];
-                        setEditingUserModal({ 
-                          ...editingUserModal, 
-                          division: newDiv,
-                          approval_divisions: nextApprovals
-                        });
-                      }}
-                      className="w-full text-xs p-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 font-semibold text-slate-800"
-                    >
-                      {availableDivisions.map(d => (
-                        <option key={d.code} value={d.code}>
-                          {d.name ? `${d.name} (${d.code})` : d.code}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Department</label>
-                  <input 
-                    type="text"
-                    value={editingUserModal.department || editingUserModal.dept || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, department: e.target.value })}
-                    placeholder="e.g. Finance"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Plant / Branch</label>
-                  <input 
-                    type="text"
-                    value={editingUserModal.plant || ''}
-                    onChange={e => setEditingUserModal({ ...editingUserModal, plant: e.target.value })}
-                    placeholder="e.g. TN-SIVAKASI"
-                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Approval Divisions</label>
-                {divisionsLoading ? (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 p-2.5 border border-slate-200 rounded-lg bg-slate-50">
-                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                    <span>Loading approval divisions...</span>
-                  </div>
-                ) : divisionsError ? (
-                  <div className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2">
-                    {divisionsError}
-                  </div>
-                ) : availableDivisions.length === 0 ? (
-                  <div className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                    No divisions available to assign.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-50/70 rounded-lg border border-slate-200 max-h-48 overflow-y-auto pr-1">
-                    {availableDivisions.map(d => {
-                      const currentList = Array.isArray(editingUserModal.approval_divisions)
-                        ? editingUserModal.approval_divisions
-                        : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
-                      const isChecked = currentList.includes(d.code);
-                      return (
-                        <label key={d.code} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none py-0.5">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={e => {
-                              let nextList;
-                              if (e.target.checked) {
-                                nextList = [...currentList, d.code];
-                              } else {
-                                nextList = currentList.filter(x => x !== d.code);
-                              }
-                              setEditingUserModal({
-                                ...editingUserModal,
-                                approval_divisions: nextList
-                              });
-                            }}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-                          />
-                          <span className="text-[11px] font-medium">{d.name ? `${d.name} (${d.code})` : d.code}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                <span className="text-[9px] text-slate-400 mt-0.5 block">Select all divisions this user is authorized to review or approve documents for.</span>
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Reset Password (Optional - leave blank to keep unchanged)</label>
-                <input 
-                  type="password"
-                  value={editingUserModal.password || ''}
-                  onChange={e => setEditingUserModal({ ...editingUserModal, password: e.target.value })}
-                  placeholder="New password (optional)"
-                  className="w-full text-xs p-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
-                />
-              </div>
-
-              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/80 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingUserModal(null)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                  className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isUpdatingUser}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  className="px-5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
                 >
                   {isUpdatingUser && <Loader2 className="h-3 w-3 animate-spin" />}
                   <span>Save Profile</span>
@@ -2605,7 +2855,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
