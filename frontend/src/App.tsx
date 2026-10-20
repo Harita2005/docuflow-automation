@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Header from "./components/Header.tsx";
 import Sidebar from "./components/Sidebar.tsx";
 import LoginPage from "./components/LoginPage";
@@ -76,6 +76,8 @@ export default function App() {
   });
 
   // Multi-Tab Synchronization across tabs in the same browser
+  const handleLogoutRef = useRef<(reason?: string | null, broadcast?: boolean) => void>(() => {});
+
   useEffect(() => {
     let authChannel: BroadcastChannel | null = null;
     try {
@@ -83,19 +85,39 @@ export default function App() {
         authChannel = new BroadcastChannel("docuflow_auth_channel");
         authChannel.onmessage = (event) => {
           if (event.data?.type === "LOGIN") {
+            // Fresh start on Dashboard for all open tabs, never inside any doc
+            setCurrentView("dashboard");
+            setSelectedDocId(null);
+            setPreviousView("dashboard");
+            if (typeof window !== "undefined" && window.location.pathname !== "/") {
+              window.history.replaceState({}, "", "/");
+            }
             setIsLoggedIn(true);
             setCurrentUserRole(event.data.role || localStorage.getItem("currentUserRole") || "");
             setCurrentUserEmail(event.data.email || localStorage.getItem("currentUserEmail") || "");
             setCurrentUserUsername(event.data.username || localStorage.getItem("currentUserUsername") || "");
             setKickedReason(null);
             sessionStorage.removeItem("sessionKickedReason");
+            sessionStorage.setItem("hasShownWelcomeQueue", "false");
+            setShowPendingModal(false);
+            setLoadingDocs(true);
           } else if (event.data?.type === "LOGOUT") {
-            setIsLoggedIn(false);
+            handleLogoutRef.current(null, false);
+            try {
+              if (window.opener && !window.opener.closed) {
+                window.close();
+              }
+            } catch {}
           } else if (event.data?.type === "SESSION_KICKED") {
             const reason = event.data.reason || "Your session was terminated because your account was logged in from another device/browser.";
             setKickedReason(reason);
             sessionStorage.setItem("sessionKickedReason", reason);
-            handleLogout(reason, false);
+            handleLogoutRef.current(reason, false);
+            try {
+              if (window.opener && !window.opener.closed) {
+                window.close();
+              }
+            } catch {}
           }
         };
       }
@@ -106,12 +128,29 @@ export default function App() {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "authToken") {
         if (!e.newValue) {
-          setIsLoggedIn(false);
+          handleLogoutRef.current(null, false);
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.close();
+            }
+          } catch {}
         } else {
+          // Fresh start on Dashboard for all open tabs, never inside any doc
+          setCurrentView("dashboard");
+          setSelectedDocId(null);
+          setPreviousView("dashboard");
+          if (typeof window !== "undefined" && window.location.pathname !== "/") {
+            window.history.replaceState({}, "", "/");
+          }
           setIsLoggedIn(true);
           setCurrentUserRole(localStorage.getItem("currentUserRole") || "");
           setCurrentUserEmail(localStorage.getItem("currentUserEmail") || "");
           setCurrentUserUsername(localStorage.getItem("currentUserUsername") || "");
+          setKickedReason(null);
+          sessionStorage.removeItem("sessionKickedReason");
+          sessionStorage.setItem("hasShownWelcomeQueue", "false");
+          setShowPendingModal(false);
+          setLoadingDocs(true);
         }
       }
     };
@@ -623,6 +662,21 @@ export default function App() {
   };
 
   function handleLogout(reason?: string | null, broadcast = true) {
+    const activeToken = localStorage.getItem("authToken") || localStorage.getItem("token");
+    if (selectedDocId && activeToken) {
+      try {
+        fetch(`/api/invoices/${selectedDocId}/lock/release`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeToken}`
+          },
+          body: JSON.stringify({}),
+          keepalive: true
+        }).catch(() => {});
+      } catch {}
+    }
+
     localStorage.removeItem("authToken");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("lastActivityTime");
@@ -671,6 +725,8 @@ export default function App() {
     }
   }
 
+  handleLogoutRef.current = handleLogout;
+
   // Welcome Pending Actions Queue: Check user's actual pending count upon login/session
   useEffect(() => {
     if (isLoggedIn && !loadingDocs) {
@@ -713,13 +769,9 @@ export default function App() {
         onLoginSuccess={(userId, role, email, username) => {
           handleLoginSuccess(userId, role, email, username);
           sessionStorage.setItem("hasShownWelcomeQueue", "false");
-          // Smart Routing based on role
-          setCurrentView((prev) => {
-            if (prev === "details" && selectedDocId) return "details";
-            // If they are an approver or employee, send them straight to the work tracker!
-            if (role === "manager" || role === "executive" || role === "employee") return "work-tracker";
-            return "dashboard";
-          });
+          // Always start completely fresh in Dashboard, never retain previous document state
+          setSelectedDocId(null);
+          setCurrentView("dashboard");
         }}
       />
     );

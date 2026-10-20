@@ -16,6 +16,7 @@ import {
   Clock,
   CheckCheck,
   Lock,
+  Unlock,
   FileSpreadsheet,
   XCircle,
   PauseCircle,
@@ -1200,15 +1201,51 @@ export default function DocumentDetails({
 
     return () => {
       clearInterval(heartbeat);
-      try {
-        fetch(`/api/invoices/${document.id}/lock/release`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ user_handle: userHandle })
-        }).catch(() => {});
-      } catch {}
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+      if (token && document?.id) {
+        try {
+          fetch(`/api/invoices/${document.id}/lock/release`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ user_handle: userHandle }),
+            keepalive: true
+          }).catch(() => {});
+        } catch {}
+      }
     };
   }, [document?.id, currentUserUsername, currentUserEmail]);
+
+  const [isTakingOver, setIsTakingOver] = useState(false);
+  const handleForceTakeover = async () => {
+    if (!document?.id) return;
+    setIsTakingOver(true);
+    try {
+      const userHandle = (currentUserUsername || currentUserEmail || "reviewer").trim().toLowerCase();
+      const userName = currentUserUsername || currentUserEmail || "Reviewer";
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const res = await fetch(`/api/invoices/${document.id}/lock/acquire`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ user_handle: userHandle, user_name: userName, lease_seconds: 180, force: true })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.acquired) {
+          setLockInfo({ isLocked: false, lockedBy: userName, isSelf: true });
+        }
+      }
+    } catch (err) {
+      console.warn("Takeover lock error:", err);
+    } finally {
+      setIsTakingOver(false);
+    }
+  };
 
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
   const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
@@ -2211,9 +2248,23 @@ export default function DocumentDetails({
                 Active Review in Progress: Currently being reviewed by <strong className="underline decoration-amber-500 font-extrabold">{lockInfo.lockedBy}</strong>. Document is in read-only mode to prevent conflicting modifications.
               </span>
             </div>
-            <span className="text-[9.5px] bg-amber-200 text-amber-950 font-mono px-2 py-0.5 rounded font-black uppercase tracking-wider border border-amber-300">
-              Locked
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {(isCurrentApprover || currentUserRole === 'admin') && (
+                <button
+                  type="button"
+                  onClick={handleForceTakeover}
+                  disabled={isTakingOver}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded shadow-xs transition cursor-pointer disabled:opacity-50"
+                  title="Unlock and take over review as the authorized reviewer"
+                >
+                  <Unlock className="h-3.5 w-3.5" />
+                  <span>{isTakingOver ? "Unlocking..." : "Take Over Review"}</span>
+                </button>
+              )}
+              <span className="text-[9.5px] bg-amber-200 text-amber-950 font-mono px-2 py-0.5 rounded font-black uppercase tracking-wider border border-amber-300">
+                Locked
+              </span>
+            </div>
           </div>
         )}
 

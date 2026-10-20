@@ -20,14 +20,14 @@ class DocumentLockManager:
         for doc_id in expired:
             del self._locks[doc_id]
 
-    def acquire_lock(self, doc_id: str, user_handle: str, user_name: str, lease_seconds: int=180) -> Dict[str, Any]:
+    def acquire_lock(self, doc_id: str, user_handle: str, user_name: str, lease_seconds: int=180, force: bool=False) -> Dict[str, Any]:
         with self._lock_mutex:
             self._cleanup_expired()
             now = time.time()
             clean_doc_id = str(doc_id).strip()
             clean_handle = str(user_handle).strip().lower()
             existing = self._locks.get(clean_doc_id)
-            if existing:
+            if existing and not force:
                 if existing.get('user_handle') == clean_handle:
                     existing['expires_at'] = now + lease_seconds
                     existing['last_heartbeat'] = now

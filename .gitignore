@@ -35,3 +35,6 @@ pytest_report.txt
 test_results.csv
 test_summary.csv
 results_*.json
+
+summary-*.json
+load-test-*.js

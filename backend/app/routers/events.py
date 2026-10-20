@@ -355,11 +355,21 @@ def acquire_document_lock(
     user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
     user_name = current_user.employee_name or current_user.name or current_user.username or "Reviewer"
     lease_seconds = _cap_lease_seconds(clean_payload.get('lease_seconds'))
+    force = bool(clean_payload.get('force', False))
+    if force:
+        is_admin = _is_admin_user(current_user)
+        assigned_target = str(getattr(inv, 'assigned_approver', None) or "").strip().lower()
+        user_tokens = {user_handle, (current_user.username or "").strip().lower(), (current_user.email or "").strip().lower()}
+        is_assigned = any(token and token in assigned_target for token in user_tokens)
+        if not (is_admin or is_assigned):
+            force = False
+
     result = lock_manager.acquire_lock(
         doc_id=str(inv.id),
         user_handle=user_handle,
         user_name=user_name,
         lease_seconds=lease_seconds,
+        force=force,
     )
     if result.get('acquired'):
         broadcast_event(
@@ -409,10 +419,13 @@ def release_document_lock(
     inv = _verify_document_access(current_user, invoice_id, db)
     user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
     is_admin = _is_admin_user(current_user)
+    assigned_target = str(getattr(inv, 'assigned_approver', None) or "").strip().lower()
+    user_tokens = {user_handle, (current_user.username or "").strip().lower(), (current_user.email or "").strip().lower()}
+    is_assigned = any(token and token in assigned_target for token in user_tokens)
     result = lock_manager.release_lock(
         doc_id=str(inv.id),
         user_handle=user_handle,
-        is_admin=is_admin,
+        is_admin=is_admin or is_assigned,
     )
     if not result.get('released'):
         raise HTTPException(
