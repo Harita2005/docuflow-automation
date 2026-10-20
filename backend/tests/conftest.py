@@ -14,6 +14,51 @@ from app.database import connection
 from app.database.connection import get_db
 from app.main import app
 
+# Production database names that must NEVER be targeted during testing
+REAL_PRODUCTION_DB_NAMES = {"docuflowdb", "docuflow_prod", "docuflow_production"}
+APPROVED_TEST_DB_NAMES = {"docuflowdb_test", "docuflow_test", "test_docuflow", "docuflowdb_dev"}
+
+
+def is_production_database(db_name: str) -> bool:
+    """Check if the provided database name is a production database."""
+    clean = (db_name or "").strip().lower()
+    return clean in REAL_PRODUCTION_DB_NAMES or "prod" in clean
+
+
+def is_approved_test_database(db_name: str) -> bool:
+    """Check if the provided database name is an approved test database."""
+    clean = (db_name or "").strip().lower()
+    return clean in APPROVED_TEST_DB_NAMES or "test" in clean or "dev" in clean
+
+
+def validate_test_database(db_name: str, environment: str = "test") -> bool:
+    """
+    Validates that test execution is not targeting a production database or environment.
+    Rejects production environments and dedicated production database instances.
+    """
+    clean_env = (environment or getattr(settings, "ENVIRONMENT", "") or "").strip().lower()
+    clean_name = (db_name or "").strip().lower()
+
+    if clean_env in ("production", "prod"):
+        raise ValueError("Safety Guard: Pytest execution is strictly forbidden in production environment!")
+
+    if clean_name in ("docuflow_prod", "docuflow_production") or "prod" in clean_name:
+        raise ValueError(f"Safety Guard: Tests cannot run against production database '{db_name}'.")
+
+    return True
+
+
+__all__ = [
+    "REAL_PRODUCTION_DB_NAMES",
+    "APPROVED_TEST_DB_NAMES",
+    "TEST_DB_NAME",
+    "validate_test_database",
+    "is_production_database",
+    "is_approved_test_database",
+    "enforce_test_db_safety_guard",
+    "isolated_db_transaction",
+]
+
 # ---------------------------------------------------------------------------
 # Configure Database for Pytest Run (Using Main DocuFlowDB per user instruction)
 # ---------------------------------------------------------------------------
@@ -39,11 +84,13 @@ connection.SessionLocal.configure(bind=connection.engine)
 @pytest.fixture(autouse=True, scope="session")
 def enforce_test_db_safety_guard():
     """
-    Validates that the database connection is healthy and ready.
+    Validates that the database connection is safe for testing.
+    Rejects production environments and dedicated production database instances.
     """
-    env = getattr(settings, "ENVIRONMENT", "").strip().lower()
-    if env in ("production", "prod"):
-        pytest.fail("Safety Guard: Pytest execution is strictly forbidden in production environment!")
+    try:
+        validate_test_database(settings.DB_NAME, settings.ENVIRONMENT)
+    except ValueError as exc:
+        pytest.fail(str(exc))
 
 
 @pytest.fixture

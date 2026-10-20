@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Counter, Rate, Trend } from 'k6/metrics';
+import { Rate, Trend } from 'k6/metrics';
 
 // Custom Metrics separating real document APIs from health endpoint
 const failureRate = new Rate('custom_failure_rate');

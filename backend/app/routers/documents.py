@@ -138,7 +138,7 @@ def invalidate_invoices_cache(doc_id: Optional[str] = None):
         else:
             _BASE_DOC_CACHE.clear()
 
-def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
+def sync_document_approver_from_workflow(db: Session, inv: Invoice, cached_steps: Optional[list] = None) -> str:
     """
     Dynamically synchronizes an active document's assigned_approver from the current 
     workflow step definition. If the member was changed in between, this ensures the newly 
@@ -162,11 +162,11 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
     if inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
         return inv.assigned_approver or ''
 
-    # Fetch all defined steps for this workflow profile
-    steps = db.query(WorkflowStepDefinition).filter(
-        (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
-        (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip()))
-    ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+    # Fetch all defined steps for this workflow profile using cache
+    if cached_steps is not None:
+        steps = cached_steps
+    else:
+        steps = get_cached_workflow_steps(db, inv.workflow_profile_id)
 
     step_count = len(steps)
     if step_count > 0:
@@ -208,7 +208,7 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice) -> str:
 
     curr_stage = inv.current_stage or 1
     step_def = next((s for s in steps if s.stage_number == curr_stage), None) if step_count > 0 else None
-    if not step_def:
+    if not step_def and cached_steps is None:
         step_def = db.query(WorkflowStepDefinition).filter(
             (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
             (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
@@ -322,7 +322,7 @@ def record_approval_assignment_transition(
         logger.warning("Approval assignment transition sync error: %s", exc)
 
 
-def resolve_document_stage_name(db: Session, inv: Invoice) -> str:
+def resolve_document_stage_name(db: Session, inv: Invoice, cached_steps: Optional[list] = None) -> str:
     """Dynamically resolves the current workflow stage display name for a document."""
     if not inv:
         return "Stage 1"
@@ -330,11 +330,11 @@ def resolve_document_stage_name(db: Session, inv: Invoice) -> str:
         return inv.current_stage_name
     curr_stg = inv.current_stage or 1
     if inv.workflow_profile_id:
-        step = db.query(WorkflowStepDefinition).filter(
-            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
-            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
-            WorkflowStepDefinition.stage_number == curr_stg
-        ).first()
+        if cached_steps is not None:
+            steps = cached_steps
+        else:
+            steps = get_cached_workflow_steps(db, inv.workflow_profile_id)
+        step = next((s for s in steps if s.stage_number == curr_stg), None)
         if step and step.step_name:
             inv.current_stage_name = step.step_name
             return step.step_name
@@ -927,9 +927,20 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
     user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     results = []
 
+    # Batch pre-load cached workflow steps for all distinct profile IDs in this invoice batch
+    profile_names = {
+        inv.workflow_profile_id.strip()
+        for inv in invoices
+        if inv.workflow_profile_id and str(inv.workflow_profile_id).strip() not in ['', 'None']
+    }
+    workflow_steps_map = {p: get_cached_workflow_steps(db, p) for p in profile_names}
+
     for inv in invoices:
+        clean_prof = inv.workflow_profile_id.strip() if (inv.workflow_profile_id and str(inv.workflow_profile_id).strip() not in ['', 'None']) else None
+        p_steps = workflow_steps_map.get(clean_prof) if clean_prof else None
+
         # Dynamically synchronize assigned_approver from workflow definition
-        sync_document_approver_from_workflow(db, inv)
+        sync_document_approver_from_workflow(db, inv, cached_steps=p_steps)
 
         st_low = (inv.status or '').strip().lower()
         cs_low = (str(inv.current_stage or '')).strip().lower()
@@ -986,7 +997,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_approved_curr_stage or has_approved_any_stage
         inv_res.has_rejected = has_rej
-        inv_res.current_stage_name = resolve_document_stage_name(db, inv)
+        inv_res.current_stage_name = resolve_document_stage_name(db, inv, cached_steps=p_steps)
         results.append(inv_res)
 
     return results

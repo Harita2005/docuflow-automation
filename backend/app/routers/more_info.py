@@ -1,6 +1,8 @@
 import json
 import logging
 import re
+import threading
+import time
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -27,6 +29,20 @@ from app.services.rbac_service import check_permission
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["More Info Field Configuration"])
+
+_MORE_INFO_CONFIG_CACHE: Dict[str, Any] = {}
+_MORE_INFO_CONFIG_LOCK = threading.Lock()
+_MORE_INFO_CONFIG_TTL = 60.0
+
+def invalidate_more_info_cache(doc_type: Optional[str] = None):
+    with _MORE_INFO_CONFIG_LOCK:
+        if doc_type:
+            norm = normalize_doc_type(doc_type)
+            keys_to_del = [k for k in _MORE_INFO_CONFIG_CACHE if k.startswith(f"{norm}:")]
+            for k in keys_to_del:
+                _MORE_INFO_CONFIG_CACHE.pop(k, None)
+        else:
+            _MORE_INFO_CONFIG_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -829,6 +845,14 @@ def get_doc_type_more_info_config(
     db: Session = Depends(get_db),
 ):
     norm_type = normalize_doc_type(document_type)
+    user_key = current_user.id if (current_user and current_user.id) else "anon"
+    cache_key = f"{norm_type}:{user_key}"
+    now = time.monotonic()
+    with _MORE_INFO_CONFIG_LOCK:
+        entry = _MORE_INFO_CONFIG_CACHE.get(cache_key)
+        if entry and (now - entry["timestamp"] < _MORE_INFO_CONFIG_TTL):
+            return entry["data"]
+
     try:
         sample_doc = (
             db.query(Invoice)
@@ -864,7 +888,7 @@ def get_doc_type_more_info_config(
                 current_user, "role:manage", db
             )
 
-        return MoreInfoConfigResponse(
+        resp = MoreInfoConfigResponse(
             document_type=norm_type,
             scope=scope,
             has_user_override=has_user_override,
@@ -874,6 +898,9 @@ def get_doc_type_more_info_config(
             selected_fields=combined,
             available_fields=available_fields,
         )
+        with _MORE_INFO_CONFIG_LOCK:
+            _MORE_INFO_CONFIG_CACHE[cache_key] = {"data": resp, "timestamp": now}
+        return resp
     except Exception as exc:
         logger.error("Error getting doc type more info config for '%s': %s", document_type, exc, exc_info=True)
         try:
@@ -1255,6 +1282,8 @@ def save_doc_type_more_info_config(
         db, norm_type, current_user, available_fields
     )
 
+    invalidate_more_info_cache(norm_type)
+
     return MoreInfoConfigResponse(
         document_type=norm_type,
         scope="GLOBAL" if payload.save_as_default else scope,
@@ -1317,6 +1346,7 @@ def save_document_more_info_config(
         admin_defaults, user_selected, combined, scope, has_user_override = resolve_effective_configuration(
             db, doc_type, current_user, available_fields
         )
+        invalidate_more_info_cache(doc_type)
         return MoreInfoConfigResponse(
             document_type=doc_type,
             scope=scope,
@@ -1401,6 +1431,8 @@ def save_document_more_info_config(
             db, doc_type, current_user, available_fields
         )
 
+        invalidate_more_info_cache(doc_type)
+
         return MoreInfoConfigResponse(
             document_type=doc_type,
             scope="GLOBAL",
@@ -1470,6 +1502,8 @@ def save_document_more_info_config(
 
     doc_specific_fields = _resolve_document_custom_config(doc, available_fields, admin_defaults)
     effective_fields = doc_specific_fields if doc_specific_fields is not None else combined
+
+    invalidate_more_info_cache(doc_type)
 
     return MoreInfoConfigResponse(
         document_type=doc_type,

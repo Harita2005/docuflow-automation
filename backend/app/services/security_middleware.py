@@ -169,7 +169,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             limit = self.max_auth_requests  # default 15/min
             category = "login"
         elif path.startswith('/api/auth/mfa'):
-            limit = 120  # 120 OTP / MFA requests per min
+            limit = 15  # 15 OTP / MFA requests per min (OWASP-compliant; test runner bypasses via E2E_TESTING)
             category = "mfa"
         elif (
             path.startswith('/api/documents/upload')

@@ -74,6 +74,13 @@ async def lifespan(app: FastAPI):
                 start_archive_scheduler()
             except Exception as arch_err:
                 logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
+            # Tune AnyIO thread limiter to 200 tokens for 150+ concurrent requests
+            try:
+                import anyio.to_thread
+                anyio.to_thread.current_default_thread_limiter().total_tokens = 200
+                logger.info("Configured AnyIO default thread limiter tokens to 200 for high concurrency.")
+            except Exception as thread_err:
+                logger.debug(f"AnyIO thread limiter configuration deferred: {thread_err}")
         except Exception as exc: 
             logger.warning(f"Startup tasks deferred: {exc}")
     yield

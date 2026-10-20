@@ -31,7 +31,7 @@ export const options = {
             ],
         },
     },
-    summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
+    summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(50)', 'p(90)', 'p(95)', 'p(99)'],
     thresholds: {
         // Gracefully abort the test if the failure rate exceeds 10%
         'http_req_failed': [{ threshold: 'rate<0.10', abortOnFail: true, delayAbortEval: '10s' }],
@@ -51,6 +51,7 @@ export default function () {
         `${BASE_URL}/api/invoices/CMP-00000172`,
         `${BASE_URL}/api/admin/roles`,
         `${BASE_URL}/api/document-types/AP%20INVOICE/more-info/config`,
+        `${BASE_URL}/api/documents/work-tracker`,
     ];
 
     const targetUrl = endpoints[Math.floor(Math.random() * endpoints.length)];
@@ -73,6 +74,7 @@ export function handleSummary(data) {
         total_requests: (metrics.http_reqs && metrics.http_reqs.values && metrics.http_reqs.values.count) || 0,
         throughput_rps: (metrics.http_reqs && metrics.http_reqs.values && metrics.http_reqs.values.rate) || 0,
         avg_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values.avg) || 0,
+        p50_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && (metrics.http_req_duration.values['p(50)'] || metrics.http_req_duration.values.med)) || 0,
         p90_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(90)']) || 0,
         p95_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(95)']) || 0,
         p99_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(99)']) || 0,
@@ -87,6 +89,7 @@ export function handleSummary(data) {
 - **Total Requests**: ${summary.total_requests}
 - **Throughput**: ${summary.throughput_rps.toFixed(2)} req/sec
 - **Average Latency**: ${summary.avg_latency_ms.toFixed(2)} ms
+- **P50 Latency**: ${summary.p50_latency_ms.toFixed(2)} ms
 - **P90 Latency**: ${summary.p90_latency_ms.toFixed(2)} ms
 - **P95 Latency**: ${summary.p95_latency_ms.toFixed(2)} ms
 - **P99 Latency**: ${summary.p99_latency_ms.toFixed(2)} ms

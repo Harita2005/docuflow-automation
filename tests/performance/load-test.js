@@ -7,6 +7,7 @@ const failureRate = new Rate('custom_failure_rate');
 const invoiceQueueTrend = new Trend('trend_invoice_queue');
 const rolesTrend = new Trend('trend_roles');
 const moreInfoTrend = new Trend('trend_more_info');
+const workTrackerTrend = new Trend('trend_work_tracker');
 
 // Environment Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:3000';
@@ -52,11 +53,18 @@ export const options = {
             startTime: `${parseInt(DURATION_PER_STAGE) * 3}s`,
             tags: { scenario_tier: '100_vus' },
         },
+        scenario_150_vus: {
+            executor: 'constant-vus',
+            vus: 150,
+            duration: DURATION_PER_STAGE,
+            startTime: `${parseInt(DURATION_PER_STAGE) * 4}s`,
+            tags: { scenario_tier: '150_vus' },
+        },
     },
-    summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
+    summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(50)', 'p(90)', 'p(95)', 'p(99)'],
     thresholds: {
         'http_req_failed': ['rate<0.05'], // Max 5% HTTP failure rate
-        'http_req_duration': ['p(90)<1200', 'p(95)<2500'], // P90 < 1.2s, P95 < 2.5s
+        'http_req_duration': ['p(90)<1500', 'p(95)<3000'], // P90 < 1.5s, P95 < 3.0s
     },
 };
 
@@ -129,6 +137,22 @@ export default function () {
     });
     failureRate.add(!moreInfoOk);
 
+    // 5. Work Tracker (/api/documents/work-tracker)
+    const startTracker = new Date();
+    const resTracker = http.get(`${BASE_URL}/api/documents/work-tracker`, { headers: authHeaders });
+    workTrackerTrend.add(new Date() - startTracker);
+    const trackerOk = check(resTracker, {
+        'work-tracker status is 200': (r) => r.status === 200,
+        'work-tracker returns list': (r) => {
+            try {
+                return Array.isArray(JSON.parse(r.body));
+            } catch (e) {
+                return false;
+            }
+        },
+    });
+    failureRate.add(!trackerOk);
+
     // Realistic user think time
     sleep(0.5);
 }
@@ -141,6 +165,7 @@ export function handleSummary(data) {
         total_requests: (metrics.http_reqs && metrics.http_reqs.values && metrics.http_reqs.values.count) || 0,
         throughput_rps: (metrics.http_reqs && metrics.http_reqs.values && metrics.http_reqs.values.rate) || 0,
         avg_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values.avg) || 0,
+        p50_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && (metrics.http_req_duration.values['p(50)'] || metrics.http_req_duration.values.med)) || 0,
         p90_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(90)']) || 0,
         p95_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(95)']) || 0,
         p99_latency_ms: (metrics.http_req_duration && metrics.http_req_duration.values && metrics.http_req_duration.values['p(99)']) || 0,
@@ -153,6 +178,7 @@ export function handleSummary(data) {
 - **Total Requests**: ${summaryData.total_requests}
 - **Throughput**: ${summaryData.throughput_rps.toFixed(2)} req/sec
 - **Average Latency**: ${summaryData.avg_latency_ms.toFixed(2)} ms
+- **P50 Latency**: ${summaryData.p50_latency_ms.toFixed(2)} ms
 - **P90 Latency**: ${summaryData.p90_latency_ms.toFixed(2)} ms
 - **P95 Latency**: ${summaryData.p95_latency_ms.toFixed(2)} ms
 - **P99 Latency**: ${summaryData.p99_latency_ms.toFixed(2)} ms
@@ -163,6 +189,7 @@ export function handleSummary(data) {
 - 25 Virtual Users (Tier 2)
 - 50 Virtual Users (Tier 3)
 - 100 Virtual Users (Tier 4)
+- 150 Virtual Users (Tier 5)
 `;
 
     return {

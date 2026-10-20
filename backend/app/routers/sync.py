@@ -27,6 +27,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
 
 SCHEMA_ALTER_LOCK = threading.Lock()
+_KNOWN_COLUMNS_CACHE: set = set()
+_KNOWN_COLUMNS_LOCK = threading.Lock()
+
+def _init_known_columns_cache():
+    global _KNOWN_COLUMNS_CACHE
+    try:
+        from app.database.models import Invoice
+        with _KNOWN_COLUMNS_LOCK:
+            for col in Invoice.__table__.columns:
+                _KNOWN_COLUMNS_CACHE.add(col.name.lower())
+    except Exception as e:
+        logger.debug("Could not pre-populate _KNOWN_COLUMNS_CACHE: %s", e)
+
+_init_known_columns_cache()
 
 CANONICAL_FIELD_ALIASES = {
     "account_name": "account_name",
@@ -142,7 +156,16 @@ def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_
     if not col_name:
         return raw_field_name
 
+    col_lower = col_name.lower()
+    with _KNOWN_COLUMNS_LOCK:
+        if col_lower in _KNOWN_COLUMNS_CACHE:
+            return col_name
+
     with SCHEMA_ALTER_LOCK:
+        with _KNOWN_COLUMNS_LOCK:
+            if col_lower in _KNOWN_COLUMNS_CACHE:
+                return col_name
+
         try:
             from sqlalchemy import text
             dialect_name = db.bind.dialect.name if (db.bind and hasattr(db.bind, 'dialect')) else 'mssql'
@@ -162,7 +185,11 @@ def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_
             
             existing = db.execute(check_query, {"col_name": col_name}).fetchone()
             if existing:
-                return existing[0]
+                canonical_name = existing[0]
+                with _KNOWN_COLUMNS_LOCK:
+                    _KNOWN_COLUMNS_CACHE.add(col_lower)
+                    _KNOWN_COLUMNS_CACHE.add(canonical_name.lower())
+                return canonical_name
 
             sql_type = infer_sql_server_datatype(sample_value)
             
@@ -186,6 +213,8 @@ def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_
                 except Exception as exc:
                     logging.getLogger(__name__).debug("Database alter column error (ignoring if exists): %s", exc)
 
+            with _KNOWN_COLUMNS_LOCK:
+                _KNOWN_COLUMNS_CACHE.add(col_lower)
             logger.info("Dynamically created REAL SQL Server column '%s' (%s) in documents table", col_name, sql_type)
             return col_name
         except Exception as e:
@@ -213,13 +242,12 @@ def generate_compliance_checklist_for_category(category: Optional[str], doc_type
         logging.getLogger(__name__).debug('Handled exception: %s', e)
     return []
 
-_PRODUCTION_SCHEMA_INITIALIZED = False
+_SCHEMA_STATE = {"production_initialized": False}
 
 def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv: Invoice):
-    global _PRODUCTION_SCHEMA_INITIALIZED
     try:
         from sqlalchemy import text
-        if not _PRODUCTION_SCHEMA_INITIALIZED:
+        if not _SCHEMA_STATE["production_initialized"]:
             if db.bind and db.bind.dialect.name == 'mssql':
                 db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'integration') EXEC('CREATE SCHEMA integration');"))
                 db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'core') EXEC('CREATE SCHEMA core');"))
@@ -244,7 +272,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
                 db.execute(text("IF OBJECT_ID('audit.audit_events', 'U') IS NULL CREATE TABLE audit.audit_events (event_id INT IDENTITY(1,1) PRIMARY KEY, correlation_id UNIQUEIDENTIFIER NULL, actor_user_id INT NULL, source_system_id INT NULL, event_category VARCHAR(50) NULL, event_type VARCHAR(100) NULL, entity_schema VARCHAR(50) NULL, entity_table VARCHAR(100) NULL, entity_id VARCHAR(100) NULL, action_type VARCHAR(50) NULL, before_json NVARCHAR(MAX) NULL, after_json NVARCHAR(MAX) NULL, metadata_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
                 db.execute(text("IF OBJECT_ID('rules.rule_evaluation_runs', 'U') IS NULL CREATE TABLE rules.rule_evaluation_runs (evaluation_run_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, run_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), correlation_id UNIQUEIDENTIFIER NULL);"))
                 db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='evaluation_run_id') AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='run_id') EXEC sp_rename 'rules.rule_evaluation_runs.run_id', 'evaluation_run_id', 'COLUMN';"))
-                _PRODUCTION_SCHEMA_INITIALIZED = True
+                _SCHEMA_STATE["production_initialized"] = True
         sys_code = req.company_code or req.division or 'APP_A'
         sys_name = f'System for {sys_code}'
         db.execute(text('\n            IF NOT EXISTS (SELECT 1 FROM integration.source_systems WHERE system_code = :sys_code)\n            BEGIN\n                INSERT INTO integration.source_systems (system_code, system_name, is_active, created_at)\n                VALUES (:sys_code, :sys_name, 1, SYSUTCDATETIME())\n            END\n        '), {'sys_code': sys_code, 'sys_name': sys_name})
@@ -602,8 +630,8 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 logger.error("Failed batch updating dynamic columns: %s", exc)
                 try:
                     db.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_exc:
+                    logger.debug("Database rollback after batch update failure suppressed: %s", rb_exc)
 
     db.commit()
     db.refresh(target_inv)
