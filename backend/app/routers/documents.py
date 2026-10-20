@@ -2193,13 +2193,10 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
+    inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, doc_id)
+        expected_ver = inv.version or 1
     expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
     check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None)
     
@@ -2629,13 +2626,10 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in rejection payload')
+    inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, doc_id)
+        expected_ver = inv.version or 1
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2766,13 +2760,10 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in hold payload')
+    inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, doc_id)
+        expected_ver = inv.version or 1
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2824,13 +2815,10 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in sendback payload')
+    inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, doc_id)
+        expected_ver = inv.version or 1
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:

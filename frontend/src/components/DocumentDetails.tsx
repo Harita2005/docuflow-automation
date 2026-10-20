@@ -1806,7 +1806,8 @@ export default function DocumentDetails({
           "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
         },
         body: JSON.stringify({
-          invoiceId: document.id,
+          invoiceId: (activeDoc || document)?.id || document?.id,
+          expected_version: (activeDoc || document)?.version ?? document?.version ?? 1,
           comments,
         }),
       });
@@ -1864,7 +1865,7 @@ export default function DocumentDetails({
           "Content-Type": "application/json",
           "Authorization": token ? `Bearer ${token}` : ""
         },
-        body: JSON.stringify(isReturn ? { invoiceId: document.id, comments: holdComment } : { remarks: holdComment }),
+        body: JSON.stringify(isReturn ? { invoiceId: (activeDoc || document)?.id || document?.id, expected_version: (activeDoc || document)?.version ?? document?.version ?? 1, comments: holdComment } : { remarks: holdComment, expected_version: (activeDoc || document)?.version ?? document?.version ?? 1 }),
       });
       if (response.ok) {
         clearDraft();
@@ -1948,7 +1949,12 @@ export default function DocumentDetails({
     setActionLoading(true);
     setActionError(null);
     try {
-      const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || 1} (Document Attached & Compliance Checklist Verified)`;
+      const docObj = activeDoc || document;
+      const docId = docObj?.id || document?.id;
+      const expectedVersion = docObj?.version ?? document?.version ?? 1;
+      const expectedStage = docObj?.current_stage ?? document?.current_stage ?? 1;
+
+      const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || expectedStage} (Document Attached & Compliance Checklist Verified)`;
       const response = await fetch(`/api/workflows/approve`, {
         method: "POST",
         headers: { 
@@ -1956,9 +1962,9 @@ export default function DocumentDetails({
           "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
         },
         body: JSON.stringify({
-          invoiceId: document.id,
-          expected_stage: document.current_stage || 1,
-          expected_version: document.version,
+          invoiceId: docId,
+          expected_stage: expectedStage,
+          expected_version: expectedVersion,
           comments: commentsToSend,
           checklistVerified: true,
           verifiedItems: Object.keys(checkedStates).filter(k => checkedStates[k])

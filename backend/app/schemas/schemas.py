@@ -189,6 +189,7 @@ class InvoiceBase(BaseModel):
     rating: Optional[Union[int, str]] = None
     feedback_date: Optional[str] = None
     due_date: Optional[str] = None
+    version: Optional[int] = 1
 
     class Config:
         from_attributes = True
