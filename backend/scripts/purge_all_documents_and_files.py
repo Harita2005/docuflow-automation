@@ -29,7 +29,7 @@ with open(backup_path, 'w', encoding='utf-8') as f:
 print(f'\n[Backup Success] Document records backed up to: {backup_path}\n')
 for table in doc_tables:
     try:
-        res = db.execute(text(f'DELETE FROM {table}'))
+        db.execute(text(f'DELETE FROM {table}'))
         print(f"[Clear DB] Deleted all records from '{table}'")
     except Exception as e:
         logging.getLogger(__name__).debug('Handled exception: %s', e)
@@ -39,7 +39,7 @@ storage_dirs = [settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED
 deleted_file_count = 0
 for folder in storage_dirs:
     if os.path.exists(folder):
-        for root, dirs, files in os.walk(folder):
+        for root, _, files in os.walk(folder):
             for file in files:
                 file_path = os.path.join(root, file)
                 try:

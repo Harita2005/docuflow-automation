@@ -24,7 +24,7 @@ try:
     cnt_sync_log = db.query(IntegrationSyncLog).delete()
     cnt_notif = db.query(InAppNotification).delete()
     cnt_doc = db.query(Document).delete()
-    print(f'[Purge Documents] Deleted {cnt_doc} documents, {cnt_line} line items, {cnt_chk_state} checklist states, {cnt_app_log} approval logs, {cnt_notif} notifications.')
+    print(f'[Purge Documents] Deleted {cnt_doc} documents, {cnt_line} line items, {cnt_chk_state} checklist states, {cnt_app_log} approval logs, {cnt_sys_log} system logs, {cnt_sync_log} sync logs, {cnt_notif} notifications.')
     cnt_rules = db.query(BusinessRule).delete()
     print(f'[Purge Conditions] Deleted {cnt_rules} business condition rules.')
     cnt_chk_rules = db.query(ChecklistRule).delete()
@@ -44,7 +44,7 @@ storage_dirs = [settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED
 deleted_file_count = 0
 for folder in storage_dirs:
     if os.path.exists(folder):
-        for root, dirs, files in os.walk(folder):
+        for root, _, files in os.walk(folder):
             for file in files:
                 file_path = os.path.join(root, file)
                 try:

@@ -36,7 +36,7 @@ if not chk:
     db.commit()
 doc = db.query(Document).filter(Document.id == 'DOC-VCC-001').first()
 if doc:
-    eval_res = evaluate_business_rules(db, doc)
+    evaluate_business_rules(db, doc)
     doc.workflow_profile_id = wf_name
     doc.assigned_approver = 'YUVASREE'
     doc.current_stage = 1

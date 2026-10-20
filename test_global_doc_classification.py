@@ -48,7 +48,7 @@ def main():
                 print(f"❌ FAIL: Record {case['doc_key']} not found in DB!")
                 continue
                 
-            db_id, db_doc_type, db_inv_num, db_status = row
+            db_id, db_doc_type, db_inv_num, _ = row
             
             if db_doc_type == expected_type:
                 print(f"✅ PASS: [{case['doc_key']}] DB document_type='{db_doc_type}' | id='{db_id}' | inv_num='{db_inv_num}'")

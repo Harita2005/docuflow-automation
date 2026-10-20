@@ -1,0 +1,20 @@
+TAX INVOICE
+PRECISE TECH SOLUTIONS PVT LTD
+12 Industrial Estate, Guindy, Chennai, Tamil Nadu - 600032
+GSTIN: 33AAAAA0000A1Z5
+
+Invoice No: INV-2026-001
+Invoice Date: 15-10-2026
+PO Number: PO-88291
+
+Bill To:
+DocuFlow Manufacturing Ltd
+Sivakasi, Tamil Nadu - 626123
+
+Item Description: Enterprise Software Maintenance & Cloud Hosting
+Quantity: 1
+Base Amount: INR 10,000.00
+Tax Amount: INR 1,800.00
+CGST: INR 900.00
+SGST: INR 900.00
+Total Amount: INR 11,800.00

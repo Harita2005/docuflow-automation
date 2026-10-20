@@ -1,0 +1,4 @@
+invoice_id,file_path,invoice_number,invoice_date,vendor_name,po_number,base_amount,tax_amount,amount,gstin,notes
+SAMPLE-INV-001,tests/accuracy/sample_invoice.txt,INV-2026-001,2026-10-15,Precise Tech Solutions Pvt Ltd,PO-88291,10000.00,1800.00,11800.00,33AAAAA0000A1Z5,Verified sample for baseline evaluation
+TEMPLATE-INV-002,stored_pdfs/CAPEX-9901.pdf,,,,,,,,,Pending human ground truth annotation
+TEMPLATE-INV-003,stored_pdfs/DOC-3STAGE-01.pdf,,,,,,,,,Pending human ground truth annotation

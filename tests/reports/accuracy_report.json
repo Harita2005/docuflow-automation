@@ -1,0 +1,82 @@
+{
+  "timestamp": "manual_run",
+  "total_records": 3,
+  "annotated_records": 1,
+  "unannotated_records": 2,
+  "overall_normalized_accuracy_pct": 100.0,
+  "total_annotated_fields": 8,
+  "total_normalized_matches": 8,
+  "total_exact_matches": 4,
+  "total_missing_fields": 0,
+  "field_statistics": {
+    "invoice_number": {
+      "total": 1,
+      "exact_match": 1,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "invoice_date": {
+      "total": 1,
+      "exact_match": 1,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "vendor_name": {
+      "total": 1,
+      "exact_match": 0,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "po_number": {
+      "total": 1,
+      "exact_match": 1,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "base_amount": {
+      "total": 1,
+      "exact_match": 0,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "tax_amount": {
+      "total": 1,
+      "exact_match": 0,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "amount": {
+      "total": 1,
+      "exact_match": 0,
+      "normalized_match": 1,
+      "missing": 0
+    },
+    "gstin": {
+      "total": 1,
+      "exact_match": 1,
+      "normalized_match": 1,
+      "missing": 0
+    }
+  },
+  "mismatches": [],
+  "records": [
+    {
+      "invoice_id": "SAMPLE-INV-001",
+      "file_path": "tests/accuracy/sample_invoice.txt",
+      "status": "PASS",
+      "mismatches": []
+    },
+    {
+      "invoice_id": "TEMPLATE-INV-002",
+      "file_path": "stored_pdfs/CAPEX-9901.pdf",
+      "status": "BLOCKED",
+      "reason": "Pending ground truth annotation"
+    },
+    {
+      "invoice_id": "TEMPLATE-INV-003",
+      "file_path": "stored_pdfs/DOC-3STAGE-01.pdf",
+      "status": "BLOCKED",
+      "reason": "Pending ground truth annotation"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ try:
     cnt_sync = db.query(IntegrationSyncLog).delete()
     cnt_notif = db.query(InAppNotification).delete()
     cnt_doc = db.query(Document).delete()
-    print(f'[Purge Documents] Deleted {cnt_doc} documents, {cnt_chk} checklist states, {cnt_app} approval logs, {cnt_notif} notifications.')
+    print(f'[Purge Documents] Deleted {cnt_doc} documents, {cnt_line} line items, {cnt_chk} checklist states, {cnt_app} approval logs, {cnt_sys} system logs, {cnt_sync} sync logs, {cnt_notif} notifications.')
     cnt_rule = db.query(BusinessRule).delete()
     print(f'[Purge Conditions] Deleted {cnt_rule} business condition rules.')
     cnt_step = db.query(WorkflowStepDefinition).delete()
