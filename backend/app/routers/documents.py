@@ -2462,13 +2462,10 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
 @router.post('/api/documents/{invoice_id}/step-action')
 @router.post('/api/invoices/{invoice_id}/step-action')
 def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, invoice_id)
+        expected_ver = inv.version or 1
     action_type = str(payload.get('action') or 'Approve').strip()
     act_lower = action_type.lower()
     is_approving = 'approve' in act_lower or 'pass' in act_lower
@@ -2645,13 +2642,10 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
 @router.post('/api/documents/{invoice_id}/reject')
 @router.post('/api/invoices/{invoice_id}/reject')
 def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, invoice_id)
+        expected_ver = inv.version or 1
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2853,13 +2847,10 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
 @router.post('/api/documents/{invoice_id}/hold')
 @router.post('/api/invoices/{invoice_id}/hold')
 def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    inv = find_invoice_by_identifier(db, invoice_id)
+        expected_ver = inv.version or 1
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:

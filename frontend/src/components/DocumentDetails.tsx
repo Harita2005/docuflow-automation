@@ -391,6 +391,7 @@ export default function DocumentDetails({
   useEffect(() => {
     if (!document?.id) return;
     setFreshDocument(null);
+    setActionError(null);
     const token = localStorage.getItem("token") || localStorage.getItem("authToken");
     fetch(`/api/documents/${encodeURIComponent(document.id)}`, {
       headers: token ? { "Authorization": `Bearer ${token}` } : {}
@@ -2107,6 +2108,14 @@ export default function DocumentDetails({
             <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
             <span className="uppercase tracking-wider">{actionError}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="self-end md:self-auto p-1 text-red-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors"
+            title="Dismiss error message"
+          >
+            <X className="h-4 w-4" />
+          </button>
           {(actionError.includes("413") || actionError.toLowerCase().includes("too large") || actionError.toLowerCase().includes("limit") || actionError.toLowerCase().includes("exceeds")) && (
             <label className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs cursor-pointer shadow-sm transition-all font-semibold uppercase tracking-wider active:scale-95">
               <Sparkles className="h-3.5 w-3.5 text-amber-200" />
@@ -2174,7 +2183,7 @@ export default function DocumentDetails({
               </button>
             ) : (
               <button
-                onClick={onRefreshDocument}
+                onClick={() => { setActionError(null); onRefreshDocument(); }}
                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition text-[10px] font-bold flex items-center gap-1 px-2.5 border border-slate-200 cursor-pointer"
                 title="Refresh Document"
               >

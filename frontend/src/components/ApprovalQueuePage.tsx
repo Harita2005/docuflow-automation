@@ -83,13 +83,19 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
 
     setSubmitting(true);
     try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const response = await fetch(`/api/invoices/${selectedInvoice.id}/step-action`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify({
           action,
           comments: commentText,
-          approver: `${currentUserEmail} (${currentUserRole.toUpperCase()})`
+          approver: `${currentUserEmail} (${currentUserRole.toUpperCase()})`,
+          expected_version: selectedInvoice.version || 1,
+          expected_stage: selectedInvoice.current_stage || 1
         })
       });
 
