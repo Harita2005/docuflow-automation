@@ -31,7 +31,6 @@ _KNOWN_COLUMNS_CACHE: set = set()
 _KNOWN_COLUMNS_LOCK = threading.Lock()
 
 def _init_known_columns_cache():
-    global _KNOWN_COLUMNS_CACHE
     try:
         from app.database.models import Invoice
         with _KNOWN_COLUMNS_LOCK:

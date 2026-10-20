@@ -23,8 +23,10 @@ def free_port_if_occupied(port: int = 3000):
                 if pid and pid != my_pid:
                     print(f"[DocuFlow Startup] Port {port} occupied by previous process PID {pid}. Releasing port...")
                     subprocess.run(f'taskkill /F /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    except Exception as exc:
+        # Pre-startup port check is advisory; continue starting uvicorn even if netstat/taskkill fails
+        import logging
+        logging.getLogger("uvicorn.error").debug("Port occupancy check skipped: %s", exc)
 
 if __name__ == '__main__':
     free_port_if_occupied(3000)
