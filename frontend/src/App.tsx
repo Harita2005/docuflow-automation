@@ -23,6 +23,13 @@ import { getCanonicalDocumentType } from "./utils/formatters.ts";
 
 export default function App() {
   const getInitialRoute = () => {
+    const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+    if (!isStoredLoggedIn) {
+      if (typeof window !== "undefined" && window.location.pathname !== "/") {
+        window.history.replaceState({}, "", "/");
+      }
+      return { docId: null, view: "dashboard" };
+    }
     const path = window.location.pathname;
     const matchFeedback = path.match(/^\/customer-feedback\/([^/]+)$/);
     if (matchFeedback) {
@@ -381,7 +388,17 @@ export default function App() {
     localStorage.setItem("currentUserRole", role);
     localStorage.setItem("currentUserEmail", email);
     localStorage.setItem("currentUserUsername", username);
+    localStorage.setItem("currentView", "dashboard");
     localStorage.setItem("lastActivityTime", String(Date.now()));
+    
+    // Always reset view and document selection back to Dashboard upon login
+    setCurrentView("dashboard");
+    setSelectedDocId(null);
+    setPreviousView("dashboard");
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
+    }
+
     setCurrentUserRole(role);
     setCurrentUserEmail(email);
     setCurrentUserUsername(username);
@@ -402,19 +419,31 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem("currentView", currentView);
-  }, [currentView]);
+    if (isLoggedIn && currentView) {
+      localStorage.setItem("currentView", currentView);
+    }
+  }, [currentView, isLoggedIn]);
 
   useEffect(() => {
-    localStorage.setItem("currentUserRole", currentUserRole);
-  }, [currentUserRole]);
+    if (isLoggedIn) {
+      localStorage.setItem("currentUserRole", currentUserRole);
+    }
+  }, [currentUserRole, isLoggedIn]);
 
   useEffect(() => {
-    localStorage.setItem("currentUserEmail", currentUserEmail);
-  }, [currentUserEmail]);
+    if (isLoggedIn) {
+      localStorage.setItem("currentUserEmail", currentUserEmail);
+    }
+  }, [currentUserEmail, isLoggedIn]);
 
   // Synchronize browser address bar pathname dynamically based on currentView and selectedDocId
   useEffect(() => {
+    if (!isLoggedIn) {
+      if (typeof window !== "undefined" && window.location.pathname !== "/") {
+        window.history.replaceState({}, "", "/");
+      }
+      return;
+    }
     if (currentView === "customer-feedback" && selectedDocId) {
       const targetPath = `/customer-feedback/${selectedDocId}`;
       if (window.location.pathname !== targetPath) {
@@ -430,7 +459,7 @@ export default function App() {
         window.history.replaceState({}, "", "/");
       }
     }
-  }, [currentView, selectedDocId]);
+  }, [currentView, selectedDocId, isLoggedIn]);
 
   const [requireGRN, setRequireGRN] = useState(true);
   const [orgName, setOrgName] = useState("Document Approval & Automation System");
@@ -597,10 +626,30 @@ export default function App() {
     localStorage.removeItem("authToken");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("lastActivityTime");
+    localStorage.removeItem("currentView");
+    localStorage.removeItem("currentUserRole");
+    localStorage.removeItem("currentUserEmail");
+    localStorage.removeItem("currentUserUsername");
+    localStorage.removeItem("workTrackerStatusFilter");
     sessionStorage.removeItem("hasShownWelcomeQueue");
+    sessionStorage.removeItem("sessionKickedReason");
+    
+    // Reset all views and document activity back to Dashboard
+    setCurrentView("dashboard");
+    setSelectedDocId(null);
+    setPreviousView("dashboard");
+    setCurrentUserRole("");
+    setCurrentUserEmail("");
+    setCurrentUserUsername("");
     setShowPendingModal(false);
     setDocuments([]);
+    setStats(null);
     setLoadingDocs(true);
+    
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
+    }
+
     if (reason) {
       setKickedReason(reason);
       sessionStorage.setItem("sessionKickedReason", reason);
