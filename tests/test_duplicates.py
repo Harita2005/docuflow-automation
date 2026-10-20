@@ -1,5 +1,4 @@
 import concurrent.futures
-import time
 import uuid
 import pytest
 from fastapi.testclient import TestClient

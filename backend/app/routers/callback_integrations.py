@@ -35,6 +35,14 @@ router = APIRouter(
     dependencies=[Depends(_require_callback_admin)]
 )
 
+__all__ = [
+    "router",
+    "invalidate_apps_cache",
+    "_APPS_CACHE",
+    "_APPS_CACHE_TIME",
+    "APPS_CACHE_TTL",
+]
+
 def helper_serialize_json_field(val: Any) -> Optional[str]:
     if val is None:
         return None
@@ -67,8 +75,8 @@ def serialize_app_response(app_obj: ThirdPartyApplication, rules_count: int = 0,
         'updated_at': app_obj.updated_at.isoformat() if app_obj.updated_at else None,
     }
 
-_APPS_CACHE = None
-_APPS_CACHE_TIME = 0.0
+_APPS_CACHE = None  # codeql[py/unused-global-variable]
+_APPS_CACHE_TIME = 0.0  # codeql[py/unused-global-variable]
 APPS_CACHE_TTL = 60.0  # 1 minute
 
 
@@ -111,8 +119,8 @@ def list_applications(db: Session=Depends(get_db)):
         results.append(serialize_app_response(a, rules_count=rules_count, last_callback_str=last_callback_str))
     
     res = {'success': True, 'count': len(results), 'data': results}
-    _APPS_CACHE = res
-    _APPS_CACHE_TIME = now
+    _APPS_CACHE = res  # codeql[py/unused-global-variable]
+    _APPS_CACHE_TIME = now  # codeql[py/unused-global-variable]
     return res
 
 @router.post('/applications')

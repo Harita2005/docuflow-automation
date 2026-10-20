@@ -1,10 +1,9 @@
-import json
 import uuid
 import pytest
 from fastapi.testclient import TestClient
 
 from app.database.connection import SessionLocal
-from app.database.models import Invoice, AuditLog, InvoiceChecklistState, User
+from app.database.models import Invoice, AuditLog, InvoiceChecklistState
 
 
 class TestWorkflowTransitionsAndApprovals:

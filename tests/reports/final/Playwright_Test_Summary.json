@@ -1,0 +1,118 @@
+{
+  "testSuite": "DocuFlow Automation End-to-End Playwright Functional Suite",
+  "project": "M.Sc. Artificial Intelligence and Machine Learning Capstone / FlowApprove",
+  "generatedAt": "2026-10-20T05:43:43.293Z",
+  "environment": {
+    "os": "Windows 11 Enterprise (x64)",
+    "nodeVersion": "v24.16.0",
+    "playwrightVersion": "1.58.2",
+    "browser": "Chromium (Desktop Chrome)",
+    "frontendUrl": "http://localhost:5173",
+    "backendUrl": "http://127.0.0.1:3000",
+    "database": "Microsoft SQL Server 2022 (DocuFlowDB)",
+    "workers": 1,
+    "headless": true
+  },
+  "summary": {
+    "totalTests": 27,
+    "passed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "passRatePercentage": 100.0,
+    "totalDurationMs": 118807.579,
+    "totalDurationFormatted": "1m 58.8s"
+  },
+  "moduleBreakdown": [
+    {
+      "moduleId": "MOD-A",
+      "moduleName": "Authentication & Session Management",
+      "specFile": "playwright-tests/01_auth.spec.ts",
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "durationMs": 15614,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-B",
+      "moduleName": "Dashboard & Navigation",
+      "specFile": "playwright-tests/02_dashboard_nav.spec.ts",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "durationMs": 19094,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-C",
+      "moduleName": "Document Management (Work Tracker & Approved Documents)",
+      "specFile": "playwright-tests/03_document_management.spec.ts",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "durationMs": 26012,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-D",
+      "moduleName": "Invoice Upload & AI Ingestion",
+      "specFile": "playwright-tests/04_invoice_upload_ai.spec.ts",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "durationMs": 5957,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-E",
+      "moduleName": "Workflow Configuration & Rules",
+      "specFile": "playwright-tests/05_workflow_config.spec.ts",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "durationMs": 7833,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-F",
+      "moduleName": "Approval Processing & Audit History",
+      "specFile": "playwright-tests/06_approval_processing.spec.ts",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "durationMs": 8103,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-G",
+      "moduleName": "User Management & RBAC Permissions",
+      "specFile": "playwright-tests/07_user_management_rbac.spec.ts",
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "durationMs": 11109,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-H",
+      "moduleName": "Integration & Synchronization (DAPI Sync Hub)",
+      "specFile": "playwright-tests/08_integration_sync.spec.ts",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "durationMs": 15779,
+      "status": "PASS"
+    },
+    {
+      "moduleId": "MOD-I",
+      "moduleName": "Comprehensive End-to-End User Journey",
+      "specFile": "playwright-tests/09_end_to_end_journey.spec.ts",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "durationMs": 6077,
+      "status": "PASS"
+    }
+  ]
+}

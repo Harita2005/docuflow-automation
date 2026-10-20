@@ -1,21 +1,17 @@
 import datetime
 import pytest
-import jwt
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.auth import create_access_token, decode_token
-from app.config.settings import settings
+from app.auth import create_access_token
 from app.database.models import Document, User
 from app.services.file_security import (
     sanitize_filename,
     detect_file_type_and_validate_magic,
-    MAGIC_BYTES,
     DANGEROUS_EXTENSIONS,
 )
 from app.services.rbac_service import (
     authorize_document_access,
-    get_user_approval_divisions,
 )
 
 

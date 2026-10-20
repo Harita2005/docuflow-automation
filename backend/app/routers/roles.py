@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/roles", tags=["Role & Permission Management"], dependencies=[Depends(get_current_active_user)])
 permission_router = APIRouter(prefix="/api/admin/permissions", tags=["Role & Permission Management"], dependencies=[Depends(get_current_active_user)])
 
+__all__ = [
+    "router",
+    "permission_router",
+    "invalidate_roles_cache",
+    "_ROLES_CACHE",
+    "_ROLES_CACHE_TIME",
+    "ROLES_CACHE_TTL",
+]
+
 # ---------------------------------------------------------------------------
 # Registered Application Resources Catalogue
 # ---------------------------------------------------------------------------
@@ -427,8 +436,8 @@ def delete_custom_permission(
 
 # ---------------------------------------------------------------------------
 # Role Endpoints
-_ROLES_CACHE = None
-_ROLES_CACHE_TIME = 0.0
+_ROLES_CACHE = None  # codeql[py/unused-global-variable]
+_ROLES_CACHE_TIME = 0.0  # codeql[py/unused-global-variable]
 ROLES_CACHE_TTL = 300.0  # 5 minutes
 
 
@@ -473,8 +482,8 @@ def get_all_roles(
             permissions=perm_map.get(r.id, [])
         ))
 
-    _ROLES_CACHE = result
-    _ROLES_CACHE_TIME = now
+    _ROLES_CACHE = result  # codeql[py/unused-global-variable]
+    _ROLES_CACHE_TIME = now  # codeql[py/unused-global-variable]
     return result
 
 

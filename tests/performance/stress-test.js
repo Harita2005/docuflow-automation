@@ -48,6 +48,7 @@ export default function () {
     const endpoints = [
         `${BASE_URL}/health`,
         `${BASE_URL}/api/invoices`,
+        `${BASE_URL}/api/invoices/CMP-00000172`,
         `${BASE_URL}/api/admin/roles`,
         `${BASE_URL}/api/document-types/AP%20INVOICE/more-info/config`,
     ];

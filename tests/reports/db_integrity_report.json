@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-10-20T05:14:40.929829Z",
+  "test_prefix": "PERF_SYNC_%",
+  "status": "PASS",
+  "persisted_records_count": 263,
+  "batch_records_count": 34,
+  "total_test_records": 297,
+  "duplicate_dockey_count": 0,
+  "duplicate_docnum_count": 0,
+  "integrity_violations": [],
+  "line_items_total": 526,
+  "audit_logs_total": 831,
+  "workflow_assigned_count": 297,
+  "idempotency_verified": true,
+  "cleaned_up": false
+}

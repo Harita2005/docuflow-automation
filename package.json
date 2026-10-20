@@ -11,7 +11,9 @@
     "dev:frontend": "npm run dev -w frontend",
     "install:all": "npm install",
     "prepare": "husky",
-    "test": "npm run test -w frontend"
+    "test": "npm run test -w frontend",
+    "test:playwright": "playwright test",
+    "test:playwright:report": "playwright show-report"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

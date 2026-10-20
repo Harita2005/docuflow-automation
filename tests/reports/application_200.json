@@ -1,0 +1,224 @@
+{
+    "metrics": {
+        "vus": {
+            "value": 23,
+            "min": 10,
+            "max": 175
+        },
+        "iteration_duration": {
+            "p(90)": 43015.7089,
+            "p(95)": 44462.04199,
+            "p(99)": 44582.951112,
+            "avg": 22858.943411042954,
+            "min": 1098.5081,
+            "med": 12045.0466,
+            "max": 44660.8369
+        },
+        "http_req_blocked": {
+            "med": 0,
+            "max": 105.9225,
+            "p(90)": 12.175270000000001,
+            "p(95)": 83.064905,
+            "p(99)": 96.831828,
+            "avg": 8.192747087378642,
+            "min": 0
+        },
+        "custom_failure_rate": {
+            "fails": 823,
+            "passes": 0,
+            "value": 0
+        },
+        "data_received": {
+            "count": 138049198,
+            "rate": 1533395.2527968711
+        },
+        "vus_max": {
+            "value": 175,
+            "min": 175,
+            "max": 175
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 824,
+            "thresholds": {
+                "rate<0.05": false
+            },
+            "value": 0
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0
+        },
+        "trend_invoice_queue": {
+            "p(95)": 39120.24999999999,
+            "p(99)": 44211.38,
+            "avg": 18002.330188679247,
+            "min": 49,
+            "med": 17507.5,
+            "max": 44273,
+            "p(90)": 33061.7
+        },
+        "http_req_waiting": {
+            "p(95)": 31884.750339999995,
+            "p(99)": 40028.52810699999,
+            "avg": 6144.280864077671,
+            "min": 0.5775,
+            "med": 2252.82305,
+            "max": 44236.5494,
+            "p(90)": 29917.20981
+        },
+        "http_req_receiving": {
+            "avg": 20.181767718446594,
+            "min": 0,
+            "med": 12.123149999999999,
+            "max": 445.5994,
+            "p(90)": 48.23946000000001,
+            "p(95)": 74.52316999999991,
+            "p(99)": 131.94376299999988
+        },
+        "http_req_sending": {
+            "min": 0,
+            "med": 0,
+            "max": 13.5841,
+            "p(90)": 0,
+            "p(95)": 0.6192749999999992,
+            "p(99)": 2.608878999999998,
+            "avg": 0.11382451456310677
+        },
+        "checks": {
+            "passes": 1647,
+            "fails": 0,
+            "value": 1
+        },
+        "http_req_connecting": {
+            "p(90)": 11.170760000000001,
+            "p(95)": 82.176875,
+            "p(99)": 96.831828,
+            "avg": 8.115934466019418,
+            "min": 0,
+            "med": 0,
+            "max": 104.8123
+        },
+        "iterations": {
+            "count": 163,
+            "rate": 1.8105387776746809
+        },
+        "trend_more_info": {
+            "p(90)": 4846,
+            "p(95)": 4878.6,
+            "p(99)": 5040.0399999999945,
+            "avg": 2419.927272727273,
+            "min": 246,
+            "med": 1457,
+            "max": 5402
+        },
+        "http_reqs": {
+            "count": 824,
+            "rate": 9.152662287140718
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(99)": 40035.15153499999,
+            "avg": 6164.576456310679,
+            "min": 4.0182,
+            "med": 2265.33205,
+            "max": 44272.7551,
+            "p(90)": 30030.872750000006,
+            "p(95)": 31899.625099999994
+        },
+        "trend_roles": {
+            "p(95)": 11232.5,
+            "p(99)": 25431.7,
+            "avg": 2468.2043010752686,
+            "min": 6,
+            "med": 475,
+            "max": 25713,
+            "p(90)": 4769
+        },
+        "data_sent": {
+            "rate": 2362.819750464637,
+            "count": 212721
+        },
+        "http_req_duration": {
+            "min": 4.0182,
+            "med": 2265.33205,
+            "max": 44272.7551,
+            "p(90)": 30030.872750000006,
+            "p(95)": 31899.625099999994,
+            "p(99)": 40035.15153499999,
+            "avg": 6164.576456310679,
+            "thresholds": {
+                "p(95)<2500": true,
+                "p(90)<1200": true
+            }
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "health status is 200": {
+                    "name": "health status is 200",
+                    "path": "::health status is 200",
+                    "id": "ab698ad652ee317628077e42e47eda00",
+                    "passes": 261,
+                    "fails": 0
+                },
+                "health response has status healthy": {
+                    "name": "health response has status healthy",
+                    "path": "::health response has status healthy",
+                    "id": "cf22651e5da872fd16c3206f31a4b3bc",
+                    "passes": 261,
+                    "fails": 0
+                },
+                "invoices status is 200": {
+                    "name": "invoices status is 200",
+                    "path": "::invoices status is 200",
+                    "id": "8ece3dbf2da6b5280eb22e96123184d2",
+                    "passes": 212,
+                    "fails": 0
+                },
+                "invoices returns array": {
+                    "name": "invoices returns array",
+                    "path": "::invoices returns array",
+                    "id": "6e4926e060ae86f7cfeed09bcd9741fc",
+                    "passes": 211,
+                    "fails": 0
+                },
+                "roles status is 200": {
+                    "name": "roles status is 200",
+                    "path": "::roles status is 200",
+                    "id": "b4cb1f8d1d76cad09daecdc2bcd7a631",
+                    "passes": 186,
+                    "fails": 0
+                },
+                "roles returns list": {
+                    "name": "roles returns list",
+                    "path": "::roles returns list",
+                    "id": "769d3cc5c9c25b4925d0afb9b67fbf09",
+                    "passes": 186,
+                    "fails": 0
+                },
+                "more-info status is 200": {
+                    "fails": 0,
+                    "name": "more-info status is 200",
+                    "path": "::more-info status is 200",
+                    "id": "241e71d81bd562023215aacd01bb31c6",
+                    "passes": 165
+                },
+                "more-info returns selected_fields": {
+                    "name": "more-info returns selected_fields",
+                    "path": "::more-info returns selected_fields",
+                    "id": "7b8677acd180e191b81e9f4e045e603c",
+                    "passes": 165,
+                    "fails": 0
+                }
+            }
+    }
+}

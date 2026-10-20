@@ -34,3 +34,4 @@ backend/data/.mfa_tickets.json
 pytest_report.txt
 test_results.csv
 test_summary.csv
+results_*.json

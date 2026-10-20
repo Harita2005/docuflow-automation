@@ -13,5 +13,5 @@
     "inter_worker_invalidation_lag_max": "Bounded by respective TTL (max 3-10s)",
     "recommended_for_large_horizontal_clusters": "Redis / Valkey distributed cache bus"
   },
-  "timestamp": "2026-10-17T08:45:43.924335"
+  "timestamp": "2026-10-20T05:52:52.375097"
 }

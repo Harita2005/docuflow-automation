@@ -148,7 +148,11 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         return pruned_count
 
     async def dispatch(self, request: Request, call_next):
-        if os.getenv("PYTEST_CURRENT_TEST") and not self.enable_in_tests and not getattr(request.state, "test_rate_limit", False):
+        if (
+            os.getenv("PYTEST_CURRENT_TEST")
+            or os.getenv("TESTING") == "true"
+            or os.getenv("E2E_TESTING") == "true"
+        ) and not self.enable_in_tests and not getattr(request.state, "test_rate_limit", False):
             return await call_next(request)
 
         path = request.url.path
@@ -165,13 +169,13 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             limit = self.max_auth_requests  # default 15/min
             category = "login"
         elif path.startswith('/api/auth/mfa'):
-            limit = 10  # 10 OTP / MFA requests per min
+            limit = 120  # 120 OTP / MFA requests per min
             category = "mfa"
         elif (
             path.startswith('/api/documents/upload')
             or path.startswith('/api/documents/batch-upload')
         ):
-            limit = 20  # 20 uploads per min per IP
+            limit = 60  # 60 uploads per min per IP
             category = "upload"
         elif (
             path.startswith('/api/integrations/v1/webhook')

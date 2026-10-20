@@ -1,9 +1,8 @@
-import os
 import sys
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -16,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
 from app.config.settings import settings
 from app.database import connection
 from app.database.connection import get_db, SessionLocal
-from app.database.models import User, Invoice
+from app.database.models import User
 from app.main import app
 from app.auth import create_access_token
 

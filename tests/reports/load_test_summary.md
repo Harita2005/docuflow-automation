@@ -1,12 +1,12 @@
 # DocuFlow k6 Load Test Summary
 
-- **Timestamp**: 2026-10-20T04:24:45.602Z
-- **Total Requests**: 0
-- **Throughput**: 0.00 req/sec
-- **Average Latency**: 0.00 ms
-- **P90 Latency**: 0.00 ms
-- **P95 Latency**: 0.00 ms
-- **P99 Latency**: 0.00 ms
+- **Timestamp**: 2026-10-20T05:55:24.715Z
+- **Total Requests**: 824
+- **Throughput**: 9.15 req/sec
+- **Average Latency**: 6164.58 ms
+- **P90 Latency**: 30030.87 ms
+- **P95 Latency**: 31899.63 ms
+- **P99 Latency**: 40035.15 ms
 - **HTTP Failure Rate**: 0.00%
 
 ## Scenarios Executed

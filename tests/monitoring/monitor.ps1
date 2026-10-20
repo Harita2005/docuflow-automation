@@ -55,7 +55,13 @@ $Headers = @(
 )
 
 $HeaderLine = $Headers -join ","
-Set-Content -Path $OutputFile -Value $HeaderLine -Encoding UTF8
+try {
+    Set-Content -Path $OutputFile -Value $HeaderLine -Encoding UTF8 -ErrorAction Stop
+} catch {
+    $OutputFile = Join-Path (Split-Path -Parent $OutputFile) "system_resources_latest.csv"
+    Set-Content -Path $OutputFile -Value $HeaderLine -Encoding UTF8
+    Write-Warning "Target file was locked by an external application (e.g. Excel). Using $OutputFile"
+}
 
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "DocuFlow Resource Monitor Started" -ForegroundColor Green
@@ -127,7 +133,11 @@ try {
             $NodeWS_MB
         ) -join ","
 
-        Add-Content -Path $OutputFile -Value $Row -Encoding UTF8
+        try {
+            Add-Content -Path $OutputFile -Value $Row -Encoding UTF8 -ErrorAction Stop
+        } catch {
+            # Retry or skip sample gracefully if locked
+        }
 
         $SampleCount++
         if ($MaxSamples -gt 0 -and $SampleCount -ge $MaxSamples) {
