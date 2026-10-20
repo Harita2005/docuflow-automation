@@ -1,0 +1,260 @@
+{
+    "metrics": {
+        "checks": {
+            "passes": 768,
+            "fails": 0,
+            "value": 1
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(99)": 44549.446237000004,
+            "avg": 23290.08555182291,
+            "min": 8.6691,
+            "med": 28418.0544,
+            "max": 44939.9043,
+            "p(50)": 28418.0544,
+            "p(90)": 42352.53293,
+            "p(95)": 43202.96637
+        },
+        "data_sent": {
+            "count": 140144,
+            "rate": 1334.654252232361
+        },
+        "trend_mixed_latency": {
+            "p(95)": 43239.7,
+            "p(99)": 44592.67,
+            "avg": 23306.268229166668,
+            "min": 9,
+            "med": 28436.5,
+            "max": 44940,
+            "p(50)": 28436.5,
+            "p(90)": 42353.7
+        },
+        "data_received": {
+            "count": 99241113,
+            "rate": 945117.6893889302
+        },
+        "iteration_duration": {
+            "p(50)": 28621.2173,
+            "p(90)": 42553.246060000005,
+            "p(95)": 43416.7291,
+            "p(99)": 44534.174374,
+            "avg": 23450.28781018276,
+            "min": 209.8346,
+            "med": 28621.2173,
+            "max": 44991.7645
+        },
+        "http_req_connecting": {
+            "med": 0,
+            "max": 7.3676,
+            "p(50)": 0,
+            "p(90)": 2.2172,
+            "p(95)": 3.685379999999995,
+            "p(99)": 5.809672000000011,
+            "avg": 0.8095757812499995,
+            "min": 0
+        },
+        "http_req_failed": {
+            "fails": 384,
+            "passes": 0,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_waiting": {
+            "p(99)": 44547.595228,
+            "avg": 23275.374455208337,
+            "min": 5.1222,
+            "med": 28416.49095,
+            "max": 44939.38,
+            "p(50)": 28416.49095,
+            "p(90)": 42339.35894,
+            "p(95)": 43200.3982
+        },
+        "iterations": {
+            "count": 383,
+            "rate": 3.647481009568688
+        },
+        "mixed_failure_rate": {
+            "passes": 0,
+            "fails": 384,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_tls_handshaking": {
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(50)": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0
+        },
+        "http_req_blocked": {
+            "p(50)": 0.3664,
+            "p(90)": 2.5475,
+            "p(95)": 3.708,
+            "p(99)": 7.0677,
+            "avg": 0.8912091145833333,
+            "min": 0,
+            "med": 0.3664,
+            "max": 8.0848
+        },
+        "http_req_duration": {
+            "p(50)": 28418.0544,
+            "p(90)": 42352.53293,
+            "p(95)": 43202.96637,
+            "p(99)": 44549.446237000004,
+            "avg": 23290.08555182291,
+            "min": 8.6691,
+            "med": 28418.0544,
+            "max": 44939.9043,
+            "thresholds": {
+                "p(95)<500": true
+            }
+        },
+        "http_req_receiving": {
+            "med": 4.30575,
+            "max": 340.9047,
+            "p(50)": 4.30575,
+            "p(90)": 37.19987,
+            "p(95)": 46.63635999999997,
+            "p(99)": 93.50956400000013,
+            "avg": 14.520004166666672,
+            "min": 0
+        },
+        "vus": {
+            "min": 10,
+            "max": 269,
+            "value": 77
+        },
+        "http_reqs": {
+            "count": 384,
+            "rate": 3.657004458679834
+        },
+        "http_req_sending": {
+            "p(99)": 1.5292,
+            "avg": 0.19109244791666669,
+            "min": 0,
+            "med": 0,
+            "max": 5.9237,
+            "p(50)": 0,
+            "p(90)": 1.0012,
+            "p(95)": 1.3382
+        },
+        "vus_max": {
+            "value": 300,
+            "min": 300,
+            "max": 300
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "more-info 200": {
+                    "path": "::more-info 200",
+                    "id": "a0f5f5de08cd9e6548ab9d34078c9f52",
+                    "passes": 50,
+                    "fails": 0,
+                    "name": "more-info 200"
+                },
+                "more-info returns selected_fields": {
+                    "id": "7b8677acd180e191b81e9f4e045e603c",
+                    "passes": 50,
+                    "fails": 0,
+                    "name": "more-info returns selected_fields",
+                    "path": "::more-info returns selected_fields"
+                },
+                "invoice detail 200": {
+                    "passes": 51,
+                    "fails": 0,
+                    "name": "invoice detail 200",
+                    "path": "::invoice detail 200",
+                    "id": "1bece06fb655b3c6aec8070e648fa849"
+                },
+                "invoice detail returns valid object": {
+                    "path": "::invoice detail returns valid object",
+                    "id": "b133bf46f3ee1d5715092c5eb4dd4d8e",
+                    "passes": 51,
+                    "fails": 0,
+                    "name": "invoice detail returns valid object"
+                },
+                "auth me 200": {
+                    "name": "auth me 200",
+                    "path": "::auth me 200",
+                    "id": "5ae9ce937a6802c592cf3d0ae454e20f",
+                    "passes": 29,
+                    "fails": 0
+                },
+                "auth me has role": {
+                    "name": "auth me has role",
+                    "path": "::auth me has role",
+                    "id": "67027c264b867e989aef320ac8db772d",
+                    "passes": 29,
+                    "fails": 0
+                },
+                "notifications 200": {
+                    "fails": 0,
+                    "name": "notifications 200",
+                    "path": "::notifications 200",
+                    "id": "cd75c130d94ca4462f25f415154c1047",
+                    "passes": 28
+                },
+                "notifications returns array": {
+                    "fails": 0,
+                    "name": "notifications returns array",
+                    "path": "::notifications returns array",
+                    "id": "55004e6283d024dbc1a4e8a52c8c82e6",
+                    "passes": 28
+                },
+                "dashboard 200": {
+                    "path": "::dashboard 200",
+                    "id": "834732e3e331ab0c1efa32a058e51217",
+                    "passes": 96,
+                    "fails": 0,
+                    "name": "dashboard 200"
+                },
+                "dashboard has totalDocuments": {
+                    "fails": 0,
+                    "name": "dashboard has totalDocuments",
+                    "path": "::dashboard has totalDocuments",
+                    "id": "4cf2e2f8034bc56959246f1f0a917a35",
+                    "passes": 96
+                },
+                "invoices 200": {
+                    "fails": 0,
+                    "name": "invoices 200",
+                    "path": "::invoices 200",
+                    "id": "f42240b03f9713e41e4790f5efef42ab",
+                    "passes": 72
+                },
+                "invoices returns array": {
+                    "path": "::invoices returns array",
+                    "id": "6e4926e060ae86f7cfeed09bcd9741fc",
+                    "passes": 72,
+                    "fails": 0,
+                    "name": "invoices returns array"
+                },
+                "work-tracker 200": {
+                    "name": "work-tracker 200",
+                    "path": "::work-tracker 200",
+                    "id": "c629b46db3132f1bdb4ddb4f8b575ee4",
+                    "passes": 58,
+                    "fails": 0
+                },
+                "work-tracker returns array": {
+                    "path": "::work-tracker returns array",
+                    "id": "5148566b08f9229164214e93ae16014d",
+                    "passes": 58,
+                    "fails": 0,
+                    "name": "work-tracker returns array"
+                }
+            }
+    }
+}

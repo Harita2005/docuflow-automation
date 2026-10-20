@@ -5,7 +5,30 @@ from app.config.settings import settings
 
 BASE_DIR = Path(__file__).resolve().parent
 
+def free_port_if_occupied(port: int = 3000):
+    """Checks if the port is held by an orphan process and terminates it to prevent WinError 10013 / WSAEACCES."""
+    try:
+        import subprocess
+        output = subprocess.check_output(
+            f'netstat -ano | findstr :{port}',
+            shell=True,
+            text=True,
+            stderr=subprocess.DEVNULL
+        )
+        my_pid = os.getpid()
+        for line in output.strip().splitlines():
+            if 'LISTENING' in line:
+                parts = line.strip().split()
+                pid = int(parts[-1])
+                if pid and pid != my_pid:
+                    print(f"[DocuFlow Startup] Port {port} occupied by previous process PID {pid}. Releasing port...")
+                    subprocess.run(f'taskkill /F /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 if __name__ == '__main__':
+    free_port_if_occupied(3000)
+
     env = (settings.ENVIRONMENT or os.getenv("ENVIRONMENT", "development")).strip().lower()
     is_non_prod = env in ("development", "dev", "local", "test", "testing")
 
