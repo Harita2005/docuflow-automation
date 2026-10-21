@@ -39,6 +39,14 @@ async def lifespan(app: FastAPI):
         settings.FILE_URL_SIGNING_SECRET, settings.ENVIRONMENT, settings.SECRET_KEY
     )
 
+    # Multi-worker readiness guard (Issue 10)
+    signing_secret = (getattr(settings, "FILE_URL_SIGNING_SECRET", None) or os.getenv("FILE_URL_SIGNING_SECRET", "")).strip()
+    workers_num = int(os.getenv("WEB_CONCURRENCY", "1") or os.getenv("UVICORN_WORKERS", "1"))
+    if not signing_secret:
+        logger.warning("SECURITY WARNING: FILE_URL_SIGNING_SECRET is unset. Shared signed file URLs cannot be verified across worker instances.")
+        if workers_num > 1:
+            raise RuntimeError("FATAL: FILE_URL_SIGNING_SECRET must be configured when running with more than 1 worker.")
+
     if (settings.ENVIRONMENT or "").strip().lower() != "production":
         logger.warning(
             "SECURITY WARNING: Server running in non-production mode (ENVIRONMENT='%s'). "
@@ -48,12 +56,8 @@ async def lifespan(app: FastAPI):
 
     if not os.getenv("PYTEST_CURRENT_TEST"):
         try:
-            # Automatic retention pruning for audit logs on startup
-            try:
-                with SessionLocal() as db_session:
-                    prune_expired_audit_logs(db_session)
-            except Exception as prune_err:
-                logger.warning(f"Audit log retention pruning deferred: {prune_err}")
+            # Audit log retention pruning on startup disabled to prevent unintended data loss (Issue 7).
+            # Retention pruning is now managed via explicit admin operations / scheduled jobs with archival.
 
             # Invalidate legacy MFA tickets from public uploads/ and clear ticket store
             try:
@@ -61,19 +65,22 @@ async def lifespan(app: FastAPI):
             except Exception as mfa_clean_err:
                 logger.warning(f"MFA cache invalidation on startup deferred: {mfa_clean_err}")
 
-            # Start background outbound sync retry worker
-            try:
-                from .services.integration_service import start_background_retry_worker
-                start_background_retry_worker(poll_interval=60)
-            except Exception as retry_err:
-                logger.warning(f"Starting background retry worker deferred: {retry_err}")
+            # Start background workers only when explicitly enabled (Issue 10)
+            run_bg = os.getenv("RUN_BACKGROUND_JOBS", "false").strip().lower() in ("true", "1", "yes")
+            if run_bg:
+                try:
+                    from .services.integration_service import start_background_retry_worker
+                    start_background_retry_worker(poll_interval=60)
+                except Exception as retry_err:
+                    logger.warning(f"Starting background retry worker deferred: {retry_err}")
 
-            # Start background database archival scheduler
-            try:
-                from .services.archive_service import start_archive_scheduler
-                start_archive_scheduler()
-            except Exception as arch_err:
-                logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
+                try:
+                    from .services.archive_service import start_archive_scheduler
+                    start_archive_scheduler()
+                except Exception as arch_err:
+                    logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
+            else:
+                logger.info("Background jobs (sync retry & archive scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
             # Tune AnyIO thread limiter to 200 tokens for 150+ concurrent requests
             try:
                 import anyio.to_thread

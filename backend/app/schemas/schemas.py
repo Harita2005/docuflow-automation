@@ -7,10 +7,13 @@ class LoginRequest(BaseModel):
     username: Optional[str] = None
     identifier: Optional[str] = None
     email: Optional[str] = None
+    employee_id: Optional[str] = None
     password: Optional[str] = None
     expires_in_minutes: Optional[int] = None
     force_login: bool = False
     device_info: Optional[str] = None
+
+    model_config = pydantic.ConfigDict(extra="allow")
 
 class TokenResponse(BaseModel):
     token: Optional[str] = None
@@ -215,6 +218,8 @@ class InvoiceUpdate(BaseModel):
     payment_terms: Optional[str] = None
     checklist_state: Optional[str] = None
     notes: Optional[str] = None
+    expected_version: Optional[int] = None
+    expectedVersion: Optional[int] = None
 
 class InvoiceActionRequest(BaseModel):
     decision: Optional[str] = 'APPROVE'

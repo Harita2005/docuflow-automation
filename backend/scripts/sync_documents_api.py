@@ -12,52 +12,63 @@ import requests
 def main():
     parser = argparse.ArgumentParser(description="DocuFlow API Document Synchronization Script")
     parser.add_argument("--host", default="http://192.168.179.22:3000", help="Base API URL (default: http://192.168.179.22:3000)")
-    parser.add_argument("--username", default="admin", help="Admin username")
-    parser.add_argument("--password", default="password123", help="Admin password")
+    parser.add_argument("--username", default="backend_sync_client", help="Service or Admin username (default: backend_sync_client)")
+    parser.add_argument("--password", default="SecretPassword987654321!", help="Service or Admin password")
     parser.add_argument("--timeout", type=int, default=15, help="Request timeout in seconds")
     args = parser.parse_args()
 
     base_url = args.host.rstrip("/")
+    m2m_url = f"{base_url}/m2m/auth/login"
     login_url = f"{base_url}/api/auth/login"
     sync_url = f"{base_url}/api/sync/record"
 
     print("=" * 70)
-    print(">>> DOCUFLOW SAMPLE DOCUMENTS SYNC UTILITY")
+    print(">>> DOCUFLOW SAMPLE DOCUMENTS SYNC UTILITY (Option 1: Direct M2M Token)")
     print("=" * 70)
     print(f"Target API Host: {base_url}")
-    print(f"Auth Endpoint:   {login_url}")
+    print(f"M2M Auth URL:    {m2m_url}")
     print(f"Sync Endpoint:   {sync_url}")
     print(f"Username:        {args.username}")
     print("=" * 70)
 
-    # Step 1: Authenticate and obtain Bearer Token (60 min validity)
-    login_payload = {
-        "username": args.username,
-        "password": args.password,
-        "expires_in_minutes": 60
-    }
-
-    print("\n[*] Step 1: Authenticating to obtain 60-minute Bearer token...")
+    # Step 1: Authenticate and obtain Bearer Token (Option 1: Direct Service Token)
+    print("\n[*] Step 1: Authenticating via Option 1 (/m2m/auth/login) to obtain Bearer token...")
+    token = None
     try:
-        login_resp = requests.post(login_url, json=login_payload, timeout=args.timeout)
-    except requests.exceptions.RequestException as e:
-        print(f"\n[!] Network / Connection Error connecting to {login_url}:")
-        print(f"    {e}")
-        print(f"\nNote: Please ensure this machine is connected to the same network/Wi-Fi/hotspot as {base_url}.")
-        sys.exit(1)
+        # First attempt Option 1 M2M Direct Token endpoint
+        m2m_payload = {
+            "username": args.username,
+            "password": args.password,
+        }
+        resp = requests.post(m2m_url, json=m2m_payload, timeout=args.timeout)
+        if resp.status_code == 200:
+            auth_data = resp.json()
+            token = auth_data.get("access_token") or auth_data.get("token")
+    except requests.exceptions.RequestException:
+        pass
 
-    if login_resp.status_code != 200:
-        print(f"[!] Authentication failed with HTTP status {login_resp.status_code}:")
-        print(f"    Response: {login_resp.text}")
-        sys.exit(1)
-
-    auth_data = login_resp.json()
-    token = auth_data.get("access_token") or auth_data.get("token")
+    # If M2M endpoint not used or fallback needed, try standard login endpoint
     if not token:
-        print(f"[!] No access token returned in login response: {auth_data}")
+        login_payload = {
+            "username": args.username,
+            "password": args.password,
+            "expires_in_minutes": 60,
+            "force_login": True,
+        }
+        try:
+            login_resp = requests.post(login_url, json=login_payload, timeout=args.timeout)
+            if login_resp.status_code == 200:
+                auth_data = login_resp.json()
+                token = auth_data.get("access_token") or auth_data.get("token")
+        except requests.exceptions.RequestException as e:
+            print(f"\n[!] Network / Connection Error connecting to {login_url}: {e}")
+            sys.exit(1)
+
+    if not token:
+        print("[!] No access token returned in login response.")
         sys.exit(1)
 
-    print("[+] Authentication successful! Token acquired (expires in 60 min).")
+    print("[+] Authentication successful! Direct access token acquired (no MFA challenge).")
     print(f"    Token snippet: {token[:25]}...{token[-10:]}")
 
     headers = {

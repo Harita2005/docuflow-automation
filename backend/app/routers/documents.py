@@ -1,4 +1,5 @@
 import logging
+from app.constants.document_types import DocumentType, normalize_document_type, is_feedback_or_complaint
 from app.services.rules_engine import infer_document_type, evaluate_business_rules_full, resolve_matching_rules
 import os
 import re
@@ -138,6 +139,29 @@ def invalidate_invoices_cache(doc_id: Optional[str] = None):
         else:
             _BASE_DOC_CACHE.clear()
 
+def get_document_display_approver(db: Session, inv: Invoice, cached_steps: Optional[list] = None) -> str:
+    """
+    Read-only: computes the assigned approver for display without modifying or committing to the database.
+    """
+    if not inv:
+        return ''
+    if inv.assigned_approver and str(inv.assigned_approver).strip() not in ['', 'None']:
+        return inv.assigned_approver
+    if not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'None']:
+        return 'Unassigned (No Rule Matched)'
+    if inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
+        return inv.assigned_approver or ''
+    steps = cached_steps if cached_steps is not None else get_cached_workflow_steps(db, inv.workflow_profile_id)
+    curr_stage = inv.current_stage or 1
+    step_def = next((s for s in steps if s.stage_number == curr_stage), None) if steps else None
+    if step_def and step_def.approver_target:
+        targets = [step_def.approver_target.strip()]
+        if step_def.delegate_approver and step_def.delegate_approver.strip():
+            targets.append(step_def.delegate_approver.strip())
+        return ', '.join(targets)
+    return inv.assigned_approver or 'Unassigned'
+
+
 def sync_document_approver_from_workflow(db: Session, inv: Invoice, cached_steps: Optional[list] = None) -> str:
     """
     Dynamically synchronizes an active document's assigned_approver from the current 
@@ -145,17 +169,6 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice, cached_steps
     assigned member is persisted in the database and authorized for approval.
     """
     if not inv or not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'None']:
-        if inv and inv.status not in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']:
-            if not inv.status or not inv.status.startswith('Unrouted'):
-                inv.status = 'Unrouted (No Rule Matched)'
-                inv.assigned_approver = 'Unassigned (No Rule Matched)'
-                inv.current_stage = 0
-                inv.total_stages = 0
-                try:
-                    db.add(inv)
-                    db.commit()
-                except Exception:
-                    db.rollback()
         return (inv.assigned_approver if inv else '') or 'Unassigned (No Rule Matched)'
     
     # Completed terminal documents retain their final audit state
@@ -173,38 +186,6 @@ def sync_document_approver_from_workflow(db: Session, inv: Invoice, cached_steps
         if inv.total_stages != step_count:
             inv.total_stages = step_count
             db.add(inv)
-
-        curr_stage = inv.current_stage or 1
-        # Check if all stages in this workflow have completed (e.g. stage exceeded step_count or final step approved)
-        if curr_stage > step_count:
-            inv.current_stage = step_count
-            inv.status = 'Approved'
-            archive_approved_pdf(inv)
-            try:
-                db.add(inv)
-                db.commit()
-                db.refresh(inv)
-            except Exception as e:
-                logger.warning(f"Error persisting completed status: {e}")
-                db.rollback()
-            return inv.assigned_approver or ''
-
-        if curr_stage == step_count:
-            final_log = db.query(AuditLog).filter(
-                AuditLog.invoice_id == str(inv.id),
-                AuditLog.action.ilike(f'%Approved (Stage {step_count})%')
-            ).first()
-            if final_log:
-                inv.status = 'Approved'
-                archive_approved_pdf(inv)
-                try:
-                    db.add(inv)
-                    db.commit()
-                    db.refresh(inv)
-                except Exception as e:
-                    logger.warning(f"Error persisting completed status for final stage: {e}")
-                    db.rollback()
-                return inv.assigned_approver or ''
 
     curr_stage = inv.current_stage or 1
     step_def = next((s for s in steps if s.stage_number == curr_stage), None) if step_count > 0 else None
@@ -371,8 +352,7 @@ def get_approved_invoices(
         ~Invoice.status.ilike('%rejected%'),
         ~Invoice.status.ilike('%cancelled%'),
         ~Invoice.status.ilike('%hold%'),
-        ~Invoice.document_type.ilike('%feedback%'),
-        ~Invoice.document_type.ilike('%complaint%'),
+        ~Invoice.document_type.in_(['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT', 'FEEDBACK', 'COMPLAINT']),
         ~Invoice.id.ilike('CMP%'),
         ~Invoice.id.ilike('CF%'),
         ~Invoice.workflow_profile_id.ilike('%feedback%')
@@ -786,11 +766,21 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
     filtered_invoices = []
     user_approval_divs = get_user_approval_divisions(current_user) if current_user else []
     has_hq_division = any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs)
+
+    # Batch-load workflow steps in a single query to eliminate N+1
+    profile_names = {
+        inv.workflow_profile_id.strip()
+        for inv in invoices
+        if inv.workflow_profile_id and str(inv.workflow_profile_id).strip() not in ['', 'None']
+    }
+    workflow_steps_map = {p: get_cached_workflow_steps(db, p) for p in profile_names}
     
     for inv in invoices:
-        # Dynamically synchronize assigned_approver from workflow definition if missing
+        clean_prof = inv.workflow_profile_id.strip() if (inv.workflow_profile_id and str(inv.workflow_profile_id).strip() not in ['', 'None']) else None
+        p_steps = workflow_steps_map.get(clean_prof) if clean_prof else None
+        # Read-only display calculation without DB mutation in GET
         if not inv.assigned_approver or str(inv.assigned_approver).strip() in ['', 'None']:
-            sync_document_approver_from_workflow(db, inv)
+            inv.assigned_approver = get_document_display_approver(db, inv, cached_steps=p_steps)
 
         doc_key_clean = str(inv.id).replace('DOC-', '')
         has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
@@ -839,7 +829,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
 
         # Status filter query parameter enforcement
-        if status:
+        if status and isinstance(status, str):
             s_req = status.strip().lower()
             if s_req == 'pending':
                 if not (is_curr and is_active_flow):
@@ -939,8 +929,9 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
         clean_prof = inv.workflow_profile_id.strip() if (inv.workflow_profile_id and str(inv.workflow_profile_id).strip() not in ['', 'None']) else None
         p_steps = workflow_steps_map.get(clean_prof) if clean_prof else None
 
-        # Dynamically synchronize assigned_approver from workflow definition
-        sync_document_approver_from_workflow(db, inv, cached_steps=p_steps)
+        # Read-only approver display calculation without DB mutation in GET
+        if not inv.assigned_approver or str(inv.assigned_approver).strip() in ['', 'None']:
+            inv.assigned_approver = get_document_display_approver(db, inv, cached_steps=p_steps)
 
         st_low = (inv.status or '').strip().lower()
         cs_low = (str(inv.current_stage or '')).strip().lower()
@@ -1063,7 +1054,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 current_step_name = s['stage_name']
                 break
         if not inv.assigned_approver or str(inv.assigned_approver).strip() in ['', 'None']:
-            sync_document_approver_from_workflow(db, inv)
+            inv.assigned_approver = get_document_display_approver(db, inv, cached_steps=steps)
 
         cand_doc_ids = [str(inv.id), f'DOC-{inv.id}', str(inv.id).replace('DOC-', '')]
         audit_logs_db = db.query(AuditLog).filter(
@@ -1144,8 +1135,8 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 completed_by_peer = True
 
     if not is_admin:
-        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent', 'accounts.approver', 'accounts_approver', 'manager', 'approver', 'executive', 'employee', 'ap_specialist', 'auditor'] or True
-        is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
+        is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent']
+        is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
         
         if not is_curr and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
             user_approval_divs = get_user_approval_divisions(current_user)
@@ -1172,7 +1163,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
 
     # For Customer Feedback records: dynamically ensure matching approved invoice PDF is attached if not yet set
     is_feedback_doc = (
-        (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+        is_feedback_or_complaint(inv.document_type)
         or str(inv.id).startswith('CMP')
         or str(inv.id).startswith('CF')
         or bool(getattr(inv, 'type_of_complaint', None))
@@ -1258,6 +1249,20 @@ FORBIDDEN_DOCUMENT_UPDATE_FIELDS = {
     'created_by', 'id', 'created_at', 'deleted_at', 'is_deleted'
 }
 
+EDITABLE_DOCUMENT_FIELDS = {
+    'vendor_name', 'vendor_code', 'vendor_gstin', 'invoice_number', 'invoice_date',
+    'po_number', 'amount', 'base_amount', 'tax_amount', 'currency',
+    'document_type', 'division', 'category', 'cost_center', 'plant', 'payment_terms',
+    'checklist_state', 'notes', 'remarks', 'comments', 'additional_comments',
+    'dealer_name', 'account_name', 'bp_code', 'bp_type',
+    'type_of_complaint', 'subtype_of_complaint', 'feedback_type', 'rating', 'feedback_date',
+    'due_date', 'expense_type', 'department', 'expense_date', 'receipt_number',
+    'credit_note_number', 'reason_for_credit', 'original_invoice_ref', 'credit_note_date', 'credit_status',
+    'bank_account', 'bank_account_number', 'bank_name', 'ifsc_code'
+}
+
+FINANCIAL_FIELDS = {'amount', 'base_amount', 'tax_amount', 'vendor_name', 'vendor_code', 'po_number', 'bank_account', 'bank_account_number'}
+
 @router.put('/api/records/{invoice_id}')
 @router.put('/api/documents/{invoice_id}')
 @router.put('/api/invoices/{invoice_id}')
@@ -1269,7 +1274,16 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
     if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
         raise HTTPException(status_code=403, detail='Access Denied: You are not authorized to update this document.')
 
+    # ISSUE 4: Reject edits (409) when status is Approved, Posted, Paid, Cancelled or Rejected
+    cur_status = (inv.status or '').strip().lower()
+    if cur_status in ['approved', 'posted', 'paid', 'cancelled', 'rejected']:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot edit document in '{inv.status}' status. Approved, posted, paid, cancelled, and rejected records are permanently locked from manual edits."
+        )
+
     # SEC-01: Check raw JSON payload for forbidden workflow/status/lock fields
+    raw_json = None
     try:
         raw_json = await req.json()
         if isinstance(raw_json, dict):
@@ -1285,6 +1299,22 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
         # Request body may not be JSON; proceed with payload model validation
         pass
 
+    # ISSUE 4: Require expected_version and enforce optimistic concurrency
+    raw_expected = raw_json.get('expected_version') or raw_json.get('expectedVersion') if isinstance(raw_json, dict) else None
+    expected_ver = payload.expected_version if payload.expected_version is not None else (payload.expectedVersion if payload.expectedVersion is not None else raw_expected)
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
+
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document version has been modified by another approver or process."
+        )
+
     update_data = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
 
     # Protect synced ERP data during Attachment Status
@@ -1299,9 +1329,20 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
                     detail=f"Data Sync Protection: This document was synced from third-party ERP. Core financial field '{sf}' cannot be edited during Attachment Status."
                 )
 
+    # ISSUE 4: Explicit allowlist of editable fields & audit financial changes mid-workflow
+    financial_audit_details = []
+    is_mid_workflow = (inv.current_stage or 1) >= 1 and cur_status not in ['draft', 'unrouted']
+
     for field, val in update_data.items():
-        if hasattr(inv, field) and val is not None:
-            setattr(inv, field, val)
+        if field in EDITABLE_DOCUMENT_FIELDS and hasattr(inv, field) and val is not None:
+            old_val = getattr(inv, field)
+            if old_val != val:
+                if is_mid_workflow and field in FINANCIAL_FIELDS:
+                    financial_audit_details.append(f"{field}: '{old_val}' -> '{val}'")
+                setattr(inv, field, val)
+
+    inv.version = current_version + 1
+
     matched_wf = evaluate_business_rules(db, {'division': inv.division, 'category': inv.category, 'amount': inv.amount, 'document_type': inv.document_type})
     if matched_wf and matched_wf != inv.workflow_profile_id:
         inv.workflow_profile_id = matched_wf
@@ -1309,7 +1350,11 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
         inv.total_stages = len(steps) if steps else 1
         if (inv.current_stage or 1) == 1 and steps:
             inv.assigned_approver = steps[0].approver_target
-    db.add(AuditLog(invoice_id=str(inv.id), user=user.employee_name or user.name or user.username, action='Invoice Fields Updated', stage=f'Stage {inv.current_stage or 1}', notes='Document header/line-items edited and saved.'))
+
+    audit_notes = 'Document header/line-items edited and saved.'
+    if financial_audit_details:
+        audit_notes = f"Financial fields modified mid-workflow: {', '.join(financial_audit_details)}"
+    db.add(AuditLog(invoice_id=str(inv.id), user=user.employee_name or user.name or user.username, action='Invoice Fields Updated', stage=f'Stage {inv.current_stage or 1}', notes=audit_notes))
     db.commit()
     db.refresh(inv)
     invalidate_invoices_cache(str(inv.id))
@@ -2013,9 +2058,40 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Rejected']:
         raise HTTPException(status_code=409, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
+    # Missing workflow profile validation (read-only; does not mutate document)
+    if db is not None and (not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'None']):
+        raise HTTPException(status_code=400, detail="Document has no workflow profile assigned.")
+
     is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+
+    # Explicit assignment detection for current step: allows explicitly assigned approver across divisions
+    user_identity_handles = {
+        (user.username or '').strip().lower(),
+        (user.employee_id or '').strip().lower(),
+        (user.employee_name or '').strip().lower(),
+        (user.name or '').strip().lower(),
+        (user.email or '').strip().lower(),
+        str(user.id)
+    }
+    user_identity_handles.discard('')
+
+    is_explicitly_assigned = False
+    curr_stage = inv.current_stage or 1
+    if db and inv.workflow_profile_id:
+        step = db.query(WorkflowStepDefinition).filter(
+            WorkflowStepDefinition.profile_name == inv.workflow_profile_id,
+            WorkflowStepDefinition.stage_number == curr_stage
+        ).first()
+        if step and step.approver_target:
+            step_targets = [s.strip().lower() for s in step.approver_target.split(',') if s.strip()]
+            if step.delegate_approver and step.delegate_approver.strip():
+                step_targets.extend([s.strip().lower() for s in step.delegate_approver.split(',') if s.strip()])
+            if any(h in step_targets for h in user_identity_handles):
+                is_explicitly_assigned = True
+
     # Enforce Division Authorization: user can only approve documents matching their authorized approval divisions
-    if not is_admin and inv.division:
+    # If the user is an admin or the explicitly assigned approver for the current workflow step, division check is bypassed.
+    if not is_admin and not is_explicitly_assigned and inv.division:
         user_approval_divs = get_user_approval_divisions(user)
         doc_div = (inv.division or '').strip().upper()
         if doc_div and user_approval_divs and not any(d in {'HQ', 'GLOBAL', 'ALL'} for d in user_approval_divs):
@@ -2025,7 +2101,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                     detail=f"Access Denied: You are not authorized to approve documents for division '{inv.division}'."
                 )
 
-    is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
+    is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
 
     # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document
     if user and not is_feedback_doc:
@@ -2090,14 +2166,11 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         if has_user_approved:
             raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
 
-    if db and inv:
-        sync_document_approver_from_workflow(db, inv)
-
     approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
     user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
     user_handles = [h for h in user_handles if h]
     
-    is_authorized = is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
+    is_authorized = is_explicitly_assigned or is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
     if not is_authorized:
         for handle in user_handles:
             if handle in approvers:
@@ -2156,7 +2229,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             except Exception:
                 has_attachment = False
 
-        is_feedback_doc = (inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'] or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
+        is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
 
         if is_attachment_stage and (not has_attachment) and not is_feedback_doc:
             raise HTTPException(status_code=400, detail='Physical PDF Attachment Compulsory: A valid physical document file must be attached and uploaded before approving Stage 1.')
@@ -2196,7 +2269,10 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
     inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
     check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None)
     
@@ -2465,7 +2541,10 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     action_type = str(payload.get('action') or 'Approve').strip()
     act_lower = action_type.lower()
     is_approving = 'approve' in act_lower or 'pass' in act_lower
@@ -2626,7 +2705,10 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
     inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2645,7 +2727,10 @@ def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=N
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2757,7 +2842,10 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
     inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2812,7 +2900,10 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
     inv = find_invoice_by_identifier(db, doc_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:
@@ -2832,7 +2923,67 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId')
     inv = find_invoice_by_identifier(db, doc_id)
-    username = (user.employee_name or user.name if user else None) or (payload.get('user') or payload.get('username') if payload else 'User')
+    if not inv:
+        raise HTTPException(status_code=404, detail='Document not found')
+
+    if not user:
+        raise HTTPException(status_code=401, detail='Authentication required to cancel workflow process.')
+
+    is_admin = bool((user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'])
+
+    # Check if user is the document uploader/creator
+    user_identifiers = {
+        (user.username or '').strip().lower(),
+        (user.employee_name or '').strip().lower(),
+        (user.name or '').strip().lower(),
+        (user.email or '').strip().lower(),
+        str(user.id),
+    }
+    user_identifiers.discard('')
+
+    doc_creator = (getattr(inv, 'created_by', None) or '').strip().lower()
+    doc_creator_id = getattr(inv, 'created_by_id', None)
+    doc_emp_id = (getattr(inv, 'employee_id', None) or '').strip().lower()
+
+    is_uploader = bool(
+        (doc_creator_id and user.id == doc_creator_id) or
+        (doc_creator and doc_creator in user_identifiers) or
+        (doc_emp_id and doc_emp_id in user_identifiers)
+    )
+
+    current_stage = inv.current_stage or 1
+    # Allow only admins, or the document uploader while the document is still at stage 1/not yet approved
+    if not is_admin:
+        if not is_uploader or current_stage > 1:
+            raise HTTPException(
+                status_code=403,
+                detail='Access Denied: Only administrators or the document uploader at Stage 1 can cancel this workflow process.'
+            )
+
+    # Reject cancelling documents already Approved/Posted/Paid/Cancelled with 409
+    current_status = (inv.status or '').strip().lower()
+    if current_status in ['approved', 'posted', 'paid', 'cancelled']:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot cancel document in '{inv.status}' status."
+        )
+
+    # Require expected_version and increment version
+    expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None))
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(
+            status_code=409,
+            detail="This document version has been modified by another approver or process."
+        )
+
+    inv.version = current_version + 1
+    username = user.employee_name or user.name or user.username or 'User'
     remarks = (payload.get('comments') or payload.get('remarks') if payload else None) or 'Process cancelled by user.'
     inv.status = 'Cancelled'
     inv.assigned_approver = None
@@ -2841,7 +2992,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Process Cancelled', stage=f'Stage {inv.current_stage or 1}', notes=f'Process cancelled/voided: {remarks}'))
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'message': 'Workflow process cancelled.'}
+    return {'success': True, 'status': inv.status, 'version': inv.version, 'message': 'Workflow process cancelled.'}
 
 @router.post('/api/records/{invoice_id}/hold')
 @router.post('/api/documents/{invoice_id}/hold')
@@ -2850,7 +3001,10 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     check_approval_authorization(inv, user, db=db, require_compliance=False)
     current_version = inv.version or 1
     if expected_ver != current_version:

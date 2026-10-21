@@ -1,0 +1,144 @@
+{
+  "info": {
+    "_postman_id": "a9b8c7d6-e5f4-4a3b-8c2d-1e0f9a8b7c6d",
+    "name": "DocuFlow - M2M Integration (Direct Service Token)",
+    "description": "Option 1: Machine-to-Machine Direct Service Token flow for Postman and ERP sync into the DocuFlow documents table.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Get Direct Service Token (M2M Login)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.access_token) {",
+              "    pm.collectionVariables.set('service_token', jsonData.access_token);",
+              "    console.log('Service Bearer token saved successfully.');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"backend_sync_client\",\n  \"password\": \"SecretPassword987654321!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/m2m/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "m2m",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Generates a direct M2M Service Bearer token without 2FA/MFA challenge."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Post Record to Documents Table (/api/sync/record)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"doc_key\": \"ERP-INV-2026-0001\",\n  \"doc_num\": \"INV-2026-0001\",\n  \"invoice_number\": \"INV-2026-0001\",\n  \"invoice_date\": \"2026-10-21\",\n  \"due_date\": \"2026-11-20\",\n  \"po_number\": \"PO-2026-8801\",\n  \"amount\": 45000.0,\n  \"currency\": \"INR\",\n  \"vendor_name\": \"Apex Supplies India Ltd\",\n  \"vendor_code\": \"VEND-APEX-01\",\n  \"vendor_gstin\": \"33AAAAA0000A1Z5\",\n  \"company_code\": \"VCC\",\n  \"division\": \"VCC\",\n  \"plant\": \"Chennai\",\n  \"document_type\": \"AP INVOICE\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/sync/record",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "sync",
+            "record"
+          ]
+        },
+        "description": "Idempotently syncs and inserts the record into the documents table with workflow initialized."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Post Customer Feedback to Documents Table",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"doc_key\": \"CF-2026-0001\",\n  \"doc_num\": \"CF-2026-0001\",\n  \"invoice_number\": \"CF-2026-0001\",\n  \"customer_code\": \"CUST-10023\",\n  \"customer_name\": \"Global Engineering Corp\",\n  \"feedback_type\": \"Service Satisfaction\",\n  \"rating\": 5,\n  \"amount\": 1.0,\n  \"company_code\": \"VCC\",\n  \"division\": \"VCC\",\n  \"plant\": \"Chennai\",\n  \"document_type\": \"CUSTOMER FEEDBACK\",\n  \"additional_comments\": \"Fast resolution and prompt turnaround time.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/sync/record",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "sync",
+            "record"
+          ]
+        },
+        "description": "Posts a Customer Feedback record directly into the documents table."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://192.168.179.22:3000",
+      "type": "string"
+    },
+    {
+      "key": "service_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

@@ -167,6 +167,7 @@ export default function CustomerFeedbackDetails({
   // Workflow Action & Comments State
   const [approvalComment, setApprovalComment] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const isSubmittingRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -530,7 +531,8 @@ export default function CustomerFeedbackDetails({
 
   const handleTriggerEscalation = async () => {
     const docId = activeDoc?.id || document?.id;
-    if (!docId) return;
+    if (!docId || isSubmittingRef.current || actionLoading) return;
+    isSubmittingRef.current = true;
     setActionLoading(true);
     setActionError(null);
     try {
@@ -542,6 +544,7 @@ export default function CustomerFeedbackDetails({
           "Authorization": token ? `Bearer ${token}` : ""
         },
         body: JSON.stringify({
+          expected_version: (activeDoc as any)?.version || (document as any)?.version || 1,
           user: currentUserUsername || currentUserEmail || "Feedback Reviewer",
           reason: `SLA Target Completion Date Exceeded (Target was: ${targetCompletionDate ? new Date(targetCompletionDate).toLocaleString() : 'Past Due'})`
         })
@@ -551,6 +554,16 @@ export default function CustomerFeedbackDetails({
         setActionSuccess(`✓ Feedback record escalated successfully! ${data.message || ''}`);
         if (onRefreshDocument) onRefreshDocument();
       } else {
+        if (res.status === 409) {
+
+          alert("Document was modified by someone else, please refresh");
+
+          if (onRefreshDocument) onRefreshDocument();
+
+          return;
+
+        }
+
         const txt = await res.text();
         let errDetail = "Escalation failed.";
         try {
@@ -565,6 +578,7 @@ export default function CustomerFeedbackDetails({
       setActionError(err.message || "Escalation failed.");
     } finally {
       setActionLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -984,6 +998,7 @@ export default function CustomerFeedbackDetails({
         body: JSON.stringify({
           invoiceId: activeDoc.id,
           expected_stage: activeDoc.current_stage || 1,
+          expected_version: activeDoc.version || 1,
           comments: approvalComment.trim() || "Approved customer feedback",
         }),
       });
@@ -1010,6 +1025,16 @@ export default function CustomerFeedbackDetails({
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
+        if (res.status === 409) {
+
+          alert("Document was modified by someone else, please refresh");
+
+          if (onRefreshDocument) onRefreshDocument();
+
+          return;
+
+        }
+
         const txt = await res.text();
         let msg = "Failed to approve record.";
         try {
@@ -1024,6 +1049,7 @@ export default function CustomerFeedbackDetails({
       setActionError(err.message || "Network error approving record.");
     } finally {
       setActionLoading(false);
+      isSubmittingRef.current = false;
       setTimeout(() => {
         setActionSuccess(null);
         setActionError(null);
@@ -1115,6 +1141,16 @@ export default function CustomerFeedbackDetails({
         } catch {}
         if (onRefreshDocument) onRefreshDocument();
       } else {
+        if (res.status === 409) {
+
+          alert("Document was modified by someone else, please refresh");
+
+          if (onRefreshDocument) onRefreshDocument();
+
+          return;
+
+        }
+
         const txt = await res.text();
         let msg = "Failed to place record on hold.";
         try {
@@ -1129,6 +1165,7 @@ export default function CustomerFeedbackDetails({
       setActionError(err.message || "Network error placing record on hold.");
     } finally {
       setActionLoading(false);
+      isSubmittingRef.current = false;
       setTimeout(() => {
         setActionSuccess(null);
         setActionError(null);
@@ -1161,6 +1198,7 @@ export default function CustomerFeedbackDetails({
         },
         body: JSON.stringify({
           remarks: approvalComment.trim(),
+          expected_version: activeDoc.version || 1,
         }),
       });
 
@@ -1169,6 +1207,16 @@ export default function CustomerFeedbackDetails({
         setApprovalComment("");
         if (onRefreshDocument) onRefreshDocument();
       } else {
+        if (res.status === 409) {
+
+          alert("Document was modified by someone else, please refresh");
+
+          if (onRefreshDocument) onRefreshDocument();
+
+          return;
+
+        }
+
         const txt = await res.text();
         let msg = "Failed to reject record.";
         try {
@@ -1183,6 +1231,7 @@ export default function CustomerFeedbackDetails({
       setActionError(err.message || "Network error rejecting record.");
     } finally {
       setActionLoading(false);
+      isSubmittingRef.current = false;
       setTimeout(() => {
         setActionSuccess(null);
         setActionError(null);
@@ -2396,30 +2445,31 @@ export default function CustomerFeedbackDetails({
       {/* ========================================================= */}
       {showTimelineModal && (
         <div
-          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn"
+          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-fadeIn"
           onClick={() => setShowTimelineModal(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh] my-auto"
+            className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-32px)] my-auto"
             onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: "calc(100dvh - 32px)" }}
           >
             {/* Modal Header */}
-            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+            <div className="bg-[#003F28] text-white px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between shadow-xs shrink-0">
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
                   <Clock className="h-4 w-4" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-xs sm:text-sm text-white flex items-center gap-1.5 sm:gap-2 flex-wrap">
                     <span>Stage Approval Timeline</span>
-                    <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
+                    <span className="text-[9.5px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-700/60">
                       {formatDocNumber(activeDoc.id, docTypeCanonical, (activeDoc as any).category)}
                     </span>
-                    <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-2 py-0.5 rounded border border-emerald-600/70">
+                    <span className="text-[9.5px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-1.5 py-0.2 rounded border border-emerald-600/70">
                       Flow: {activeDoc?.workflow_profile_id || activeDoc?.workflow_profile || "Customer_feedback"}
                     </span>
                   </h3>
-                  <p className="text-[10.5px] text-emerald-100/80 font-medium truncate max-w-sm">
+                  <p className="text-[10px] sm:text-[10.5px] text-emerald-100/80 font-medium truncate max-w-sm">
                     {accountName || "Customer Record"} &bull; {typeOfComplaint || "Feedback Review"}
                   </p>
                 </div>
@@ -2427,14 +2477,14 @@ export default function CustomerFeedbackDetails({
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0 ml-2"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Modal Body: Workflow Stages Stepper Only */}
-            <div className="p-5 overflow-y-auto min-h-0 flex-1 space-y-4 custom-scrollbar text-xs">
+            <div className="px-4 sm:px-5 py-3 sm:py-3.5 overflow-y-auto min-h-0 flex-1 space-y-2.5 sm:space-y-3 custom-scrollbar text-xs">
               {effectiveSteps && effectiveSteps.length > 0 && (
                 effectiveSteps.map((step: any, idx: number) => {
                   const stgNum = step.stage_number || idx + 1;
@@ -2471,9 +2521,10 @@ export default function CustomerFeedbackDetails({
                   });
 
                   return (
-                    <div key={idx} className="flex gap-3 relative">
+                    <div key={idx} className="flex gap-2.5 sm:gap-3 relative">
+                      {/* Left timeline connector and stage indicator */}
                       <div className="flex flex-col items-center">
-                        <div className={`h-6 w-6 rounded-full flex items-center justify-center font-semibold text-[10px] ${
+                        <div className={`h-5 w-5 sm:h-5.5 sm:w-5.5 rounded-full flex items-center justify-center font-bold text-[9px] sm:text-[9.5px] shrink-0 ${
                           isTerminalCancelledStage
                             ? "bg-slate-100 text-rose-600 border border-slate-300 font-bold"
                             : isPassed 
@@ -2485,111 +2536,114 @@ export default function CustomerFeedbackDetails({
                           {isTerminalCancelledStage ? "✕" : isPassed ? "✓" : stgNum}
                         </div>
                         {idx < effectiveSteps.length - 1 && (
-                          <div className={`w-0.5 flex-1 mt-1 min-h-[28px] ${
-                            isPassed ? "bg-emerald-200" : "bg-slate-200"
+                          <div className={`w-0.5 flex-1 my-0.5 min-h-[12px] ${
+                            isPassed ? "bg-emerald-300" : "bg-slate-200"
                           }`} />
                         )}
                       </div>
-                      <div className="flex-1 pb-3">
-                        <div className="flex items-center justify-between">
-                          <span className={`font-semibold text-xs ${
-                            isCurrent ? "text-slate-900 font-bold" : isPassed ? "text-slate-800 font-semibold" : "text-slate-400"
+
+                      {/* Right stage content */}
+                      <div className="flex-1 min-w-0 pb-1.5 sm:pb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11.5px] sm:text-xs truncate ${
+                            isCurrent ? "text-slate-900 font-extrabold" : isPassed ? "text-slate-800 font-bold" : "text-slate-400 font-semibold"
                           }`}>
                             {displayLabel}
                           </span>
                           {isTerminalCancelledStage && (
-                            <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[9px] font-semibold tracking-wider flex items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[8.5px] font-bold tracking-wider flex items-center gap-1 shrink-0">
                               <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                               Cancelled
                             </span>
                           )}
                           {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 font-bold text-[9px] uppercase tracking-wider border border-amber-300 animate-pulse">
+                            <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-900 font-black text-[8.5px] uppercase tracking-wider border border-amber-300 animate-pulse shrink-0">
                               Active Stage
                             </span>
                           )}
                           {isPassed && (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold text-[9px] border border-emerald-200/60">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[8.5px] border border-emerald-200/60 shrink-0">
                               Approved
                             </span>
                           )}
                         </div>
 
                         {/* Approver Details Card */}
-                        <div className="mt-1 text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/90 space-y-2 shadow-3xs">
-                          <div className="flex items-start justify-between text-[10px]">
-                            <div className="space-y-1 flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] uppercase font-black text-slate-500 tracking-wider flex items-center gap-1">
-                                  <Users className="h-3 w-3 text-[#003F28]" />
-                                  <span>Assigned Role & Division Approvers:</span>
+                        <div className="mt-1 text-[10.5px] sm:text-[11px] text-slate-600 bg-white p-2 sm:p-2.5 rounded-lg border border-slate-200 space-y-1.5 shadow-3xs">
+                          {/* Role & Division Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-1 text-[9px] sm:text-[9.5px]">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[8.5px] uppercase font-black text-slate-500 tracking-wider flex items-center gap-1">
+                                <Users className="h-3 w-3 text-[#003F28] shrink-0" />
+                                <span>Approvers:</span>
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                                Role: {resolvedStepRoleInfo.roleName}
+                              </span>
+                              {docDivision && (
+                                <span className="px-1.5 py-0.2 rounded font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  Division: {docDivision}
                                 </span>
-                                <span className="text-slate-500 font-mono text-[8.5px] bg-slate-100 px-1.5 py-0.5 rounded font-bold border border-slate-200">Stage {stgNum}</span>
-                              </div>
-
-                              {/* Role & Division badges */}
-                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
-                                  Role: {resolvedStepRoleInfo.roleName}
-                                </span>
-                                {docDivision && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                                    Division: {docDivision}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Resolved Persons in this Role for Division */}
-                              <div className="pt-1 space-y-0.5">
-                                <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block">
-                                  Person(s) in Role ({resolvedStepRoleInfo.users.length > 0 ? resolvedStepRoleInfo.users.length : poolMembers.length}):
-                                </span>
-                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                                  {resolvedStepRoleInfo.users.length > 0 ? (
-                                    resolvedStepRoleInfo.users.map((memUser: any, mIdx: number) => {
-                                      const uName = memUser.employee_name || memUser.name || memUser.username;
-                                      return (
-                                        <span 
-                                          key={mIdx} 
-                                          className="px-2 py-0.5 rounded-md text-[9.5px] font-extrabold bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1.5"
-                                        >
-                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                                          <span>{uName}</span>
-                                          {(memUser.division || docDivision) && (
-                                            <span className="text-[8.5px] font-mono text-emerald-700 font-semibold">
-                                              ({memUser.division || docDivision})
-                                            </span>
-                                          )}
-                                        </span>
-                                      );
-                                    })
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-                                      {resolvedStepRoleInfo.displayName}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                              )}
                             </div>
+                            <span className="text-slate-500 font-mono text-[8px] bg-slate-100 px-1 py-0.2 rounded font-bold border border-slate-200 shrink-0">
+                              Stage {stgNum}
+                            </span>
+                          </div>
+
+                          {/* Resolved Persons in this Role for Division */}
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                            <span className="text-[8px] uppercase font-extrabold text-slate-400 mr-0.5 shrink-0">
+                              Pool ({resolvedStepRoleInfo.users.length > 0 ? resolvedStepRoleInfo.users.length : poolMembers.length}):
+                            </span>
+                            {resolvedStepRoleInfo.users.length > 0 ? (
+                              resolvedStepRoleInfo.users.map((memUser: any, mIdx: number) => {
+                                const uName = memUser.employee_name || memUser.name || memUser.username;
+                                return (
+                                  <span 
+                                    key={mIdx} 
+                                    className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-900 border border-emerald-300 flex items-center gap-1"
+                                    title={`User: ${uName} | Role: ${memUser.role || resolvedStepRoleInfo.roleName} | Division: ${memUser.division || docDivision || 'All'}`}
+                                  >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
+                                    <span className="truncate max-w-[120px]">{uName}</span>
+                                    {(memUser.division || docDivision) && (
+                                      <span className="text-[8px] font-mono text-emerald-700 font-semibold">
+                                        ({memUser.division || docDivision})
+                                      </span>
+                                    )}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                                {resolvedStepRoleInfo.displayName}
+                              </span>
+                            )}
                           </div>
 
                           {/* Exact Sign-Off Attribution: Approved Person Name, Date & Time */}
                           {isPassed && (
-                            <div className="p-1.5 bg-emerald-50/60 rounded-lg border border-emerald-200/60 text-[10.5px] flex items-center justify-between text-emerald-800">
-                              <div className="flex items-center gap-1.5">
-                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-600 text-white font-bold text-[8.5px] flex items-center justify-center">✓</span>
-                                <span>
+                            <div className="p-1 px-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[9.5px] flex items-center justify-between text-emerald-800">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="h-3 w-3 rounded-full bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✓</span>
+                                <span className="truncate">
                                   <strong>Approved By:</strong> {matchingLog ? (matchingLog.actor || matchingLog.user || matchingLog.username) : ((activeDoc as any).approved_by || "Authorized Approver")}
                                 </span>
                               </div>
                               {matchingLog?.timestamp && (
-                                <div className="text-[9px] font-mono text-emerald-700 text-right">
-                                  <span>Date: {formatDate(matchingLog.timestamp)}</span>
-                                  <span className="mx-1">•</span>
-                                  <span>Time: {formatTimeOnly(matchingLog.timestamp)}</span>
+                                <div className="text-[8.5px] font-mono text-emerald-700 text-right shrink-0 ml-2">
+                                  <span>{formatDate(matchingLog.timestamp)} • {formatTimeOnly(matchingLog.timestamp)}</span>
                                 </div>
                               )}
                             </div>
+                          )}
+
+                          {isCurrent && (
+                            <p className="text-[8.5px] text-slate-500 font-medium flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-ping shrink-0" />
+                              <span>Any 1 pool member can verify and sign off.</span>
+                            </p>
                           )}
                         </div>
                       </div>
@@ -2600,12 +2654,12 @@ export default function CustomerFeedbackDetails({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0">
-              <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
+            <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between shrink-0">
+              <span className="text-[10px] sm:text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+                className="px-3.5 py-1 sm:py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
               </button>

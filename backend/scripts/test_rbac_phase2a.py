@@ -1,3 +1,14 @@
+import sys
+import os
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from app.config.test_safety import enforce_test_database_safety
+enforce_test_database_safety()
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app

@@ -4,6 +4,11 @@ import json
 import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
+from app.constants.document_types import (
+    DocumentType,
+    normalize_document_type,
+    is_feedback_or_complaint,
+)
 from app.database.models import BusinessRule, Invoice, WorkflowProfile, WorkflowStepDefinition
 
 logger = logging.getLogger(__name__)
@@ -23,10 +28,7 @@ def parse_date_str(val: Any) -> Optional[datetime.date]:
 
 def infer_document_type(category: str='', trans_type: str='', wf_name: str='', doc_type: str='') -> str:
     if doc_type and doc_type.strip():
-        dt_clean = doc_type.strip().upper()
-        if 'FEEDBACK' in dt_clean or 'COMPLAINT' in dt_clean:
-            return 'CUSTOMER FEEDBACK'
-        return doc_type.strip()
+        return normalize_document_type(doc_type)
     n = f'{category} {trans_type} {wf_name}'.upper()
     if 'EVOUCHER' in n or 'E-VOUCHER' in n or 'E_VOUCHER' in n:
         return 'E-VOUCHER'
@@ -42,8 +44,10 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
         return 'UTILITY & RENT'
     elif 'TRAVEL' in n or 'WELFARE' in n or 'INCENTIVE' in n or ('SALARY' in n) or 'STAFF' in n or 'HR' in n:
         return 'STAFF & HR EXPENSE'
-    elif 'COMPLAINT' in n or 'FEEDBACK' in n:
-        return 'CUSTOMER FEEDBACK'
+    elif 'COMPLAINT' in n:
+        return DocumentType.CUSTOMER_COMPLAINT.value
+    elif 'FEEDBACK' in n:
+        return DocumentType.CUSTOMER_FEEDBACK.value
     elif 'PURCHASE' in n or 'PO_' in n:
         return 'PURCHASE INVOICE'
     elif 'MAINTENANCE' in n or 'REPAIRS' in n or 'SERVICE' in n:
@@ -52,7 +56,7 @@ def infer_document_type(category: str='', trans_type: str='', wf_name: str='', d
         return 'ADVANCE VOUCHER'
     elif 'JRNL' in n or 'JOURNAL' in n:
         return 'JOURNAL VOUCHER'
-    return 'AP INVOICE'
+    return DocumentType.AP_INVOICE.value
 def get_doc_type_prefix(doc_type: str='', category: str='', trans_type: str='', wf_name: str='') -> str:
     combined = f"{doc_type or ''} {category or ''} {trans_type or ''} {wf_name or ''}".strip().upper()
     if 'CASH VOUCHER' in combined or 'CASH' in combined or 'PETTY' in combined:
@@ -653,6 +657,91 @@ def resolve_step_approvers(db: Session, step: Any, doc: Any) -> List[Any]:
 
     return resolved_users
 
+def rule_has_type_or_category_condition(rule: Any) -> bool:
+    if isinstance(rule, (str, dict)) and not hasattr(rule, 'document_type') and not hasattr(rule, 'conditions_json'):
+        conditions_json = rule
+    else:
+        rule_doc_type = getattr(rule, 'document_type', None) or (rule.get('document_type') if isinstance(rule, dict) else None)
+        if rule_doc_type and str(rule_doc_type).strip().upper() not in ['', '*', 'ALL', 'NONE', 'GENERAL RECORDS']:
+            return True
+        conditions_json = getattr(rule, 'conditions_json', None) or (rule.get('conditions_json') if isinstance(rule, dict) else None)
+
+    if not conditions_json:
+        return False
+    try:
+        data = json.loads(conditions_json) if isinstance(conditions_json, str) else conditions_json
+        cond_list = data.get('conditions', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        for c in cond_list:
+            if isinstance(c, dict):
+                f = sanitize_text(str(c.get('field', '')))
+                if f in ['documenttype', 'doctype', 'type', 'category', 'cat', 'categoryname', 'category_name']:
+                    return True
+    except Exception:
+        pass
+    return False
+
+def is_rule_type_compatible_with_document(rule: Any, document: Any, db: Optional[Session] = None) -> bool:
+    """
+    Guard for Issue 3:
+    A rule that has no document_type/category condition must not act as a wildcard
+    for document types it wasn't designed for.
+    Rules intended for a specific workflow type (e.g. Feedback) only match documents of that type.
+    Logs a warning when a rule has no type condition.
+    """
+    raw_doc_type = normalize_document_type(
+        getattr(document, 'document_type', None) or (document.get('document_type') if isinstance(document, dict) else None)
+    )
+    cat_val = normalize_document_type(
+        getattr(document, 'category', None) or (document.get('category') if isinstance(document, dict) else None)
+    )
+    rule_doc_type_raw = str(getattr(rule, 'document_type', None) or (rule.get('document_type') if isinstance(rule, dict) else None) or '').strip()
+
+    has_type_cond = rule_has_type_or_category_condition(rule)
+    if has_type_cond:
+        return True
+
+    rule_name = getattr(rule, 'rule_name', '') or ''
+    rule_id = getattr(rule, 'id', 'N/A')
+    logger.warning(
+        f"[RulesEngine] Rule '{rule_name}' (id={rule_id}) has no document_type or category condition; "
+        f"applying guard against unintended wildcard matching."
+    )
+
+    target_wf = str(getattr(rule, 'target_workflow_id', None) or (rule.get('target_workflow_id') if isinstance(rule, dict) else None) or '').strip()
+
+    is_feedback_rule = (
+        is_feedback_or_complaint(rule_doc_type_raw) or
+        'FEEDBACK' in rule_name.upper() or
+        'FEEDBACK' in target_wf.upper() or
+        'COMPLAINT' in rule_name.upper() or
+        'COMPLAINT' in target_wf.upper()
+    )
+    doc_is_feedback = is_feedback_or_complaint(raw_doc_type) or is_feedback_or_complaint(cat_val)
+
+    if is_feedback_rule and not doc_is_feedback:
+        return False
+
+    if rule_doc_type_raw and rule_doc_type_raw.upper() not in ['*', 'ALL', '', 'GENERAL RECORDS']:
+        norm_rule_doc_type = normalize_document_type(rule_doc_type_raw)
+        if raw_doc_type != norm_rule_doc_type and cat_val != norm_rule_doc_type:
+            return False
+
+    if db and target_wf:
+        try:
+            profile = db.query(WorkflowProfile).filter(
+                (WorkflowProfile.profile_name == target_wf) | (WorkflowProfile.workflow_code == target_wf)
+            ).filter(WorkflowProfile.is_deleted == False).first()
+            if profile and profile.workflow_type:
+                raw_wf_type = str(profile.workflow_type).strip()
+                if raw_wf_type and raw_wf_type.upper() not in ['*', 'ALL', '', 'GENERAL RECORDS']:
+                    norm_wf_type = normalize_document_type(raw_wf_type)
+                    if raw_doc_type != norm_wf_type and cat_val != norm_wf_type:
+                        return False
+        except Exception:
+            pass
+
+    return True
+
 def resolve_matching_rules(db: Session, invoice: Invoice) -> List[Dict[str, Any]]:
     """
     Evaluates all active business rules against the given invoice/document and returns
@@ -668,6 +757,8 @@ def resolve_matching_rules(db: Session, invoice: Invoice) -> List[Dict[str, Any]
 
     for rule in rules:
         try:
+            if not is_rule_type_compatible_with_document(rule, invoice, db=db):
+                continue
             matched_conditions = False
             if rule.conditions_json and rule.conditions_json.strip() and rule.conditions_json.strip() != "{}":
                 conds = json.loads(rule.conditions_json)
@@ -719,6 +810,8 @@ def evaluate_business_rules_full(db: Session, invoice: Invoice) -> Optional[Dict
     rules = db.query(BusinessRule).filter(BusinessRule.is_active == True, BusinessRule.is_deleted == False).order_by(BusinessRule.priority.desc(), BusinessRule.id.asc()).all()
     for rule in rules:
         try:
+            if not is_rule_type_compatible_with_document(rule, invoice, db=db):
+                continue
             matched_conditions = False
             if rule.conditions_json and rule.conditions_json.strip() and rule.conditions_json.strip() != "{}":
                 conds = json.loads(rule.conditions_json)
@@ -917,6 +1010,8 @@ def remap_unrouted_documents(db: Session) -> List[Dict[str, Any]]:
             else:
                 doc.document_type = infer_document_type(category=doc.category, wf_name=profile.profile_name, doc_type=doc.document_type)
 
+        doc.version = (doc.version or 1) + 1
+
         if rule_action == 'AUTO_APPROVE':
             doc.status = 'Approved'
             doc.current_stage = doc.total_stages
@@ -991,4 +1086,4 @@ def remap_unrouted_documents(db: Session) -> List[Dict[str, Any]]:
             # Broadcast is non-critical; suppress errors during event emission
             pass
 
-    return remapped_results
+    return remapped_results

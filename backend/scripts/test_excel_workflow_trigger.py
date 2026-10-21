@@ -19,6 +19,9 @@ import openpyxl
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from app.config.test_safety import enforce_test_database_safety
+enforce_test_database_safety()
+
 from app.database.connection import SessionLocal
 from app.database.models import Invoice, User, AuditLog, WorkflowProfile, WorkflowStepDefinition
 from app.services.excel_trigger_service import (

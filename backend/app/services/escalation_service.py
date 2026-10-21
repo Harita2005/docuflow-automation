@@ -60,7 +60,7 @@ def can_stage_escalate(inv: Invoice, db: Session) -> Tuple[bool, str]:
 
     return True, f"Stage {cur_stage_num} ({current_step_name}) is eligible for escalation."
 
-def escalate_invoice_stage(inv: Invoice, db: Session, user_name: str = "System Escalation", reason: str = "SLA Threshold Exceeded") -> dict:
+def escalate_invoice_stage(inv: Invoice, db: Session, user_name: str = "System Escalation", reason: str = "SLA Threshold Exceeded", expected_version: Optional[int] = None, is_background_job: bool = False) -> dict:
     """
     Executes escalation for an invoice if permitted by policy.
     Blocks escalation if the attachment is missing in the Attachment Status stage.
@@ -68,6 +68,19 @@ def escalate_invoice_stage(inv: Invoice, db: Session, user_name: str = "System E
     can_escalate, message = can_stage_escalate(inv, db)
     if not can_escalate:
         raise HTTPException(status_code=400, detail=message)
+
+    current_version = inv.version or 1
+    if not is_background_job:
+        if expected_version is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Missing mandatory 'expected_version' for concurrency control."
+            )
+        if expected_version != current_version:
+            raise HTTPException(
+                status_code=409,
+                detail="This document version has been modified by another approver or process."
+            )
 
     cur_stage_num = inv.current_stage or 1
     total_stages = inv.total_stages or 1
@@ -89,6 +102,7 @@ def escalate_invoice_stage(inv: Invoice, db: Session, user_name: str = "System E
     inv.assigned_approver = escalated_approver
     inv.status = f"Escalated (Stage {cur_stage_num})"
     inv.updated_at = datetime.datetime.utcnow()
+    inv.version = current_version + 1
 
     db.add(AuditLog(
         invoice_id=str(inv.id),

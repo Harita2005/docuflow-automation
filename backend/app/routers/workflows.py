@@ -685,13 +685,25 @@ def execute_invoice_escalation(
 ):
     from app.routers.documents import find_invoice_by_identifier
     from app.services.escalation_service import escalate_invoice_stage
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document version has been modified by another approver or process."
+        )
     verify_escalation_authorization(current_user, inv, db)
     user_name = current_user.employee_name or current_user.name or current_user.username or 'Escalation Engine'
     reason = payload.get('reason') or 'SLA Threshold Exceeded'
-    return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason)
+    return escalate_invoice_stage(inv, db, user_name=user_name, reason=reason, expected_version=expected_ver)
 
 
 @router.post('/api/admin/workflows/{invoice_id}/fallback-reassign')
@@ -713,6 +725,19 @@ def fallback_reassign_or_override(
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail=f"Document '{invoice_id}' not found")
+
+    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+    if expected_ver is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document version has been modified by another approver or process."
+        )
 
     action = str(payload.get('action') or 'REASSIGN').strip().upper()
     target_approver = str(payload.get('target_approver') or '').strip()

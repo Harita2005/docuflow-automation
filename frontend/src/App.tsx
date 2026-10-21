@@ -20,8 +20,12 @@ import { DbInvoice } from "./types";
 import { Clock } from "lucide-react";
 
 import { getCanonicalDocumentType } from "./utils/formatters.ts";
+import { initAuthTokenMigration, removeAuthTokens } from "./utils/auth";
 
 export default function App() {
+  useEffect(() => {
+    initAuthTokenMigration();
+  }, []);
   const getInitialRoute = () => {
     const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true";
     if (!isStoredLoggedIn) {
@@ -677,6 +681,7 @@ export default function App() {
       } catch {}
     }
 
+    removeAuthTokens();
     localStorage.removeItem("authToken");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("lastActivityTime");

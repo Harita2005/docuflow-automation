@@ -161,7 +161,8 @@ class Settings(BaseSettings):
     EXCEL_PATH: Path = BASE_DIR / "data" / "SD Checklists.xlsx"
 
     # Audit Log Retention (default 7 days / 1 week)
-    AUDIT_LOG_RETENTION_DAYS: int = 7
+    # Audit Log Retention (0 = infinite / never delete)
+    AUDIT_LOG_RETENTION_DAYS: int = 0
 
     # SMTP Configuration (loaded from environment variables / .env)
     SMTP_HOST: str = ""

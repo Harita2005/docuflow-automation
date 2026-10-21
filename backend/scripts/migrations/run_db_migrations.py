@@ -37,8 +37,10 @@ def run_migrations():
 
         with engine.begin() as conn:
             logger.info("Applying column schema additions and foreign key constraints...")
-            # role_id column on users
+            # role_id, division_id, approval_divisions columns on users
             conn.execute(text("IF COL_LENGTH('users', 'role_id') IS NULL ALTER TABLE users ADD role_id INT NULL;"))
+            conn.execute(text("IF COL_LENGTH('users', 'division_id') IS NULL ALTER TABLE users ADD division_id INT NULL;"))
+            conn.execute(text("IF COL_LENGTH('users', 'approval_divisions') IS NULL ALTER TABLE users ADD approval_divisions VARCHAR(500) NULL;"))
             conn.execute(text("""IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_users_role_id')
                 ALTER TABLE users ADD CONSTRAINT fk_users_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;"""))
 

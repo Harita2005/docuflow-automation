@@ -37,7 +37,7 @@ def get_audit_retention_days() -> int:
                     return int(val)
     except Exception as e:
         logger.debug("Error reading retention config: %s", e)
-    return getattr(settings, "AUDIT_LOG_RETENTION_DAYS", 7)
+    return getattr(settings, "AUDIT_LOG_RETENTION_DAYS", 0)
 
 
 def prune_expired_audit_logs(db: Session, retention_days: Optional[int] = None) -> int:

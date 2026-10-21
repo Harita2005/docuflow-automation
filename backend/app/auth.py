@@ -366,7 +366,7 @@ async def verify_service_api_key(
                 if (
                     user
                     and user.is_active
-                    and user.role == "admin"
+                    and (user.role or "").strip().lower() in {"admin", "administrator", "system_admin", "superadmin"}
                 ):
                     return True
 

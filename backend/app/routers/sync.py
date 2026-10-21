@@ -19,6 +19,7 @@ from app.database.models import (
 )
 from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
 from app.services.rules_engine import get_doc_type_prefix, generate_document_id
+from app.constants.document_types import DocumentType, normalize_document_type, is_feedback_or_complaint
 from app.services.ocr_service import extract_text_from_pdf
 from app.auth import verify_service_api_key
 from app.routers.documents import resolve_checklist_items
@@ -391,16 +392,17 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if not existing:
             prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
             existing = db.query(Invoice).filter(or_(Invoice.id == str(req.doc_key), Invoice.id == f'{prefix}-{req.doc_key}', Invoice.id == f'DOC-{req.doc_key}')).first()
+    req_doc_type = normalize_document_type(req.document_type) if req.document_type else None
     if not existing and req.invoice_number:
         req_is_feedback = (
-            (req.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+            is_feedback_or_complaint(req.document_type)
             or (req.category or '').lower().startswith('customer')
         )
         if not req_is_feedback:
             existing = db.query(Invoice).filter(
                 Invoice.invoice_number == req.invoice_number,
                 Invoice.division == effective_division,
-                ~Invoice.document_type.in_(['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'])
+                ~Invoice.document_type.in_([DocumentType.CUSTOMER_FEEDBACK.value, DocumentType.CUSTOMER_COMPLAINT.value])
             ).first()
     calculated_base = req.base_amount
     calculated_tax = req.tax_amount
@@ -412,22 +414,39 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
     existing_custom_str = existing.custom_data if (existing and existing.custom_data) else None
 
     if existing:
-        existing.doc_num = req.doc_num or existing.doc_num
-        existing.vendor_name = req.vendor_name or existing.vendor_name
-        existing.vendor_code = req.vendor_code or existing.vendor_code
-        existing.vendor_gstin = req.vendor_gstin or existing.vendor_gstin
-        existing.invoice_number = req.invoice_number or existing.invoice_number
-        existing.invoice_date = req.invoice_date or existing.invoice_date
-        existing.po_number = req.po_number or existing.po_number
-        existing.amount = req.amount if req.amount > 0 else existing.amount
-        existing.base_amount = calculated_base if calculated_base else existing.base_amount
-        existing.tax_amount = calculated_tax if calculated_tax else existing.tax_amount
-        existing.document_type = req.document_type or existing.document_type
-        existing.division = effective_division
-        existing.category = req.category or existing.category
-        existing.cost_center = req.cost_center or existing.cost_center
-        existing.plant = req.plant or existing.plant
-        existing.payment_terms = req.payment_terms or existing.payment_terms
+        financial_fields = {'amount', 'base_amount', 'tax_amount', 'vendor_name', 'vendor_code', 'vendor_gstin', 'po_number'}
+        changed_fields = []
+        financial_changes = []
+        is_mid_approval = (existing.current_stage or 1) >= 1 and (existing.status or '').lower() in ['pending approval', 'in progress', 'under review']
+
+        def _track_and_set(field_name, new_val):
+            if new_val is not None:
+                old_val = getattr(existing, field_name, None)
+                if old_val != new_val:
+                    changed_fields.append(field_name)
+                    if field_name in financial_fields:
+                        financial_changes.append(f"{field_name}: '{old_val}' -> '{new_val}'")
+                    setattr(existing, field_name, new_val)
+
+        _track_and_set('doc_num', req.doc_num)
+        _track_and_set('vendor_name', req.vendor_name)
+        _track_and_set('vendor_code', req.vendor_code)
+        _track_and_set('vendor_gstin', req.vendor_gstin)
+        _track_and_set('invoice_number', req.invoice_number)
+        _track_and_set('invoice_date', req.invoice_date)
+        _track_and_set('po_number', req.po_number)
+        if req.amount > 0:
+            _track_and_set('amount', req.amount)
+        if calculated_base:
+            _track_and_set('base_amount', calculated_base)
+        if calculated_tax:
+            _track_and_set('tax_amount', calculated_tax)
+        _track_and_set('document_type', req_doc_type)
+        _track_and_set('division', effective_division)
+        _track_and_set('category', req.category)
+        _track_and_set('cost_center', req.cost_center)
+        _track_and_set('plant', req.plant)
+        _track_and_set('payment_terms', req.payment_terms)
 
         # Explicit real column mappings for document fields
         if req.account_name is not None: existing.account_name = req.account_name
@@ -464,7 +483,22 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if req.credit_status is not None: existing.credit_status = req.credit_status
 
         if line_items_str:
+            if existing.line_items_json != line_items_str:
+                changed_fields.append('line_items_json')
             existing.line_items_json = line_items_str
+
+        if changed_fields:
+            existing.version = (existing.version or 1) + 1
+            if is_mid_approval and financial_changes:
+                logger.warning(f"[Sync Alert] Financial field modified mid-approval for document {existing.id}: {financial_changes}")
+                db.add(AuditLog(
+                    invoice_id=str(existing.id),
+                    user='ERP Sync Engine',
+                    action='Mid-Approval Financial Field Modified',
+                    stage=f'Stage {existing.current_stage or 1}',
+                    notes=f"WARNING: Financial fields modified via ERP Sync while document in approval flow: {', '.join(financial_changes)}"
+                ))
+
         existing.is_deleted = False
         existing.deleted_at = None
         target_inv = existing
@@ -472,7 +506,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         doc_type_pref = get_doc_type_prefix(doc_type=req.document_type or '', category=req.category or '')
         doc_id = generate_document_id(db, doc_type=req.document_type or '', category=req.category or '')
         timestamp = int(datetime.datetime.utcnow().timestamp())
-        effective_doc_type = req.document_type or 'AP INVOICE'
+        effective_doc_type = req_doc_type or DocumentType.AP_INVOICE.value
         new_inv = Invoice(
             id=doc_id,
             doc_key=str(req.doc_key) if req.doc_key is not None else None,
@@ -658,7 +692,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         if profile:
             from app.services.rules_engine import infer_document_type
             target_inv.workflow_profile_id = profile.profile_name
-            if target_inv.document_type and target_inv.document_type.upper() in ('CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT'):
+            if target_inv.document_type and is_feedback_or_complaint(target_inv.document_type):
                 pass  # Preserve existing feedback document type
             elif req.document_type and req.document_type.strip():
                 target_inv.document_type = req.document_type
@@ -708,7 +742,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
     # Auto-attach approved physical invoice PDF for Customer Feedback / Customer Complaint records
     is_feedback_doc = (
-        (target_inv.document_type or '').upper() in ['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT']
+        is_feedback_or_complaint(target_inv.document_type)
         or str(target_inv.id).startswith('CMP')
         or str(target_inv.id).startswith('CF')
         or bool(getattr(target_inv, 'type_of_complaint', None))

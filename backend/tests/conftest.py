@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.config.settings import settings
+from app.config.test_safety import enforce_test_database_safety
 from app.database import connection
 from app.database.connection import get_db
 from app.main import app
@@ -31,20 +32,12 @@ def is_approved_test_database(db_name: str) -> bool:
     return clean in APPROVED_TEST_DB_NAMES or "test" in clean or "dev" in clean
 
 
-def validate_test_database(db_name: str, environment: str = "test") -> bool:
+def validate_test_database(db_name: str = None, environment: str = "test") -> bool:
     """
     Validates that test execution is not targeting a production database or environment.
-    Rejects production environments and dedicated production database instances.
+    Delegates to enforce_test_database_safety for strict verification.
     """
-    clean_env = (environment or getattr(settings, "ENVIRONMENT", "") or "").strip().lower()
-    clean_name = (db_name or "").strip().lower()
-
-    if clean_env in ("production", "prod"):
-        raise ValueError("Safety Guard: Pytest execution is strictly forbidden in production environment!")
-
-    if clean_name in ("docuflow_prod", "docuflow_production") or "prod" in clean_name:
-        raise ValueError(f"Safety Guard: Tests cannot run against production database '{db_name}'.")
-
+    enforce_test_database_safety(test_db_name=db_name, environment=environment)
     return True
 
 
@@ -60,9 +53,10 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Configure Database for Pytest Run (Using Main DocuFlowDB per user instruction)
+# Configure Database for Pytest Run (Strict safety guard)
 # ---------------------------------------------------------------------------
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", settings.DB_NAME)
+# TEST_DB_NAME MUST be explicitly set via environment variable.
+TEST_DB_NAME = enforce_test_database_safety()
 
 db_url = settings.get_database_url()
 if settings.DB_NAME != TEST_DB_NAME:
@@ -88,8 +82,8 @@ def enforce_test_db_safety_guard():
     Rejects production environments and dedicated production database instances.
     """
     try:
-        validate_test_database(settings.DB_NAME, settings.ENVIRONMENT)
-    except ValueError as exc:
+        validate_test_database(TEST_DB_NAME, settings.ENVIRONMENT)
+    except (ValueError, RuntimeError) as exc:
         pytest.fail(str(exc))
 
 

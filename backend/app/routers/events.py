@@ -419,13 +419,10 @@ def release_document_lock(
     inv = _verify_document_access(current_user, invoice_id, db)
     user_handle = (current_user.username or current_user.email or f"user_{current_user.id}").strip().lower()
     is_admin = _is_admin_user(current_user)
-    assigned_target = str(getattr(inv, 'assigned_approver', None) or "").strip().lower()
-    user_tokens = {user_handle, (current_user.username or "").strip().lower(), (current_user.email or "").strip().lower()}
-    is_assigned = any(token and token in assigned_target for token in user_tokens)
     result = lock_manager.release_lock(
         doc_id=str(inv.id),
         user_handle=user_handle,
-        is_admin=is_admin or is_assigned,
+        is_admin=is_admin,
     )
     if not result.get('released'):
         raise HTTPException(

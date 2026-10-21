@@ -1,3 +1,15 @@
+import sys
+import os
+from pathlib import Path
+
+# Add backend directory to sys.path if not present
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from app.config.test_safety import enforce_test_database_safety
+enforce_test_database_safety()
+
 import pytest
 import datetime
 from fastapi.testclient import TestClient
@@ -159,10 +171,11 @@ def test_workflow_lifecycle_progression(client, db_session, test_setup):
     approve_payload = {
         "invoiceId": doc_id,
         "expected_stage": 1,
+        "expected_version": test_doc.version or 1,
         "comments": "Stage 1 verified and passed.",
         "checklistVerified": True
     }
-    appr_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_1, json={"remarks": "Stage 1 approved"})
+    appr_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_1, json={"remarks": "Stage 1 approved", "expected_version": test_doc.version or 1})
     if appr_res.status_code != 200:
         appr_res = client.post("/api/workflows/approve", headers=headers_1, json=approve_payload)
     assert appr_res.status_code == 200, f"Approval failed: {appr_res.text}"
@@ -194,9 +207,10 @@ def test_workflow_lifecycle_progression(client, db_session, test_setup):
     assert doc_id in [str(d["id"]) for d in res_2_pending_after.json()], "Document must now be in Approver 2 pending queue"
 
     # 5. Approver 2 approves Stage 2 (Final Approval)
-    appr_2_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_2, json={"remarks": "Final approval completed"})
+    db_session.refresh(test_doc)
+    appr_2_res = client.post(f"/api/records/{doc_id}/approve", headers=headers_2, json={"remarks": "Final approval completed", "expected_version": test_doc.version or 2})
     if appr_2_res.status_code != 200:
-        appr_2_res = client.post("/api/workflows/approve", headers=headers_2, json={"invoiceId": doc_id, "expected_stage": 2, "comments": "Final pass", "checklistVerified": True})
+        appr_2_res = client.post("/api/workflows/approve", headers=headers_2, json={"invoiceId": doc_id, "expected_stage": 2, "expected_version": test_doc.version or 2, "comments": "Final pass", "checklistVerified": True})
     assert appr_2_res.status_code == 200
 
     db_session.refresh(test_doc)

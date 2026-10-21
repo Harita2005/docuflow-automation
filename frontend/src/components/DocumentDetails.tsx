@@ -479,7 +479,8 @@ export default function DocumentDetails({
   }, [document?.id, selectedAction, targetCompletionDate]);
 
   const _handleTriggerEscalation = async () => {
-    if (!document?.id) return;
+    if (!document?.id || isSubmittingRef.current || actionLoading) return;
+    isSubmittingRef.current = true;
     setActionLoading(true);
     setActionError(null);
     try {
@@ -491,6 +492,7 @@ export default function DocumentDetails({
           "Authorization": token ? `Bearer ${token}` : ""
         },
         body: JSON.stringify({
+          expected_version: (activeDoc as any)?.version || (document as any)?.version || 1,
           user: currentUserUsername || currentUserEmail || "Reviewer",
           reason: `SLA Target Completion Date Exceeded (Target was: ${targetCompletionDate ? new Date(targetCompletionDate).toLocaleString() : 'Past Due'})`
         })
@@ -501,6 +503,11 @@ export default function DocumentDetails({
         await fetchWorkflowData();
         onRefreshDocument();
       } else {
+        if (res.status === 409) {
+          showToast("Document was modified by someone else, please refresh", "amber");
+          onRefreshDocument();
+          return;
+        }
         const txt = await res.text();
         let errDetail = "Escalation failed.";
         try {
@@ -515,6 +522,7 @@ export default function DocumentDetails({
       setActionError(err.message || "Escalation failed.");
     } finally {
       setActionLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -522,6 +530,7 @@ export default function DocumentDetails({
   const [_saveLoading, _setSaveLoading] = useState(false);
   const [approvalComment, setApprovalComment] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [showNextActionModal, setShowNextActionModal] = useState(false);
@@ -1824,7 +1833,8 @@ export default function DocumentDetails({
   };
 
   const handleInlineReject = async () => {
-    if (!document) return;
+    if (!document || isSubmittingRef.current || actionLoading) return;
+    isSubmittingRef.current = true;
     const isStage1 = (document?.current_stage || 1) <= 1;
     const comments = approvalComment.trim();
     if (!comments) {
@@ -1860,6 +1870,11 @@ export default function DocumentDetails({
         setActionModalType('reject');
         setShowNextActionModal(true);
       } else {
+        if (response.status === 409) {
+          alert("Document was modified by someone else, please refresh");
+          onRefreshDocument();
+          return;
+        }
         let errDetail = "Rejection failed";
         try {
           const txt = await response.text();
@@ -1879,7 +1894,8 @@ export default function DocumentDetails({
   };
 
   const handleInlineHold = async () => {
-    if (!document) return;
+    if (!document || isSubmittingRef.current || actionLoading) return;
+    isSubmittingRef.current = true;
     const comments = approvalComment.trim();
     if (!comments) {
       alert("Comments are required to hold/send back the document.");
@@ -1916,6 +1932,11 @@ export default function DocumentDetails({
         setActionModalType('hold');
         setShowNextActionModal(true);
       } else {
+        if (response.status === 409) {
+          alert("Document was modified by someone else, please refresh");
+          onRefreshDocument();
+          return;
+        }
         let errDetail = "Hold action failed";
         try {
           const txt = await response.text();
@@ -1968,6 +1989,8 @@ export default function DocumentDetails({
 
 
   const handleInlineApprove = async () => {
+    if (isSubmittingRef.current || actionLoading) return;
+    isSubmittingRef.current = true;
     const hasDocAttachment = Boolean(iframeSrc);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
     const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
@@ -2028,6 +2051,11 @@ export default function DocumentDetails({
         setActionModalType('approve');
         setShowNextActionModal(true);
       } else {
+        if (response.status === 409) {
+          alert("Document was modified by someone else, please refresh");
+          onRefreshDocument();
+          return;
+        }
         let errDetail = "Approval action failed";
         try {
           const txt = await response.text();
@@ -3225,33 +3253,34 @@ export default function DocumentDetails({
       {/* ========================================================= */}
       {showTimelineModal && (
         <div 
-          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn"
+          className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-fadeIn"
           onClick={() => setShowTimelineModal(false)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh] my-auto"
+            className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-32px)] my-auto"
             onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: "calc(100dvh - 32px)" }}
           >
             
             {/* Modal Header */}
-            <div className="bg-[#003F28] text-white px-5 py-3.5 flex items-center justify-between shadow-sm shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+            <div className="bg-[#003F28] text-white px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between shadow-xs shrink-0">
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
                   <Clock className="h-4 w-4" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2 flex-wrap">
-                    <span>Approval Timeline & Audit Trail</span>
-                    <span className="text-[10px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/60">
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-xs sm:text-sm text-white flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span>Stage Approval Timeline</span>
+                    <span className="text-[9.5px] font-mono font-normal text-emerald-200 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-700/60">
                       {formatDocNumber(document.id, canonicalDocType, (document as any).category)}
                     </span>
                     {document?.workflow_profile_id && (
-                      <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-2 py-0.5 rounded border border-emerald-600/70">
+                      <span className="text-[9.5px] font-mono font-bold text-emerald-300 bg-emerald-900/80 px-1.5 py-0.2 rounded border border-emerald-600/70">
                         Flow: {document.workflow_profile_id}
                       </span>
                     )}
                   </h3>
-                  <p className="text-[10.5px] text-emerald-100/80 font-medium">
+                  <p className="text-[10px] sm:text-[10.5px] text-emerald-100/80 font-medium truncate max-w-sm">
                     {vendorName || document.vendor_name || "Vendor"} • ₹{Number(amount || document.amount || 0).toLocaleString('en-IN')}
                   </p>
                 </div>
@@ -3259,14 +3288,14 @@ export default function DocumentDetails({
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0 ml-2"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Modal Body: Chronological Audit Trail */}
-            <div className="p-5 overflow-y-auto min-h-0 flex-1 space-y-4 custom-scrollbar text-xs">
+            <div className="px-4 sm:px-5 py-3 sm:py-3.5 overflow-y-auto min-h-0 flex-1 space-y-2.5 sm:space-y-3 custom-scrollbar text-xs">
               
               {/* Dynamic Approval Workflow Stages */}
               {workflowStepDefinitions && workflowStepDefinitions.length > 0 ? (
@@ -3321,9 +3350,9 @@ export default function DocumentDetails({
                   const isAborted = isDocCancelled && step.stage_number > currentStageNum;
 
                   return (
-                    <div key={idx} className="flex gap-3 relative">
+                    <div key={idx} className="flex gap-2.5 sm:gap-3 relative">
                       <div className="flex flex-col items-center">
-                        <div className={`h-6 w-6 rounded-full flex items-center justify-center font-semibold text-[10px] ${
+                        <div className={`h-5 w-5 sm:h-5.5 sm:w-5.5 rounded-full flex items-center justify-center font-bold text-[9px] sm:text-[9.5px] shrink-0 ${
                           isTerminalCancelledStage
                             ? "bg-slate-100 text-rose-600 border border-slate-300 font-bold"
                             : isPassed 
@@ -3335,118 +3364,112 @@ export default function DocumentDetails({
                           {isTerminalCancelledStage ? "✕" : isPassed ? "✓" : step.stage_number}
                         </div>
                         {idx < workflowStepDefinitions.length - 1 && (
-                          <div className={`w-0.5 flex-1 mt-1 min-h-[28px] ${
-                            isPassed ? "bg-emerald-200" : "bg-slate-200"
+                          <div className={`w-0.5 flex-1 my-0.5 min-h-[12px] ${
+                            isPassed ? "bg-emerald-300" : "bg-slate-200"
                           }`} />
                         )}
                       </div>
-                      <div className="flex-1 pb-3">
-                        <div className="flex items-center justify-between">
-                          <span className={`font-semibold text-xs ${
-                            isTerminalCancelledStage ? "text-slate-800" : isCurrent ? "text-slate-900 font-bold" : isPassed ? "text-slate-800 font-semibold" : "text-slate-400"
+                      <div className="flex-1 min-w-0 pb-1.5 sm:pb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11.5px] sm:text-xs truncate ${
+                            isTerminalCancelledStage ? "text-slate-800 font-bold" : isCurrent ? "text-slate-900 font-extrabold" : isPassed ? "text-slate-800 font-bold" : "text-slate-400 font-semibold"
                           }`}>
                             {step.stage_name}
                           </span>
                           {isTerminalCancelledStage && (
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-semibold tracking-wider flex items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8.5px] font-semibold tracking-wider flex items-center gap-1 shrink-0">
                               <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                               Cancelled
                             </span>
                           )}
                           {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[#003F28] font-bold text-[9px] uppercase tracking-wider border border-emerald-200">
+                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-[#003F28] font-bold text-[8.5px] uppercase tracking-wider border border-emerald-200 shrink-0">
                               Active Stage
                             </span>
                           )}
                           {isPassed && (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold text-[9px] border border-emerald-200/60">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold text-[8.5px] border border-emerald-200/60 shrink-0">
                               Approved
                             </span>
                           )}
                           {isAborted && (
-                            <span className="text-[9px] text-slate-400 font-medium italic">
+                            <span className="text-[8.5px] text-slate-400 font-medium italic shrink-0">
                               Not Reached
                             </span>
                           )}
                         </div>
 
                         {/* Approver Details & Specific Sign-off Identity Card */}
-                        <div className="mt-1 text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200/90 space-y-2 shadow-3xs">
+                        <div className="mt-1 text-[10.5px] sm:text-[11px] text-slate-600 bg-white p-2 sm:p-2.5 rounded-lg border border-slate-200 space-y-1.5 shadow-3xs">
                           {/* 1. Assigned Role & Division Approver Resolution */}
-                          <div className="flex items-start justify-between text-[10px]">
-                            <div className="space-y-1 flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] uppercase font-black text-slate-500 tracking-wider flex items-center gap-1">
-                                  <Users className="h-3 w-3 text-[#003F28]" />
-                                  <span>Assigned Role & Division Approvers:</span>
+                          <div className="flex flex-wrap items-center justify-between gap-1 text-[9px] sm:text-[9.5px]">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[8.5px] uppercase font-black text-slate-500 tracking-wider flex items-center gap-1">
+                                <Users className="h-3 w-3 text-[#003F28] shrink-0" />
+                                <span>Approvers:</span>
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                                Role: {resolvedStepRoleInfo.roleName}
+                              </span>
+                              {docDivision && (
+                                <span className="px-1.5 py-0.2 rounded font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  Division: {docDivision}
                                 </span>
-                                <span className="text-slate-500 font-mono text-[8.5px] bg-slate-100 px-1.5 py-0.5 rounded font-bold border border-slate-200">Stage {step.stage_number}</span>
-                              </div>
-
-                              {/* Role & Division badges */}
-                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
-                                  Role: {resolvedStepRoleInfo.roleName}
-                                </span>
-                                {docDivision && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                                    Division: {docDivision}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Resolved Persons in this Role for the Document's Division */}
-                              <div className="pt-1 space-y-0.5">
-                                <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block">
-                                  Person(s) in Role ({resolvedStepRoleInfo.users.length > 0 ? resolvedStepRoleInfo.users.length : poolMembers.length}):
-                                </span>
-                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                                  {resolvedStepRoleInfo.users.length > 0 ? (
-                                    resolvedStepRoleInfo.users.map((memUser: any, mIdx: number) => {
-                                      const relevantLog = isTerminalCancelledStage ? terminalCancelLog : matchingApprovalLog;
-                                      const isTheSigner = relevantLog && (relevantLog.author || relevantLog.user_name || relevantLog.user || "").toLowerCase().includes((memUser.username || memUser.employee_name || "").toLowerCase());
-                                      const uName = memUser.employee_name || memUser.name || memUser.username;
-                                      return (
-                                        <span 
-                                          key={mIdx} 
-                                          className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold flex items-center gap-1.5 transition ${
-                                            isTheSigner 
-                                              ? "bg-emerald-100 text-emerald-950 border border-emerald-400 shadow-2xs"
-                                              : "bg-emerald-50 text-emerald-900 border border-emerald-300"
-                                          }`}
-                                          title={`User: ${uName} | Role: ${memUser.role || resolvedStepRoleInfo.roleName} | Division: ${memUser.division || docDivision || 'All'}`}
-                                        >
-                                          <span className={`h-1.5 w-1.5 rounded-full ${isTheSigner ? "bg-emerald-700 animate-pulse" : "bg-emerald-600"}`} />
-                                          <span>{uName}</span>
-                                          {(memUser.division || docDivision) && (
-                                            <span className="text-[8.5px] font-mono text-emerald-700 font-semibold">
-                                              ({memUser.division || docDivision})
-                                            </span>
-                                          )}
-                                        </span>
-                                      );
-                                    })
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-                                      {resolvedStepRoleInfo.displayName}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                              )}
                             </div>
+                            <span className="text-slate-500 font-mono text-[8px] bg-slate-100 px-1 py-0.2 rounded font-bold border border-slate-200 shrink-0">
+                              Stage {step.stage_number}
+                            </span>
+                          </div>
+
+                          {/* Resolved Persons in this Role for the Document's Division */}
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                            <span className="text-[8px] uppercase font-extrabold text-slate-400 mr-0.5 shrink-0">
+                              Pool ({resolvedStepRoleInfo.users.length > 0 ? resolvedStepRoleInfo.users.length : poolMembers.length}):
+                            </span>
+                            {resolvedStepRoleInfo.users.length > 0 ? (
+                              resolvedStepRoleInfo.users.map((memUser: any, mIdx: number) => {
+                                const relevantLog = isTerminalCancelledStage ? terminalCancelLog : matchingApprovalLog;
+                                const isTheSigner = relevantLog && (relevantLog.author || relevantLog.user_name || relevantLog.user || "").toLowerCase().includes((memUser.username || memUser.employee_name || "").toLowerCase());
+                                const uName = memUser.employee_name || memUser.name || memUser.username;
+                                return (
+                                  <span 
+                                    key={mIdx} 
+                                    className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold flex items-center gap-1 transition ${
+                                      isTheSigner 
+                                        ? "bg-emerald-100 text-emerald-950 border border-emerald-400 shadow-2xs"
+                                        : "bg-emerald-50 text-emerald-900 border border-emerald-300"
+                                    }`}
+                                    title={`User: ${uName} | Role: ${memUser.role || resolvedStepRoleInfo.roleName} | Division: ${memUser.division || docDivision || 'All'}`}
+                                  >
+                                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isTheSigner ? "bg-emerald-700 animate-pulse" : "bg-emerald-600"}`} />
+                                    <span className="truncate max-w-[120px]">{uName}</span>
+                                    {(memUser.division || docDivision) && (
+                                      <span className="text-[8px] font-mono text-emerald-700 font-semibold">
+                                        ({memUser.division || docDivision})
+                                      </span>
+                                    )}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                                {resolvedStepRoleInfo.displayName}
+                              </span>
+                            )}
                           </div>
 
                           {/* 2. Exact Sign-Off / Status Attribution */}
                           {isTerminalCancelledStage ? (
-                            <div className="p-1.5 bg-rose-50/70 rounded border border-rose-200/70 text-[10px] flex items-center justify-between text-rose-900">
-                              <div className="flex items-center gap-1.5">
-                                <span className="h-3.5 w-3.5 rounded-full bg-rose-600 text-white font-bold text-[8.5px] flex items-center justify-center">✕</span>
-                                <span>
+                            <div className="p-1 px-1.5 bg-rose-50/70 rounded border border-rose-200/70 text-[9.5px] flex items-center justify-between text-rose-900">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="h-3 w-3 rounded-full bg-rose-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✕</span>
+                                <span className="truncate">
                                   <strong>Process Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : "Initiator"}
                                 </span>
                               </div>
                               {terminalCancelLog?.created_at && (
-                                <div className="text-[9px] font-mono text-slate-500 text-right">
+                                <div className="text-[8.5px] font-mono text-slate-500 text-right shrink-0 ml-2">
                                   <span>Date: {formatDate(terminalCancelLog.created_at)}</span>
                                   <span className="mx-1">•</span>
                                   <span>Time: {formatTimeOnly(terminalCancelLog.created_at)}</span>
@@ -3454,15 +3477,15 @@ export default function DocumentDetails({
                               )}
                             </div>
                           ) : isPassed ? (
-                            <div className="p-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[10.5px] flex items-center justify-between text-emerald-800">
-                              <div className="flex items-center gap-1.5">
-                                <span className="h-3.5 w-3.5 rounded-full bg-emerald-600 text-white font-bold text-[8.5px] flex items-center justify-center">✓</span>
-                                <span>
+                            <div className="p-1 px-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[9.5px] flex items-center justify-between text-emerald-800">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="h-3 w-3 rounded-full bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✓</span>
+                                <span className="truncate">
                                   <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : "Authorized Approver"}
                                 </span>
                               </div>
                               {matchingApprovalLog?.created_at && (
-                                <div className="text-[9px] font-mono text-emerald-700 text-right">
+                                <div className="text-[8.5px] font-mono text-emerald-700 text-right shrink-0 ml-2">
                                   <span>Date: {formatDate(matchingApprovalLog.created_at)}</span>
                                   <span className="mx-1">•</span>
                                   <span>Time: {formatTimeOnly(matchingApprovalLog.created_at)}</span>
@@ -3470,15 +3493,15 @@ export default function DocumentDetails({
                               )}
                             </div>
                           ) : returnLog && !isDocSettled ? (
-                            <div className="p-1.5 bg-amber-50/60 rounded border border-amber-200/60 text-[10px] flex items-center justify-between text-amber-800">
-                              <div className="flex items-center gap-1.5">
-                                <span className="h-3.5 w-3.5 rounded-full bg-amber-500 text-white font-bold text-[8.5px] flex items-center justify-center">↩</span>
-                                <span>
+                            <div className="p-1 px-1.5 bg-amber-50/60 rounded border border-amber-200/60 text-[9.5px] flex items-center justify-between text-amber-800">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="h-3 w-3 rounded-full bg-amber-500 text-white font-bold text-[8px] flex items-center justify-center shrink-0">↩</span>
+                                <span className="truncate">
                                   <strong>Returned By:</strong> {returnLog.author || returnLog.user_name || returnLog.user || "Reviewer"}
                                 </span>
                               </div>
                               {returnLog?.created_at && (
-                                <div className="text-[9px] font-mono text-amber-700 text-right">
+                                <div className="text-[8.5px] font-mono text-amber-700 text-right shrink-0 ml-2">
                                   <span>Date: {formatDate(returnLog.created_at)}</span>
                                   <span className="mx-1">•</span>
                                   <span>Time: {formatTimeOnly(returnLog.created_at)}</span>
@@ -3488,8 +3511,8 @@ export default function DocumentDetails({
                           ) : null}
 
                           {isCurrent && (
-                            <p className="text-[9.5px] text-slate-700 font-medium pt-0.5 flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-ping" />
+                            <p className="text-[8.5px] text-slate-500 font-medium flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-ping shrink-0" />
                               <span>Any 1 pool member can verify and sign off.</span>
                             </p>
                           )}
@@ -3499,22 +3522,22 @@ export default function DocumentDetails({
                   );
                 })
               ) : (
-                <div className="flex gap-3 relative">
+                <div className="flex gap-2.5 sm:gap-3 relative">
                   <div className="flex flex-col items-center">
-                    <div className="h-6 w-6 rounded-full bg-[#003F28] text-white shadow-md ring-4 ring-[#003F28]/20 flex items-center justify-center font-bold text-[10px]">
+                    <div className="h-5 w-5 sm:h-5.5 sm:w-5.5 rounded-full bg-[#003F28] text-white shadow-xs ring-2 ring-[#003F28]/20 flex items-center justify-center font-bold text-[9px] sm:text-[9.5px]">
                       1
                     </div>
                   </div>
-                  <div className="flex-1 pb-3">
+                  <div className="flex-1 pb-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-slate-900">Stage 1: Accounts Review</span>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold text-[9px] uppercase tracking-wider border border-slate-300 animate-pulse">
+                      <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold text-[8.5px] uppercase tracking-wider border border-slate-300 animate-pulse">
                         Active Stage
                       </span>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                    <div className="mt-1 text-[10.5px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
                       <span><strong className="text-slate-700">Assigned Approver:</strong> {currentUserUsername || "anbu"}</span>
-                      <p className="text-[10px] text-slate-700 font-semibold mt-1">
+                      <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5">
                         Awaiting compliance checklist verification and sign-off.
                       </p>
                     </div>
@@ -3525,12 +3548,12 @@ export default function DocumentDetails({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0">
-              <span className="text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
+            <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between shrink-0">
+              <span className="text-[10px] sm:text-[10.5px] text-slate-500 font-medium">DocuFlow Stage Approval Timeline</span>
               <button
                 type="button"
                 onClick={() => setShowTimelineModal(false)}
-                className="px-4 py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[11px] rounded-lg transition cursor-pointer"
+                className="px-3.5 py-1 sm:py-1.5 bg-[#003F28] hover:bg-[#005333] text-white font-bold text-[10.5px] sm:text-[11px] rounded-lg transition cursor-pointer"
               >
                 Close
               </button>

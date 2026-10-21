@@ -8,7 +8,7 @@ from app.auth import (
     require_permission_or_service,
 )
 from app.database.connection import get_db
-from app.database.models import BusinessRule, User, WorkflowProfile
+from app.database.models import AuditLog, BusinessRule, User, WorkflowProfile
 from app.schemas import BusinessRuleSchema
 from app.services.rbac_service import require_permission
 
@@ -200,6 +200,16 @@ def save_business_rule(
                 is_active=payload.is_active if payload.is_active is not None else True
             )
             db.add(rule)
+        
+        user_name = (current_user.employee_name or current_user.name or current_user.username) if current_user else 'Admin'
+        action_name = "Rule Updated" if (payload.id or rule.id) else "Rule Created"
+        db.add(AuditLog(
+            invoice_id=f"RULE-{rule.id or 'NEW'}",
+            user=user_name,
+            action=action_name,
+            stage="Policy Matrix",
+            notes=f"{action_name}: '{rule.rule_name}' targeting workflow '{rule.target_workflow_id}' with action '{rule.rule_action}'."
+        ))
         db.commit()
         db.refresh(rule)
         
@@ -232,6 +242,14 @@ def delete_business_rule(
         if rule:
             rule.is_deleted = True
             rule.deleted_at = datetime.datetime.utcnow()
+            user_name = (current_user.employee_name or current_user.name or current_user.username) if current_user else 'Admin'
+            db.add(AuditLog(
+                invoice_id=f"RULE-{rule.id}",
+                user=user_name,
+                action="Rule Deleted",
+                stage="Policy Matrix",
+                notes=f"Rule '{rule.rule_name}' (ID: {rule.id}) archived/deleted."
+            ))
             db.commit()
     except Exception as e:
         logger.debug('Error deleting business rule: %s', e)

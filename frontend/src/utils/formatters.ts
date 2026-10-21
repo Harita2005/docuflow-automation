@@ -1,3 +1,4 @@
+export * from "../types/documentTypes";
 /**
  * DocuFlow Shared Formatting Utilities
  */

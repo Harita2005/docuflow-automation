@@ -18,6 +18,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,6 +82,8 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
       return;
     }
 
+    if (isSubmittingRef.current || submitting) return;
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
@@ -107,13 +110,20 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
         onRefreshDataSignal(); 
         setTimeout(() => setSuccessToast(null), 4000);
       } else {
+        if (response.status === 409) {
+          alert("Document was modified by someone else, please refresh");
+          fetchQueue();
+          onRefreshDataSignal();
+          return;
+        }
         const errorData = await response.json();
-        alert(`Failed to save: ${errorData.error}`);
+        alert(`Failed to save: ${errorData.detail || errorData.error || errorData.message || 'Error'}`);
       }
     } catch (err: any) {
       alert(`API Connection Failure: ${err.message}`);
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 

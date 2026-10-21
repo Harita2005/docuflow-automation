@@ -6,6 +6,9 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+from app.config.test_safety import enforce_test_database_safety
+enforce_test_database_safety()
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
