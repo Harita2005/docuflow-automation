@@ -1834,16 +1834,25 @@ export default function DocumentDetails({
 
   const handleInlineReject = async () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
-    isSubmittingRef.current = true;
     const isStage1 = (document?.current_stage || 1) <= 1;
-    const comments = approvalComment.trim();
+    let comments = approvalComment.trim();
     if (!comments) {
-      alert(isStage1 
-        ? "Please enter reason notes in the comments box before cancelling this process." 
-        : `Please enter rejection reason notes in the comments box before returning to Stage ${(document.current_stage || 2) - 1} approver.`
-      );
-      return;
+      if (isStage1) {
+        const confirmCancel = window.confirm(
+          "Are you sure you want to cancel and void this document process at the Attachment Stage?"
+        );
+        if (!confirmCancel) return;
+        comments = "Process cancelled and voided at Attachment Stage.";
+      } else {
+        const enteredReason = window.prompt(
+          `Please enter rejection reason notes to return to Stage ${(document.current_stage || 2) - 1} approver:`
+        );
+        if (!enteredReason || !enteredReason.trim()) return;
+        comments = enteredReason.trim();
+      }
     }
+
+    isSubmittingRef.current = true;
     setActionLoading(true);
     setActionError(null);
     try {
@@ -1862,7 +1871,7 @@ export default function DocumentDetails({
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
-        showToast("✓ Document Rejection Recorded Successfully!", "amber");
+        showToast(isStage1 ? "✓ Document Process Cancelled Successfully!" : "✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
@@ -1875,7 +1884,7 @@ export default function DocumentDetails({
           onRefreshDocument();
           return;
         }
-        let errDetail = "Rejection failed";
+        let errDetail = isStage1 ? "Cancellation failed" : "Rejection failed";
         try {
           const txt = await response.text();
           try {
@@ -1888,19 +1897,23 @@ export default function DocumentDetails({
         setActionError(errDetail);
       }
     } catch (err: any) {
-      setActionError(err.message || "Rejection action failed");
+      setActionError(err.message || (isStage1 ? "Cancellation action failed" : "Rejection action failed"));
+    } finally {
+      isSubmittingRef.current = false;
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const handleInlineHold = async () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
-    isSubmittingRef.current = true;
-    const comments = approvalComment.trim();
+    let comments = approvalComment.trim();
     if (!comments) {
-      alert("Comments are required to hold/send back the document.");
-      return;
+      const entered = window.prompt("Enter reason notes to place document on hold / request clarification:");
+      if (!entered || !entered.trim()) return;
+      comments = entered.trim();
     }
+
+    isSubmittingRef.current = true;
     setActionLoading(true);
     setActionError(null);
     try {
@@ -1951,22 +1964,26 @@ export default function DocumentDetails({
       }
     } catch (err: any) {
       setActionError(err.message || "Hold action failed");
+    } finally {
+      isSubmittingRef.current = false;
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const handleToggleChecklist = async (itemText: string) => {
     if (isDocumentLocked) return;
     const updatedStates = { ...checkedStates, [itemText]: !checkedStates[itemText] };
     setCheckedStates(updatedStates);
-    
+
+    const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
+
+    // Save directly to API
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: any = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      
-      const checked_items = Object.keys(updatedStates).filter(k => updatedStates[k]);
-      const res = await fetch(`/api/invoices/${document.id}/checklist`, {
+
+      const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/checklist-state`, {
         method: "POST",
         headers,
         body: JSON.stringify({ checked_items })
@@ -1987,10 +2004,8 @@ export default function DocumentDetails({
                         (document?.status || '').toLowerCase().includes('no rule matched');
   const effectiveChecklist = isDocUnrouted ? [] : checklistItems;
 
-
   const handleInlineApprove = async () => {
     if (isSubmittingRef.current || actionLoading) return;
-    isSubmittingRef.current = true;
     const hasDocAttachment = Boolean(iframeSrc);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
     const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
@@ -2007,6 +2022,7 @@ export default function DocumentDetails({
       return;
     }
 
+    isSubmittingRef.current = true;
     setActionLoading(true);
     setActionError(null);
     try {
@@ -2068,17 +2084,17 @@ export default function DocumentDetails({
         } catch {}
         setActionError(errDetail);
         if (response.status === 409) {
-          // Collision: Another approver already completed this stage. Refresh immediately!
           await fetchWorkflowData();
           onRefreshDocument();
         }
       }
     } catch (err: any) {
       setActionError(err.message || "Approval action failed");
+    } finally {
+      isSubmittingRef.current = false;
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
-
 
   const getStatusBadge = () => {
     const status = document.status || "";
