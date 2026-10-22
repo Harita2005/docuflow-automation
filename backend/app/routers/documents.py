@@ -3325,13 +3325,46 @@ async def confirm_and_ingest_document(
     timestamp = int(datetime.datetime.utcnow().timestamp())
     new_id = generate_document_id(db, doc_type=document_type or 'AP INVOICE')
 
-    final_amount = float(amount or 0.0)
-    final_base = float(base_amount) if base_amount is not None else (round(final_amount / 1.18, 2) if final_amount else 0.0)
-    final_tax = float(tax_amount) if tax_amount is not None else (round(final_amount - final_base, 2) if final_amount else 0.0)
-    final_vendor = (vendor_name or '').strip() or 'Direct Upload Supplier'
-    final_inv_no = (invoice_number or '').strip() or f'INV-{timestamp % 100000}'
-    final_gstin = (vendor_gstin or '').strip()
-    user_div = (division or '').strip() or current_user.division or 'VCC'
+    # Run OCR & LLM extraction if document fields are omitted or zero
+    ocr_data = {}
+    needs_extraction = (
+        not vendor_name 
+        or vendor_name.strip() in ('', 'Direct Upload Supplier')
+        or amount is None 
+        or float(amount or 0.0) == 0.0
+        or not vendor_gstin
+    )
+    if needs_extraction and final_file_path and final_file_path.is_file():
+        try:
+            from starlette.concurrency import run_in_threadpool
+            from app.services.ocr_service import extract_document_for_verification
+            ocr_data = (await run_in_threadpool(extract_document_for_verification, final_file_path)) or {}
+        except Exception as exc:
+            logger.warning('Handled OCR/LLM extraction exception in create_document: %s', exc)
+
+    extracted_amount = ocr_data.get('amount')
+    if amount is not None and float(amount or 0.0) > 0.0:
+        final_amount = float(amount)
+    elif extracted_amount is not None and float(extracted_amount or 0.0) > 0.0:
+        final_amount = float(extracted_amount)
+    else:
+        final_amount = 0.0
+
+    final_base = float(base_amount) if base_amount is not None else float(ocr_data.get('base_amount') or (round(final_amount / 1.18, 2) if final_amount else 0.0))
+    final_tax = float(tax_amount) if tax_amount is not None else float(ocr_data.get('tax_amount') or (round(final_amount - final_base, 2) if final_amount else 0.0))
+    final_cgst = float(cgst) if cgst is not None else float(ocr_data.get('cgst') or 0.0)
+    final_sgst = float(sgst) if sgst is not None else float(ocr_data.get('sgst') or 0.0)
+    final_igst = float(igst) if igst is not None else float(ocr_data.get('igst') or 0.0)
+
+    final_vendor = (vendor_name or '').strip()
+    if not final_vendor or final_vendor == 'Direct Upload Supplier':
+        final_vendor = (ocr_data.get('vendor_name') or '').strip() or 'Direct Upload Supplier'
+
+    final_inv_no = (invoice_number or '').strip() or (ocr_data.get('invoice_number') or '').strip() or f'INV-{timestamp % 100000}'
+    final_gstin = (vendor_gstin or '').strip() or (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
+    final_po = (po_number or '').strip() or (ocr_data.get('po_number') or '').strip() or None
+    final_inv_date = invoice_date or ocr_data.get('invoice_date') or ocr_data.get('date') or datetime.date.today().strftime('%Y-%m-%d')
+    user_div = (division or '').strip() or (ocr_data.get('division') or '').strip() or current_user.division or 'VCC'
     user_plant = (plant or '').strip() or 'MAIN'
 
     new_inv = Invoice(
