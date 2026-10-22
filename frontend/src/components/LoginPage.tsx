@@ -205,9 +205,37 @@ export default function LoginPage({
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
 
-        // Preselect the next available method (Authenticator, then SMS)
+        // Preselect the next available method
         if (methods.includes("EMAIL")) {
           setSelectedMethod("EMAIL");
+          // Auto-dispatch Email OTP directly to screen
+          try {
+            const sendRes = await fetch("/api/auth/mfa/send-otp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                ticket: data.mfa_ticket,
+                method: "EMAIL",
+              }),
+            });
+            const sendData = await sendRes.json().catch(() => ({}));
+            if (sendRes.ok) {
+              const target = data.masked_email || "your registered email";
+              setOtpSentNotice(
+                sendData.message || `A verification code has been dispatched to ${target}.`
+              );
+              if (sendData.otp) {
+                setDisplayOtp(sendData.otp);
+              }
+              setResendTimer(60);
+              setStep(3);
+              return;
+            }
+          } catch (e) {
+            console.warn("Auto-dispatch email OTP failed, fallback to step 2:", e);
+          }
         } else if (methods.includes("AUTHENTICATOR")) {
           setSelectedMethod("AUTHENTICATOR");
         } else if (methods.includes("SMS")) {
