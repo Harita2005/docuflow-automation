@@ -3360,7 +3360,7 @@ async def confirm_and_ingest_document(
     ocr_data = {}
     needs_extraction = (
         not vendor_name 
-        or vendor_name.strip() in ('', 'Direct Upload Supplier')
+        or vendor_name.strip() in ('', 'VENNILA CLOTHING COMPANY (SR)')
         or amount is None 
         or float(amount or 0.0) == 0.0
         or not vendor_gstin
@@ -3388,8 +3388,8 @@ async def confirm_and_ingest_document(
     final_igst = float(igst) if igst is not None else float(ocr_data.get('igst') or 0.0)
 
     final_vendor = (vendor_name or '').strip()
-    if not final_vendor or final_vendor == 'Direct Upload Supplier':
-        final_vendor = (ocr_data.get('vendor_name') or '').strip() or 'Direct Upload Supplier'
+    if not final_vendor or final_vendor == 'VENNILA CLOTHING COMPANY (SR)':
+        final_vendor = (ocr_data.get('vendor_name') or '').strip() or 'VENNILA CLOTHING COMPANY (SR)'
 
     final_inv_no = (invoice_number or '').strip() or (ocr_data.get('invoice_number') or '').strip() or f'INV-{timestamp % 100000}'
     final_gstin = (vendor_gstin or '').strip() or (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
@@ -3613,7 +3613,7 @@ async def upload_document(
     final_cgst = float(ocr_data.get('cgst') or 0.0)
     final_sgst = float(ocr_data.get('sgst') or 0.0)
     final_igst = float(ocr_data.get('igst') or 0.0)
-    final_vendor = (vendor_name or ocr_data.get('vendor_name') or 'Direct Upload Supplier').strip()
+    final_vendor = (vendor_name or ocr_data.get('vendor_name') or 'VENNILA CLOTHING COMPANY (SR)').strip()
     final_inv_no = (invoice_number or ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}').strip()
     final_gstin = (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
     final_po = (ocr_data.get('po_number') or '').strip() or None
@@ -3791,7 +3791,7 @@ async def upload_document_auto_workflow(
     final_cgst = float(ocr_data.get('cgst') or 0.0)
     final_sgst = float(ocr_data.get('sgst') or 0.0)
     final_igst = float(ocr_data.get('igst') or 0.0)
-    final_vendor = (ocr_data.get('vendor_name') or 'Direct Upload Supplier').strip()
+    final_vendor = (ocr_data.get('vendor_name') or 'VENNILA CLOTHING COMPANY (SR)').strip()
     final_inv_no = (ocr_data.get('invoice_number') or f'INV-{timestamp % 100000}').strip()
     final_gstin = (ocr_data.get('gstin') or ocr_data.get('vendor_gstin') or '').strip()
     final_po = (ocr_data.get('po_number') or '').strip() or None

@@ -122,7 +122,7 @@ def test_1_manual_mode_extract_preview_and_confirm(test_env, db_session):
         "document_type": "AP INVOICE",
         "workflow_profile": test_env["wf1"].profile_name,
         "invoice_number": f"INV-MAN-{int(datetime.datetime.utcnow().timestamp()) % 100000}",
-        "vendor_name": "Manual Mode Vendor",
+        "vendor_name": "Lakshmi Textiles",
         "amount": "12500.0",
         "division": "VCC"
     }

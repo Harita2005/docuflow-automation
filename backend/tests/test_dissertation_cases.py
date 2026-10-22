@@ -665,7 +665,7 @@ def test_pf02_concurrent_uploads(auth_tokens):
                 "doc_key": f"BATCH-PF-{i}-{uuid.uuid4().hex[:4]}",
                 "company_code": "VCC",
                 "document_type": "AP INVOICE",
-                "vendor_name": f"Batch Vendor {i}",
+                "vendor_name": ["Sri Gomathy Mills", "Ramraj Cotton Mills", "Coimbatore Cotton Corp", "Tirupur Garments Ltd", "Lakshmi Textiles"][i % 5],
                 "amount": 1000.0 * (i + 1)
             }
             for i in range(5)
