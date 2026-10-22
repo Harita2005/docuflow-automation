@@ -1240,3 +1240,20 @@ def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
     db.add(AuditLog(invoice_id=None, user='ERP Data Sync', action='Data Sync Completed', stage='Data Synchronization', notes=f'Data sync completed from primary data source at {now_str}. Synced {seeded_count} documents into ledger.'))
     db.commit()
     return {'success': True, 'seeded_count': seeded_count, 'total_invoices': db.query(Invoice).count()}
+
+# Direct root and /api/ aliases for single record sync
+alias_router = APIRouter(tags=['Enterprise Data & Attachment Sync Aliases'])
+
+@alias_router.post('/records', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/record', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/api/records', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/api/record', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
+def sync_single_document_alias(
+    payload: DocumentSyncRequest,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key)
+):
+    """
+    Direct root and /api/ alias routes for /records and /record.
+    """
+    return sync_single_document(payload=payload, db=db, api_key=api_key)

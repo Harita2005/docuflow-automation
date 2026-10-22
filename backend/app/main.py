@@ -21,7 +21,7 @@ from .routers.events import router as events_router
 from .routers.integrations import router as integrations_router, alias_router as integrations_alias_router
 from .routers.more_info import router as more_info_router
 from .routers.roles import permission_router as permissions_router, router as roles_router
-from .routers.sync import router as sync_router
+from .routers.sync import alias_router as sync_alias_router, router as sync_router
 from .routers.sync_router import router as m2m_sync_router
 from .routers.users import admin_router as admin_users_router, router as users_router
 from .routers.workflows import router as workflows_router
@@ -81,6 +81,23 @@ async def lifespan(app: FastAPI):
                     logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
             else:
                 logger.info("Background jobs (sync retry & archive scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
+            # Non-blocking pre-warm of PaddleOCR and Ollama for instant first-upload response
+            def _warm_up_ai():
+                try:
+                    import httpx
+                    from .services.ocr_service import get_ocr_engine
+                    get_ocr_engine()
+                    ollama_url = getattr(settings, "OLLAMA_URL", "http://localhost:11434/api/generate")
+                    ollama_model = getattr(settings, "OLLAMA_MODEL", "llama3.2:latest")
+                    with httpx.Client(timeout=10.0) as client:
+                        client.post(ollama_url, json={"model": ollama_model, "prompt": "ping", "stream": False})
+                    logger.info("[AI Startup] PaddleOCR and Ollama (%s) pre-warmed successfully.", ollama_model)
+                except Exception as warm_err:
+                    logger.debug("[AI Startup] AI warm-up deferred: %s", warm_err)
+
+            import threading
+            threading.Thread(target=_warm_up_ai, daemon=True).start()
+
             # Tune AnyIO thread limiter to 200 tokens for 150+ concurrent requests
             try:
                 import anyio.to_thread
@@ -155,6 +172,7 @@ app.include_router(integrations_router)
 app.include_router(integrations_alias_router)
 app.include_router(callback_integrations_router)
 app.include_router(sync_router)
+app.include_router(sync_alias_router)
 app.include_router(m2m_sync_router)
 
 # ---------------------------------------------------------------------------

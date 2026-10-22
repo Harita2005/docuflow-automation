@@ -340,18 +340,17 @@ async def verify_service_api_key(
             role = payload.get("role")
             scope = payload.get("scope")
 
-            # Service tokens: must carry scope 'data:sync' to prove M2M service issuance
-            if scope == "data:sync" and (
-                subject in {
-                    "backend_sync_client",
-                    "sync_service",
-                }
-                or role == "service"
-            ):
+            # 1. Any token carrying scope 'data:sync' is directly authorized for records sync
+            if scope == "data:sync":
                 return True
 
-            # Admin JWT
+            # 2. Service client roles
+            if role in {"service", "service_client"} or subject in {"backend_sync_client", "sync_service"}:
+                return True
+
+            # 3. Active authenticated user JWT
             if subject:
+                from sqlalchemy import or_
                 user = (
                     db.query(User)
                     .filter(
@@ -359,15 +358,11 @@ async def verify_service_api_key(
                         | (User.email == subject)
                         | (User.employee_id == subject)
                     )
-                    .filter(User.is_deleted == False)
+                    .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
                     .first()
                 )
 
-                if (
-                    user
-                    and user.is_active
-                    and (user.role or "").strip().lower() in {"admin", "administrator", "system_admin", "superadmin"}
-                ):
+                if user and user.is_active:
                     return True
 
         except JWTError as exc:

@@ -1,9 +1,10 @@
+from typing import Optional, List, Dict, Any, Union
 import logging
 import os
 import uuid
 import time
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, load_only
 from app.auth import create_access_token, get_current_user, verify_password, invalidate_user_cache
@@ -63,20 +64,90 @@ def login_get_info():
 
 @router.post('/login', response_model=TokenResponse, response_model_exclude_none=True)
 @router.post('/token', response_model=TokenResponse, response_model_exclude_none=True)
-def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request, db: Session=Depends(get_db)):
+async def login(
+    background_tasks: BackgroundTasks,
+    req: Request,
+    request: Optional[Union[LoginRequest, Dict[str, Any], str]] = Body(None),
+    db: Session = Depends(get_db)
+):
     client_ip = extract_client_ip(req)
-    ident = request.username or request.identifier or request.email or getattr(request, 'employee_id', None)
-    if not ident:
+    ident_str = ""
+    password = ""
+    expires_in_minutes = None
+    force_login = False
+    device_info = None
+
+    if isinstance(request, str):
+        import urllib.parse
+        try:
+            req_dict = dict(urllib.parse.parse_qsl(request))
+        except Exception:
+            req_dict = {}
+        request = req_dict
+
+    if isinstance(request, dict):
+        ident_str = str(request.get("username") or request.get("Username") or request.get("identifier") or request.get("email") or request.get("employee_id") or request.get("user") or "").strip()
+        password = str(request.get("password") or request.get("Password") or request.get("pass") or request.get("pwd") or "")
+        expires_in_minutes = request.get("expires_in_minutes")
+        force_login = str(request.get("force_login", "")).lower() in ("true", "1")
+        device_info = request.get("device_info")
+    elif request and hasattr(request, "username"):
+        ident = request.username or request.identifier or request.email or getattr(request, 'employee_id', None)
+        if ident:
+            ident_str = str(ident).strip()
+        password = request.password or getattr(request, 'Password', None) or ""
+        expires_in_minutes = request.expires_in_minutes
+        force_login = bool(request.force_login)
+        device_info = request.device_info
+
+    # Flexible extraction from JSON, form-data, or url-encoded body if fields missing
+    if not ident_str or not password:
+        content_type = req.headers.get("content-type", "").lower()
+        body_dict = {}
+        if "json" in content_type:
+            try:
+                body_dict = await req.json()
+            except Exception:
+                pass
+        elif "form" in content_type:
+            try:
+                form = await req.form()
+                body_dict = dict(form)
+            except Exception:
+                pass
+        if not body_dict:
+            body_dict = dict(req.query_params)
+
+        if body_dict:
+            if not ident_str:
+                for k in ["username", "Username", "userName", "identifier", "Identifier", "email", "employee_id", "user", "login"]:
+                    if body_dict.get(k):
+                        ident_str = str(body_dict[k]).strip()
+                        break
+            if not password:
+                for k in ["password", "Password", "pass", "pwd", "secret", "user_password"]:
+                    if body_dict.get(k) is not None:
+                        password = str(body_dict[k])
+                        break
+            if not expires_in_minutes and body_dict.get("expires_in_minutes"):
+                try:
+                    expires_in_minutes = int(body_dict["expires_in_minutes"])
+                except Exception:
+                    pass
+            if not force_login and body_dict.get("force_login"):
+                force_login = str(body_dict["force_login"]).lower() in ("true", "1")
+            if not device_info and body_dict.get("device_info"):
+                device_info = str(body_dict["device_info"])
+
+    if not ident_str:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
-    ident_str = ident.strip()
-    password = request.password or ""
 
     # Option 1 / M2M Service Client Direct Token Fast-Path:
     from app.routers.sync_router import SERVICE_API_USER, SERVICE_API_PASS
     import hmac
     if hmac.compare_digest(ident_str, SERVICE_API_USER) and hmac.compare_digest(password, SERVICE_API_PASS):
         import jwt
-        expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        expires_minutes = expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
         expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=expires_minutes)
         service_token = jwt.encode({'sub': SERVICE_API_USER, 'scope': 'data:sync', 'exp': expire}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return {
@@ -143,7 +214,6 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
     if not user and ident_str.isdigit():
         user = db.query(User).filter(User.id == int(ident_str)).filter(or_(User.is_deleted == False, User.is_deleted.is_(None))).first()
     dummy_hash = "$2b$12$e80MvQkQ1q8dK9nU9p8lRe8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8qM8"
-    password = request.password or ""
     if not user:
         if password and password.strip():
             verify_password(password, dummy_hash)
@@ -272,105 +342,108 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, req: Request
                 )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-    # Option 1 / Direct API Token: If password is provided (and verified above), or force_login is True, or requested via header/Postman, return access_token directly
-    is_postman = "postman" in req.headers.get("user-agent", "").lower()
-    has_force_flag = bool(request.force_login or req.headers.get("x-force-login") == "true" or req.headers.get("x-bypass-mfa") == "true")
-    has_password = bool(password and password.strip())
-    if has_password or has_force_flag or is_postman:
-        new_session_id = str(uuid.uuid4())
-        device_label = request.device_info or ('Postman API Client' if is_postman else 'Direct API Client')
-        user.active_session_id = new_session_id
-        user.active_device_info = device_label
-        user.session_created_at = datetime.datetime.utcnow()
-        user.last_activity_at = datetime.datetime.utcnow()
-        user.last_login = datetime.datetime.utcnow()
-        invalidate_user_cache(user.username)
-        expires_minutes = request.expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        access_token = create_access_token(
-            data={
-                'sub': user.username,
-                'id': user.id,
-                'role': user.role,
-                'division': user.division,
-                'session_id': new_session_id,
-            },
-            expires_delta=datetime.timedelta(minutes=expires_minutes)
-        )
-        try:
-            db.add(UserAccessLog(
-                username=user.username,
-                event_type="LOGIN",
-                status="SUCCESS",
-                ip_address=client_ip,
-                user_agent=req.headers.get("user-agent", "")[:255],
-                timestamp=datetime.datetime.utcnow()
-            ))
-            db.add(AuditLog(
-                invoice_id=None,
-                user=user.employee_name or user.name or user.username,
-                action='Direct Login',
-                stage='Authentication',
-                notes=f"User {user.employee_name} ({user.employee_id}) generated direct token (force_login={has_force_flag}). IP: {client_ip}",
-                ip_address=client_ip
-            ))
-            db.commit()
-        except Exception as e:
-            logger.debug('Handled exception: %s', e)
+    # Check if MFA is required for this user:
+    # If user has MFA enabled (user.mfa_enabled == True), require secondary 2FA / OTP challenge.
+    # If MFA is disabled (user.mfa_enabled == False), issue access_token directly!
+    bypass_mfa = bool(force_login or req.headers.get("x-force-login") == "true" or req.headers.get("x-bypass-mfa") == "true")
+
+    if user.mfa_enabled and not bypass_mfa:
+        # Issue OTP ticket for verification (OTP/Authenticator challenge)
+        ticket = create_mfa_ticket(user.id, user.username)
+        ticket_data = get_mfa_ticket(ticket)
+        if ticket_data:
+            ticket_data['password_verified'] = True
+            save_mfa_ticket()
+
+        show_dev_otp = should_show_dev_otp()
+        email_available = is_email_otp_available(db=db)
+        available_methods = []
+        if (email_available or show_dev_otp) and user.email and '@' in user.email:
+            available_methods.append('EMAIL')
+        if user.phone_number and user.phone_number.strip():
+            available_methods.append('SMS')
+        if user.mfa_secret:
+            available_methods.append('AUTHENTICATOR')
+
+        has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
 
         return {
-            'token': access_token,
-            'access_token': access_token,
+            'token': None,
+            'access_token': None,
             'token_type': 'bearer',
-            'expires_in': expires_minutes * 60,
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'name': user.employee_name or user.name,
-                'email': user.email,
-                'role': user.role,
-                'employee_id': user.employee_id
-            },
-            'mfa_required': False,
+            'expires_in': 3600,
+            'user': None,
+            'mfa_required': True,
+            'mfa_ticket': ticket,
+            'available_methods': available_methods,
+            'email_otp_available': email_available or show_dev_otp,
+            'selected_method': None,
+            'initial_otp_sent': False,
+            'masked_email': mask_email(user.email) if user.email else '',
+            'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+            'has_authenticator_setup': has_auth_setup,
             'active_session_conflict': False,
-            'session_id': new_session_id
+            'message': 'Password verified. Please complete secondary two-factor authentication.',
         }
 
-    # Issue OTP ticket for verification (OTP/Authenticator is the primary authentication factor)
-    ticket = create_mfa_ticket(user.id, user.username)
-    ticket_data = get_mfa_ticket(ticket)
-    if ticket_data:
-        ticket_data['password_verified'] = True
-        save_mfa_ticket()
-
-    show_dev_otp = should_show_dev_otp()
-    email_available = is_email_otp_available(db=db)
-    available_methods = []
-    if (email_available or show_dev_otp) and user.email and '@' in user.email:
-        available_methods.append('EMAIL')
-    if user.phone_number and user.phone_number.strip():
-        available_methods.append('SMS')
-    if user.mfa_secret:
-        available_methods.append('AUTHENTICATOR')
-
-    has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+    # If MFA is disabled (or bypassed), return access_token directly
+    new_session_id = str(uuid.uuid4())
+    device_label = device_info or 'Direct API Client'
+    user.active_session_id = new_session_id
+    user.active_device_info = device_label
+    user.session_created_at = datetime.datetime.utcnow()
+    user.last_activity_at = datetime.datetime.utcnow()
+    user.last_login = datetime.datetime.utcnow()
+    invalidate_user_cache(user.username)
+    expires_minutes = expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    access_token = create_access_token(
+        data={
+            'sub': user.username,
+            'id': user.id,
+            'role': user.role,
+            'division': user.division,
+            'session_id': new_session_id,
+            'scope': 'data:sync',
+        },
+        expires_delta=datetime.timedelta(minutes=expires_minutes)
+    )
+    try:
+        db.add(UserAccessLog(
+            username=user.username,
+            event_type="LOGIN",
+            status="SUCCESS",
+            ip_address=client_ip,
+            user_agent=req.headers.get("user-agent", "")[:255],
+            timestamp=datetime.datetime.utcnow()
+        ))
+        db.add(AuditLog(
+            invoice_id=None,
+            user=user.employee_name or user.name or user.username,
+            action='Direct Login',
+            stage='Authentication',
+            notes=f"User {user.employee_name} ({user.employee_id}) direct login (mfa_enabled={user.mfa_enabled}). IP: {client_ip}",
+            ip_address=client_ip
+        ))
+        db.commit()
+    except Exception as e:
+        logger.debug('Handled exception: %s', e)
 
     return {
-        'token': None,
-        'access_token': None,
+        'token': access_token,
+        'access_token': access_token,
         'token_type': 'bearer',
-        'expires_in': 3600,
-        'user': None,
-        'mfa_required': True,
-        'mfa_ticket': ticket,
-        'available_methods': available_methods,
-        'email_otp_available': email_available or show_dev_otp,
-        'selected_method': None,
-        'initial_otp_sent': False,
-        'masked_email': mask_email(user.email) if user.email else '',
-        'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
-        'has_authenticator_setup': has_auth_setup,
+        'expires_in': expires_minutes * 60,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'name': user.employee_name or user.name,
+            'email': user.email,
+            'role': user.role,
+            'employee_id': user.employee_id
+        },
+        'mfa_required': False,
         'active_session_conflict': False,
-        'message': 'Please complete verification to sign in.',
+        'session_id': new_session_id
     }
 
 @router.post('/mfa/send-otp')

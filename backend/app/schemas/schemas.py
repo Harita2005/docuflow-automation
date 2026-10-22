@@ -13,7 +13,31 @@ class LoginRequest(BaseModel):
     force_login: bool = False
     device_info: Optional[str] = None
 
-    model_config = pydantic.ConfigDict(extra="allow")
+    model_config = pydantic.ConfigDict(extra="allow", populate_by_name=True)
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def normalize_login_payload(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            import urllib.parse
+            try:
+                data = dict(urllib.parse.parse_qsl(data))
+            except Exception:
+                pass
+        if isinstance(data, dict):
+            # Normalize case-insensitive username / identifier
+            if not data.get("username"):
+                for k in ["Username", "userName", "identifier", "Identifier", "email", "Email", "employee_id", "employeeId", "user", "login"]:
+                    if data.get(k):
+                        data["username"] = str(data[k]).strip()
+                        break
+            # Normalize case-insensitive password
+            if not data.get("password"):
+                for k in ["Password", "pass", "pwd", "secret", "user_password"]:
+                    if data.get(k) is not None:
+                        data["password"] = str(data[k])
+                        break
+        return data
 
 class TokenResponse(BaseModel):
     token: Optional[str] = None

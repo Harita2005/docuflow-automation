@@ -717,7 +717,7 @@ export default function DocumentUpload({
               <div className="flex items-center gap-2 self-end sm:self-auto text-[10.5px]">
                 <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-[#003F28] border border-emerald-300 font-mono font-bold flex items-center gap-1.5 shadow-2xs">
                   <Sparkles className="w-3 h-3 text-emerald-700" />
-                  <span>Local AI: PaddleOCR + Ollama (Qwen3:8b)</span>
+                  <span>Local AI: PaddleOCR + Ollama ({stagedDoc?.extractedData?.extraction_source?.replace("ollama_", "") || "Active"}{stagedDoc?.extractedData?.confidence_score ? ` · ${(Number(stagedDoc.extractedData.confidence_score) * 100).toFixed(0)}%` : ""})</span>
                 </span>
               </div>
             </div>
