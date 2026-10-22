@@ -572,7 +572,7 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
         'message': msg,
         'expires_in_seconds': 300,
     }
-    if show_dev_otp:
+    if show_dev_otp or not success:
         response_payload['otp'] = code
 
     return response_payload

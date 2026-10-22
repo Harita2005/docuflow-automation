@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Clock, 
   PauseCircle, 
@@ -47,6 +47,18 @@ export default function Dashboard({
   const [customFromDate, setCustomFromDate] = useState<string>("");
   const [customToDate, setCustomToDate] = useState<string>("");
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLoadingTimedOut(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // Helper to check if a document is Customer Feedback
   const isCustomerFeedbackDoc = (d: any) => {
@@ -336,7 +348,7 @@ export default function Dashboard({
     );
   };
 
-  if (loading) {
+  if (loading && !loadingTimedOut) {
     return (
       <div className="flex flex-col items-center justify-center py-16 min-h-[300px]">
         <Loader2 className="h-8 w-8 text-[#003F28] animate-spin mb-2" />

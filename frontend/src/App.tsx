@@ -81,6 +81,7 @@ export default function App() {
 
   // Multi-Tab Synchronization across tabs in the same browser
   const handleLogoutRef = useRef<(reason?: string | null, broadcast?: boolean) => void>(() => {});
+  const refreshDataRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let authChannel: BroadcastChannel | null = null;
@@ -105,6 +106,7 @@ export default function App() {
             sessionStorage.setItem("hasShownWelcomeQueue", "false");
             setShowPendingModal(false);
             setLoadingDocs(true);
+            refreshDataRef.current();
           } else if (event.data?.type === "LOGOUT") {
             handleLogoutRef.current(null, false);
             try {
@@ -155,6 +157,7 @@ export default function App() {
           sessionStorage.setItem("hasShownWelcomeQueue", "false");
           setShowPendingModal(false);
           setLoadingDocs(true);
+          refreshDataRef.current();
         }
       }
     };
@@ -276,10 +279,13 @@ export default function App() {
   // Sync Registry documents
   const fetchDocuments = async (silent = false) => {
     if (!silent) setLoadingDocs(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const token = localStorage.getItem("authToken");
       const response = await fetch("/api/documents", {
-        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        signal: controller.signal
       });
       if (response.ok) {
         const data = await response.json();
@@ -299,19 +305,23 @@ export default function App() {
         console.error("Failed to fetch documents:", await response.text());
       }
     } catch {
-      // Backend temporarily offline
+      // Backend temporarily offline or timed out
     } finally {
-      if (!silent) setLoadingDocs(false);
+      clearTimeout(timeoutId);
+      setLoadingDocs(false);
     }
   };
 
   // Sync aggregations stats
   const fetchStats = async (silent = false) => {
     if (!silent) setLoadingStats(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const token = localStorage.getItem("authToken");
       const response = await fetch("/api/stats", {
-        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        signal: controller.signal
       });
       if (response.ok) {
         const data = await response.json();
@@ -334,8 +344,14 @@ export default function App() {
     } catch {
       setStats({ totalDocuments: 0 });
     } finally {
-      if (!silent) setLoadingStats(false);
+      clearTimeout(timeoutId);
+      setLoadingStats(false);
     }
+  };
+
+  refreshDataRef.current = () => {
+    fetchDocuments();
+    fetchStats();
   };
 
   useEffect(() => {
@@ -451,6 +467,8 @@ export default function App() {
     setShowPendingModal(false);
     setLoadingDocs(true);
     setIsLoggedIn(true);
+    fetchDocuments();
+    fetchStats();
 
     try {
       if (typeof BroadcastChannel !== "undefined") {
@@ -839,7 +857,7 @@ export default function App() {
               <Dashboard
                 documents={documents}
                 stats={stats}
-                loading={loadingDocs || loadingStats}
+                loading={loadingDocs && documents.length === 0}
                 onViewDocument={handleViewDocument}
                 currentUserRole={currentUserRole}
                 currentUserEmail={currentUserEmail}
