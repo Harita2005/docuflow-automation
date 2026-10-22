@@ -1081,6 +1081,34 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         inv_dict_base = {c.name: getattr(inv, c.name) for c in inv.__table__.columns}
         inv_dict_base = _unpack_custom_data_into_dict(inv_dict_base)
 
+        # Attach line items
+        if inv.line_items:
+            loaded_items = [
+                {
+                    'id': li.id,
+                    's_no': idx,
+                    'item_code': li.item_code or '',
+                    'hsn_sac': li.item_code or li.warranty_text or '',
+                    'description': li.description,
+                    'quantity': float(li.quantity) if li.quantity is not None else 1.0,
+                    'rate': float(li.unit_price) if li.unit_price is not None else 0.0,
+                    'unit_price': float(li.unit_price) if li.unit_price is not None else 0.0,
+                    'amount': float(li.amount) if li.amount is not None else 0.0,
+                    'warranty_text': li.warranty_text,
+                    'serial_numbers': li.serial_numbers
+                }
+                for idx, li in enumerate(inv.line_items, start=1)
+            ]
+            inv_dict_base['items'] = loaded_items
+            inv_dict_base['line_items'] = loaded_items
+        elif inv.line_items_json:
+            try:
+                loaded_items = json.loads(inv.line_items_json)
+                inv_dict_base['items'] = loaded_items
+                inv_dict_base['line_items'] = loaded_items
+            except Exception:
+                pass
+
         try:
             db.expunge(inv)
         except Exception:
@@ -3267,6 +3295,9 @@ async def confirm_and_ingest_document(
     plant: Optional[str] = Form(None),
     document_type: Optional[str] = Form('AP INVOICE'),
     workflow_profile: Optional[str] = Form(None),
+    line_items: Optional[str] = Form(None),
+    dynamic_fields: Optional[str] = Form(None),
+    custom_data: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -3481,6 +3512,51 @@ async def confirm_and_ingest_document(
         checklist_items = resolve_checklist_items(db, new_inv, first_stage)
         new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
 
+    # Persist Line Items table (from user verification or OCR fallback)
+    parsed_items = []
+    if line_items:
+        try:
+            parsed_items = json.loads(line_items) if isinstance(line_items, str) else line_items
+        except Exception as li_err:
+            logger.debug("Failed parsing confirm line_items JSON: %s", li_err)
+    elif ocr_data.get('line_items'):
+        parsed_items = ocr_data['line_items']
+
+    if parsed_items and isinstance(parsed_items, list):
+        clean_items = []
+        for itm in parsed_items:
+            if isinstance(itm, dict) and itm.get('description'):
+                clean_items.append(itm)
+        if clean_items:
+            new_inv.line_items_json = json.dumps(clean_items)
+            for itm in clean_items:
+                try:
+                    db.add(DocumentLineItem(
+                        invoice_id=new_inv.id,
+                        description=str(itm.get('description') or 'Item'),
+                        quantity=float(itm.get('quantity') or 1.0),
+                        unit_price=float(itm.get('rate') or itm.get('unit_price') or 0.0),
+                        amount=float(itm.get('amount') or 0.0),
+                        item_code=str(itm.get('hsn_sac') or itm.get('item_code') or ''),
+                        warranty_text=str(itm.get('hsn_sac') or '')
+                    ))
+                except Exception as li_db_err:
+                    logger.debug("Failed inserting DocumentLineItem row: %s", li_db_err)
+
+    # Persist Dynamic Custom Fields
+    dyn_dict = {}
+    raw_dyn = dynamic_fields or custom_data
+    if raw_dyn:
+        try:
+            dyn_dict = json.loads(raw_dyn) if isinstance(raw_dyn, str) else raw_dyn
+        except Exception as dyn_err:
+            logger.debug("Failed parsing dynamic_fields JSON: %s", dyn_err)
+    elif ocr_data.get('dynamic_fields'):
+        dyn_dict = ocr_data['dynamic_fields']
+
+    if dyn_dict and isinstance(dyn_dict, dict):
+        new_inv.custom_data = json.dumps(dyn_dict)
+
     db.add(new_inv)
     db.commit()
     db.refresh(new_inv)
@@ -3634,6 +3710,28 @@ async def upload_document(
             first_stage = steps[0].step_name
         checklist_items = resolve_checklist_items(db, new_inv, first_stage)
         new_inv.checklist_state = json.dumps({item: False for item in checklist_items})
+    # Persist OCR extracted Line Items table and dynamic metadata
+    if ocr_data.get('line_items') and isinstance(ocr_data['line_items'], list):
+        clean_items = [it for it in ocr_data['line_items'] if isinstance(it, dict) and it.get('description')]
+        if clean_items:
+            new_inv.line_items_json = json.dumps(clean_items)
+            for itm in clean_items:
+                try:
+                    db.add(DocumentLineItem(
+                        invoice_id=new_inv.id,
+                        description=str(itm.get('description') or 'Item'),
+                        quantity=float(itm.get('quantity') or 1.0),
+                        unit_price=float(itm.get('rate') or itm.get('unit_price') or 0.0),
+                        amount=float(itm.get('amount') or 0.0),
+                        item_code=str(itm.get('hsn_sac') or itm.get('item_code') or ''),
+                        warranty_text=str(itm.get('hsn_sac') or '')
+                    ))
+                except Exception as li_db_err:
+                    logger.debug("Failed inserting direct upload DocumentLineItem: %s", li_db_err)
+
+    if ocr_data.get('dynamic_fields') and isinstance(ocr_data['dynamic_fields'], dict):
+        new_inv.custom_data = json.dumps(ocr_data['dynamic_fields'])
+
     db.add(new_inv)
     db.commit()
     db.refresh(new_inv)

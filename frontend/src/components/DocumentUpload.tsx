@@ -63,7 +63,32 @@ export default function DocumentUpload({
     extractedData: any;
   } | null>(null);
 
-  const [verifyForm, setVerifyForm] = useState({
+  const [verifyForm, setVerifyForm] = useState<{
+    vendor_name: string;
+    invoice_number: string;
+    invoice_date: string;
+    amount: string;
+    base_amount: string;
+    tax_amount: string;
+    cgst: string;
+    sgst: string;
+    igst: string;
+    vendor_gstin: string;
+    po_number: string;
+    division: string;
+    plant: string;
+    document_type: string;
+    workflow_profile: string;
+    line_items: Array<{
+      s_no: number;
+      description: string;
+      hsn_sac: string;
+      quantity: number;
+      rate: number;
+      amount: number;
+    }>;
+    dynamic_fields: Record<string, string>;
+  }>({
     vendor_name: "",
     invoice_number: "",
     invoice_date: "",
@@ -78,8 +103,13 @@ export default function DocumentUpload({
     division: "VCC",
     plant: "MAIN",
     document_type: "AP INVOICE",
-    workflow_profile: "auto"
+    workflow_profile: "auto",
+    line_items: [],
+    dynamic_fields: {}
   });
+
+  const [newDynamicKey, setNewDynamicKey] = useState("");
+  const [newDynamicVal, setNewDynamicVal] = useState("");
 
   // PDF Viewer Zoom state for staged preview (Default: 100%, View-only)
   const [previewZoomLevel, setPreviewZoomLevel] = useState(100);
@@ -410,7 +440,10 @@ export default function DocumentUpload({
           extractedData: ext
         });
 
-        // Initialize verification form with extracted fields
+        // Initialize verification form with extracted fields including line items & dynamic fields
+        const rawLineItems = Array.isArray(ext.line_items) ? ext.line_items : [];
+        const rawDynamic = (typeof ext.dynamic_fields === 'object' && ext.dynamic_fields !== null) ? ext.dynamic_fields : {};
+
         setVerifyForm({
           vendor_name: ext.vendor_name || "",
           invoice_number: ext.invoice_number || "",
@@ -426,7 +459,16 @@ export default function DocumentUpload({
           division: ext.division || "VCC",
           plant: "MAIN",
           document_type: ext.document_type || selectedDocType || "AP INVOICE",
-          workflow_profile: selectedWorkflowProfile || "auto"
+          workflow_profile: selectedWorkflowProfile || "auto",
+          line_items: rawLineItems.map((itm: any, idx: number) => ({
+            s_no: itm.s_no != null ? Number(itm.s_no) : idx + 1,
+            description: String(itm.description || ""),
+            hsn_sac: String(itm.hsn_sac || ""),
+            quantity: Number(itm.quantity) || 1,
+            rate: Number(itm.rate) || 0,
+            amount: Number(itm.amount) || 0
+          })),
+          dynamic_fields: rawDynamic
         });
       } else {
         const err = await response.json().catch(() => ({}));
@@ -470,6 +512,12 @@ export default function DocumentUpload({
       formData.append("document_type", verifyForm.document_type);
       if (verifyForm.workflow_profile && verifyForm.workflow_profile !== "auto") {
         formData.append("workflow_profile", verifyForm.workflow_profile);
+      }
+      if (verifyForm.line_items && verifyForm.line_items.length > 0) {
+        formData.append("line_items", JSON.stringify(verifyForm.line_items));
+      }
+      if (verifyForm.dynamic_fields && Object.keys(verifyForm.dynamic_fields).length > 0) {
+        formData.append("dynamic_fields", JSON.stringify(verifyForm.dynamic_fields));
       }
 
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
@@ -1022,11 +1070,278 @@ export default function DocumentUpload({
                   </div>
                 </div>
 
-                {/* Card 4: Routing & Business Rule Scope */}
+                {/* Card 4: Extracted Line Items & Dynamic Tabular Breakdown */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                        4. Line Items &amp; Tabular Data
+                      </span>
+                      {verifyForm.line_items.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-[#003F28] border border-emerald-200">
+                          {verifyForm.line_items.length} extracted
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextSno = verifyForm.line_items.length + 1;
+                        setVerifyForm(prev => ({
+                          ...prev,
+                          line_items: [
+                            ...prev.line_items,
+                            { s_no: nextSno, description: "", hsn_sac: "", quantity: 1, rate: 0, amount: 0 }
+                          ]
+                        }));
+                      }}
+                      className="text-[10px] text-[#003F28] hover:text-[#002f1e] font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>+ Add Row</span>
+                    </button>
+                  </div>
+
+                  {verifyForm.line_items.length === 0 ? (
+                    <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center">
+                      <p className="text-[11px] text-slate-500 font-medium">No line items table detected by OCR.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVerifyForm(prev => ({
+                            ...prev,
+                            line_items: [{ s_no: 1, description: "", hsn_sac: "", quantity: 1, rate: 0, amount: 0 }]
+                          }));
+                        }}
+                        className="mt-1 text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                      >
+                        + Add First Line Item
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 text-[9.5px] uppercase font-bold text-slate-600 border-b border-slate-200">
+                            <th className="py-1.5 px-2 w-10 text-center">S.No</th>
+                            <th className="py-1.5 px-2">Description</th>
+                            <th className="py-1.5 px-2 w-24">HSN/SAC</th>
+                            <th className="py-1.5 px-2 w-16 text-right">Qty</th>
+                            <th className="py-1.5 px-2 w-20 text-right">Rate (₹)</th>
+                            <th className="py-1.5 px-2 w-24 text-right">Amount (₹)</th>
+                            <th className="py-1.5 px-1 w-8 text-center"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {verifyForm.line_items.map((row, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/70">
+                              <td className="py-1 px-1.5 text-center">
+                                <input
+                                  type="text"
+                                  value={row.s_no}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value) || idx + 1;
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].s_no = val;
+                                    setVerifyForm({ ...verifyForm, line_items: updated });
+                                  }}
+                                  className="w-8 text-center text-xs py-1 border border-slate-200 rounded bg-slate-50 font-semibold"
+                                />
+                              </td>
+                              <td className="py-1 px-1.5">
+                                <input
+                                  type="text"
+                                  value={row.description}
+                                  onChange={(e) => {
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].description = e.target.value;
+                                    setVerifyForm({ ...verifyForm, line_items: updated });
+                                  }}
+                                  placeholder="Item name / goods description"
+                                  className="w-full text-xs py-1 px-2 border border-slate-200 rounded bg-slate-50 focus:bg-white font-medium"
+                                />
+                              </td>
+                              <td className="py-1 px-1.5">
+                                <input
+                                  type="text"
+                                  value={row.hsn_sac}
+                                  onChange={(e) => {
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].hsn_sac = e.target.value;
+                                    setVerifyForm({ ...verifyForm, line_items: updated });
+                                  }}
+                                  placeholder="e.g. 85044090"
+                                  className="w-full text-xs py-1 px-1.5 font-mono border border-slate-200 rounded bg-slate-50 focus:bg-white"
+                                />
+                              </td>
+                              <td className="py-1 px-1.5 text-right">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={row.quantity}
+                                  onChange={(e) => {
+                                    const q = parseFloat(e.target.value) || 0;
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].quantity = q;
+                                    updated[idx].amount = Math.round(q * updated[idx].rate * 100) / 100;
+                                    const sumAmt = updated.reduce((acc, it) => acc + (it.amount || 0), 0);
+                                    setVerifyForm({
+                                      ...verifyForm,
+                                      line_items: updated,
+                                      amount: sumAmt > 0 ? String(sumAmt.toFixed(2)) : verifyForm.amount
+                                    });
+                                  }}
+                                  className="w-16 text-right text-xs py-1 px-1.5 border border-slate-200 rounded bg-slate-50 font-semibold"
+                                />
+                              </td>
+                              <td className="py-1 px-1.5 text-right">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.rate}
+                                  onChange={(e) => {
+                                    const r = parseFloat(e.target.value) || 0;
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].rate = r;
+                                    updated[idx].amount = Math.round(updated[idx].quantity * r * 100) / 100;
+                                    const sumAmt = updated.reduce((acc, it) => acc + (it.amount || 0), 0);
+                                    setVerifyForm({
+                                      ...verifyForm,
+                                      line_items: updated,
+                                      amount: sumAmt > 0 ? String(sumAmt.toFixed(2)) : verifyForm.amount
+                                    });
+                                  }}
+                                  className="w-20 text-right text-xs py-1 px-1.5 border border-slate-200 rounded bg-slate-50 font-semibold"
+                                />
+                              </td>
+                              <td className="py-1 px-1.5 text-right">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.amount}
+                                  onChange={(e) => {
+                                    const a = parseFloat(e.target.value) || 0;
+                                    const updated = [...verifyForm.line_items];
+                                    updated[idx].amount = a;
+                                    const sumAmt = updated.reduce((acc, it) => acc + (it.amount || 0), 0);
+                                    setVerifyForm({
+                                      ...verifyForm,
+                                      line_items: updated,
+                                      amount: sumAmt > 0 ? String(sumAmt.toFixed(2)) : verifyForm.amount
+                                    });
+                                  }}
+                                  className="w-24 text-right text-xs py-1 px-1.5 border border-slate-200 rounded bg-emerald-50/50 font-bold text-emerald-950"
+                                />
+                              </td>
+                              <td className="py-1 px-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = verifyForm.line_items.filter((_, i) => i !== idx);
+                                    const sumAmt = updated.reduce((acc, it) => acc + (it.amount || 0), 0);
+                                    setVerifyForm({
+                                      ...verifyForm,
+                                      line_items: updated,
+                                      amount: sumAmt > 0 ? String(sumAmt.toFixed(2)) : verifyForm.amount
+                                    });
+                                  }}
+                                  className="text-slate-400 hover:text-rose-500 font-bold p-1 cursor-pointer transition-colors"
+                                  title="Delete item"
+                                >
+                                  ×
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Dynamic Custom Document Fields Section */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">
+                        Dynamic Document Fields
+                      </span>
+                      <span className="text-[9.5px] text-slate-400">Extra AI-detected metadata</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {Object.entries(verifyForm.dynamic_fields || {}).map(([key, val]) => (
+                        <div key={key} className="flex items-center gap-1.5 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                          <span className="text-[10px] font-bold text-slate-600 uppercase truncate w-28" title={key.replace(/_/g, ' ')}>
+                            {key.replace(/_/g, ' ')}:
+                          </span>
+                          <input
+                            type="text"
+                            value={val}
+                            onChange={(e) => {
+                              setVerifyForm(prev => ({
+                                ...prev,
+                                dynamic_fields: { ...prev.dynamic_fields, [key]: e.target.value }
+                              }));
+                            }}
+                            className="flex-1 text-xs py-0.5 px-1.5 bg-white border border-slate-200 rounded font-medium text-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = { ...verifyForm.dynamic_fields };
+                              delete next[key];
+                              setVerifyForm(prev => ({ ...prev, dynamic_fields: next }));
+                            }}
+                            className="text-slate-400 hover:text-rose-500 font-bold text-xs px-1 cursor-pointer"
+                            title="Remove field"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Custom Dynamic Field Row */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        value={newDynamicKey}
+                        onChange={(e) => setNewDynamicKey(e.target.value)}
+                        placeholder="New field name (e.g. Vehicle No)"
+                        className="w-40 text-xs py-1 px-2 border border-slate-200 rounded bg-white text-slate-800 placeholder:text-slate-400"
+                      />
+                      <input
+                        type="text"
+                        value={newDynamicVal}
+                        onChange={(e) => setNewDynamicVal(e.target.value)}
+                        placeholder="Field value"
+                        className="flex-1 text-xs py-1 px-2 border border-slate-200 rounded bg-white text-slate-800 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newDynamicKey.trim()) {
+                            const cleanK = newDynamicKey.trim().toLowerCase().replace(/\s+/g, '_');
+                            setVerifyForm(prev => ({
+                              ...prev,
+                              dynamic_fields: { ...prev.dynamic_fields, [cleanK]: newDynamicVal.trim() }
+                            }));
+                            setNewDynamicKey("");
+                            setNewDynamicVal("");
+                          }
+                        }}
+                        disabled={!newDynamicKey.trim()}
+                        className="px-2.5 py-1 text-xs font-bold text-[#003F28] bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 disabled:opacity-50 cursor-pointer transition-colors"
+                      >
+                        + Add Field
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 5: Routing & Business Rule Scope */}
                 <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 shadow-2xs">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                     <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
-                      4. Scope &amp; Routing Engine
+                      5. Scope &amp; Routing Engine
                     </span>
                     <span className="text-[10px] text-emerald-800 font-semibold">Condition Engine convergence</span>
                   </div>
