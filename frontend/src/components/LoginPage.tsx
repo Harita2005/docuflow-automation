@@ -149,6 +149,23 @@ export default function LoginPage({
       return;
     }
 
+    if (identifier.includes("@")) {
+      setOtpError("Login with email address is not permitted. Please enter your Employee ID or Username.");
+      return;
+    }
+
+    const cleanDigits = identifier.replace(/[\s\-\(\)\+]/g, "");
+    const isPhoneNumber =
+      identifier.startsWith("+") ||
+      (cleanDigits.length >= 10 &&
+        /^\d+$/.test(cleanDigits) &&
+        ["6", "7", "8", "9"].includes(cleanDigits.slice(-10)[0]));
+
+    if (isPhoneNumber) {
+      setOtpError("Login with phone number is not permitted. Please enter your Employee ID or Username.");
+      return;
+    }
+
     setLoading(true);
     setOtpError("");
     setOtpSentNotice("");
@@ -639,9 +656,14 @@ export default function LoginPage({
               >
                 {/* Employee ID / Username */}
                 <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-gray-800">
-                    Employee ID or Username
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-800">
+                      Employee ID or Username
+                    </label>
+                    <span className="text-[11px] text-gray-400">
+                      Email &amp; phone not permitted
+                    </span>
+                  </div>
 
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -654,7 +676,7 @@ export default function LoginPage({
                       onChange={(e) =>
                         setEmployeeId(e.target.value)
                       }
-                      placeholder="Enter your employee ID or username"
+                      placeholder="Enter Employee ID (e.g. 16220) or Username"
                       required
                       autoFocus
                       autoComplete="username"

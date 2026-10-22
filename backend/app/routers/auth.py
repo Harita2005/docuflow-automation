@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any, Union
 import logging
 import os
+import re
 import uuid
 import time
 import datetime
@@ -92,7 +93,7 @@ async def login(
         force_login = str(request.get("force_login", "")).lower() in ("true", "1")
         device_info = request.get("device_info")
     elif request and hasattr(request, "username"):
-        ident = request.username or request.identifier or request.email or getattr(request, 'employee_id', None)
+        ident = request.username or request.identifier or getattr(request, 'employee_id', None)
         if ident:
             ident_str = str(ident).strip()
         password = request.password or getattr(request, 'Password', None) or ""
@@ -120,7 +121,7 @@ async def login(
 
         if body_dict:
             if not ident_str:
-                for k in ["username", "Username", "userName", "identifier", "Identifier", "email", "employee_id", "user", "login"]:
+                for k in ["employee_id", "employeeId", "username", "Username", "userName", "identifier", "Identifier", "user", "login"]:
                     if body_dict.get(k):
                         ident_str = str(body_dict[k]).strip()
                         break
@@ -141,6 +142,29 @@ async def login(
 
     if not ident_str:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
+    # Strict restriction: Only Employee ID or Username allowed. Email and Phone numbers are strictly forbidden.
+    if "@" in ident_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Login with email address is not permitted. Please sign in using your Employee ID or Username."
+        )
+
+    clean_digits = re.sub(r"[\s\-\(\)\+]", "", ident_str)
+    is_phone_candidate = ident_str.startswith("+") or (
+        clean_digits.isdigit()
+        and len(clean_digits) in (10, 11, 12, 13)
+        and (clean_digits.startswith("0") or clean_digits.startswith("91") or clean_digits[-10] in "56789")
+    )
+    if is_phone_candidate:
+        exact_user_exists = db.query(User.id).filter(
+            or_(User.employee_id == ident_str, User.username == ident_str)
+        ).first()
+        if not exact_user_exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Login with phone number is not permitted. Please sign in using your Employee ID or Username."
+            )
+
 
     # Option 1 / M2M Service Client Direct Token Fast-Path:
     from app.routers.sync_router import SERVICE_API_USER, SERVICE_API_PASS
@@ -192,7 +216,6 @@ async def login(
         )
         .filter(
             User.username.ilike(ident_str)
-            | User.email.ilike(ident_str)
             | User.employee_id.ilike(ident_str)
             | User.user_uid.ilike(ident_str)
         )
@@ -206,7 +229,6 @@ async def login(
                 User.employee_id.ilike(f'%_{ident_str}')
                 | User.employee_id.ilike(f'%{ident_str}%')
                 | User.username.ilike(f'%{ident_str}%')
-                | User.name.ilike(f'%{ident_str}%')
             )
             .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
             .first()

@@ -27,7 +27,7 @@ class LoginRequest(BaseModel):
         if isinstance(data, dict):
             # Normalize case-insensitive username / identifier
             if not data.get("username"):
-                for k in ["Username", "userName", "identifier", "Identifier", "email", "Email", "employee_id", "employeeId", "user", "login"]:
+                for k in ["employee_id", "employeeId", "Username", "userName", "identifier", "Identifier", "user", "login"]:
                     if data.get(k):
                         data["username"] = str(data[k]).strip()
                         break

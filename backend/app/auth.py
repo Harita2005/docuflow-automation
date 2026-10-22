@@ -163,7 +163,7 @@ async def get_current_user(
                 db.query(User)
                 .options(joinedload(User.role_rel))
                 .filter(
-                    (User.email == username) | (User.employee_id == username),
+                    User.employee_id == username,
                     User.is_deleted == False
                 )
                 .first()
@@ -251,7 +251,7 @@ async def get_current_user_optional(
                 db.query(User)
                 .options(joinedload(User.role_rel))
                 .filter(
-                    (User.email == username) | (User.employee_id == username),
+                    User.employee_id == username,
                     User.is_deleted == False
                 )
                 .first()
