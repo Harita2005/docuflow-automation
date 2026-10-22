@@ -242,7 +242,7 @@ class User(Base):
     is_deleted = Column(Boolean, default=False, index=True, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
 
-    mfa_enabled = Column(Boolean, default=False)
+    mfa_enabled = Column(Boolean, default=True)
     mfa_type = Column(String(50), default="EMAIL")
     mfa_secret = Column(String(500), nullable=True)
 

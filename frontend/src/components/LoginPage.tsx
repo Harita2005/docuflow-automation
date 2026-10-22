@@ -656,14 +656,9 @@ export default function LoginPage({
               >
                 {/* Employee ID / Username */}
                 <div className="space-y-1.5 text-left">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-800">
-                      Employee ID or Username
-                    </label>
-                    <span className="text-[11px] text-gray-400">
-                      Email &amp; phone not permitted
-                    </span>
-                  </div>
+                  <label className="text-xs font-semibold text-gray-800">
+                    Employee ID or Username
+                  </label>
 
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">

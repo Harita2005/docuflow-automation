@@ -364,12 +364,12 @@ async def login(
                 )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-    # Check if MFA is required for this user:
-    # If user has MFA enabled (user.mfa_enabled == True), require secondary 2FA / OTP challenge.
-    # If MFA is disabled (user.mfa_enabled == False), issue access_token directly!
+    # Check if MFA / OTP is required for this user:
+    # In passwordless login (no password submitted) or if user has mfa_enabled=True,
+    # require OTP verification challenge unless explicitly bypassed by internal force_login.
     bypass_mfa = bool(force_login or req.headers.get("x-force-login") == "true" or req.headers.get("x-bypass-mfa") == "true")
 
-    if user.mfa_enabled and not bypass_mfa:
+    if not bypass_mfa and (not password or user.mfa_enabled):
         # Issue OTP ticket for verification (OTP/Authenticator challenge)
         ticket = create_mfa_ticket(user.id, user.username)
         ticket_data = get_mfa_ticket(ticket)

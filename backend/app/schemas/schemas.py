@@ -98,7 +98,7 @@ class UserMasterCreate(BaseModel):
     department: Optional[str] = Field(None, description='Department (Finance, Audit, Operations)')
     plant: Optional[str] = Field(None, description='Assigned Plant / Branch (e.g. TN-SIVAKASI)')
     is_active: bool = Field(True, description='Active or Inactive status')
-    mfa_enabled: bool = Field(False, description='Enable Multi-Factor Authentication')
+    mfa_enabled: bool = Field(True, description='Enable Multi-Factor Authentication')
     mfa_type: str = Field('EMAIL', description='SMS, EMAIL, AUTHENTICATOR')
     created_by: Optional[str] = Field('System Admin', description='Admin who created this user')
 
