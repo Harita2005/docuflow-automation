@@ -4711,17 +4711,38 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
         except Exception as e:
             logger.debug("Failed parsing step.checklist_json: %s", e)
 
-    # 2. ChecklistRule explicitly configured for this workflow profile (if any)
-    wf_rules = db.query(ChecklistRule).filter(
-        ChecklistRule.is_active == True,
-        ChecklistRule.workflow_profile == inv.workflow_profile_id,
-        (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
-    ).order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.id.asc()).all()
+    # 2. ChecklistRule explicitly configured for this workflow profile (or 'ALL')
+    if not flow_items:
+        stage_aliases = [clean_stage, 'ALL']
+        stg_idx = inv.current_stage or 1
+        if stg_idx == 1 or 'store operations' in clean_stage.lower():
+            stage_aliases.extend(['Attachment Status', 'First Approval', 'Stage 1'])
+        elif stg_idx == 2 or 'accounts' in clean_stage.lower():
+            stage_aliases.extend(['Second Approval', 'Accounts Verification', 'Stage 2'])
+        elif stg_idx >= 3 or 'finance' in clean_stage.lower():
+            stage_aliases.extend(['3rd APPROVAL', 'Final Approval', 'Finance Final Settlement', 'Stage 3'])
 
-    for r in wf_rules:
-        for itm in split_checklist_items(r.item_text):
-            if itm and itm not in flow_items:
-                flow_items.append(itm)
+        wf_rules = db.query(ChecklistRule).filter(
+            ChecklistRule.is_active == True,
+            ChecklistRule.workflow_profile.in_([inv.workflow_profile_id, 'ALL']),
+            or_(*[ChecklistRule.stage_name.ilike(a) for a in stage_aliases])
+        ).order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.id.asc()).all()
+
+        for r in wf_rules:
+            for itm in split_checklist_items(r.item_text):
+                if itm and itm not in flow_items:
+                    flow_items.append(itm)
+    else:
+        wf_rules = db.query(ChecklistRule).filter(
+            ChecklistRule.is_active == True,
+            ChecklistRule.workflow_profile == inv.workflow_profile_id,
+            (ChecklistRule.stage_name.ilike(clean_stage)) | (ChecklistRule.stage_name == 'ALL')
+        ).order_by(ChecklistRule.sequence_order.asc(), ChecklistRule.id.asc()).all()
+
+        for r in wf_rules:
+            for itm in split_checklist_items(r.item_text):
+                if itm and itm not in flow_items:
+                    flow_items.append(itm)
 
     return flow_items
 
