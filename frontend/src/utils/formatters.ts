@@ -123,18 +123,15 @@ export function getCanonicalDocumentType(docOrType?: any): string {
     const cleaned = raw.trim().replace(/\s+/g, " ");
     const upper = cleaned.toUpperCase().replace(/_/g, " ");
     if (
-      upper === "CUSTOMER FEEDBACK" ||
-      upper === "FEEDBACK" ||
-      upper === "CUSTOMER COMPLAINT" ||
       upper.includes("COMPLAINT") ||
       upper.includes("FEEDBACK") ||
       upper.startsWith("CMP") ||
       upper.startsWith("CF-") ||
-      upper.startsWith("CF_")
+      upper.startsWith("CF ")
     ) {
       return "CUSTOMER FEEDBACK";
     }
-    if (upper === "INVOICE" || upper === "TAX INVOICE" || upper === "AP INVOICE" || upper === "AP_INVOICE" || upper === "STANDARD INVOICE") {
+    if (upper === "INVOICE" || upper === "TAX INVOICE" || upper === "AP INVOICE" || upper === "STANDARD INVOICE") {
       return "AP INVOICE";
     }
     if (upper === "PURCHASE ORDER" || upper === "PO") {
@@ -150,24 +147,20 @@ export function getCanonicalDocumentType(docOrType?: any): string {
       return "JOURNAL VOUCHER";
     }
     if (
-      upper === "CREDIT NOTE" ||
       upper === "CREDIT" ||
       upper.includes("CREDIT NOTE") ||
-      upper.includes("CREDIT_NOTE") ||
       upper.includes("CREDIT-NOTE") ||
       upper.startsWith("CN-") ||
-      upper.startsWith("CN_")
+      upper.startsWith("CN ")
     ) {
       return "CREDIT NOTE";
     }
     if (
-      upper === "DEBIT NOTE" ||
       upper === "DEBIT" ||
       upper.includes("DEBIT NOTE") ||
-      upper.includes("DEBIT_NOTE") ||
       upper.includes("DEBIT-NOTE") ||
       upper.startsWith("DN-") ||
-      upper.startsWith("DN_")
+      upper.startsWith("DN ")
     ) {
       return "DEBIT NOTE";
     }
@@ -183,7 +176,7 @@ export function getCanonicalDocumentType(docOrType?: any): string {
     if (upper.includes("CAPEX") || upper.includes("FIXED ASSET")) {
       return "CAPEX";
     }
-    if (upper === "GENERAL RECORDS" || upper === "GENERAL RECORD" || upper === "RECORD") {
+    if (upper.startsWith("GENERAL RECORD") || upper === "RECORD") {
       return "GENERAL RECORDS";
     }
     return upper;

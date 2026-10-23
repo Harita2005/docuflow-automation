@@ -176,8 +176,8 @@ export default function WorkTrackerPage({
     };
     const activeAliases = roleAliases[rHandle] || [rHandle];
 
-    if (uHandle && (pool.includes(uHandle) || pool.some(p => p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (eHandle && (pool.includes(eHandle) || pool.some(p => p.includes(eHandle)))) return true;
+    if (uHandle && pool.some(p => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && pool.some(p => p && p.includes(eHandle))) return true;
     if (rHandle && pool.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
     return false;
   };

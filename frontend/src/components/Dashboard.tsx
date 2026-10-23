@@ -139,8 +139,8 @@ export default function Dashboard({
     };
     const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
 
-    if (uHandle && (pool.includes(uHandle) || pool.some((p: string) => p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (eHandle && (pool.includes(eHandle) || pool.some((p: string) => p.includes(eHandle)))) return true;
+    if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
     if (rHandle && pool.some((p: string) => activeAliases.includes(p) || activeAliases.some((a: string) => p.includes(a) || a.includes(p)))) return true;
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
@@ -162,8 +162,8 @@ export default function Dashboard({
     const approverStr = (doc.assigned_approver || "").toLowerCase();
     const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
 
-    if (uHandle && (pool.includes(uHandle) || pool.some((p: string) => p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (eHandle && (pool.includes(eHandle) || pool.some((p: string) => p === eHandle || p.includes(eHandle)))) return true;
+    if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
 
     // 3. Stage-specific role match (only when stage is assigned specifically by role name, not universal bypass)
     const roleAliases: Record<string, string[]> = {

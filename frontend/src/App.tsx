@@ -305,8 +305,8 @@ export default function App() {
 
     if (doc.assigned_approver) {
       const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
-      if (uHandle && (approvers.includes(uHandle) || approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p))))) return true;
-      if (eHandle && (approvers.includes(eHandle) || approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p))))) return true;
+      if (uHandle && approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+      if (eHandle && approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p)))) return true;
       if (rHandle && approvers.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
     }
 
