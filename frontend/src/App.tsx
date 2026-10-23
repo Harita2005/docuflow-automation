@@ -73,6 +73,33 @@ export default function App() {
   const [currentUserUsername, setCurrentUserUsername] = useState<string>(() => localStorage.getItem("currentUserUsername") || "");
   const [kickedReason, setKickedReason] = useState<string | null>(() => sessionStorage.getItem("sessionKickedReason") || null);
 
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      fetch("/api/auth/me", {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(u => {
+          if (u) {
+            if (u.role) {
+              setCurrentUserRole(u.role);
+              localStorage.setItem("currentUserRole", u.role);
+            }
+            if (u.username) {
+              setCurrentUserUsername(u.username);
+              localStorage.setItem("currentUserUsername", u.username);
+            }
+            if (u.email) {
+              setCurrentUserEmail(u.email);
+              localStorage.setItem("currentUserEmail", u.email);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({
     employee: ["dashboard", "work-tracker", "customer-feedback", "approved-documents", "dapi-sync-back"],
     settings_editor: ["dashboard", "work-tracker", "customer-feedback", "approved-documents", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"],
@@ -264,14 +291,27 @@ export default function App() {
     const eHandle = (currentUserEmail || "").toLowerCase().trim();
     const rHandle = (currentUserRole || "").toLowerCase().trim();
 
+    if (rHandle === "admin" || rHandle === "manager" || rHandle === "finance_manager") return true;
+
+    const roleAliases: Record<string, string[]> = {
+      admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
+      manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
+      finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
+      accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
+      employee: ["employee", "standard employee", "standard_employee"]
+    };
+    const activeAliases = roleAliases[rHandle] || [rHandle];
+
     if (doc.assigned_approver) {
       const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
       if (uHandle && (approvers.includes(uHandle) || approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p))))) return true;
       if (eHandle && (approvers.includes(eHandle) || approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p))))) return true;
-      if (rHandle && approvers.includes(rHandle)) return true;
+      if (rHandle && approvers.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
     }
 
-    if (doc.status === "Data Verification Pending" && (currentUserRole === "ap_executive" || currentUserRole === "executive")) return true;
+    if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
 
     return false;
   };

@@ -34,6 +34,7 @@ import {
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
 import { MoreInfoConfigDrawer, ConfigFieldItem } from "./MoreInfoConfigDrawer";
+import { getAuthToken } from "../utils/auth";
 
 
 interface DocumentDetailsProps {
@@ -535,7 +536,7 @@ export default function DocumentDetails({
 
   const [showNextActionModal, setShowNextActionModal] = useState(false);
   const [pendingNextId, setPendingNextId] = useState<string | null>(null);
-  const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold'>('approve');
+  const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold' | 'cancel'>('approve');
   const [approvedNextStageInfo, setApprovedNextStageInfo] = useState<{ nextApprover?: string | null; nextStageName?: string | null; isCompleted?: boolean } | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'amber' } | null>(null);
 
@@ -1521,6 +1522,8 @@ export default function DocumentDetails({
   const [_erpData, setErpData] = useState<any | null>(null);
   const [_erpLoading, setErpLoading] = useState(false);
 
+  const lastFetchedPoRef = useRef<string | null>(null);
+
   const fetchErpData = async (poNum: string) => {
     if (!poNum || poNum === "Not Found" || poNum === "Extracting...") {
       setErpData(null);
@@ -1528,7 +1531,7 @@ export default function DocumentDetails({
     }
     setErpLoading(true);
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getAuthToken() || localStorage.getItem("authToken") || localStorage.getItem("token");
       const res = await fetch(`/api/erp/${encodeURIComponent(poNum)}`, {
         headers: token ? { "Authorization": `Bearer ${token}` } : {}
       });
@@ -1631,7 +1634,11 @@ export default function DocumentDetails({
       setVendorName(document.vendor_name || "");
       setInvoiceNumber(document.invoice_number || "");
       setPoNumber(document.po_number || "");
-      fetchErpData(document.po_number || "");
+      const currentPo = document.po_number || "";
+      if (lastFetchedPoRef.current !== currentPo) {
+        lastFetchedPoRef.current = currentPo;
+        fetchErpData(currentPo);
+      }
       setAmount(document.amount || 0);
       setInvoiceDate(document.invoice_date || "");
       setCgst(document.cgst || 0);
@@ -1856,27 +1863,36 @@ export default function DocumentDetails({
     setActionLoading(true);
     setActionError(null);
     try {
-      const response = await fetch(`/api/workflows/reject`, {
+      const token = getAuthToken() || localStorage.getItem("authToken") || localStorage.getItem("token");
+      const targetDocId = (activeDoc || document)?.id || document?.id;
+      const expectedVersion = (activeDoc || document)?.version ?? document?.version ?? 1;
+
+      const endpoint = isStage1 ? `/api/workflows/cancel` : `/api/workflows/reject`;
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || localStorage.getItem("authToken")}`
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
-          invoiceId: (activeDoc || document)?.id || document?.id,
-          expected_version: (activeDoc || document)?.version ?? document?.version ?? 1,
+          invoiceId: targetDocId,
+          id: targetDocId,
+          expected_version: expectedVersion,
           comments,
         }),
       });
+
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
+        if (activeDoc) activeDoc.status = isStage1 ? "Cancelled" : activeDoc.status;
+        if (document) document.status = isStage1 ? "Cancelled" : document.status;
         showToast(isStage1 ? "✓ Document Process Cancelled Successfully!" : "✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
         setPendingNextId(nextId);
-        setActionModalType('reject');
+        setActionModalType(isStage1 ? 'cancel' : 'reject');
         setShowNextActionModal(true);
       } else {
         if (response.status === 409) {
@@ -1894,10 +1910,13 @@ export default function DocumentDetails({
             if (txt) errDetail = txt;
           }
         } catch {}
+        alert(errDetail);
         setActionError(errDetail);
       }
     } catch (err: any) {
-      setActionError(err.message || (isStage1 ? "Cancellation action failed" : "Rejection action failed"));
+      const msg = err.message || (isStage1 ? "Cancellation action failed" : "Rejection action failed");
+      alert(msg);
+      setActionError(msg);
     } finally {
       isSubmittingRef.current = false;
       setActionLoading(false);
@@ -3707,7 +3726,7 @@ export default function DocumentDetails({
             
             <div className="space-y-1">
               <h3 className="font-extrabold text-slate-900 text-lg tracking-tight">
-                {actionModalType === 'approve' ? 'Document Approved Successfully!' : actionModalType === 'reject' ? 'Document Rejection Saved' : 'Document Placed On Hold'}
+                {actionModalType === 'approve' ? 'Document Approved Successfully!' : actionModalType === 'cancel' ? 'Document Process Cancelled' : actionModalType === 'reject' ? 'Document Rejection Saved' : 'Document Placed On Hold'}
               </h3>
               <p className="text-xs text-slate-500 font-medium">
                 Stage sign-off recorded for <span className="font-bold text-slate-800">{document?.invoice_number || document?.id}</span>.

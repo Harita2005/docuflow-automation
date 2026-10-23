@@ -250,10 +250,9 @@ export default function LoginPage({
       // Direct login if MFA not required
       if (data.token && data.user) {
         localStorage.setItem("authToken", data.token);
-        localStorage.setItem(
-          "currentUserUsername",
-          data.user.username
-        );
+        localStorage.setItem("currentUserUsername", data.user.username);
+        localStorage.setItem("currentUserRole", data.user.role || "");
+        localStorage.setItem("currentUserEmail", data.user.email || "");
 
         onLoginSuccess(
           data.user.id,
@@ -511,10 +510,9 @@ export default function LoginPage({
 
       // Store existing JWT
       localStorage.setItem("authToken", data.token);
-      localStorage.setItem(
-        "currentUserUsername",
-        data.user.username
-      );
+      localStorage.setItem("currentUserUsername", data.user.username);
+      localStorage.setItem("currentUserRole", data.user.role || "");
+      localStorage.setItem("currentUserEmail", data.user.email || "");
 
       onLoginSuccess(
         data.user.id,

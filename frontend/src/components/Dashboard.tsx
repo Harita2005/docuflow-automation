@@ -119,7 +119,8 @@ export default function Dashboard({
 
   // Filter documents strictly by assigned user if not admin
   const isAssignedToUser = (doc: any) => {
-    if (currentUserRole === "admin") return true;
+    const rHandle = (currentUserRole || "").toLowerCase().trim();
+    if (rHandle === "admin" || rHandle === "manager" || rHandle === "finance_manager") return true;
     if (doc.is_current_approver) return true;
 
     const uHandle = (currentUserUsername || "").toLowerCase().trim();
@@ -127,10 +128,22 @@ export default function Dashboard({
     const approverStr = (doc.assigned_approver || "").toLowerCase();
     const pool = approverStr.split(",").map((s: string) => s.trim());
 
+    const roleAliases: Record<string, string[]> = {
+      admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
+      manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
+      finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
+      accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
+      employee: ["employee", "standard employee", "standard_employee"]
+    };
+    const activeAliases = roleAliases[rHandle] || [rHandle];
+
     if (uHandle && (pool.includes(uHandle) || pool.some((p: string) => p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (eHandle && (pool.includes(eHandle) || pool.some((p: string) => p.includes(eHandle)))) return true;
+    if (rHandle && pool.some((p: string) => activeAliases.includes(p) || activeAliases.some((a: string) => p.includes(a) || a.includes(p)))) return true;
 
-    if (doc.status === "Data Verification Pending" && (currentUserRole === "ap_executive" || currentUserRole === "executive")) return true;
+    if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
     return false;
   };
 
@@ -171,15 +184,25 @@ export default function Dashboard({
     return isAssignedToUser(d) && isPendingStatus(d.status);
   };
 
-  const pendingCount = baseDocs.filter(isPendingActionForUser).length;
-  const holdCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
-  const rejectedCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
-  const progressCount = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
-  const approvedCount = _stats?.approvedDocuments !== undefined
-    ? Number(_stats.approvedDocuments)
-    : (currentUserRole === "admin"
-        ? displayDocs.filter(d => isApprovedStatus(d.status)).length
-        : displayDocs.filter(d => isApprovedStatus(d.status) && d.has_approved).length);
+  const calculatedPending = baseDocs.filter(isPendingActionForUser).length;
+  const statsPending = Number(_stats?.pendingApprovals ?? _stats?.pendingDocuments ?? 0);
+  const pendingCount = Math.max(calculatedPending, statsPending);
+
+  const calculatedHold = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
+  const statsHold = Number(_stats?.holdDocuments ?? 0);
+  const holdCount = Math.max(calculatedHold, statsHold);
+
+  const calculatedRejected = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
+  const statsRejected = Number(_stats?.rejectedDocuments ?? 0);
+  const rejectedCount = Math.max(calculatedRejected, statsRejected);
+
+  const calculatedProgress = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
+  const statsProgress = Number(_stats?.pendingDocuments ?? 0);
+  const progressCount = Math.max(calculatedProgress, statsProgress);
+
+  const calculatedApproved = displayDocs.filter(d => isApprovedStatus(d.status)).length;
+  const statsApproved = Number(_stats?.approvedDocuments ?? 0);
+  const approvedCount = Math.max(calculatedApproved, statsApproved);
 
   const activeTotal = pendingCount + holdCount + rejectedCount;
   const pendingPercent = activeTotal > 0 ? Math.round((pendingCount / activeTotal) * 100) : 0;

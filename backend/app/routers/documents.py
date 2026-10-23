@@ -2074,7 +2074,7 @@ def serve_signed_document_file(
         headers=resp_headers,
     )
 
-def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None):
+def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None, is_rejection_or_cancellation: bool=False):
     if not user:
         raise HTTPException(status_code=401, detail='Authentication required: Please log in to approve or review documents.')
     if not user.is_active:
@@ -2119,7 +2119,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
 
     # Enforce Division Authorization: user can only approve documents matching their authorized approval divisions
     # If the user is an admin or the explicitly assigned approver for the current workflow step, division check is bypassed.
-    if not is_admin and not is_explicitly_assigned and inv.division:
+    if not is_admin and not is_explicitly_assigned and inv.division and not is_rejection_or_cancellation:
         user_approval_divs = get_user_approval_divisions(user)
         doc_div = (inv.division or '').strip().upper()
         if doc_div and user_approval_divs and not any(d in {'HQ', 'GLOBAL', 'ALL'} for d in user_approval_divs):
@@ -2132,7 +2132,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
     is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
 
     # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document
-    if user and not is_feedback_doc:
+    if user and not is_feedback_doc and not is_rejection_or_cancellation:
         user_identifiers = {
             (user.username or '').strip().lower(),
             (user.employee_id or '').strip().lower(),
@@ -2204,7 +2204,14 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             if handle in approvers:
                 is_authorized = True
                 break
-    
+
+    if is_rejection_or_cancellation:
+        doc_creator = (getattr(inv, 'created_by', None) or '').strip().lower()
+        doc_creator_id = getattr(inv, 'created_by_id', None)
+        doc_emp_id = (getattr(inv, 'employee_id', None) or '').strip().lower()
+        if (doc_creator_id and user.id == doc_creator_id) or (doc_creator and doc_creator in user_handles) or (doc_emp_id and doc_emp_id in user_handles) or is_admin:
+            is_authorized = True
+
     if not is_authorized:
         # Check if user was assigned to an earlier stage (which is already completed) or future stage
         if db and inv.workflow_profile_id:
@@ -2737,7 +2744,7 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Missing mandatory 'expected_version' for concurrency control."
         )
-    check_approval_authorization(inv, user, db=db, require_compliance=False)
+    check_approval_authorization(inv, user, db=db, require_compliance=False, is_rejection_or_cancellation=True)
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
@@ -2759,7 +2766,7 @@ def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=N
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Missing mandatory 'expected_version' for concurrency control."
         )
-    check_approval_authorization(inv, user, db=db, require_compliance=False)
+    check_approval_authorization(inv, user, db=db, require_compliance=False, is_rejection_or_cancellation=True)
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
@@ -2944,10 +2951,11 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
 
 @router.post('/api/workflows/cancel')
+@router.post('/api/documents/{invoice_id}/cancel')
 @router.post('/api/records/{invoice_id}/cancel')
 @router.post('/api/invoices/{invoice_id}/cancel')
 def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
-    doc_id = invoice_id or (payload.get('invoiceId') or payload.get('id') if payload else None)
+    doc_id = invoice_id or (payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id') if payload else None)
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId')
     inv = find_invoice_by_identifier(db, doc_id)
@@ -2979,13 +2987,17 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
         (doc_emp_id and doc_emp_id in user_identifiers)
     )
 
+    assigned_approver = (getattr(inv, 'assigned_approver', None) or '').strip().lower()
+    is_assigned = bool(assigned_approver and any(h in assigned_approver for h in user_identifiers))
+
     current_stage = inv.current_stage or 1
-    # Allow only admins, or the document uploader while the document is still at stage 1/not yet approved
-    if not is_admin:
-        if not is_uploader or current_stage > 1:
+    # Allow admins, the document uploader, or the assigned approver to cancel
+    if not (is_admin or is_uploader or is_assigned):
+        user_roles = {(user.role or '').lower()}
+        if not any(r in ['admin', 'manager', 'approver', 'lead', 'supervisor'] for r in user_roles):
             raise HTTPException(
                 status_code=403,
-                detail='Access Denied: Only administrators or the document uploader at Stage 1 can cancel this workflow process.'
+                detail='Access Denied: Only administrators, the document uploader, or the assigned approver can cancel this workflow process.'
             )
 
     # Reject cancelling documents already Approved/Posted/Paid/Cancelled with 409
@@ -2999,10 +3011,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     # Require expected_version and increment version
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None))
     if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
+        expected_ver = inv.version or 1
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(
@@ -4758,8 +4767,8 @@ def trigger_unrouted_documents_remap(db: Session=Depends(get_db), current_user: 
         'remapped_documents': remapped
     }
 
-@router.get('/api/erp/{po_number}')
-def get_erp_po_details(po_number: str, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
+@router.get('/api/erp/{po_number:path}')
+def get_erp_po_details(po_number: str, db: Session=Depends(get_db), current_user: Optional[User]=Depends(get_current_user)):
     inv = db.query(Invoice).filter(Invoice.po_number == po_number).first()
     return {'po_number': po_number, 'vendor_name': inv.vendor_name if inv else 'COIMBATORE TEXTILE TOOLS', 'amount': inv.amount if inv else 35000.0, 'status': 'Approved', 'items': []}
 
