@@ -827,7 +827,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_curr = False
         if is_active_flow and inv.assigned_approver and not has_appr:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
 
         # Status filter query parameter enforcement
         if status and isinstance(status, str):
@@ -1136,7 +1136,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
     if current_user and inv.assigned_approver and not has_appr:
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
         if is_active_flow:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver)
+            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
     is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
     completed_by_peer = False
     curr_stg = inv.current_stage or 1

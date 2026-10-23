@@ -42,6 +42,7 @@ export default function Dashboard({
 }: DashboardProps) {
   const [activeDocType, setActiveDocType] = useState<string>("ALL");
   const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected'>('pending');
+  const [pendingScope, setPendingScope] = useState<'my' | 'all'>('my');
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [timeRange, setTimeRange] = useState<string>("ALL TIME");
   const [customFromDate, setCustomFromDate] = useState<string>("");
@@ -117,16 +118,15 @@ export default function Dashboard({
   // Exclude Customer Feedback records from AP Invoice Dashboard (they live exclusively in Customer Feedback Hub)
   const displayDocs = rawDisplayDocs.filter(d => !isCustomerFeedbackDoc(d));
 
-  // Filter documents strictly by assigned user if not admin
+  // Filter documents strictly by assigned user without universal admin bypass
   const isAssignedToUser = (doc: any) => {
-    const rHandle = (currentUserRole || "").toLowerCase().trim();
-    if (rHandle === "admin" || rHandle === "manager" || rHandle === "finance_manager") return true;
     if (doc.is_current_approver) return true;
 
     const uHandle = (currentUserUsername || "").toLowerCase().trim();
     const eHandle = (currentUserEmail || "").toLowerCase().trim();
+    const rHandle = (currentUserRole || "").toLowerCase().trim();
     const approverStr = (doc.assigned_approver || "").toLowerCase();
-    const pool = approverStr.split(",").map((s: string) => s.trim());
+    const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
 
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
@@ -137,13 +137,57 @@ export default function Dashboard({
       accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
       employee: ["employee", "standard employee", "standard_employee"]
     };
-    const activeAliases = roleAliases[rHandle] || [rHandle];
+    const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
 
     if (uHandle && (pool.includes(uHandle) || pool.some((p: string) => p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (eHandle && (pool.includes(eHandle) || pool.some((p: string) => p.includes(eHandle)))) return true;
     if (rHandle && pool.some((p: string) => activeAliases.includes(p) || activeAliases.some((a: string) => p.includes(a) || a.includes(p)))) return true;
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
+    return false;
+  };
+
+  // Strictly check if current logged-in user is the actual approver for the document's CURRENT pending stage
+  const isActionRequiredForUser = (doc: any): boolean => {
+    if (doc.has_approved) return false;
+    if (!isPendingStatus(doc.status)) return false;
+
+    // 1. Direct current approver flag from backend (evaluated without admin bypass)
+    if (doc.is_current_approver) return true;
+
+    // 2. Direct match with current user's username or email against current stage's assigned approver
+    const uHandle = (currentUserUsername || "").toLowerCase().trim();
+    const eHandle = (currentUserEmail || "").toLowerCase().trim();
+    const rHandle = (currentUserRole || "").toLowerCase().trim();
+    const approverStr = (doc.assigned_approver || "").toLowerCase();
+    const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
+
+    if (uHandle && (pool.includes(uHandle) || pool.some((p: string) => p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (eHandle && (pool.includes(eHandle) || pool.some((p: string) => p === eHandle || p.includes(eHandle)))) return true;
+
+    // 3. Stage-specific role match (only when stage is assigned specifically by role name, not universal bypass)
+    const roleAliases: Record<string, string[]> = {
+      admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
+      manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
+      accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
+      dept_mgr: ["department manager", "dept_mgr", "department_mgr", "hod"],
+      div_hod: ["division hod", "div_hod", "division_head", "hod"],
+      gm: ["general manager", "gm", "general_manager"],
+      jmd: ["joint managing director", "jmd", "joint_managing_director"],
+      md: ["managing director", "md", "managing_director"],
+      finance_auditor: ["finance & internal auditor", "finance and internal auditor", "finance_auditor", "finance auditor", "auditor", "internal auditor"],
+      employee: ["employee", "standard employee", "standard_employee"]
+    };
+
+    if (rHandle && rHandle !== "admin" && rHandle !== "superadmin") {
+      const activeAliases = roleAliases[rHandle] || [rHandle];
+      if (pool.some((p: string) => activeAliases.includes(p))) {
+        return true;
+      }
+    }
+
     return false;
   };
 
@@ -178,27 +222,28 @@ export default function Dashboard({
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
   const baseDocs = displayDocs.filter(d => !isApprovedStatus(d.status));
 
-  // Pending action required helper: Must be active, assigned to user, and user must NOT have already approved it
-  const isPendingActionForUser = (d: any) => {
-    if (d.has_approved) return false;
-    return isAssignedToUser(d) && isPendingStatus(d.status);
-  };
+  // Pending documents: My Pending (Action Required by current user) vs All Company Pending
+  const myPendingDocs = useMemo(() => {
+    return baseDocs.filter(isActionRequiredForUser);
+  }, [baseDocs, currentUserUsername, currentUserEmail, currentUserRole]);
 
-  const calculatedPending = baseDocs.filter(isPendingActionForUser).length;
-  const statsPending = Number(_stats?.pendingApprovals ?? _stats?.pendingDocuments ?? 0);
-  const pendingCount = Math.max(calculatedPending, statsPending);
+  const allPendingDocs = useMemo(() => {
+    return baseDocs.filter(d => isPendingStatus(d.status));
+  }, [baseDocs]);
 
-  const calculatedHold = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
-  const statsHold = Number(_stats?.holdDocuments ?? 0);
-  const holdCount = Math.max(calculatedHold, statsHold);
+  const activePendingDocs = pendingScope === "all" ? allPendingDocs : myPendingDocs;
+  const pendingCount = activePendingDocs.length;
 
-  const calculatedRejected = baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
-  const statsRejected = Number(_stats?.rejectedDocuments ?? 0);
-  const rejectedCount = Math.max(calculatedRejected, statsRejected);
+  const isSuperUser = currentUserRole === "admin" || currentUserRole === "manager" || currentUserRole === "finance_manager";
 
-  const calculatedProgress = baseDocs.filter(d => (isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
-  const statsProgress = Number(_stats?.pendingDocuments ?? 0);
-  const progressCount = Math.max(calculatedProgress, statsProgress);
+  const calculatedHold = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
+  const holdCount = calculatedHold;
+
+  const calculatedRejected = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
+  const rejectedCount = calculatedRejected;
+
+  const calculatedProgress = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
+  const progressCount = calculatedProgress;
 
   const calculatedApproved = displayDocs.filter(d => isApprovedStatus(d.status)).length;
   const statsApproved = Number(_stats?.approvedDocuments ?? 0);
@@ -215,10 +260,10 @@ export default function Dashboard({
 
   // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected)
   const currentStatusDocs = kpiFilter === 'hold'
-    ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
+    ? baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
-      ? baseDocs.filter(d => (isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status))
-      : baseDocs.filter(isPendingActionForUser);
+      ? baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status))
+      : activePendingDocs;
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {
@@ -251,7 +296,7 @@ export default function Dashboard({
   };
 
   // Dynamic Doc Type Pills Filter list for the current active queue
-  const currentQueueLabel = `ALL ${kpiFilter.toUpperCase()}`;
+  const currentQueueLabel = kpiFilter === 'pending' ? (pendingScope === 'my' ? 'MY PENDING' : 'ALL PENDING') : `ALL ${kpiFilter.toUpperCase()}`;
 
   // Dynamically group currentStatusDocs by document_type (no hardcoding)
   const docTypeCountsMap = useMemo(() => {
@@ -284,6 +329,7 @@ export default function Dashboard({
       activeDocType !== "ALL" &&
       activeDocType !== "ALL DOCUMENTS" &&
       activeDocType !== "ALL PENDING" &&
+      activeDocType !== "MY PENDING" &&
       activeDocType !== "ALL HOLD" &&
       activeDocType !== "ALL REJECTED"
     ) {
@@ -390,8 +436,8 @@ export default function Dashboard({
         
         {/* Card 1: PENDING (Filter in Dashboard) */}
         <div 
-          onClick={() => { setKpiFilter('pending'); setActiveDocType('ALL'); }}
-          title="Click to show Pending documents in Dashboard"
+          onClick={() => { setKpiFilter('pending'); setPendingScope('my'); setActiveDocType('ALL'); }}
+          title="Click to show your Pending documents in Dashboard"
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
             kpiFilter === 'pending'
               ? 'border-[#FFBE00] ring-2 ring-[#FFBE00]/40 bg-[#FFFDF5]'
@@ -423,7 +469,7 @@ export default function Dashboard({
               {pendingCount}
             </span>
             <span className="text-[8px] font-extrabold text-[#D97706] bg-[#FFF7E2] px-1.5 py-0.5 rounded border border-[#FDE68A]/60">
-              {pendingPercent}% OF ACTIVE
+              {pendingScope === 'all' ? 'COMPANY QUEUE' : 'ACTION REQUIRED'}
             </span>
           </div>
 
@@ -436,7 +482,7 @@ export default function Dashboard({
               />
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>IN DASHBOARD</span>
+              <span>{pendingScope === 'all' ? 'COMPANY PENDING' : 'MY PENDING'}</span>
               <span>{pendingCount} OF {activeTotal}</span>
             </div>
           </div>
@@ -674,14 +720,56 @@ export default function Dashboard({
       <div className="bg-white border border-[#E8E4DA] rounded-[12px] p-3 sm:p-3.5 shadow-2xs space-y-2.5">
         
         {/* Header & Date Filter */}
-        <div className="flex items-center justify-between pb-2 border-b border-[#EAE6DD]">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-[#003F28]" />
-            <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display flex items-center">
-              {kpiFilter === 'pending' && `PENDING DOCUMENTS (${filteredDocs.length})`}
-              {kpiFilter === 'hold' && `HOLD DOCUMENTS (${filteredDocs.length})`}
-              {kpiFilter === 'rejected' && `REJECTED DOCUMENTS (${filteredDocs.length})`}
-            </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-[#EAE6DD] gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-[#003F28]" />
+              <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display flex items-center">
+                {kpiFilter === 'pending' && (pendingScope === 'my' ? `MY PENDING DOCUMENTS (${filteredDocs.length})` : `ALL PENDING DOCUMENTS (${filteredDocs.length})`)}
+                {kpiFilter === 'hold' && `HOLD DOCUMENTS (${filteredDocs.length})`}
+                {kpiFilter === 'rejected' && `REJECTED DOCUMENTS (${filteredDocs.length})`}
+              </h2>
+            </div>
+
+            {/* Scope Toggle for Pending (My Pending vs All Pending) */}
+            {kpiFilter === 'pending' && (
+              <div className="inline-flex items-center bg-[#FAF8F3] border border-[#E8E4DA] rounded-md p-0.5 text-[9px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setPendingScope('my'); setActiveDocType('ALL'); }}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1 ${
+                    pendingScope === 'my'
+                      ? 'bg-[#003F28] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                  title="Show only documents that need your approval at the current stage"
+                >
+                  <span>My Pending</span>
+                  <span className={`px-1 py-0.2 rounded text-[7.5px] font-mono font-bold ${
+                    pendingScope === 'my' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
+                  }`}>
+                    {myPendingDocs.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPendingScope('all'); setActiveDocType('ALL'); }}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1 ${
+                    pendingScope === 'all'
+                      ? 'bg-[#003F28] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                  title="Show all company pending documents"
+                >
+                  <span>All Pending</span>
+                  <span className={`px-1 py-0.2 rounded text-[7.5px] font-mono font-bold ${
+                    pendingScope === 'all' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
+                  }`}>
+                    {allPendingDocs.length}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Date Filter Dropdown */}
@@ -876,16 +964,26 @@ export default function Dashboard({
               </div>
             ))
           ) : (
-            <div className="py-6 text-center text-slate-400 bg-[#FAF8F3]/60 rounded-md border border-dashed border-[#E8E4DA]">
-              <p className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
-                No documents found for status: {kpiFilter.toUpperCase()}
+            <div className="py-8 text-center text-slate-400 bg-[#FAF8F3]/60 rounded-md border border-dashed border-[#E8E4DA] px-4">
+              <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                {kpiFilter === 'pending' && pendingScope === 'my'
+                  ? "No Pending Approvals Assigned to You"
+                  : `No documents found for status: ${kpiFilter.toUpperCase()}`}
               </p>
-              <button 
-                onClick={() => { setKpiFilter('pending'); setActiveDocType('ALL'); }}
-                className="mt-1 text-[8.5px] font-bold text-[#003F28] underline cursor-pointer"
-              >
-                View Pending Documents
-              </button>
+              <p className="text-[9.5px] text-slate-500 mt-1 max-w-md mx-auto">
+                {kpiFilter === 'pending' && pendingScope === 'my'
+                  ? "All caught up! You have no documents currently awaiting your stage approval."
+                  : "Try resetting your document type or date range filters."}
+              </p>
+              {kpiFilter === 'pending' && pendingScope === 'my' && allPendingDocs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setPendingScope('all'); setActiveDocType('ALL'); }}
+                  className="mt-2.5 inline-flex items-center gap-1 px-3 py-1 bg-[#003F28] hover:bg-[#002F1E] text-white text-[9.5px] font-bold rounded shadow-2xs transition cursor-pointer"
+                >
+                  View All Company Pending ({allPendingDocs.length})
+                </button>
+              )}
             </div>
           )}
         </div>
