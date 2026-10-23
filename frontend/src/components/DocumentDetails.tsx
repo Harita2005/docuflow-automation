@@ -2002,11 +2002,26 @@ export default function DocumentDetails({
       const headers: any = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/checklist-state`, {
+      const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/checklist`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ checked_items })
+        body: JSON.stringify({
+          checked_items,
+          stage_num: document.current_stage || 1,
+          stage_name: activeApprovalLog?.current_step_name || undefined
+        })
       });
+      if (!res.ok) {
+        await fetch(`/api/documents/${encodeURIComponent(document.id)}/checklist-state`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            checked_items,
+            stage_num: document.current_stage || 1,
+            stage_name: activeApprovalLog?.current_step_name || undefined
+          })
+        });
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         showToast(`⚠️ Checklist save failed: ${errData.detail || 'Server error'}`, "error");
@@ -2027,7 +2042,16 @@ export default function DocumentDetails({
     if (isSubmittingRef.current || actionLoading) return;
     const hasDocAttachment = Boolean(iframeSrc);
     const isStage1Attachment = (document?.current_stage || 1) === 1 || (activeApprovalLog?.stage_name || '').toUpperCase().includes('ATTACHMENT');
-    const checkedCount = effectiveChecklist.filter(item => Boolean(checkedStates[item])).length;
+    const updatedChecked = { ...checkedStates };
+    if (hasDocAttachment) {
+      effectiveChecklist.forEach(item => {
+        if (/document/i.test(item) && /(attach|upload|pdf)/i.test(item) && !updatedChecked[item]) {
+          updatedChecked[item] = true;
+        }
+      });
+      setCheckedStates(updatedChecked);
+    }
+    const checkedCount = effectiveChecklist.filter(item => Boolean(updatedChecked[item])).length;
     const totalCount = effectiveChecklist.length;
     const allItemsChecked = totalCount === 0 || checkedCount === totalCount;
 
@@ -2063,7 +2087,7 @@ export default function DocumentDetails({
           expected_version: expectedVersion,
           comments: commentsToSend,
           checklistVerified: true,
-          verifiedItems: Object.keys(checkedStates).filter(k => checkedStates[k])
+          verifiedItems: Object.keys(updatedChecked).filter(k => updatedChecked[k])
         }),
       });
       if (response.ok) {

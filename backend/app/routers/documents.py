@@ -2074,7 +2074,7 @@ def serve_signed_document_file(
         headers=resp_headers,
     )
 
-def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None, is_rejection_or_cancellation: bool=False):
+def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optional[Session]=None, require_compliance: bool=True, expected_stage: Optional[int]=None, is_rejection_or_cancellation: bool=False, verified_items: Optional[List[str]]=None):
     if not user:
         raise HTTPException(status_code=401, detail='Authentication required: Please log in to approve or review documents.')
     if not user.is_active:
@@ -2284,12 +2284,37 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         else:
             checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
             if not checklist_items:
+                checklist_items = db.query(InvoiceChecklistState).filter(
+                    InvoiceChecklistState.invoice_id == inv.id,
+                    func.lower(InvoiceChecklistState.stage_name) == current_step_name.lower()
+                ).all()
+            if not checklist_items:
+                checklist_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id).all()
+            if not checklist_items:
                 for t_text in configured_items:
                     item = InvoiceChecklistState(invoice_id=inv.id, stage_name=current_step_name, item_text=t_text, is_checked=False, is_mandatory=True)
                     db.add(item)
                     checklist_items.append(item)
                 db.commit()
         if checklist_items and not is_feedback_doc:
+            if has_attachment:
+                for item in checklist_items:
+                    if not item.is_checked and 'document' in (item.item_text or '').lower() and any(w in (item.item_text or '').lower() for w in ['attach', 'upload', 'pdf', 'physical']):
+                        item.is_checked = True
+                        item.checked_by = user.employee_name or user.name if user else 'System Auto-Check'
+                        item.checked_at = datetime.datetime.utcnow()
+                db.commit()
+
+            if verified_items:
+                v_set = {str(x).strip().lower() for x in verified_items if x}
+                for item in checklist_items:
+                    if (item.item_text or '').strip().lower() in v_set:
+                        item.is_checked = True
+                        if not item.checked_by:
+                            item.checked_by = user.employee_name or user.name if user else 'Approver'
+                            item.checked_at = datetime.datetime.utcnow()
+                db.commit()
+
             unchecked_mandatory = [item for item in checklist_items if getattr(item, 'is_mandatory', True) and not item.is_checked]
             if unchecked_mandatory:
                 missing_items_str = ', '.join([f"'{item.item_text}'" for item in unchecked_mandatory])
@@ -2309,7 +2334,8 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
             detail="Missing mandatory 'expected_version' for concurrency control."
         )
     expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
-    check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None)
+    verified_items = payload.get('verifiedItems') or payload.get('checked_items') or payload.get('verified_items')
+    check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=int(expected_stage) if expected_stage is not None else None, verified_items=verified_items)
     
     approver_name = payload.get('approver') or payload.get('user') or payload.get('username')
     if not approver_name or approver_name.lower() in ['approver', 'reviewer', 'admin']:
@@ -2449,7 +2475,8 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
             detail="Missing mandatory 'expected_version' for concurrency control."
         )
     inv = find_invoice_by_identifier(db, invoice_id)
-    check_approval_authorization(inv, user, db=db, require_compliance=True)
+    verified_items = (payload.get('verifiedItems') or payload.get('checked_items') or payload.get('verified_items')) if payload else None
+    check_approval_authorization(inv, user, db=db, require_compliance=True, verified_items=verified_items)
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = action.remarks if action and action.remarks else 'Compliance items verified and signed off.'
     stage_name = action.stage_name if action and action.stage_name else f'Stage {inv.current_stage or 1}'
@@ -2584,7 +2611,8 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
     act_lower = action_type.lower()
     is_approving = 'approve' in act_lower or 'pass' in act_lower
     expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
-    check_approval_authorization(inv, user, db=db, require_compliance=is_approving, expected_stage=int(expected_stage) if expected_stage is not None else None)
+    verified_items = (payload.get('verifiedItems') or payload.get('checked_items') or payload.get('verified_items')) if payload else None
+    check_approval_authorization(inv, user, db=db, require_compliance=is_approving, expected_stage=int(expected_stage) if expected_stage is not None else None, verified_items=verified_items)
     comments = str(payload.get('comments') or payload.get('comment') or 'Action processed by desk operator.').strip()
     approver_name = payload.get('approver') or (user.employee_name or user.name if user else 'Desk Operator')
     stage_name = f'Stage {inv.current_stage or 1}'
@@ -4888,6 +4916,8 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
 
 @router.get('/api/invoices/{invoice_id}/checklist')
 @router.get('/api/documents/{invoice_id}/checklist')
+@router.get('/api/invoices/{invoice_id}/checklist-state')
+@router.get('/api/documents/{invoice_id}/checklist-state')
 def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_name: Optional[str]=None, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
@@ -4962,6 +4992,8 @@ def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_
 
 @router.post('/api/invoices/{invoice_id}/checklist')
 @router.post('/api/documents/{invoice_id}/checklist')
+@router.post('/api/invoices/{invoice_id}/checklist-state')
+@router.post('/api/documents/{invoice_id}/checklist-state')
 def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
@@ -4982,14 +5014,41 @@ def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends
     if payload.get('stage_name'):
         current_step_name = payload.get('stage_name')
     elif inv.workflow_profile_id:
-        step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == req_stage_num).first()
+        step = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+            WorkflowStepDefinition.stage_number == req_stage_num
+        ).first()
         if step and step.step_name:
             current_step_name = step.step_name
     items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == current_step_name).all()
+    if not items:
+        items = db.query(InvoiceChecklistState).filter(
+            InvoiceChecklistState.invoice_id == inv.id,
+            func.lower(InvoiceChecklistState.stage_name) == current_step_name.lower()
+        ).all()
+    if not items:
+        items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id).all()
+    if not items:
+        configured_items = resolve_checklist_items(db, inv, current_step_name)
+        if configured_items:
+            for t_text in configured_items:
+                new_item = InvoiceChecklistState(
+                    invoice_id=inv.id,
+                    stage_name=current_step_name,
+                    item_text=t_text,
+                    is_checked=(t_text in checked_items),
+                    is_mandatory=True
+                )
+                db.add(new_item)
+                items.append(new_item)
+            db.commit()
+
     username = user.employee_name or user.name or user.username if user else payload.get('username') or 'System Reviewer'
+    checked_set = set(str(c).strip().lower() for c in checked_items)
     for item in items:
         old_checked = item.is_checked
-        item.is_checked = item.item_text in checked_items
+        item.is_checked = (item.item_text in checked_items) or ((item.item_text or '').strip().lower() in checked_set)
         if item.is_checked and (not old_checked):
             item.checked_by = username
             item.checked_at = datetime.datetime.utcnow()
