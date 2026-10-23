@@ -151,11 +151,11 @@ def evaluate_rule_conditions(conditions_json: Optional[str], doc_context: Dict[s
             return True
         if isinstance(cond_data, dict):
             logical_op = cond_data.get('logicalOperator', cond_data.get('logic', 'AND')).upper()
-            conditions = cond_data.get('conditions', [])
+            conditions = cond_data.get('conditions') or []
             if not conditions:
                 return True
             results = []
-            for cond in conditions:
+            for cond in (conditions if isinstance(conditions, list) else []):
                 if 'conditions' in cond:
                     results.append(evaluate_rule_conditions(cond, doc_context))
                 else:

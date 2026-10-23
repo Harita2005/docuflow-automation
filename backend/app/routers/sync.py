@@ -1,6 +1,6 @@
 import logging
 logger = logging.getLogger(__name__)
-import os, re, threading, json, base64, datetime, logging
+import os, re, threading, json, base64, datetime
 from pathlib import Path
 from typing import List, Optional, Any, Union
 from pydantic import BaseModel
@@ -1230,9 +1230,9 @@ def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
         raise HTTPException(status_code=404, detail='production_data.json not found')
     with open(data_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    invoices_data = data.get('invoices', [])
+    invoices_data = data.get('invoices') or []
     seeded_count = 0
-    for inv in invoices_data:
+    for inv in (invoices_data if isinstance(invoices_data, list) else []):
         existing = db.query(Invoice).filter(Invoice.id == inv.get('id')).first()
         if not existing:
             new_inv = Invoice(id=inv.get('id'), doc_key=inv.get('doc_key'), doc_num=inv.get('doc_num'), doc_date=inv.get('doc_date'), vendor_name=inv.get('vendor_name'), vendor_code=inv.get('vendor_code'), vendor_gstin=inv.get('vendor_gstin'), invoice_number=inv.get('invoice_number'), invoice_date=inv.get('invoice_date'), po_number=inv.get('po_number'), amount=inv.get('amount', 0.0), base_amount=inv.get('base_amount', 0.0), tax_amount=inv.get('tax_amount', 0.0), currency=inv.get('currency') or 'INR', document_type=inv.get('document_type') or 'AP INVOICE', division=inv.get('division') or 'VCC', category=inv.get('category'), cost_center=inv.get('cost_center'), plant=inv.get('plant'), payment_terms=inv.get('payment_terms') or 'Net 30', status=inv.get('status') or 'Initiated (Attachment Status)', current_stage=inv.get('current_stage', 1), total_stages=inv.get('total_stages', 4), assigned_approver=inv.get('assigned_approver') or 'YUVASREE', workflow_profile_id=inv.get('workflow_profile_id') or 'EVOUCHER_INV SR10', file_url=inv.get('file_url'))

@@ -408,10 +408,10 @@ export default function DocumentDetails({
   }, [document?.id]);
 
   const activeDoc = freshDocument || document;
-  const canonicalDocType = useMemo(() => getCanonicalDocumentType(activeDoc || document), [activeDoc, document]);
+  const canonicalDocType = useMemo(() => getCanonicalDocumentType(activeDoc), [activeDoc, document]);
 
   const headerTitle = useMemo(() => {
-    const docObj = activeDoc || document;
+    const docObj = activeDoc;
     if (!docObj) return "Document Details";
     const rawType = docObj.document_type || docObj.Document_type || docObj.trans_type || docObj.doc_type || docObj.category;
     if (!rawType || typeof rawType !== "string" || !rawType.trim()) return "Document Details";
@@ -1864,8 +1864,8 @@ export default function DocumentDetails({
     setActionError(null);
     try {
       const token = getAuthToken() || localStorage.getItem("authToken") || localStorage.getItem("token");
-      const targetDocId = (activeDoc || document)?.id || document?.id;
-      const expectedVersion = (activeDoc || document)?.version ?? document?.version ?? 1;
+      const targetDocId = activeDoc?.id;
+      const expectedVersion = activeDoc?.version ?? 1;
 
       const endpoint = isStage1 ? `/api/workflows/cancel` : `/api/workflows/reject`;
       const response = await fetch(endpoint, {
@@ -1951,7 +1951,7 @@ export default function DocumentDetails({
           "Content-Type": "application/json",
           "Authorization": token ? `Bearer ${token}` : ""
         },
-        body: JSON.stringify(isReturn ? { invoiceId: (activeDoc || document)?.id || document?.id, expected_version: (activeDoc || document)?.version ?? document?.version ?? 1, comments: holdComment } : { remarks: holdComment, expected_version: (activeDoc || document)?.version ?? document?.version ?? 1 }),
+        body: JSON.stringify(isReturn ? { invoiceId: activeDoc?.id, expected_version: activeDoc?.version ?? 1, comments: holdComment } : { remarks: holdComment, expected_version: activeDoc?.version ?? 1 }),
       });
       if (response.ok) {
         clearDraft();
@@ -2069,10 +2069,10 @@ export default function DocumentDetails({
     setActionLoading(true);
     setActionError(null);
     try {
-      const docObj = activeDoc || document;
-      const docId = docObj?.id || document?.id;
-      const expectedVersion = docObj?.version ?? document?.version ?? 1;
-      const expectedStage = docObj?.current_stage ?? document?.current_stage ?? 1;
+      const docObj = activeDoc;
+      const docId = docObj?.id;
+      const expectedVersion = docObj?.version ?? 1;
+      const expectedStage = docObj?.current_stage ?? 1;
 
       const commentsToSend = approvalComment.trim() || `Approved Stage ${activeApprovalLog?.current_stage_number || expectedStage} (Document Attached & Compliance Checklist Verified)`;
       const response = await fetch(`/api/workflows/approve`, {
@@ -3364,7 +3364,7 @@ export default function DocumentDetails({
                   const isDocCancelled = docStatusLower.includes("cancel") || docStatusLower.includes("reject") || docStatusLower.includes("failed");
                   const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
 
-                  const docDivision = activeDoc?.division || (activeDoc as any)?.employee_division || document?.division || (document as any)?.employee_division || "";
+                  const docDivision = activeDoc?.division || (activeDoc as any)?.employee_division || "";
                   const resolvedStepRoleInfo = resolvePersonsInRoleForDivision(step.approver_target, docDivision, allUsers);
                   const poolMembers = (step.approver_target || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                   

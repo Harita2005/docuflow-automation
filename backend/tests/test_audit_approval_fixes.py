@@ -151,9 +151,8 @@ def test_aud01_approval_blocks_premature_approval_when_next_step_approver_empty(
         if pdf_path.exists():
             try:
                 pdf_path.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary test PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         db_session.delete(inv)
         db_session.delete(step1)
         db_session.delete(step2)
@@ -242,16 +241,14 @@ def test_aud03_complete_document_lifecycle_order_and_idempotency(db_session, tes
         if pdf_path.exists():
             try:
                 pdf_path.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary test PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         archived_path = get_archived_pdf_path(inv)
         if archived_path.exists():
             try:
                 archived_path.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary archived PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         db_session.delete(inv)
         db_session.commit()
 
@@ -326,9 +323,8 @@ def test_aud03_endpoints_invoke_complete_document_lifecycle(db_session, test_set
         if pdf1.exists():
             try:
                 pdf1.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary test PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         db_session.delete(inv1)
         db_session.delete(step1)
         db_session.delete(wf)
@@ -706,9 +702,8 @@ def test_aud02_double_approval_returns_409_conflict_and_no_duplicate_logs(db_ses
         if pdf.exists():
             try:
                 pdf.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary test PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
         db_session.delete(doc)
         db_session.delete(step1)
@@ -878,9 +873,8 @@ def test_aud02_real_concurrency_two_threads_one_succeeds_one_409(db_session, tes
         if pdf.exists():
             try:
                 pdf.unlink()
-            except Exception:
-                # Silently ignore cleanup error for temporary test PDF
-                pass
+            except Exception as exc:
+                logger.debug("Handled test cleanup exception: %s", exc)
         db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
         db_session.delete(doc)
         db_session.delete(step1)

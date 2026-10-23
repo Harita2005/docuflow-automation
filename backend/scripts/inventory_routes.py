@@ -17,14 +17,18 @@ def main():
             
             # Check dependencies
             deps = []
-            for d in (route.dependencies or []):
-                dep_fn = d.dependency
-                deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
+            for d in (getattr(route, "dependencies", None) or []):
+                dep_fn = getattr(d, "dependency", None)
+                if dep_fn:
+                    deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
             
             # Check parameter dependencies
-            for p in (route.dependant.dependencies or []):
-                dep_fn = p.call
-                deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
+            dep_obj = getattr(route, "dependant", None)
+            param_deps = getattr(dep_obj, "dependencies", None) or []
+            for p in param_deps:
+                dep_fn = getattr(p, "call", None)
+                if dep_fn:
+                    deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
 
             deps_unique = sorted(list(set(deps)))
 

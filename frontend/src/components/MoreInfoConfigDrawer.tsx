@@ -26,39 +26,6 @@ export interface ConfigFieldItem {
   sample_value?: string | number | null;
 }
 
-// Canonical set of field keys that are permanently displayed in the top summary row.
-// These MUST be excluded from the configurable More Info section.
-export const FIXED_SUMMARY_FIELD_KEYS = new Set([
-  "vendor_name",
-  "party_name",
-  "supplier_name",
-  "vendor",
-  "supplier",
-  "invoice_number",
-  "invoice_date",
-  "bill_number",
-  "bill_no",
-  "bill_date",
-  "invoice_num",
-  "invoice_num_date",
-  "doc_number",
-  "document_number",
-  "po_number",
-  "po_reference",
-  "purchase_order_number",
-  "po_no",
-  "amount",
-  "total_amount",
-  "total_gross",
-  "doc_total",
-  "gross_amount",
-  "invoice_total",
-]);
-
-export const isFixedSummaryField = (key?: string | null): boolean => {
-  if (!key) return false;
-  return FIXED_SUMMARY_FIELD_KEYS.has(key.toLowerCase().trim());
-};
 
 interface MoreInfoConfigDrawerProps {
   isOpen: boolean;

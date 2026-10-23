@@ -62,7 +62,6 @@ def trigger_async_integration_push(document_id: str, decision: str='APPROVED'):
         except Exception as e:
             logger.debug('Handled exception: %s', e)
     try:
-        import threading
         t = threading.Thread(target=_runner, daemon=True)
         t.start()
     except Exception as e:
@@ -4597,10 +4596,10 @@ def post_admin_erp_master(payload: dict, db: Session=Depends(get_db), current_us
 @router.post('/api/admin/erp-master/bulk')
 def post_admin_erp_master_bulk(payload: dict, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     _require_docs_admin(current_user, db)
-    new_items = payload.get('items', [])
-    items = load_erp_master_data()
-    existing_pos = {itm.get('po_number'): i for i, itm in enumerate(items)}
-    for itm in new_items:
+    new_items = payload.get('items') or []
+    items = load_erp_master_data() or []
+    existing_pos = {itm.get('po_number'): i for i, itm in enumerate(items) if isinstance(itm, dict)}
+    for itm in (new_items if isinstance(new_items, list) else []):
         po = itm.get('po_number')
         if po in existing_pos:
             items[existing_pos[po]] = itm

@@ -241,9 +241,9 @@ def test_simultaneous_approval_and_rejection():
     if pdf.exists():
         try:
             pdf.unlink()
-        except OSError:
+        except OSError as err:
             # Benign: temporary test artifact was already unlinked or cleaned up
-            pass
+            logger.debug("Cleanup ignore: %s", err)
     db.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete()
     db.delete(final_doc)
     s_del = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == wf_name).all()

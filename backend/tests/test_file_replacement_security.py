@@ -441,9 +441,8 @@ def staged_preview_file(file_security_setup):
     try:
         if file_path.exists():
             file_path.unlink()
-    except Exception:
-        # Silently ignore cleanup error for temporary staged test file
-        pass
+    except Exception as exc:
+            logger.debug("Handled test cleanup exception: %s", exc)
 
 
 def test_temp_preview_anonymous_rejected(staged_preview_file):

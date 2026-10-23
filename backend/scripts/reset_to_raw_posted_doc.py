@@ -20,7 +20,8 @@ rule = db.query(BusinessRule).filter(BusinessRule.rule_name == 'VCC_FLOW').first
 if rule:
     try:
         conds = json.loads(rule.conditions_json)
-        for c in conds.get('conditions', []):
+        cond_list = conds.get('conditions', []) if isinstance(conds, dict) else (conds if isinstance(conds, list) else [])
+        for c in cond_list:
             if c.get('field') == 'Cost Center':
                 c['value'] = 'IT-HARDWARE'
         rule.conditions_json = json.dumps(conds)

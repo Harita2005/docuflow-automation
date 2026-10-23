@@ -44,8 +44,8 @@ def main():
         if resp.status_code == 200:
             auth_data = resp.json()
             token = auth_data.get("access_token") or auth_data.get("token")
-    except requests.exceptions.RequestException:
-        pass
+    except requests.exceptions.RequestException as exc:
+        logger.debug("M2M login attempt bypassed: %s", exc)
 
     # If M2M endpoint not used or fallback needed, try standard login endpoint
     if not token:
