@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
-import { MoreInfoConfigDrawer, ConfigFieldItem } from "./MoreInfoConfigDrawer";
+import { MoreInfoConfigDrawer, type ConfigFieldItem } from "./MoreInfoConfigDrawer";
 import { getAuthToken } from "../utils/auth";
 
 
@@ -493,7 +493,7 @@ export default function DocumentDetails({
           "Authorization": token ? `Bearer ${token}` : ""
         },
         body: JSON.stringify({
-          expected_version: (activeDoc as any)?.version || (document as any)?.version || 1,
+          expected_version: (activeDoc as any)?.version || 1,
           user: currentUserUsername || currentUserEmail || "Reviewer",
           reason: `SLA Target Completion Date Exceeded (Target was: ${targetCompletionDate ? new Date(targetCompletionDate).toLocaleString() : 'Past Due'})`
         })

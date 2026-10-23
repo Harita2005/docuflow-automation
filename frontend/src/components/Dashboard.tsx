@@ -11,7 +11,7 @@ import {
   ArrowRight,
   Loader2
 } from "lucide-react";
-import { DbInvoice } from "../types";
+import type { DbInvoice } from "../types";
 // import REFERENCE_DOCUMENTS removed to avoid mock data
 
 interface DashboardProps {

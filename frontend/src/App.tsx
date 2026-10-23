@@ -273,7 +273,6 @@ export default function App() {
   const [documents, setDocuments] = useState<DbInvoice[]>([]);
   const [stats, setStats] = useState<any | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(true);
   const [_showPendingModal, setShowPendingModal] = useState(false);
 
   const isDocumentPendingForUser = (doc: DbInvoice) => {
@@ -354,7 +353,6 @@ export default function App() {
 
   // Sync aggregations stats
   const fetchStats = async (silent = false) => {
-    if (!silent) setLoadingStats(true);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
@@ -385,7 +383,6 @@ export default function App() {
       setStats({ totalDocuments: 0 });
     } finally {
       clearTimeout(timeoutId);
-      setLoadingStats(false);
     }
   };
 

@@ -178,7 +178,7 @@ export default function CustomerFeedbackDetails({
 
   // Fetch Stage Checklist items for Customer Feedback record
   useEffect(() => {
-    const docId = activeDoc?.id || document?.id;
+    const docId = activeDoc?.id;
     if (!docId) return;
 
     const fetchChecklist = async () => {
@@ -242,7 +242,7 @@ export default function CustomerFeedbackDetails({
       )
     );
 
-    const docId = activeDoc?.id || document?.id;
+    const docId = activeDoc?.id;
     if (!docId) return;
 
     try {
@@ -406,7 +406,7 @@ export default function CustomerFeedbackDetails({
     setActionError(null);
     setActionSuccess(null);
 
-    const docId = activeDoc?.id || document?.id;
+    const docId = activeDoc?.id;
     if (!docId) return;
 
     if (activeDoc?.due_date) {
@@ -493,7 +493,7 @@ export default function CustomerFeedbackDetails({
   };
 
   useEffect(() => {
-    const docId = activeDoc?.id || document?.id;
+    const docId = activeDoc?.id;
     if (!docId) return;
     const slaKey = `docuflow_sla_${docId}`;
     if (selectedAction) {
@@ -530,7 +530,7 @@ export default function CustomerFeedbackDetails({
   }, [targetCompletionDate, autoEscalated, activeDoc?.id]);
 
   const handleTriggerEscalation = async () => {
-    const docId = activeDoc?.id || document?.id;
+    const docId = activeDoc?.id;
     if (!docId || isSubmittingRef.current || actionLoading) return;
     isSubmittingRef.current = true;
     setActionLoading(true);
@@ -544,7 +544,7 @@ export default function CustomerFeedbackDetails({
           "Authorization": token ? `Bearer ${token}` : ""
         },
         body: JSON.stringify({
-          expected_version: (activeDoc as any)?.version || (document as any)?.version || 1,
+          expected_version: (activeDoc as any)?.version || 1,
           user: currentUserUsername || currentUserEmail || "Feedback Reviewer",
           reason: `SLA Target Completion Date Exceeded (Target was: ${targetCompletionDate ? new Date(targetCompletionDate).toLocaleString() : 'Past Due'})`
         })
@@ -638,7 +638,7 @@ export default function CustomerFeedbackDetails({
             setError("Failed to load customer feedback record");
           }
         }
-      } catch (err) {
+      } catch {
         if (!document) {
           setError("Network error loading feedback details");
         }
@@ -1136,7 +1136,7 @@ export default function CustomerFeedbackDetails({
         setApprovalComment("");
         setActionFieldError(null);
         try {
-          const docId = activeDoc.id || document?.id;
+          const docId = activeDoc.id;
           if (docId) localStorage.removeItem(`docuflow_sla_${docId}`);
         } catch {}
         if (onRefreshDocument) onRefreshDocument();
@@ -1280,7 +1280,7 @@ export default function CustomerFeedbackDetails({
       } else {
         setUploadPdfSuccess("✓ PDF preview loaded.");
       }
-    } catch (err: any) {
+    } catch {
       setUploadPdfSuccess("✓ PDF preview loaded.");
     } finally {
       setIsUploadingPdf(false);

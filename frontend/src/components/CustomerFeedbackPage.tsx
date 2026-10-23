@@ -17,7 +17,7 @@ import {
   Filter,
   SlidersHorizontal,
 } from "lucide-react";
-import { DbInvoice } from "../types";
+import type { DbInvoice } from "../types";
 import { formatDate, getCanonicalDocumentType } from "../utils/formatters";
 import CustomerFeedbackDetails from "./CustomerFeedbackDetails";
 
