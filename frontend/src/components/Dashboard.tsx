@@ -141,7 +141,7 @@ export default function Dashboard({
 
     if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
-    if (rHandle && pool.some((p: string) => activeAliases.includes(p) || activeAliases.some((a: string) => p.includes(a) || a.includes(p)))) return true;
+    if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p.includes(a) || a.includes(p))))) return true;
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
     return false;

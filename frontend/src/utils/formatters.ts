@@ -359,7 +359,7 @@ export function formatAssignedToDisplay(docOrAssigned?: any): string {
       docOrAssigned.custom_data?.assigned_to;
   }
 
-  if (!raw || typeof raw !== "string") {
+  if (!raw) {
     return "Unassigned";
   }
 
@@ -526,7 +526,7 @@ export function resolvePersonsInRoleForDivision(
       "";
   }
 
-  if (!rawTargetStr || typeof rawTargetStr !== "string" || !rawTargetStr.trim()) {
+  if (!rawTargetStr || !rawTargetStr.trim()) {
     return {
       displayName: "Unassigned",
       roleName: "Unassigned",

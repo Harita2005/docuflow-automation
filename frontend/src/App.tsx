@@ -307,7 +307,7 @@ export default function App() {
       const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
       if (uHandle && approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
       if (eHandle && approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p)))) return true;
-      if (rHandle && approvers.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
+      if (rHandle && approvers.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
     }
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;

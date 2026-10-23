@@ -84,7 +84,7 @@ export default function WorkTrackerPage({
   const getDocumentDates = (d: DbInvoice): string[] => {
     const dates: string[] = [];
     const parseCandidate = (val?: string | null) => {
-      if (!val || typeof val !== 'string') return;
+      if (!val) return;
       const str = val.trim();
       if (!str) return;
       const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -178,7 +178,7 @@ export default function WorkTrackerPage({
 
     if (uHandle && pool.some(p => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (eHandle && pool.some(p => p && p.includes(eHandle))) return true;
-    if (rHandle && pool.some(p => activeAliases.includes(p) || activeAliases.some(a => p.includes(a) || a.includes(p)))) return true;
+    if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
     return false;
   };
 

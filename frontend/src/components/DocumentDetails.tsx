@@ -144,17 +144,17 @@ const getCleanAuditRemarks = (text: string | null | undefined, steps: any[] = []
 
   // Also filter out any dynamic commands/instructions from step definitions
   (steps || []).forEach((s: any) => {
-    if (s?.command && typeof s.command === "string" && s.command.trim().length > 3) {
+    if (typeof s?.command === "string" && s.command.trim().length > 3) {
       if (cleaned.toLowerCase() === s.command.trim().toLowerCase()) {
         cleaned = "";
       }
     }
-    if (s?.instruction && typeof s.instruction === "string" && s.instruction.trim().length > 3) {
+    if (typeof s?.instruction === "string" && s.instruction.trim().length > 3) {
       if (cleaned.toLowerCase() === s.instruction.trim().toLowerCase()) {
         cleaned = "";
       }
     }
-    if (s?.action_required && typeof s.action_required === "string" && s.action_required.trim().length > 3) {
+    if (typeof s?.action_required === "string" && s.action_required.trim().length > 3) {
       if (cleaned.toLowerCase() === s.action_required.trim().toLowerCase()) {
         cleaned = "";
       }
@@ -414,7 +414,7 @@ export default function DocumentDetails({
     const docObj = activeDoc;
     if (!docObj) return "Document Details";
     const rawType = docObj.document_type || docObj.Document_type || docObj.trans_type || docObj.doc_type || docObj.category;
-    if (!rawType || typeof rawType !== "string" || !rawType.trim()) return "Document Details";
+    if (!rawType || !String(rawType).trim()) return "Document Details";
     return formatDocumentTypeDisplay(canonicalDocType) || "Document Details";
   }, [activeDoc, document, canonicalDocType]);
 
@@ -1027,7 +1027,7 @@ export default function DocumentDetails({
   };
 
   const isImageUrlValue = (valStr: string): boolean => {
-    if (!valStr || typeof valStr !== "string") return false;
+    if (!valStr) return false;
     const s = valStr.trim().toLowerCase();
     return (
       /\.(jpg|jpeg|png)($|\?)/i.test(s) ||
@@ -1886,7 +1886,6 @@ export default function DocumentDetails({
         clearDraft();
         setApprovalComment("");
         if (activeDoc) activeDoc.status = isStage1 ? "Cancelled" : "Rejected";
-        if (document) document.status = isStage1 ? "Cancelled" : "Rejected";
         showToast(isStage1 ? "✓ Document Process Cancelled Successfully!" : "✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
         onRefreshDocument();
