@@ -468,6 +468,18 @@ export default function ApprovedDocumentsPage({
   }, [isUsingServerData, serverDocs, fallbackFilteredDocs, currentPage, pageSize]);
 
   const totalRecordsCount = isUsingServerData ? serverTotalCount : fallbackFilteredDocs.length;
+
+  // Total amounts for displayed page and filtered set
+  const pageTotalAmount = useMemo(() => {
+    return displayedDocs.reduce((acc, doc) => acc + (Number(doc.amount) || 0), 0);
+  }, [displayedDocs]);
+
+  const filteredTotalAmount = useMemo(() => {
+    if (isUsingServerData) {
+      return serverDocs.reduce((acc, doc) => acc + (Number(doc.amount) || 0), 0);
+    }
+    return fallbackFilteredDocs.reduce((acc, doc) => acc + (Number(doc.amount) || 0), 0);
+  }, [isUsingServerData, serverDocs, fallbackFilteredDocs]);
   const totalPages = Math.ceil(totalRecordsCount / pageSize) || 1;
 
   // Active filter count (strictly 4 filters: Year, Month, Date, Doc Type)
@@ -649,6 +661,12 @@ export default function ApprovedDocumentsPage({
               }`}>
                 {totalRecordsCount} Approved
               </span>
+              {totalRecordsCount > 0 && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                  <span className="text-emerald-600 uppercase tracking-wide text-[9px]">Total:</span>
+                  <span className="font-mono text-emerald-900 font-bold">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500">
               Enterprise approval archive filtered by Year, Month, Date, and Document Type
@@ -1180,6 +1198,19 @@ export default function ApprovedDocumentsPage({
                 </tr>
               )}
             </tbody>
+            {displayedDocs.length > 0 && (
+              <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-semibold text-slate-800 text-[11px]">
+                <tr>
+                  <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px] text-slate-600 font-bold">
+                    Page Total ({displayedDocs.length} {displayedDocs.length === 1 ? 'Record' : 'Records'}):
+                  </td>
+                  <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-800 whitespace-nowrap text-[12.5px]">
+                    ₹{pageTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td colSpan={3} className="py-2.5 px-2.5"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 
@@ -1226,6 +1257,11 @@ export default function ApprovedDocumentsPage({
                 {totalRecordsCount}
               </span>
               <span>records</span>
+
+              <span className="text-slate-300 mx-1">|</span>
+              <span className="font-semibold text-slate-700">
+                Total Amount: <strong className="text-emerald-700 font-mono font-bold text-[11.5px]">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </span>
 
               <span className="text-slate-300 mx-1">|</span>
 

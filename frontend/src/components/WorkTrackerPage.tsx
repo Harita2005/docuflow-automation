@@ -404,6 +404,11 @@ export default function WorkTrackerPage({
 
   const tableHeaders = useMemo(() => getDynamicTableHeaders(effectiveDocType), [effectiveDocType]);
 
+  // Total amount of currently filtered and sorted records
+  const totalAmount = useMemo(() => {
+    return filteredAndSortedDocs.reduce((acc, doc) => acc + (Number(doc.amount) || 0), 0);
+  }, [filteredAndSortedDocs]);
+
   return (
     <div className="space-y-2 animate-fadeIn pb-8 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0 text-slate-800">
       
@@ -426,6 +431,14 @@ export default function WorkTrackerPage({
               {t}
             </button>
           ))}
+          {filteredAndSortedDocs.length > 0 && (
+            <div className="hidden sm:inline-flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[10px] font-bold shadow-2xs">
+              <span className="text-emerald-600 font-medium uppercase tracking-wide text-[9px]">Total Amount:</span>
+              <span className="font-mono text-[11px] font-bold text-emerald-900">
+                ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right: Search, Filter Dropdown, Sorting & Export */}
@@ -738,6 +751,19 @@ export default function WorkTrackerPage({
                 );
               })}
             </tbody>
+            {filteredAndSortedDocs.length > 0 && (
+              <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-semibold text-slate-800 text-[11px]">
+                <tr>
+                  <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px] text-slate-600 font-bold">
+                    Total Amount ({filteredAndSortedDocs.length} {filteredAndSortedDocs.length === 1 ? 'Record' : 'Records'}):
+                  </td>
+                  <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-800 whitespace-nowrap text-[12.5px]">
+                    ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td colSpan={3} className="py-2.5 px-2.5"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           {/* Empty State */}
@@ -764,15 +790,25 @@ export default function WorkTrackerPage({
 
         {/* Table Footer Summary Bar */}
         <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-          <span>
-            {filteredAndSortedDocs.length === 0 ? (
+          <div className="flex items-center gap-3">
+            <span>
+              {filteredAndSortedDocs.length === 0 ? (
               "No actionable documents"
             ) : filteredAndSortedDocs.length === 1 ? (
               <>Showing <strong className="text-slate-900 font-semibold">1</strong> of <strong className="text-slate-900 font-semibold">1</strong> actionable record</>
             ) : (
               <>Showing <strong className="text-slate-900 font-semibold">{filteredAndSortedDocs.length}</strong> actionable records</>
             )}
-          </span>
+            </span>
+            {filteredAndSortedDocs.length > 0 && (
+              <>
+                <span className="text-slate-300">|</span>
+                <span>
+                  Total Amount: <strong className="text-emerald-700 font-mono font-bold text-[11.5px]">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </span>
+              </>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 text-slate-500 text-[10.5px]">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <span>DocuFlow Active</span>
