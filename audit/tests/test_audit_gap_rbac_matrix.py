@@ -53,7 +53,7 @@ def test_deny_by_default_all_routes_require_authentication_or_whitelist():
 
         deps = []
         if hasattr(route, "dependant"):
-            for d in route.dependant.dependencies:
+            for d in (route.dependant.dependencies or []):
                 if hasattr(d, "call"):
                     deps.append(d.call.__name__)
 

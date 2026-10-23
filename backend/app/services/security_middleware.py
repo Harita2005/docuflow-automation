@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import ipaddress
 import os
 import time
@@ -64,7 +66,7 @@ def resolve_client_ip(request: Request) -> str:
                 return real_ip.strip()
             except ValueError:
                 # Invalid IP address in X-Real-IP header; fallback to direct peer IP
-                pass
+                logger.debug("Handled non-fatal exception")
 
     return direct_peer
 

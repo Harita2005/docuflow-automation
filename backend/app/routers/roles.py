@@ -236,7 +236,7 @@ def create_custom_permission(
     if not payload.supported_scopes:
         raise HTTPException(status_code=422, detail="At least one supported scope must be selected.")
     clean_scopes = []
-    for sc in payload.supported_scopes:
+    for sc in (payload.supported_scopes or []):
         sc_upper = sc.strip().upper()
         if sc_upper not in REGISTERED_SCOPES:
             raise HTTPException(
@@ -331,7 +331,7 @@ def update_custom_permission(
         if not payload.supported_scopes:
             raise HTTPException(status_code=422, detail="At least one supported scope must be selected.")
         clean_scopes = []
-        for sc in payload.supported_scopes:
+        for sc in (payload.supported_scopes or []):
             sc_upper = sc.strip().upper()
             if sc_upper not in REGISTERED_SCOPES:
                 raise HTTPException(status_code=422, detail=f"Invalid scope '{sc}'.")
@@ -589,7 +589,7 @@ def update_role_permissions(
     assigned_permissions = []
     seen_codes = set()
 
-    for p_code in payload.permission_codes:
+    for p_code in (payload.permission_codes or []):
         clean_code = p_code.strip()
         if not clean_code:
             continue

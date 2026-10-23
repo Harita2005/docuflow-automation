@@ -83,7 +83,7 @@ def validate_and_reconstruct_url(url: str) -> str:
             raise HTTPException(status_code=400, detail=f"Target host '{hostname}' is a prohibited private/internal IP.")
     except ValueError:
         # Not a raw IP address; will be resolved via DNS below
-        pass
+        logger.debug("Handled non-fatal exception")
 
     # Check port bounds
     try:

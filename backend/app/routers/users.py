@@ -53,7 +53,7 @@ def ensure_enterprise_divisions(db: Session):
                         break
             except Exception:
                 # Ignore JSON read/parse errors and fallback to next path or default list
-                pass
+                logger.debug("Handled non-fatal exception")
 
     if not div_list:
         div_list = [

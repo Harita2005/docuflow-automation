@@ -154,7 +154,7 @@ export default function LoginPage({
       return;
     }
 
-    const cleanDigits = identifier.replace(/[\s\-\(\)\+]/g, "");
+    const cleanDigits = identifier.replace(/[\s\-()+]/g, "");
     const isPhoneNumber =
       identifier.startsWith("+") ||
       (cleanDigits.length >= 10 &&

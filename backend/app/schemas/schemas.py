@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Any, Union
 import pydantic
 from pydantic import BaseModel, Field
@@ -22,8 +24,8 @@ class LoginRequest(BaseModel):
             import urllib.parse
             try:
                 data = dict(urllib.parse.parse_qsl(data))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
         if isinstance(data, dict):
             # Normalize case-insensitive username / identifier
             if not data.get("username"):

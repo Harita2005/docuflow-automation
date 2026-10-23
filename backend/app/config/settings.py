@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import re
 import socket
 from pathlib import Path
@@ -124,7 +126,7 @@ class Settings(BaseSettings):
                     return f"mssql+pyodbc://@localhost/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
             except Exception:
                 # Ignore connection check failure and proceed with configured connection parameters
-                pass
+                logger.debug("Handled non-fatal exception")
 
         if self.DB_USER and self.DB_PASSWORD:
             user = quote_plus(self.DB_USER)
@@ -259,17 +261,17 @@ class Settings(BaseSettings):
             self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
             # Benign: directory may already exist or environment may be read-only
-            pass
+            logger.debug("Handled non-fatal exception")
         try:
             self.PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
             # Benign: directory may already exist or environment may be read-only
-            pass
+            logger.debug("Handled non-fatal exception")
         try:
             self.APPROVED_PDF_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:
             # Benign: directory may already exist or environment may be read-only
-            pass
+            logger.debug("Handled non-fatal exception")
         return self
 
 # Global settings instance
@@ -287,7 +289,7 @@ for d in (settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_D
         d.mkdir(parents=True, exist_ok=True)
     except OSError:
         # Benign: directory creation may fail if path is read-only or in container test environment
-        pass
+        logger.debug("Handled non-fatal exception")
 
 
 # ---------------------------------------------------------------------------

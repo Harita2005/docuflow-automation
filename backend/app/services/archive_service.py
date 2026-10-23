@@ -292,7 +292,7 @@ def execute_database_archival(batch_size: int = 200, forced: bool = False) -> Di
                 db_prod.commit()
             except Exception:
                 # Silently ignore failure when saving error status to settings
-                pass
+                logger.debug("Handled non-fatal exception")
         return {"status": "FAILED", "error": err_msg}
     finally:
         db_prod.close()

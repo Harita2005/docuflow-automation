@@ -1,6 +1,6 @@
 import logging
 import datetime
-from typing import Tuple
+from typing import Tuple, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.database.models import Invoice, WorkflowStepDefinition, AuditLog, User

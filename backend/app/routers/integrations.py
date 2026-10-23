@@ -110,7 +110,7 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
                     valid_candidates.append(res_p)
             except (OSError, RuntimeError, ValueError, Exception):
                 # Intentionally ignored: path resolution or boundary validation on unresolvable path is skipped
-                pass
+                logger.debug("Handled non-fatal exception")
                 
     found_path = next((p for p in valid_candidates if p.is_file()), None)
     if not found_path and settings.APPROVED_PDF_DIR.exists():

@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import os, re, threading, json, base64, datetime, logging
 from pathlib import Path
 from typing import List, Optional, Any, Union
@@ -671,7 +673,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
 
     db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == target_inv.id).delete()
     if req.line_items:
-        for itm in req.line_items:
+        for itm in (req.line_items or []):
             db.add(InvoiceLineItem(invoice_id=target_inv.id, description=itm.get('description') or itm.get('item_description') or 'Line Item', quantity=float(itm.get('quantity') or 1.0), unit_price=float(itm.get('unit_price') or itm.get('amount') or 0.0), amount=float(itm.get('amount') or 0.0), warranty_text=itm.get('warranty_text'), serial_numbers=','.join(itm.get('serial_numbers')) if isinstance(itm.get('serial_numbers'), list) else itm.get('serial_numbers')))
     db.commit()
     already_started = bool(
@@ -776,7 +778,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                             attached_path = str(resolved_cand)
                     except Exception:
                         # Silently ignore candidate path resolution errors
-                        pass
+                        logger.debug("Handled non-fatal exception")
                     if not attached_path:
                         attached_path = cand_path
                 attached_filename = approved_candidate.file_name or (Path(cand_path).name if cand_path else f"{lookup_invoice_num}.pdf")
@@ -816,7 +818,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                         target_inv.file_size = approved_candidate.file_size
                 except Exception:
                     # Ignore error determining attached file size
-                    pass
+                    logger.debug("Handled non-fatal exception")
                 db.add(AuditLog(
                     invoice_id=target_inv.id,
                     user='Sync Engine (Auto-Attach)',

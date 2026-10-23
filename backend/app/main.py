@@ -10,9 +10,8 @@ from .config.settings import (
     validate_production_service_api_key,
     validate_production_file_url_signing_secret,
 )
-from .database.connection import SessionLocal
 from .services.mfa_service import invalidate_legacy_and_all_tickets
-from .routers.audit import prune_expired_audit_logs, router as audit_router
+from .routers.audit import router as audit_router
 from .routers.auth import router as auth_router
 from .routers.callback_integrations import router as callback_integrations_router
 from .routers.conditions import router as conditions_router

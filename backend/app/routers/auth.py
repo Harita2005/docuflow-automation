@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, Dict, Any, Union
 import logging
 import os
 import re
@@ -108,14 +108,14 @@ async def login(
         if "json" in content_type:
             try:
                 body_dict = await req.json()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
         elif "form" in content_type:
             try:
                 form = await req.form()
                 body_dict = dict(form)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
         if not body_dict:
             body_dict = dict(req.query_params)
 
@@ -133,8 +133,8 @@ async def login(
             if not expires_in_minutes and body_dict.get("expires_in_minutes"):
                 try:
                     expires_in_minutes = int(body_dict["expires_in_minutes"])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Handled non-fatal exception: %s", exc)
             if not force_login and body_dict.get("force_login"):
                 force_login = str(body_dict["force_login"]).lower() in ("true", "1")
             if not device_info and body_dict.get("device_info"):

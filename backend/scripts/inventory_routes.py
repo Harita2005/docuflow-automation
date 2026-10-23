@@ -17,12 +17,12 @@ def main():
             
             # Check dependencies
             deps = []
-            for d in route.dependencies:
+            for d in (route.dependencies or []):
                 dep_fn = d.dependency
                 deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
             
             # Check parameter dependencies
-            for p in route.dependant.dependencies:
+            for p in (route.dependant.dependencies or []):
                 dep_fn = p.call
                 deps.append(getattr(dep_fn, "__name__", str(dep_fn)))
 

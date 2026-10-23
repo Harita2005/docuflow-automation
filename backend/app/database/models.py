@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import datetime
 import json
 import uuid
@@ -468,7 +470,7 @@ class Document(Base):
                     return data.get("storage_status")
         except Exception:
             # Fall back to default storage status if custom_data parsing fails
-            pass
+            logger.debug("Handled non-fatal exception")
         return getattr(self, "_storage_status", "PENDING")
 
     @storage_status.setter
@@ -484,7 +486,7 @@ class Document(Base):
             self.custom_data = json.dumps(data)
         except Exception:
             # Silently ignore serialization error on custom_data
-            pass
+            logger.debug("Handled non-fatal exception")
 
     __table_args__ = (
         Index(

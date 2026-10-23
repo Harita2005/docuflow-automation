@@ -676,8 +676,8 @@ def rule_has_type_or_category_condition(rule: Any) -> bool:
                 f = sanitize_text(str(c.get('field', '')))
                 if f in ['documenttype', 'doctype', 'type', 'category', 'cat', 'categoryname', 'category_name']:
                     return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Handled non-fatal exception: %s", exc)
     return False
 
 def is_rule_type_compatible_with_document(rule: Any, document: Any, db: Optional[Session] = None) -> bool:
@@ -737,8 +737,8 @@ def is_rule_type_compatible_with_document(rule: Any, document: Any, db: Optional
                     norm_wf_type = normalize_document_type(raw_wf_type)
                     if raw_doc_type != norm_wf_type and cat_val != norm_wf_type:
                         return False
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Handled non-fatal exception: %s", exc)
 
     return True
 
@@ -1084,6 +1084,6 @@ def remap_unrouted_documents(db: Session) -> List[Dict[str, Any]]:
             broadcast_event('DOCUMENTS_AUTO_REMAPPED', {'count': len(remapped_results), 'documents': [r['document_id'] for r in remapped_results]})
         except Exception:
             # Broadcast is non-critical; suppress errors during event emission
-            pass
+            logger.debug("Handled non-fatal exception")
 
     return remapped_results

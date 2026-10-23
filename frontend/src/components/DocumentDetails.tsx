@@ -1885,8 +1885,8 @@ export default function DocumentDetails({
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
-        if (activeDoc) activeDoc.status = isStage1 ? "Cancelled" : activeDoc.status;
-        if (document) document.status = isStage1 ? "Cancelled" : document.status;
+        if (activeDoc) activeDoc.status = isStage1 ? "Cancelled" : "Rejected";
+        if (document) document.status = isStage1 ? "Cancelled" : "Rejected";
         showToast(isStage1 ? "✓ Document Process Cancelled Successfully!" : "✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
         onRefreshDocument();

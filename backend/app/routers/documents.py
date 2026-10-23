@@ -1,5 +1,5 @@
 import logging
-from app.constants.document_types import DocumentType, normalize_document_type, is_feedback_or_complaint
+from app.constants.document_types import is_feedback_or_complaint
 from app.services.rules_engine import infer_document_type, evaluate_business_rules_full, resolve_matching_rules
 import os
 import re
@@ -27,6 +27,7 @@ from app.database.models import (
     ChecklistRule,
     InAppNotification,
     Invoice,
+    DocumentLineItem,
     InvoiceChecklistState,
     NotificationProviderConfig,
     NotificationRaciMatrix,
@@ -115,7 +116,7 @@ def get_cached_workflow_steps(db: Session, profile_name: Optional[str]) -> list:
             db.expunge(s)
         except Exception:
             # Benign: step object may already be detached or expunged from session
-            pass
+            logger.debug("Handled non-fatal exception")
     with _WORKFLOW_STEPS_LOCK:
         _WORKFLOW_STEPS_CACHE[clean_prof] = {"steps": steps, "timestamp": now}
     return steps
@@ -724,7 +725,7 @@ def get_all_invoices(status: Optional[str] = Query(None), db: Session=Depends(ge
                 db.expunge(inv)
             except Exception:
                 # Benign: invoice object may already be detached or expunged from session
-                pass
+                logger.debug("Handled non-fatal exception")
         with _ADMIN_INVOICES_LOCK:
             _ADMIN_INVOICES_CACHE[cache_key] = {"data": invoices, "timestamp": now}
         return invoices
@@ -1106,14 +1107,14 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 loaded_items = json.loads(inv.line_items_json)
                 inv_dict_base['items'] = loaded_items
                 inv_dict_base['line_items'] = loaded_items
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
 
         try:
             db.expunge(inv)
         except Exception:
             # Benign: invoice object may already be detached or expunged from session
-            pass
+            logger.debug("Handled non-fatal exception")
 
         cached_payload = (inv, steps, steps_data, current_step_name, audit_logs_tuples, audit_trail_list, inv_dict_base)
         with _BASE_DOC_LOCK:
@@ -1222,7 +1223,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                             cand_resolved = str(resolved_cand)
                     except Exception:
                         # Silently ignore candidate path resolution errors
-                        pass
+                        logger.debug("Handled non-fatal exception")
                     if not cand_resolved:
                         cand_resolved = cand_path
 
@@ -1238,7 +1239,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                             inv.file_size = approved_candidate.file_size
                     except Exception:
                         # Ignore error reading candidate file size
-                        pass
+                        logger.debug("Handled non-fatal exception")
                     try:
                         db.commit()
                         db.refresh(inv)
@@ -1315,7 +1316,7 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
     try:
         raw_json = await req.json()
         if isinstance(raw_json, dict):
-            for field in raw_json:
+            for field in (raw_json or {}):
                 if field in FORBIDDEN_DOCUMENT_UPDATE_FIELDS:
                     raise HTTPException(
                         status_code=400,
@@ -1325,7 +1326,7 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate, req: Request, 
         raise
     except Exception:
         # Request body may not be JSON; proceed with payload model validation
-        pass
+        logger.debug("Handled non-fatal exception")
 
     # ISSUE 4: Require expected_version and enforce optimistic concurrency
     raw_expected = raw_json.get('expected_version') or raw_json.get('expectedVersion') if isinstance(raw_json, dict) else None
@@ -2033,7 +2034,7 @@ def serve_signed_document_file(
                 safe_path = cand
         except Exception:
             # Fall back to alternative file lookup if target_ref is invalid
-            pass
+            logger.debug("Handled non-fatal exception")
 
     if not safe_path and getattr(inv, 'file_name', None):
         try:
@@ -2042,7 +2043,7 @@ def serve_signed_document_file(
                 safe_path = cand
         except Exception:
             # Fall back to default filename pattern if inv.file_name resolution fails
-            pass
+            logger.debug("Handled non-fatal exception")
 
     raw_fname = inv.file_name or (safe_path.name if safe_path else f"{inv.id}.pdf")
     safe_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', raw_fname)
@@ -3018,7 +3019,6 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     assigned_approver = (getattr(inv, 'assigned_approver', None) or '').strip().lower()
     is_assigned = bool(assigned_approver and any(h in assigned_approver for h in user_identifiers))
 
-    current_stage = inv.current_stage or 1
     # Allow admins, the document uploader, or the assigned approver to cancel
     if not (is_admin or is_uploader or is_assigned):
         user_roles = {(user.role or '').lower()}
@@ -3260,7 +3260,7 @@ def serve_temp_preview(
                 ).filter(User.is_deleted == False, User.is_active == True).first()
         except Exception:
             # Ignore invalid or expired token query parameter; authentication check follows below
-            pass
+            logger.debug("Handled non-fatal exception")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required to preview staged files")
@@ -3439,16 +3439,16 @@ async def confirm_and_ingest_document(
         id=new_id,
         vendor_name=final_vendor,
         invoice_number=final_inv_no,
-        invoice_date=invoice_date or datetime.date.today().strftime('%Y-%m-%d'),
+        invoice_date=final_inv_date,
         amount=final_amount,
         base_amount=final_base,
         tax_amount=final_tax,
-        cgst=float(cgst or 0.0),
-        sgst=float(sgst or 0.0),
-        igst=float(igst or 0.0),
+        cgst=final_cgst,
+        sgst=final_sgst,
+        igst=final_igst,
         vendor_gstin=final_gstin,
         gstin=final_gstin,
-        po_number=(po_number or '').strip() or None,
+        po_number=final_po,
         division=user_div,
         plant=user_plant,
         category=document_type or 'PURCHASE',
@@ -3880,7 +3880,7 @@ async def upload_document_auto_workflow(
                 file_path.unlink()
             except Exception:
                 # Silently ignore failure to remove uploaded temporary file
-                pass
+                logger.debug("Handled non-fatal exception")
         raise HTTPException(
             status_code=422,
             detail=f"Automatic Workflow Matching Failed: No active business rule matched document criteria (Type: '{final_doc_type}', Division: '{user_div}', Amount: ₹{final_amount:,.2f}). Please verify business rules or use Manual Workflow Start."
@@ -3897,7 +3897,7 @@ async def upload_document_auto_workflow(
                 file_path.unlink()
             except Exception:
                 # Silently ignore failure to remove uploaded temporary file
-                pass
+                logger.debug("Handled non-fatal exception")
         rule_names = [f"'{r['rule_name']}' -> {r['target_workflow_id']}" for r in top_tier_matches]
         raise HTTPException(
             status_code=409,
@@ -3916,7 +3916,7 @@ async def upload_document_auto_workflow(
                 file_path.unlink()
             except Exception:
                 # Silently ignore failure to remove uploaded temporary file
-                pass
+                logger.debug("Handled non-fatal exception")
         raise HTTPException(
             status_code=422,
             detail=f"Automatic Workflow Matching Failed: Rule '{rule_name}' matched but has no target workflow configured. Workflow start aborted."
@@ -4856,7 +4856,7 @@ def resolve_checklist_items(db: Session, inv: Invoice, stage_name: str) -> List[
             ).first()
         except (ValueError, IndexError, Exception):
             # Intentionally ignored: stage string format cannot be parsed into an integer stage number
-            pass
+            logger.debug("Handled non-fatal exception")
     if not step and clean_stage.lower() in ('attachment status', 'stage 1'):
         step = db.query(WorkflowStepDefinition).filter(
             (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |

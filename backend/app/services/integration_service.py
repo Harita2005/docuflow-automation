@@ -32,7 +32,7 @@ def get_sync_retry_meta(inv: Document) -> Dict[str, Any]:
                 }
         except Exception:
             # Fall back to default retry status if error text is not JSON-formatted
-            pass
+            logger.debug("Handled non-fatal exception")
     return {
         "attempt_count": 1 if err_text else 0,
         "last_error": err_text,
@@ -47,7 +47,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
     """
     line_items = []
     if inv.line_items:
-        for item in inv.line_items:
+        for item in (inv.line_items or []):
             line_items.append({'id': item.id, 'item_code': item.item_code, 'description': item.description, 'quantity': float(item.quantity) if item.quantity is not None else 1.0, 'unit_price': float(item.unit_price) if item.unit_price is not None else 0.0, 'amount': float(item.amount) if item.amount is not None else 0.0, 'warranty_text': item.warranty_text, 'serial_numbers': item.serial_numbers})
     elif inv.line_items_json:
         try:
@@ -58,7 +58,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             logger.debug('Handled exception: %s', exc)
     checklists = []
     if inv.checklist_states:
-        for c in inv.checklist_states:
+        for c in (inv.checklist_states or []):
             checklists.append({'item_text': c.item_text, 'is_checked': bool(c.is_checked), 'checked_by': c.checked_by, 'checked_at': c.checked_at.isoformat() if c.checked_at else None, 'stage': getattr(c, 'stage_name', getattr(c, 'stage', None))})
     elif inv.checklist_state:
         try:
@@ -69,7 +69,7 @@ def build_universal_export_payload(inv: Document, base_url: str='') -> Dict[str,
             logger.debug('Handled exception: %s', exc)
     approval_trail = []
     if inv.approval_logs:
-        for log in sorted(inv.approval_logs, key=lambda x: x.timestamp or datetime.datetime.min):
+        for log in sorted(inv.approval_logs or [], key=lambda x: x.timestamp or datetime.datetime.min):
             approval_trail.append({'user': log.user, 'action': log.action, 'stage': log.stage, 'notes': log.notes, 'ip_address': log.ip_address, 'timestamp': log.timestamp.isoformat() if log.timestamp else None})
     custom_data = {}
     if inv.custom_data:

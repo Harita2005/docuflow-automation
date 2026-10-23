@@ -34,7 +34,7 @@ def get_encryption_key() -> bytes:
                 return bytes.fromhex(raw_key.strip())
             except ValueError:
                 # String was not valid hex; fall through to next format attempt
-                pass
+                logger.debug("Handled non-fatal exception")
         # Try base64 decode if valid
         if len(raw_bytes) == 44:
             try:
@@ -43,7 +43,7 @@ def get_encryption_key() -> bytes:
                     return decoded
             except Exception:
                 # String was not valid base64; fall through to hash fallback
-                pass
+                logger.debug("Handled non-fatal exception")
         # Fall back to SHA-256 hash to ensure exact 32-byte key
         return hashlib.sha256(raw_bytes).digest()
     elif isinstance(raw_key, bytes):
