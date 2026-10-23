@@ -9,6 +9,14 @@ class DocumentType(str, Enum):
     CREDIT_NOTE = "CREDIT NOTE"
 
 
+CANONICAL_DOCUMENT_TYPES = {
+    DocumentType.AP_INVOICE.value,
+    DocumentType.CUSTOMER_FEEDBACK.value,
+    DocumentType.CUSTOMER_COMPLAINT.value,
+    DocumentType.CREDIT_NOTE.value,
+}
+
+
 FEEDBACK_ALIASES = {
     "FEEDBACK",
     "CUSTOMER FEEDBACK",
@@ -66,9 +74,8 @@ def normalize_document_type(raw_val: Optional[str]) -> str:
         return DocumentType.AP_INVOICE.value
 
     # If already a valid canonical value
-    for dt in DocumentType:
-        if clean == dt.value:
-            return dt.value
+    if clean in CANONICAL_DOCUMENT_TYPES:
+        return clean
 
     return clean
 
