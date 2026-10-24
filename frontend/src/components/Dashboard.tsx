@@ -231,7 +231,11 @@ export default function Dashboard({
     return baseDocs.filter(d => isPendingStatus(d.status));
   }, [baseDocs]);
 
-  const activePendingDocs = pendingScope === "all" ? allPendingDocs : myPendingDocs;
+  const roleLower = (currentUserRole || "").toLowerCase().trim();
+  const isAdmin = roleLower === "admin" || roleLower === "administrator" || roleLower === "system_admin" || roleLower === "superadmin";
+  const effectivePendingScope = isAdmin ? pendingScope : "my";
+
+  const activePendingDocs = effectivePendingScope === "all" ? allPendingDocs : myPendingDocs;
   const pendingCount = activePendingDocs.length;
 
   const isSuperUser = currentUserRole === "admin" || currentUserRole === "manager" || currentUserRole === "finance_manager";
@@ -296,7 +300,7 @@ export default function Dashboard({
   };
 
   // Dynamic Doc Type Pills Filter list for the current active queue
-  const currentQueueLabel = kpiFilter === 'pending' ? (pendingScope === 'my' ? 'MY PENDING' : 'ALL PENDING') : `ALL ${kpiFilter.toUpperCase()}`;
+  const currentQueueLabel = kpiFilter === 'pending' ? (effectivePendingScope === 'my' ? 'MY PENDING' : 'ALL PENDING') : `ALL ${kpiFilter.toUpperCase()}`;
 
   // Dynamically group currentStatusDocs by document_type (no hardcoding)
   const docTypeCountsMap = useMemo(() => {
@@ -469,7 +473,7 @@ export default function Dashboard({
               {pendingCount}
             </span>
             <span className="text-[8px] font-extrabold text-[#D97706] bg-[#FFF7E2] px-1.5 py-0.5 rounded border border-[#FDE68A]/60">
-              {pendingScope === 'all' ? 'COMPANY QUEUE' : 'ACTION REQUIRED'}
+              {effectivePendingScope === 'all' ? 'COMPANY QUEUE' : 'ACTION REQUIRED'}
             </span>
           </div>
 
@@ -482,7 +486,7 @@ export default function Dashboard({
               />
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
-              <span>{pendingScope === 'all' ? 'COMPANY PENDING' : 'MY PENDING'}</span>
+              <span>{effectivePendingScope === 'all' ? 'COMPANY PENDING' : 'MY PENDING'}</span>
               <span>{pendingCount} OF {activeTotal}</span>
             </div>
           </div>
@@ -725,20 +729,20 @@ export default function Dashboard({
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-[#003F28]" />
               <h2 className="text-[11px] font-black text-[#003F28] uppercase tracking-wide font-display flex items-center">
-                {kpiFilter === 'pending' && (pendingScope === 'my' ? `MY PENDING DOCUMENTS (${filteredDocs.length})` : `ALL PENDING DOCUMENTS (${filteredDocs.length})`)}
+                {kpiFilter === 'pending' && (effectivePendingScope === 'my' ? `MY PENDING DOCUMENTS (${filteredDocs.length})` : `ALL PENDING DOCUMENTS (${filteredDocs.length})`)}
                 {kpiFilter === 'hold' && `HOLD DOCUMENTS (${filteredDocs.length})`}
                 {kpiFilter === 'rejected' && `REJECTED DOCUMENTS (${filteredDocs.length})`}
               </h2>
             </div>
 
-            {/* Scope Toggle for Pending (My Pending vs All Pending) */}
-            {kpiFilter === 'pending' && (
+            {/* Scope Toggle for Pending (My Pending vs All Pending) - Strictly for Admin */}
+            {kpiFilter === 'pending' && isAdmin && (
               <div className="inline-flex items-center bg-[#FAF8F3] border border-[#E8E4DA] rounded-md p-0.5 text-[9px] font-bold">
                 <button
                   type="button"
                   onClick={() => { setPendingScope('my'); setActiveDocType('ALL'); }}
                   className={`px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1 ${
-                    pendingScope === 'my'
+                    effectivePendingScope === 'my'
                       ? 'bg-[#003F28] text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                   }`}
@@ -746,7 +750,7 @@ export default function Dashboard({
                 >
                   <span>My Pending</span>
                   <span className={`px-1 py-0.2 rounded text-[7.5px] font-mono font-bold ${
-                    pendingScope === 'my' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
+                    effectivePendingScope === 'my' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
                   }`}>
                     {myPendingDocs.length}
                   </span>
@@ -755,7 +759,7 @@ export default function Dashboard({
                   type="button"
                   onClick={() => { setPendingScope('all'); setActiveDocType('ALL'); }}
                   className={`px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1 ${
-                    pendingScope === 'all'
+                    effectivePendingScope === 'all'
                       ? 'bg-[#003F28] text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                   }`}
@@ -763,7 +767,7 @@ export default function Dashboard({
                 >
                   <span>All Pending</span>
                   <span className={`px-1 py-0.2 rounded text-[7.5px] font-mono font-bold ${
-                    pendingScope === 'all' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
+                    effectivePendingScope === 'all' ? 'bg-[#FFBE00] text-[#002F20]' : 'bg-slate-200/70 text-slate-700'
                   }`}>
                     {allPendingDocs.length}
                   </span>

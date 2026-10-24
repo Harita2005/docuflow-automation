@@ -48,7 +48,12 @@ export default function App() {
       }
       return { docId, view: "details" };
     }
-    return { docId: null, view: localStorage.getItem("currentView") || "dashboard" };
+        let savedView = localStorage.getItem("currentView") || "dashboard";
+    if (savedView === "audit-logs") {
+      localStorage.setItem("adminActiveTab", "audit");
+      savedView = "admin";
+    }
+    return { docId: null, view: savedView };
   };
 
   const [initialRoute] = useState(getInitialRoute);
@@ -964,6 +969,8 @@ export default function App() {
             {currentView === "admin" && (
               <AdminPage />
             )}
+
+
 
             {(currentView === "dapi-sync-back" || currentView === "integrations" || currentView === "applications" || currentView === "callback-rules" || currentView === "integration-logs") && (
               <DapiSyncBackHub

@@ -36,7 +36,10 @@ def validate_test_database(db_name: str = None, environment: str = "test") -> bo
     Validates that test execution is not targeting a production database or environment.
     Delegates to enforce_test_database_safety for strict verification.
     """
-    enforce_test_database_safety(test_db_name=db_name, environment=environment)
+    try:
+        enforce_test_database_safety(test_db_name=db_name, environment=environment)
+    except RuntimeError as exc:
+        raise ValueError(f"Safety Guard: {exc}") from exc
     return True
 
 

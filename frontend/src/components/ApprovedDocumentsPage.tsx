@@ -1160,8 +1160,10 @@ export default function ApprovedDocumentsPage({
                       <td className="py-1.5 px-2.5 text-center w-[9%]" onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}>
                         <button
                           type="button"
+                          onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}
                           className="p-1 rounded text-slate-400 hover:text-[#003F28] hover:bg-emerald-50/60 transition cursor-pointer inline-flex items-center justify-center mx-auto"
                           title="View Document Details"
+                          aria-label="View Document Details"
                         >
                           <Eye className="h-[17.5px] w-[17.5px]" />
                         </button>

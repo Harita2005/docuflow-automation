@@ -1,11 +1,18 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { 
   Search, 
   FileText, 
-  Calendar, 
   X, 
-  Eye 
+  Eye,
+  Filter,
+  SlidersHorizontal,
+  Receipt,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown
 } from "lucide-react";
+import matrixOptions from "../matrix_options.json";
 import { DbInvoice } from "../types";
 import { formatDocNumber, formatDocumentTypeDisplay, getCanonicalDocumentType, getDynamicTableHeaders, resolvePersonsInRoleForDivision } from "../utils/formatters";
 
@@ -28,15 +35,115 @@ export default function WorkTrackerPage({
 }: WorkTrackerPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+  const [divisionFilter, setDivisionFilter] = useState<string>(() => {
+    return localStorage.getItem("workTrackerDivisionFilter") || "ALL";
+  });
   const [selectedDocIds, _setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
     return saved === "approved" || saved === "cancelled" ? "all" : saved;
   });
-  const [sortBy, _setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "vendor">("date_desc");
+  const [sortColumn, setSortColumn] = useState<"id" | "vendor" | "type" | "amount" | "assigned" | "status">("id");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  // Comprehensive Filter Popover States
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterPopupRef = useRef<HTMLDivElement>(null);
+  const [draftDivision, setDraftDivision] = useState(divisionFilter);
+  const [draftDocType, setDraftDocType] = useState(activeTab);
+  const [draftStatus, setDraftStatus] = useState(statusFilter);
+  const [draftTime, setDraftTime] = useState(timeFilter);
+  const [draftStartDate, setDraftStartDate] = useState(customStartDate);
+  const [draftEndDate, setDraftEndDate] = useState(customEndDate);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterPopupRef.current && !filterPopupRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFilterOpen]);
+
+  const handleOpenFilter = () => {
+    setDraftDivision(divisionFilter);
+    setDraftDocType(activeTab);
+    setDraftStatus(statusFilter);
+    setDraftTime(timeFilter);
+    setDraftStartDate(customStartDate);
+    setDraftEndDate(customEndDate);
+    setIsFilterOpen(true);
+  };
+
+  const handleApplyFilters = () => {
+    setDivisionFilter(draftDivision);
+    localStorage.setItem("workTrackerDivisionFilter", draftDivision);
+
+    setActiveTab(draftDocType);
+
+    setStatusFilter(draftStatus);
+    localStorage.setItem("workTrackerStatusFilter", draftStatus);
+
+    setTimeFilter(draftTime);
+    setCustomStartDate(draftStartDate);
+    setCustomEndDate(draftEndDate);
+    setCurrentPage(1);
+
+    setIsFilterOpen(false);
+  };
+
+  const handleClearFilters = () => {
+    setDraftDivision("ALL");
+    setDraftDocType("ALL");
+    setDraftStatus("all");
+    setDraftTime("all");
+    setDraftStartDate("");
+    setDraftEndDate("");
+
+    setDivisionFilter("ALL");
+    localStorage.setItem("workTrackerDivisionFilter", "ALL");
+
+    setActiveTab("ALL");
+
+    setStatusFilter("all");
+    localStorage.setItem("workTrackerStatusFilter", "all");
+
+    setTimeFilter("all");
+    setCustomStartDate("");
+    setCustomEndDate("");
+    setCurrentPage(1);
+
+    setIsFilterOpen(false);
+  };
+
+  const handleSort = (col: "id" | "vendor" | "type" | "amount" | "assigned" | "status") => {
+    if (sortColumn === col) {
+      setSortDirection(prev => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === "amount" ? "desc" : "asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (divisionFilter !== "ALL") count++;
+    if (activeTab !== "ALL") count++;
+    if (statusFilter !== "all") count++;
+    if (timeFilter !== "all") count++;
+    return count;
+  }, [divisionFilter, activeTab, statusFilter, timeFilter]);
   const [trackerDocs, setTrackerDocs] = useState<DbInvoice[]>([]);
   const [hasLoadedApi, setHasLoadedApi] = useState(false);
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -249,6 +356,47 @@ export default function WorkTrackerPage({
 
   const TABS = dynamicTypes;
 
+  const matchesTab = (doc: DbInvoice, tab: string) => {
+    if (tab === "ALL") return true;
+    const docType = getCanonicalDocumentType(doc);
+    const selectedTab = tab.toUpperCase().trim();
+    if (docType === selectedTab) return true;
+    const isAPInvoice = selectedTab.includes("INVOICE") && (docType.includes("INVOICE") || !docType);
+    const isGeneral = selectedTab.includes("GENERAL") && (docType.includes("GENERAL") || docType.includes("VCC") || docType.includes("EXPENSE"));
+    const isPO = selectedTab.includes("PURCHASE") && (docType.includes("PURCHASE") || docType === "PO");
+    const isGRN = selectedTab.includes("GOODS") && (docType.includes("GOODS") || docType === "GRN");
+    const isCreditNote = selectedTab.includes("CREDIT") && (docType.includes("CREDIT") || docType.startsWith("CN"));
+    const isDebitNote = selectedTab.includes("DEBIT") && (docType.includes("DEBIT") || docType.startsWith("DN"));
+    return isAPInvoice || isGeneral || isPO || isGRN || isCreditNote || isDebitNote;
+  };
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dynamicTypes.forEach(t => {
+      counts[t] = visibleDocs.filter(d => matchesTab(d, t)).length;
+    });
+    return counts;
+  }, [dynamicTypes, visibleDocs]);
+
+  // Dynamic available divisions list based on documents & system master
+  const availableDivisions = useMemo(() => {
+    const set = new Set<string>();
+    visibleDocs.forEach((d) => {
+      const div = d.division || (d as any).branch || (d as any).plant;
+      if (div && typeof div === "string" && div.trim()) {
+        set.add(div.trim().toUpperCase());
+      }
+    });
+    if (matrixOptions && Array.isArray((matrixOptions as any).divisions)) {
+      (matrixOptions as any).divisions.forEach((div: string) => {
+        if (div && typeof div === "string" && div.trim()) {
+          set.add(div.trim().toUpperCase());
+        }
+      });
+    }
+    return Array.from(set).sort();
+  }, [visibleDocs]);
+
   // Auto-select first tab if current activeTab is not present
   React.useEffect(() => {
     if (dynamicTypes.length > 0 && !dynamicTypes.includes(activeTab)) {
@@ -305,21 +453,7 @@ export default function WorkTrackerPage({
   const filteredAndSortedDocs = useMemo(() => {
     const list = visibleDocs.filter(doc => {
       // Document-wise Tab filter
-      const docType = getCanonicalDocumentType(doc);
-      const selectedTab = activeTab.toUpperCase().trim();
-      if (selectedTab !== "ALL" && docType !== selectedTab) {
-        // Fallback matching for similar doc type labels
-        const isAPInvoice = selectedTab.includes("INVOICE") && (docType.includes("INVOICE") || !docType);
-        const isGeneral = selectedTab.includes("GENERAL") && (docType.includes("GENERAL") || docType.includes("VCC") || docType.includes("EXPENSE"));
-        const isPO = selectedTab.includes("PURCHASE") && (docType.includes("PURCHASE") || docType === "PO");
-        const isGRN = selectedTab.includes("GOODS") && (docType.includes("GOODS") || docType === "GRN");
-        const isCreditNote = selectedTab.includes("CREDIT") && (docType.includes("CREDIT") || docType.startsWith("CN"));
-        const isDebitNote = selectedTab.includes("DEBIT") && (docType.includes("DEBIT") || docType.startsWith("DN"));
-
-        if (!isAPInvoice && !isGeneral && !isPO && !isGRN && !isCreditNote && !isDebitNote) {
-          return false;
-        }
-      }
+      if (!matchesTab(doc, activeTab)) return false;
 
       // Status filter (strictly handles: pending, in_progress, hold, rejected)
       if (statusFilter !== "all" && statusFilter !== "approved" && statusFilter !== "cancelled") {
@@ -335,6 +469,15 @@ export default function WorkTrackerPage({
           if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
           if (!st.includes("reject") && !st.includes("fail") && !st.includes("void") && !st.includes("returned")) return false;
+        }
+      }
+
+      // Division / Branch filter
+      if (divisionFilter !== "ALL") {
+        const docDiv = (doc.division || (doc as any).branch || (doc as any).plant || "").toUpperCase().trim();
+        const selectedDiv = divisionFilter.toUpperCase().trim();
+        if (docDiv !== selectedDiv) {
+          return false;
         }
       }
 
@@ -376,19 +519,37 @@ export default function WorkTrackerPage({
 
     // Sorting
     return list.sort((a, b) => {
-      if (sortBy === "amount_desc") return (b.amount || 0) - (a.amount || 0);
-      if (sortBy === "amount_asc") return (a.amount || 0) - (b.amount || 0);
-      if (sortBy === "vendor") return (a.vendor_name || "").localeCompare(b.vendor_name || "");
-      if (sortBy === "date_asc") {
+      let comparison = 0;
+      if (sortColumn === "id") {
+        const idA = formatDocNumber(a.id, getCanonicalDocumentType(a), (a as any).category).toLowerCase();
+        const idB = formatDocNumber(b.id, getCanonicalDocumentType(b), (b as any).category).toLowerCase();
+        comparison = idA.localeCompare(idB);
+      } else if (sortColumn === "vendor") {
+        const vA = (a.vendor_name || (a as any).customer_name || (a as any).party_name || "").toLowerCase();
+        const vB = (b.vendor_name || (b as any).customer_name || (b as any).party_name || "").toLowerCase();
+        comparison = vA.localeCompare(vB);
+      } else if (sortColumn === "type") {
+        const tA = formatDocumentTypeDisplay(a).toLowerCase();
+        const tB = formatDocumentTypeDisplay(b).toLowerCase();
+        comparison = tA.localeCompare(tB);
+      } else if (sortColumn === "amount") {
+        comparison = (Number(a.amount) || 0) - (Number(b.amount) || 0);
+      } else if (sortColumn === "assigned") {
+        const rA = resolvePersonsInRoleForDivision(a.assigned_approver || (a as any).assigned_to, a.division || (a as any).branch, usersList).displayName.toLowerCase();
+        const rB = resolvePersonsInRoleForDivision(b.assigned_approver || (b as any).assigned_to, b.division || (b as any).branch, usersList).displayName.toLowerCase();
+        comparison = rA.localeCompare(rB);
+      } else if (sortColumn === "status") {
+        const sA = (a.status || "").toLowerCase();
+        const sB = (b.status || "").toLowerCase();
+        comparison = sA.localeCompare(sB);
+      } else {
         const da = getDocumentDates(a)[0] || "";
         const db = getDocumentDates(b)[0] || "";
-        return da.localeCompare(db);
+        comparison = da.localeCompare(db);
       }
-      const da = getDocumentDates(a)[0] || "";
-      const db = getDocumentDates(b)[0] || "";
-      return db.localeCompare(da);
+      return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [visibleDocs, activeTab, statusFilter, searchTerm, sortBy, timeFilter, customStartDate, customEndDate]);
+  }, [visibleDocs, activeTab, statusFilter, divisionFilter, searchTerm, sortColumn, sortDirection, timeFilter, customStartDate, customEndDate, usersList]);
 
   // Dynamic Table Headers based on selected document type tab or visible records
   const effectiveDocType = useMemo(() => {
@@ -409,299 +570,436 @@ export default function WorkTrackerPage({
     return filteredAndSortedDocs.reduce((acc, doc) => acc + (Number(doc.amount) || 0), 0);
   }, [filteredAndSortedDocs]);
 
+  // Pagination calculations
+  const totalItems = filteredAndSortedDocs.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
+  const paginatedDocs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedDocs.slice(start, start + pageSize);
+  }, [filteredAndSortedDocs, currentPage, pageSize]);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (currentPage <= 4) {
+      return [1, 2, 3, 4, 5, "...", totalPages];
+    }
+    if (currentPage >= totalPages - 3) {
+      return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+  };
+
   return (
-    <div className="space-y-2 animate-fadeIn pb-8 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0 text-slate-800">
+    <div className="space-y-3 animate-fadeIn pb-8 w-full max-w-[1680px] mx-auto px-2 sm:px-3 pt-0 text-slate-800">
       
-      {/* 1. COMPACT COMMAND & FILTER TOOLBAR */}
-      <div className="bg-white rounded-lg border border-slate-200 p-1.5 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-1.5">
+      {/* 1. TOP BAR / DOCUMENT TYPE NAVIGATION */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs">
         
-        {/* Left: Category Navigation Tabs */}
-        <div className="flex items-center gap-1 w-full md:w-auto overflow-x-auto custom-scrollbar">
-          {TABS.map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setActiveTab(t)}
-              className={`px-2.5 py-1 rounded text-[10px] font-semibold transition whitespace-nowrap cursor-pointer ${
-                activeTab === t
-                  ? 'bg-[#003F28] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-          {filteredAndSortedDocs.length > 0 && (
-            <div className="hidden sm:inline-flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[10px] font-bold shadow-2xs">
-              <span className="text-emerald-600 font-medium uppercase tracking-wide text-[9px]">Total Amount:</span>
-              <span className="font-mono text-[11px] font-bold text-emerald-900">
-                ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          )}
+        {/* Left: Category Navigation Tabs & Total Amount */}
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto custom-scrollbar">
+          {TABS.map((t) => {
+            const count = tabCounts[t] ?? 0;
+            const isActive = activeTab === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setActiveTab(t);
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  isActive
+                    ? "bg-[#003F28] text-white font-bold shadow-xs"
+                    : "bg-white text-slate-700 border border-slate-200 font-semibold hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <span>{t}</span>
+                <span className={`text-[11px] ${isActive ? "text-emerald-200 font-medium" : "text-slate-400 font-normal"}`}>
+                  ({count})
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Total Amount Badge */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold whitespace-nowrap shadow-2xs ml-1">
+            <Receipt className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>Total Amount:</span>
+            <span className="font-mono font-bold text-emerald-950">
+              ₹{totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
         </div>
 
-        {/* Right: Search, Filter Dropdown, Sorting & Export */}
-        <div className="flex items-center gap-1.5 w-full md:w-auto justify-end flex-wrap">
-          
-          {/* Real-time Search Input */}
-          <div className="relative flex-1 sm:w-52 min-w-[150px]">
-            <Search className="h-3 w-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+        {/* Right: Search Input & Filters Button */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-64 min-w-[200px]">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder={
-                effectiveDocType.includes("CREDIT")
-                  ? "Search customer, credit note #, ref..."
-                  : effectiveDocType.includes("FEEDBACK")
-                  ? "Search customer, ticket #, complaint..."
-                  : effectiveDocType.includes("PURCHASE")
-                  ? "Search supplier, PO #, item..."
-                  : effectiveDocType.includes("EXPENSE")
-                  ? "Search claimant, claim #, type..."
-                  : "Search vendor, doc #, PO..."
-              }
+              placeholder="Search document ID, supplier, PO..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-6.5 pr-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-[#003F28] transition"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/20 transition"
             />
             {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm("")}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[9px]"
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setCurrentPage(1);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
 
-          {/* Status Filter Dropdown */}
-          <div className="flex items-center gap-1">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                localStorage.setItem("workTrackerStatusFilter", e.target.value);
-              }}
-              className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
+          {/* Comprehensive Filter Popover Button */}
+          <div className="relative" ref={filterPopupRef}>
+            <button
+              type="button"
+              onClick={handleOpenFilter}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer shadow-2xs ${
+                isFilterOpen || activeFilterCount > 0
+                  ? "bg-emerald-50 border-emerald-300 text-[#003F28]"
+                  : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
+              }`}
+              title="Filter by Division, Document Type, Status, and Date"
             >
-              <option value="all">All Active / In Progress</option>
-              <option value="pending">Pending (Action Required)</option>
-              <option value="in_progress">In Progress</option>
-              <option value="hold">On Hold</option>
-              <option value="rejected">Rejected</option>
-            </select>
+              <Filter className="h-3.5 w-3.5 text-slate-500" />
+              <span>Filters</span>
+              <ChevronDown className="h-3 w-3 text-slate-400" />
+              {activeFilterCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#003F28] text-white text-[9px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
 
-            {statusFilter !== "all" && (
+            {/* POPUP FILTER PANEL */}
+            {isFilterOpen && (
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-80 bg-white border border-slate-200 rounded-xl shadow-xl p-3.5 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-[#003F28]" />
+                    <h3 className="text-xs font-bold text-slate-800">Filter Documents</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen(false)}
+                    className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 text-left">
+                  {/* 1. DIVISION / BRANCH */}
+                  <div>
+                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Division / Branch
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={draftDivision}
+                        onChange={(e) => setDraftDivision(e.target.value)}
+                        className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      >
+                        <option value="ALL">All Divisions / Branches</option>
+                        {availableDivisions.map((div) => (
+                          <option key={div} value={div}>
+                            {div}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 2. DOCUMENT TYPE */}
+                  <div>
+                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Document Type
+                    </label>
+                    <select
+                      value={draftDocType}
+                      onChange={(e) => setDraftDocType(e.target.value)}
+                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                    >
+                      <option value="ALL">All Document Types</option>
+                      {dynamicTypes.filter((t) => t !== "ALL").map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 3. WORKFLOW STATUS */}
+                  <div>
+                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Workflow Status
+                    </label>
+                    <select
+                      value={draftStatus}
+                      onChange={(e) => setDraftStatus(e.target.value)}
+                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                    >
+                      <option value="all">All Active / In Progress</option>
+                      <option value="pending">Pending (Action Required)</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="hold">On Hold</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+
+                  {/* 4. DATE RANGE */}
+                  <div>
+                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Time / Date
+                    </label>
+                    <select
+                      value={draftTime}
+                      onChange={(e) => setDraftTime(e.target.value as any)}
+                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="this_week">This Week</option>
+                      <option value="this_month">This Month</option>
+                      <option value="custom">Custom Range</option>
+                    </select>
+
+                    {draftTime === "custom" && (
+                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
+                        <div>
+                          <span className="block text-[8.5px] font-bold text-slate-400 uppercase mb-0.5">From</span>
+                          <input
+                            type="date"
+                            value={draftStartDate}
+                            onChange={(e) => setDraftStartDate(e.target.value)}
+                            className="w-full text-[9.5px] px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-slate-700 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[8.5px] font-bold text-slate-400 uppercase mb-0.5">To</span>
+                          <input
+                            type="date"
+                            value={draftEndDate}
+                            min={draftStartDate || undefined}
+                            onChange={(e) => setDraftEndDate(e.target.value)}
+                            className="w-full text-[9.5px] px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-slate-700 outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* POPUP ACTION BUTTONS */}
+                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="px-2 py-0.5 text-[9.5px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyFilters}
+                    className="px-3 py-1 bg-[#003F28] hover:bg-[#002F1E] text-white text-[10px] font-bold rounded transition shadow-2xs cursor-pointer"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ACTIVE FILTER PILLS */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap px-1">
+          {divisionFilter !== "ALL" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+              <span>Div: {divisionFilter}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDivisionFilter("ALL");
+                  localStorage.setItem("workTrackerDivisionFilter", "ALL");
+                  setCurrentPage(1);
+                }}
+                className="hover:text-emerald-950 cursor-pointer ml-0.5"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+          {activeTab !== "ALL" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+              <span>Type: {activeTab}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("ALL");
+                  setCurrentPage(1);
+                }}
+                className="hover:text-blue-950 cursor-pointer ml-0.5"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+          {statusFilter !== "all" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+              <span>Status: {statusFilter.toUpperCase()}</span>
               <button
                 type="button"
                 onClick={() => {
                   setStatusFilter("all");
                   localStorage.setItem("workTrackerStatusFilter", "all");
+                  setCurrentPage(1);
                 }}
-                className="flex items-center gap-0.5 text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition cursor-pointer"
-                title="Clear status filter"
+                className="hover:text-amber-950 cursor-pointer ml-0.5"
               >
-                <span>{statusFilter.toUpperCase()}</span>
-                <span>✕</span>
+                ✕
               </button>
-            )}
-          </div>
-
-          {/* Time / Date Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-1">
-            <Calendar className="h-3 w-3 text-slate-500" />
-            <select
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value as any)}
-              className="bg-transparent text-[10px] font-medium text-slate-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="this_week">This Week</option>
-              <option value="this_month">This Month</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          {/* Custom Date Inputs if custom range is active */}
-          {timeFilter === 'custom' && (
-            <div className="flex items-center gap-1">
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                <span className="text-[9px] font-bold text-slate-400">From:</span>
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="text-[10px] bg-transparent text-slate-700 outline-none cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                <span className="text-[9px] font-bold text-slate-400">To:</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  min={customStartDate || undefined}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="text-[10px] bg-transparent text-slate-700 outline-none cursor-pointer"
-                />
-              </div>
-              {(customStartDate || customEndDate) && (
-                <button
-                  onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }}
-                  title="Clear custom dates"
-                  className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-slate-100 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+            </span>
           )}
-
+          {timeFilter !== "all" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold">
+              <span>Date: {timeFilter.toUpperCase()}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setTimeFilter("all");
+                  setCurrentPage(1);
+                }}
+                className="hover:text-purple-950 cursor-pointer ml-0.5"
+              >
+                ✕
+              </button>
+            </span>
+          )}
         </div>
+      )}
 
-      </div>
-
-      {/* 3. COMPACT ENTERPRISE INVOICE GRID */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
+      {/* 2. TABLE GRID */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             
-            {/* Enterprise Compact Table Header (8 Columns) */}
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
-               <tr>
-                 <th className="py-1.5 px-2.5 w-10 text-center">#</th>
-                 <th className="py-1.5 px-2.5 w-[15%]">{tableHeaders.docIdLabel}</th>
-                 <th className="py-1.5 px-2.5 w-[26%]">{tableHeaders.partyLabel}</th>
-                 <th className="py-1.5 px-2.5 w-[14%]">{tableHeaders.docTypeLabel}</th>
-                 <th className="py-1.5 px-2.5 w-[15%] text-right">{tableHeaders.amountLabel}</th>
-                 <th className="py-1.5 px-2.5 w-[11%] text-center">{tableHeaders.assignedLabel || "ASSIGNED TO"}</th>
-                 <th className="py-1.5 px-2.5 w-[10%] text-center">{tableHeaders.statusLabel || "STATUS"}</th>
-                 <th className="py-1.5 px-2.5 w-[9%] text-center">ACTION</th>
-               </tr>
+            {/* Table Header (8 Columns) */}
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider uppercase">
+              <tr>
+                <th className="py-2.5 px-3 w-12 text-center text-slate-500 font-semibold">#</th>
+                <th 
+                  onClick={() => handleSort("id")}
+                  className="py-2.5 px-3 w-[16%] cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{tableHeaders.docIdLabel || "DOCUMENT ID"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort("vendor")}
+                  className="py-2.5 px-3 w-[26%] cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{tableHeaders.partyLabel || "SUPPLIER / VENDOR"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort("type")}
+                  className="py-2.5 px-3 w-[15%] cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{tableHeaders.docTypeLabel || "DOCUMENT TYPE"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort("amount")}
+                  className="py-2.5 px-3 w-[14%] text-right cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>{tableHeaders.amountLabel || "AMOUNT (₹)"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort("assigned")}
+                  className="py-2.5 px-3 w-[12%] text-center cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>{tableHeaders.assignedLabel || "ASSIGNED TO"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort("status")}
+                  className="py-2.5 px-3 w-[10%] text-center cursor-pointer select-none hover:text-slate-900 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>{tableHeaders.statusLabel || "STATUS"}</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th className="py-2.5 px-3 w-20 text-center">ACTION</th>
+              </tr>
             </thead>
 
-            {/* Enterprise Compact Table Body */}
-            <tbody className="divide-y divide-slate-100 text-slate-800">
-              {filteredAndSortedDocs.map((doc, idx) => {
+            {/* Table Body */}
+            <tbody className="divide-y divide-slate-100 text-slate-800 bg-white">
+              {paginatedDocs.map((doc, idx) => {
                 const docCanonicalType = getCanonicalDocumentType(doc);
                 const isDocCredit = docCanonicalType.includes("CREDIT") || String(doc.id).toUpperCase().startsWith("CN-");
                 const vendorName = doc.vendor_name || (doc as any).customer_name || (doc as any).party_name || (doc as any).account_name || (doc as any).dealer_name || (doc as any).client_name || (isDocCredit ? "Enterprise Customer" : "Enterprise Supplier");
                 const grossAmount = Number(doc.amount || 0);
                 const displayId = formatDocNumber(doc.id, getCanonicalDocumentType(doc), (doc as any).category);
                 const docDate = doc.invoice_date || (doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "");
-                const isSelected = selectedDocIds.includes(doc.id);
+                const rowNumber = (currentPage - 1) * pageSize + idx + 1;
 
-                // Helper for Assigned To Badge
-                const renderAssignedToBadge = () => {
-                  const resolved = resolvePersonsInRoleForDivision(
-                    doc.assigned_approver || (doc as any).assigned_user || (doc as any).assigned_to,
-                    doc.division || (doc as any).branch,
-                    usersList
-                  );
-                  const isUnassigned = resolved.isUnassigned || resolved.displayName === "Unassigned";
-
-                  return (
-                    <span 
-                      className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-medium max-w-full truncate cursor-help ${
-                        isUnassigned 
-                          ? "bg-slate-100 text-slate-500 border border-slate-200" 
-                          : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
-                      }`}
-                      title={resolved.tooltipText}
-                    >
-                      <span className="truncate">{resolved.displayName}</span>
-                    </span>
-                  );
-                };
-
-                // Helper for Status Pill
-                const renderStatusBadge = () => {
-                  const status = (doc.status || "Pending Approval").trim();
-                  const isCompleted = ["Settled", "Approved", "Paid", "Ready for Payment"].includes(status);
-
-                  if (isCompleted) {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        <span>Approved</span>
-                      </span>
-                    );
-                  }
-                  if (status === "On Hold") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
-                        <span>On Hold</span>
-                      </span>
-                    );
-                  }
-                  if (status === "Rejected" || status === "Failed" || status === "Cancelled") {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                        <span>{status === "Cancelled" ? "Cancelled" : "Rejected"}</span>
-                      </span>
-                    );
-                  }
-                  
-                  const isActionRequired = Boolean(doc.is_current_approver) || isAssignedToUser(doc);
-                  const hasApprovedByUser = Boolean(doc.has_approved);
-
-                  if (isActionRequired) {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                        <span>Pending</span>
-                      </span>
-                    );
-                  }
-
-                  if (hasApprovedByUser) {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                        <span>In Progress</span>
-                      </span>
-                    );
-                  }
-
-                  return (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-medium bg-slate-50 text-slate-700 border border-slate-200">
-                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                      <span>In Progress</span>
-                    </span>
-                  );
-                };
-
-                // Helper for Review / Action Eye Button (~17-18px icon)
-                const renderActionButton = () => (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onViewDocument(doc.id);
-                    }}
-                    className="p-1 rounded text-slate-400 hover:text-[#003F28] hover:bg-emerald-50/60 transition cursor-pointer inline-flex items-center justify-center mx-auto"
-                    title="View Document Details"
-                  >
-                    <Eye className="h-[17.5px] w-[17.5px]" />
-                  </button>
+                // Assigned To resolution
+                const resolved = resolvePersonsInRoleForDivision(
+                  doc.assigned_approver || (doc as any).assigned_user || (doc as any).assigned_to,
+                  doc.division || (doc as any).branch,
+                  usersList
                 );
+                const isUnassigned = resolved.isUnassigned || resolved.displayName === "Unassigned";
 
-                const docTypeLabel = formatDocumentTypeDisplay(doc);
+                // Status calculation
+                const isActionRequired = Boolean(doc.is_current_approver) || isAssignedToUser(doc);
 
                 return (
                   <tr 
                     key={doc.id} 
                     onClick={() => onViewDocument(doc.id)}
-                    className={`hover:bg-slate-50/70 transition-colors group cursor-pointer ${isSelected ? 'bg-indigo-50/40' : ''}`}
+                    className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                   >
-                    <td className="py-1.5 px-2.5 align-middle text-center w-10 text-[12px] text-slate-500">{idx + 1}</td>
+                    {/* # */}
+                    <td className="py-2.5 px-3 align-middle text-center text-xs text-slate-500 font-medium">
+                      {rowNumber}
+                    </td>
 
-                    {/* 2. Document ID */}
-                    <td className="py-1.5 px-2.5 align-middle w-[15%] min-w-0">
+                    {/* DOCUMENT ID */}
+                    <td className="py-2.5 px-3 align-middle">
                       <div className="flex flex-col min-w-0 leading-tight">
-                        <span className="text-[12px] font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate" title={displayId}>
+                        <span className="text-xs font-bold text-slate-900 group-hover:text-[#003F28] transition-colors truncate" title={displayId}>
                           {displayId}
                         </span>
                         {docDate && (
@@ -712,58 +1010,74 @@ export default function WorkTrackerPage({
                       </div>
                     </td>
 
-                    {/* 3. Supplier / Vendor */}
-                    <td className="py-1.5 px-2.5 align-middle w-[26%] min-w-0">
-                      <span className="text-[12px] font-semibold text-slate-900 truncate block" title={vendorName}>
+                    {/* SUPPLIER / VENDOR */}
+                    <td className="py-2.5 px-3 align-middle">
+                      <span className="text-xs font-bold text-slate-900 truncate block" title={vendorName}>
                         {vendorName}
                       </span>
                     </td>
 
-                    {/* 4. Document Type */}
-                    <td className="py-1.5 px-2.5 align-middle w-[14%] min-w-0">
-                      <span className="text-[11px] text-slate-600 truncate block">
-                        {docTypeLabel}
+                    {/* DOCUMENT TYPE */}
+                    <td className="py-2.5 px-3 align-middle">
+                      <span className="text-xs text-slate-600 font-medium truncate block">
+                        {formatDocumentTypeDisplay(doc)}
                       </span>
                     </td>
 
-                    {/* 5. Amount (₹) */}
-                    <td className="py-1.5 px-2.5 align-middle text-right w-[15%] whitespace-nowrap">
-                      <span className="text-[12px] font-semibold text-slate-900">
-                        ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    {/* AMOUNT (₹) */}
+                    <td className="py-2.5 px-3 align-middle text-right whitespace-nowrap">
+                      <span className="text-xs font-bold text-slate-900">
+                        ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>
 
-                    {/* 6. Assigned To */}
-                    <td className="py-1.5 px-2.5 align-middle text-center w-[11%]">
-                      {renderAssignedToBadge()}
+                    {/* ASSIGNED TO */}
+                    <td className="py-2.5 px-3 align-middle text-center">
+                      <span 
+                        className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-md text-xs font-medium max-w-full truncate ${
+                          isUnassigned 
+                            ? "bg-slate-100 text-slate-500 border border-slate-200" 
+                            : "bg-blue-50 text-blue-700 border border-blue-100"
+                        }`}
+                        title={resolved.tooltipText}
+                      >
+                        <span className="truncate">{resolved.displayName}</span>
+                      </span>
                     </td>
 
-                    {/* 7. Status */}
-                    <td className="py-1.5 px-2.5 align-middle text-center w-[10%]">
-                      {renderStatusBadge()}
+                    {/* STATUS */}
+                    <td className="py-2.5 px-3 align-middle text-center">
+                      {isActionRequired ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          <span>Pending</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          <span>In Progress</span>
+                        </span>
+                      )}
                     </td>
 
-                    {/* 8. Action */}
-                    <td className="py-1.5 px-2.5 align-middle text-center w-[9%]">
-                      {renderActionButton()}
+                    {/* ACTION */}
+                    <td className="py-2.5 px-3 align-middle text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewDocument(doc.id);
+                        }}
+                        className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
+                        title="View Document"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            {filteredAndSortedDocs.length > 0 && (
-              <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-semibold text-slate-800 text-[11px]">
-                <tr>
-                  <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px] text-slate-600 font-bold">
-                    Total Amount ({filteredAndSortedDocs.length} {filteredAndSortedDocs.length === 1 ? 'Record' : 'Records'}):
-                  </td>
-                  <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-800 whitespace-nowrap text-[12.5px]">
-                    ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td colSpan={3} className="py-2.5 px-2.5"></td>
-                </tr>
-              </tfoot>
-            )}
           </table>
 
           {/* Empty State */}
@@ -771,15 +1085,17 @@ export default function WorkTrackerPage({
             <div className="text-center py-16 bg-slate-50/50">
               <FileText className="h-10 w-10 mx-auto mb-2.5 text-slate-300" />
               <h3 className="text-sm font-bold text-slate-800">No records match the filter</h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-1">Try resetting your search query or status filters.</p>
+              <p className="text-xs text-slate-500 font-medium mt-1">Try resetting your search query or status filters.</p>
               <button
                 type="button"
                 onClick={() => {
                   setSearchTerm("");
                   setStatusFilter("all");
+                  setDivisionFilter("ALL");
                   setActiveTab(dynamicTypes[0] || "AP INVOICE");
+                  setCurrentPage(1);
                 }}
-                className="mt-3 px-3 py-1 bg-indigo-600 text-white font-bold text-[10px] rounded-lg shadow-2xs hover:bg-indigo-700 transition"
+                className="mt-3 px-3.5 py-1.5 bg-[#003F28] text-white font-bold text-xs rounded-lg shadow-xs hover:bg-[#002F1E] transition cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -787,34 +1103,96 @@ export default function WorkTrackerPage({
           )}
 
         </div>
+      </div>
 
-        {/* Table Footer Summary Bar */}
-        <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-          <div className="flex items-center gap-3">
+      {/* 3. BOTTOM PAGINATION BAR */}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 shadow-2xs">
+        {/* Left: Showing entries */}
+        <div>
+          {totalItems === 0 ? (
+            <span>Showing 0 of 0 documents</span>
+          ) : (
             <span>
-              {filteredAndSortedDocs.length === 0 ? (
-              "No actionable documents"
-            ) : filteredAndSortedDocs.length === 1 ? (
-              <>Showing <strong className="text-slate-900 font-semibold">1</strong> of <strong className="text-slate-900 font-semibold">1</strong> actionable record</>
-            ) : (
-              <>Showing <strong className="text-slate-900 font-semibold">{filteredAndSortedDocs.length}</strong> actionable records</>
-            )}
+              Showing <strong className="text-slate-900 font-bold">{(currentPage - 1) * pageSize + 1}</strong> –{" "}
+              <strong className="text-slate-900 font-bold">{Math.min(currentPage * pageSize, totalItems)}</strong> of{" "}
+              <strong className="text-slate-900 font-bold">{totalItems}</strong> documents
             </span>
-            {filteredAndSortedDocs.length > 0 && (
-              <>
-                <span className="text-slate-300">|</span>
-                <span>
-                  Total Amount: <strong className="text-emerald-700 font-mono font-bold text-[11.5px]">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                </span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-slate-500 text-[10.5px]">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>DocuFlow Active</span>
-          </div>
+          )}
         </div>
 
+        {/* Right: Page Buttons & Rows per page */}
+        <div className="flex items-center gap-4">
+          {/* Page numbers */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="Previous Page"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Smart page numbers */}
+            {getPageNumbers().map((item, i) => {
+              if (item === "...") {
+                return (
+                  <span key={`ellipsis-${i}`} className="px-2 py-1 text-slate-400 select-none">
+                    ...
+                  </span>
+                );
+              }
+              const pageNum = item as number;
+              const isCurrent = pageNum === currentPage;
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    isCurrent
+                      ? "bg-[#003F28] text-white font-bold shadow-2xs"
+                      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              title="Next Page"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Rows Per Page Dropdown */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+            <span>Rows per page</span>
+            <div className="relative">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="appearance-none bg-white border border-slate-200 rounded-lg pl-2.5 pr-6 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <ChevronDown className="h-3 w-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>

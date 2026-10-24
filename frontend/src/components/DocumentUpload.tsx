@@ -1751,7 +1751,8 @@ export default function DocumentUpload({
 
                 <button
                   type="button"
-                  className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00472b] text-white text-[11px] font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all pointer-events-none"
+                  onClick={(e) => { e.stopPropagation(); triggerFileInput(); }}
+                  className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00472b] text-white text-[11px] font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer pointer-events-auto"
                 >
                   <FileText className="w-3 h-3" />
                   <span>Browse Files</span>

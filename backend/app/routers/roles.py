@@ -655,3 +655,97 @@ def update_role_permissions(
         is_active=role.is_active,
         permissions=assigned_codes
     )
+
+
+class RoleStatusUpdate(BaseModel):
+    is_active: bool
+
+
+@router.put("/{role_id}/status", response_model=RoleResponse)
+def update_role_status(
+    role_id: int,
+    payload: RoleStatusUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Enable or disable a role."""
+    _require_rbac_admin(current_user, db)
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail=f"Role with ID {role_id} not found.")
+
+    if role.code.lower() == "admin":
+        raise HTTPException(status_code=400, detail="Cannot disable the Administrator role.")
+
+    role.is_active = payload.is_active
+    db.commit()
+    db.refresh(role)
+    invalidate_roles_cache()
+
+    db.add(AuditLog(
+        invoice_id=None,
+        action="ROLE_DEACTIVATE" if not role.is_active else "ROLE_ACTIVATE",
+        user=current_user.username or "Admin",
+        notes=f"{'Disabled' if not role.is_active else 'Enabled'} role {role.name} ({role.code})"
+    ))
+    db.commit()
+
+    perm_codes = [
+        rp.permission.code for rp in role.permissions 
+        if rp.permission and rp.permission.is_active
+    ]
+
+    return RoleResponse(
+        id=role.id,
+        code=role.code,
+        name=role.name,
+        description=role.description,
+        is_active=role.is_active,
+        permissions=perm_codes
+    )
+
+
+@router.delete("/{role_id}", status_code=status.HTTP_200_OK)
+def delete_role(
+    role_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a role if no users are assigned to it."""
+    _require_rbac_admin(current_user, db)
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail=f"Role with ID {role_id} not found.")
+
+    if role.code.lower() == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete the Administrator role.")
+
+    role_code_clean = role.code.strip()
+    role_name_clean = role.name.strip()
+
+    assigned_users = db.query(User).filter(
+        (User.role_id == role.id) |
+        (User.role.ilike(role_code_clean)) |
+        (User.role.ilike(role_name_clean))
+    ).count()
+
+    if assigned_users > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete role '{role.name}' because {assigned_users} employee(s) are currently assigned to it."
+        )
+
+    db.query(RolePermission).filter(RolePermission.role_id == role.id).delete(synchronize_session="fetch")
+    db.delete(role)
+    db.commit()
+    invalidate_roles_cache()
+
+    db.add(AuditLog(
+        invoice_id=None,
+        action="ROLE_DELETE",
+        user=current_user.username or "Admin",
+        notes=f"Deleted role {role_name_clean} ({role_code_clean})"
+    ))
+    db.commit()
+
+    return {"message": f"Role '{role.name}' deleted successfully."}

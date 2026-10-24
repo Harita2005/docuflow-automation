@@ -1,273 +1,618 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, Bell, BellRing, BellOff, ChevronDown, ChevronUp, Edit3, Sparkles } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { 
+  Bell, 
+  Search, 
+  Save, 
+  Edit2, 
+  MoreVertical, 
+  X, 
+  Info, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Loader2,
+  Check,
+  Eye
+} from 'lucide-react';
 
-const EVENTS = [
-  { event: "PENDING_APPROVAL", desc: "Triggered when document is assigned to an approver for decision" },
-  { event: "ASSIGNED", desc: "Triggered on stage assignment or delegate handover" },
-  { event: "REJECTED", desc: "Triggered when document is rejected during workflow approval" },
-  { event: "SENT_BACK", desc: "Triggered when document is returned to previous stage" },
-  { event: "COMPLETED", desc: "Triggered when document receives final stage approval" },
-  { event: "CLARIFICATION", desc: "Triggered when approver requests audit info or line item details" }
+const EVENTS_META = [
+  { 
+    event: "PENDING_APPROVAL", 
+    label: "Pending Approval", 
+    desc: "When document is assigned to an approver for decision",
+    defaultTitle: "Pending Approval: {{document_number}}",
+    defaultMsg: "Document {{document_number}} has been assigned to you for approval. Please review and take the necessary action."
+  },
+  { 
+    event: "ASSIGNED", 
+    label: "Assigned", 
+    desc: "On stage assignment or delegate handover",
+    defaultTitle: "Assigned: {{document_number}}",
+    defaultMsg: "Document {{document_number}} has been assigned to you. Please proceed with processing."
+  },
+  { 
+    event: "REJECTED", 
+    label: "Rejected", 
+    desc: "When document is rejected during workflow approval",
+    defaultTitle: "Rejected: {{document_number}}",
+    defaultMsg: "Document {{document_number}} was rejected during workflow approval."
+  },
+  { 
+    event: "SENT_BACK", 
+    label: "Sent Back", 
+    desc: "When document is returned to previous stage",
+    defaultTitle: "Sent Back: {{document_number}}",
+    defaultMsg: "Document {{document_number}} has been returned to previous stage."
+  },
+  { 
+    event: "COMPLETED", 
+    label: "Completed", 
+    desc: "When document receives final stage approval",
+    defaultTitle: "Completed: {{document_number}}",
+    defaultMsg: "Document {{document_number}} has received final stage approval."
+  },
+  { 
+    event: "CLARIFICATION", 
+    label: "Clarification", 
+    desc: "When approver requests audit info or line item details",
+    defaultTitle: "Clarification: {{document_number}}",
+    defaultMsg: "When approver requests audit info or line item details."
+  }
+];
+
+const TEMPLATE_VARS = [
+  'document_number',
+  'document_type',
+  'initiator_name',
+  'initiator_email',
+  'assigned_to',
+  'due_date',
+  'approval_stage'
 ];
 
 export default function AdminInApp() {
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [configs, setConfigs] = useState([]);
-  const [expandedEvents, setExpandedEvents] = useState({});
+  const [search, setSearch] = useState("");
+  // Open ONLY when user clicks Edit
+  const [selectedEventKey, setSelectedEventKey] = useState(null);
+  const [drawerTab, setDrawerTab] = useState("template"); // "template" | "preview"
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [menuOpenEvent, setMenuOpenEvent] = useState(null);
+  const [portalNode, setPortalNode] = useState(null);
+
+  useEffect(() => {
+    const el = document.getElementById("admin-header-actions");
+    if (el) {
+      setPortalNode(el);
+    }
+  }, []);
 
   useEffect(() => {
     fetchConfigs();
+
+    const handleOutsideClick = () => {
+      setMenuOpenEvent(null);
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(localStorage.getItem("authToken") ? { "Authorization": `Bearer ${localStorage.getItem("authToken")}` } : {})
+  const getHeaders = () => {
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
   };
 
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/notifications/inapp-config', { headers });
+      const res = await fetch('/api/admin/notifications/inapp-config', { headers: getHeaders() });
       if (res.ok) {
         const rawData = await res.json();
         const dataList = Array.isArray(rawData) ? rawData : (Array.isArray(rawData?.configs) ? rawData.configs : []);
         
-        const merged = EVENTS.map(({ event }) => {
-          const found = dataList.find(c => c && c.trigger_event === event);
-          if (found) return found;
+        const merged = EVENTS_META.map(meta => {
+          const found = dataList.find(c => c && (c.trigger_event === meta.event || c.trigger_event === meta.label));
+          if (found) {
+            return {
+              trigger_event: meta.event,
+              enabled: found.enabled !== undefined ? found.enabled : true,
+              title_template: found.title_template || meta.defaultTitle,
+              message_template: found.message_template || meta.defaultMsg
+            };
+          }
           return {
-            trigger_event: event,
+            trigger_event: meta.event,
             enabled: true,
-            title_template: event === "PENDING_APPROVAL" ? "Action Required: {{document_number}}" : `${event.replace('_', ' ')}: {{document_number}}`,
-            message_template: `Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.`
+            title_template: meta.defaultTitle,
+            message_template: meta.defaultMsg
           };
         });
         setConfigs(merged);
       } else {
-        setConfigs(EVENTS.map(({ event }) => ({
-          trigger_event: event,
+        setConfigs(EVENTS_META.map(meta => ({
+          trigger_event: meta.event,
           enabled: true,
-          title_template: `${event.replace('_', ' ')}: {{document_number}}`,
-          message_template: `Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.`
+          title_template: meta.defaultTitle,
+          message_template: meta.defaultMsg
         })));
       }
     } catch (e) {
       console.error(e);
-      setConfigs(EVENTS.map(({ event }) => ({
-        trigger_event: event,
+      setConfigs(EVENTS_META.map(meta => ({
+        trigger_event: meta.event,
         enabled: true,
-        title_template: `${event.replace('_', ' ')}: {{document_number}}`,
-        message_template: `Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review.`
+        title_template: meta.defaultTitle,
+        message_template: meta.defaultMsg
       })));
     }
     setLoading(false);
   };
 
-  const saveConfigs = async () => {
-    setLoading(true);
+  const saveAllConfigs = async () => {
+    setSaving(true);
     try {
       const res = await fetch('/api/admin/notifications/inapp-config', {
         method: 'POST',
-        headers,
+        headers: getHeaders(),
         body: JSON.stringify(configs)
       });
       if (res.ok) {
-        alert('In-App Notification Configurations saved successfully!');
-        fetchConfigs();
+        setSuccessMsg('Notification configurations saved successfully!');
+        setTimeout(() => setSuccessMsg(""), 3500);
       } else {
-        alert('Failed to save configurations.');
+        setErrorMsg('Failed to save notification configurations.');
+        setTimeout(() => setErrorMsg(""), 4000);
       }
     } catch (e) {
-      alert('Error saving configurations: ' + e.message);
+      setErrorMsg('Error saving configurations: ' + e.message);
+      setTimeout(() => setErrorMsg(""), 4000);
     }
-    setLoading(false);
+    setSaving(false);
   };
 
-  const handleChange = (idx, field, value) => {
-    const newConfigs = [...configs];
-    newConfigs[idx][field] = value;
-    setConfigs(newConfigs);
+  const handleUpdateField = (eventKey, field, value) => {
+    setConfigs(prev => prev.map(c => c.trigger_event === eventKey ? { ...c, [field]: value } : c));
   };
 
-  const toggleExpand = (eventKey) => {
-    setExpandedEvents(prev => ({
-      ...prev,
-      [eventKey]: !prev[eventKey]
+  const toggleStatus = (eventKey) => {
+    setConfigs(prev => prev.map(c => c.trigger_event === eventKey ? { ...c, enabled: !c.enabled } : c));
+  };
+
+  const insertVariable = (varName) => {
+    if (!selectedEventKey) return;
+    setConfigs(prev => prev.map(c => {
+      if (c.trigger_event === selectedEventKey) {
+        const curMsg = c.message_template || '';
+        return { ...c, message_template: curMsg + ` {{${varName}}}` };
+      }
+      return c;
     }));
   };
 
-  const insertVariable = (idx, field, varName) => {
-    const newConfigs = [...configs];
-    const currentVal = newConfigs[idx][field] || '';
-    newConfigs[idx][field] = currentVal + ` {{${varName}}}`;
-    setConfigs(newConfigs);
+  const selectedConfig = selectedEventKey ? configs.find(c => c.trigger_event === selectedEventKey) : null;
+  const selectedMeta = selectedConfig ? (EVENTS_META.find(m => m.event === selectedConfig.trigger_event) || EVENTS_META[0]) : null;
+
+  const filteredConfigs = configs.filter(c => {
+    const meta = EVENTS_META.find(m => m.event === c.trigger_event);
+    const searchLower = search.toLowerCase().trim();
+    if (!searchLower) return true;
+    const label = (meta?.label || "").toLowerCase();
+    const event = (c.trigger_event || "").toLowerCase();
+    const title = (c.title_template || "").toLowerCase();
+    const desc = (meta?.desc || "").toLowerCase();
+    return label.includes(searchLower) || event.includes(searchLower) || title.includes(searchLower) || desc.includes(searchLower);
+  });
+
+  const renderTitlePreview = (titleStr) => {
+    if (!titleStr) return <span className="text-slate-400 italic text-[11px]">None</span>;
+    const parts = titleStr.split(/(\{\{[^}]+\}\})/g);
+    return (
+      <div className="flex items-center whitespace-nowrap gap-1">
+        {parts.map((p, idx) => {
+          if (p.startsWith("{{") && p.endsWith("}}")) {
+            return (
+              <span 
+                key={idx} 
+                className="inline-block px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-mono text-[10.5px] font-medium border border-slate-200"
+              >
+                {p}
+              </span>
+            );
+          }
+          return <span key={idx} className="font-semibold text-slate-800 text-xs whitespace-nowrap">{p}</span>;
+        })}
+      </div>
+    );
   };
 
-  return (
-    <div className="p-3 flex flex-col gap-3 font-sans text-xs">
-      {/* Header Bar */}
-      <div className="flex justify-between items-center bg-white p-2 px-3 rounded-xl shadow-2xs border border-slate-200">
-        <div>
-          <h2 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-            <BellRing className="h-3.5 w-3.5 text-amber-500" />
-            In-App Notifications Configurator
-          </h2>
-          <p className="text-[9px] font-medium text-slate-500">
-            Configure real-time in-app bell notifications and dynamic message templates.
-          </p>
+  const renderSimulatedPreview = (titleTpl, msgTpl) => {
+    const sampleData = {
+      document_number: "INV-2024-0089",
+      document_type: "Tax Invoice",
+      initiator_name: "Rahul Sharma",
+      initiator_email: "rahul.sharma@company.com",
+      assigned_to: "Operations Approver",
+      due_date: "28 Oct 2026",
+      approval_stage: "Manager Approval"
+    };
+
+    let title = titleTpl || "";
+    let msg = msgTpl || "";
+    Object.entries(sampleData).forEach(([k, v]) => {
+      title = title.replaceAll(`{{${k}}}`, v);
+      msg = msg.replaceAll(`{{${k}}}`, v);
+    });
+
+    return (
+      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <Eye className="h-3.5 w-3.5 text-emerald-600" />
+          <span>Real-time In-App Bell Notification Mockup</span>
         </div>
-        <button 
-          onClick={saveConfigs} 
-          disabled={loading}
-          className="flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-[9.5px] uppercase tracking-wide rounded-md transition shadow-2xs cursor-pointer active:scale-98 disabled:opacity-50 h-6.5"
-        >
-          {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-          Save Configuration
-        </button>
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-start gap-3">
+          <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
+            <Bell className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <h5 className="font-bold text-xs text-slate-900 truncate">{title}</h5>
+              <span className="text-[9.5px] text-slate-400 whitespace-nowrap">Just now</span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">{msg}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const headerControls = (
+    <div className="flex items-center gap-2">
+      <div className="relative w-56 md:w-64">
+        <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+        <input 
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search event, code, or template..."
+          className="w-full text-xs pl-8 pr-2.5 h-7.5 bg-white border border-slate-200 rounded-lg focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/25 outline-none text-slate-800 shadow-2xs transition"
+        />
       </div>
 
-      {/* Accordion Table Card */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-200 text-[8.5px] font-black text-slate-400 uppercase tracking-wider">
-              <th className="py-1.5 px-3 w-48">Trigger Event</th>
-              <th className="py-1.5 px-3 w-24 text-center">Status</th>
-              <th className="py-1.5 px-3">Title Template Preview</th>
-              <th className="py-1.5 px-3 text-right w-36">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 text-[10px]">
-            {configs.map((config, idx) => {
-              const eventMeta = EVENTS.find(e => e.event === config.trigger_event) || { desc: "Triggered on workflow transitions" };
-              const isExpanded = !!expandedEvents[config.trigger_event];
+      <button
+        type="button"
+        onClick={saveAllConfigs}
+        disabled={saving || loading}
+        className="h-7.5 flex items-center gap-1.5 px-3 bg-[#003F28] hover:bg-[#004B32] text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+      >
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+        <span>Save Configuration</span>
+      </button>
+    </div>
+  );
 
-              return (
-                <React.Fragment key={config.trigger_event}>
-                  <tr className="hover:bg-slate-50/60 transition">
-                    {/* Event Name */}
-                    <td className="py-2 px-3 align-middle">
-                      <div className="font-extrabold text-slate-900 text-[10px]">{config.trigger_event}</div>
-                      <div className="text-[8.5px] text-slate-400 truncate">{eventMeta.desc}</div>
-                    </td>
+  return (
+    <div className="space-y-3 font-sans text-xs">
+      {/* Mount Search and Save Configuration into the top In-App Notifications header panel */}
+      {portalNode ? (
+        createPortal(headerControls, portalNode)
+      ) : (
+        <div className="flex items-center justify-end mb-2">
+          {headerControls}
+        </div>
+      )}
+      
+      {/* FEEDBACK ALERTS */}
+      {successMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 animate-fadeIn">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 animate-fadeIn">
+          <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
-                    {/* Status Pill */}
-                    <td className="py-2 px-3 align-middle text-center">
-                      <button
-                        onClick={() => handleChange(idx, 'enabled', !config.enabled)}
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[8.5px] font-bold tracking-wide uppercase transition cursor-pointer ${
-                          config.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
-                        }`}
-                        title={config.enabled ? "Disable" : "Enable"}
-                      >
-                        {config.enabled ? <Bell className="h-2.5 w-2.5" /> : <BellOff className="h-2.5 w-2.5" />}
-                        {config.enabled ? 'Active' : 'Disabled'}
-                      </button>
-                    </td>
+      {/* 2. CARD WITH TABLE + OPTIONAL EDIT DRAWER (ONLY WHEN EDIT CLICKED) */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col lg:flex-row">
+        
+        {/* LEFT COMPONENT: Templates Table View */}
+        <div className="flex-1 flex flex-col min-w-0">
+          
 
-                    {/* Title Template Preview */}
-                    <td className="py-2 px-3 align-middle">
-                      <span className="font-mono text-[9px] text-slate-600 font-medium truncate block max-w-md">
-                        {config.title_template || '(No title template set)'}
-                      </span>
-                    </td>
 
-                    {/* Action Dropdown Toggle Button */}
-                    <td className="py-2 px-3 align-middle text-right">
-                      <button
-                        onClick={() => toggleExpand(config.trigger_event)}
-                        className={`px-2 py-0.5 rounded text-[8.5px] font-bold transition inline-flex items-center gap-1 cursor-pointer border ${
-                          isExpanded
-                            ? 'bg-amber-500 text-white border-amber-500'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40 shadow-2xs'
-                        }`}
-                      >
-                        <Edit3 className="h-2.5 w-2.5" />
-                        {isExpanded ? 'Hide Template' : 'Edit Template'}
-                        {isExpanded ? <ChevronUp className="h-2.5 w-2.5 ml-0.5" /> : <ChevronDown className="h-2.5 w-2.5 ml-0.5" />}
-                      </button>
+          {/* Table Container - Single line per record (whitespace-nowrap) */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse whitespace-nowrap min-w-[750px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/40 text-[10px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                  <th className="px-3 py-2 w-12 text-center whitespace-nowrap">S.No.</th>
+                  <th className="px-3.5 py-2 whitespace-nowrap">TRIGGER EVENT</th>
+                  <th className="px-3.5 py-2 whitespace-nowrap">STATUS</th>
+                  <th className="px-3.5 py-2 whitespace-nowrap">TITLE TEMPLATE PREVIEW</th>
+                  <th className="px-3.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredConfigs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
+                      No notification templates found.
                     </td>
                   </tr>
+                ) : (
+                  filteredConfigs.map((cfg, idx) => {
+                    const meta = EVENTS_META.find(m => m.event === cfg.trigger_event) || {
+                      label: cfg.trigger_event,
+                      desc: "Workflow transition event"
+                    };
+                    const isSelected = selectedEventKey === cfg.trigger_event;
 
-                  {/* Collapsible Dropdown Drawer */}
-                  {isExpanded && (
-                    <tr className="bg-slate-50/70 border-b border-slate-200">
-                      <td colSpan={4} className="p-3">
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-2 max-w-4xl animate-fadeIn">
-                          <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                            <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                              <Sparkles className="h-2.5 w-2.5 text-amber-500" />
-                              Configure Message Template for {config.trigger_event}
+                    return (
+                      <tr 
+                        key={cfg.trigger_event}
+                        onClick={() => setSelectedEventKey(cfg.trigger_event)}
+                        className={`transition-colors select-none cursor-pointer group ${
+                          isSelected ? "bg-emerald-50/50" : "hover:bg-slate-50/70"
+                        }`}
+                      >
+                        {/* S.No. */}
+                        <td className="px-3 py-2 w-12 text-center align-middle whitespace-nowrap font-medium text-slate-500 text-[11px]">
+                          {idx + 1}
+                        </td>
+
+                        {/* Trigger Event - Strictly ONE line */}
+                        <td className="px-3.5 py-2 align-middle whitespace-nowrap">
+                          <span className="font-bold text-slate-900 text-xs whitespace-nowrap">{meta.label}</span>
+                          <span className="text-[11px] text-slate-400 font-normal ml-2 hidden lg:inline whitespace-nowrap">
+                            · {meta.desc}
+                          </span>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-3.5 py-2 align-middle whitespace-nowrap">
+                          {cfg.enabled ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                              Active
                             </span>
-                            <span className="text-[8.5px] font-bold text-slate-400">
-                              HTML / Variables Enabled
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                              Disabled
                             </span>
-                          </div>
+                          )}
+                        </td>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {/* Title Template Field */}
-                            <div>
-                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
-                                TITLE TEMPLATE
-                              </label>
-                              <input 
-                                type="text" 
-                                className="w-full text-[9.5px] font-mono px-2 py-0.5 bg-slate-50 border border-slate-200 hover:border-slate-300 transition rounded-md outline-hidden focus:border-amber-500 h-6.5 font-bold text-slate-900"
-                                placeholder="e.g. Action Required: {{document_number}}"
-                                value={config.title_template || ''}
-                                onChange={(e) => handleChange(idx, 'title_template', e.target.value)}
-                              />
-                              <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
-                                {['document_number', 'vendor_name', 'amount'].map(v => (
-                                  <button
-                                    key={v}
-                                    type="button"
-                                    onClick={() => insertVariable(idx, 'title_template', v)}
-                                    className="px-1 py-0.2 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
-                                  >
-                                    + {`{{${v}}}`}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
+                        {/* Title Template Preview - Strictly ONE line */}
+                        <td className="px-3.5 py-2 align-middle whitespace-nowrap">
+                          {renderTitlePreview(cfg.title_template)}
+                        </td>
 
-                            {/* Message Template Field */}
-                            <div>
-                              <label className="block text-[8.5px] font-black uppercase text-slate-500 mb-0.5">
-                                MESSAGE TEMPLATE
-                              </label>
-                              <textarea 
-                                className="w-full text-[9.5px] font-mono p-1.5 bg-slate-50 border border-slate-200 hover:border-slate-300 transition rounded-md outline-hidden focus:border-amber-500 min-h-[40px] font-medium text-slate-900"
-                                placeholder="e.g. Document {{document_number}} from {{vendor_name}} (₹{{amount}}) is pending your review."
-                                value={config.message_template || ''}
-                                onChange={(e) => handleChange(idx, 'message_template', e.target.value)}
-                              />
-                              <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                <span className="text-[8px] font-extrabold text-slate-400">Insert:</span>
-                                {['document_number', 'vendor_name', 'amount'].map(v => (
+                        {/* Actions */}
+                        <td className="px-3.5 py-2 align-middle text-center whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5 relative">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEventKey(cfg.trigger_event)}
+                              className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold flex items-center gap-1 transition shadow-3xs cursor-pointer ${
+                                isSelected
+                                  ? "bg-[#003F28] text-white border-[#003F28]"
+                                  : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                              }`}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                              <span>Edit</span>
+                            </button>
+
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMenuOpenEvent(prev => prev === cfg.trigger_event ? null : cfg.trigger_event);
+                                }}
+                                className="h-6 w-6 rounded-md border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center transition shadow-3xs cursor-pointer"
+                                title="Toggle Status"
+                              >
+                                <MoreVertical className="h-3 w-3" />
+                              </button>
+
+                              {menuOpenEvent === cfg.trigger_event && (
+                                <div 
+                                  className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-left"
+                                  onClick={e => e.stopPropagation()}
+                                >
                                   <button
-                                    key={v}
                                     type="button"
-                                    onClick={() => insertVariable(idx, 'message_template', v)}
-                                    className="px-1 py-0.2 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 rounded text-[8px] font-mono font-semibold transition cursor-pointer border border-slate-200"
+                                    onClick={() => {
+                                      toggleStatus(cfg.trigger_event);
+                                      setMenuOpenEvent(null);
+                                    }}
+                                    className="w-full px-3 py-1.5 hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition"
                                   >
-                                    + {`{{${v}}}`}
+                                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>{cfg.enabled ? 'Disable' : 'Enable'}</span>
                                   </button>
-                                ))}
-                              </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        {/* RIGHT COMPONENT: Edit Notification Template Drawer (OPENS ONLY WHEN EDIT IS CLICKED) */}
+        {selectedConfig && selectedMeta && (
+          <div className="w-full lg:w-[400px] xl:w-[440px] bg-white border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col justify-between shrink-0 animate-fadeIn">
+            
+            <div className="space-y-3.5">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Edit Notification Template</h3>
+                <button 
+                  type="button" 
+                  onClick={() => setSelectedEventKey(null)}
+                  className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
+                  title="Close Drawer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Event Info & Toggle Switch */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">{selectedMeta.label}</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{selectedMeta.desc}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-[11px] font-semibold ${selectedConfig.enabled ? 'text-emerald-700' : 'text-slate-400'}`}>
+                    {selectedConfig.enabled ? 'Active' : 'Disabled'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleStatus(selectedConfig.trigger_event)}
+                    className={`w-8 h-4.5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors ${
+                      selectedConfig.enabled ? 'bg-[#003F28]' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform ${
+                      selectedConfig.enabled ? 'translate-x-3.5' : 'translate-x-0'
+                    }`}></span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <div className="flex items-center gap-5 border-b border-slate-200 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab("template")}
+                  className={`pb-1.5 text-xs font-bold transition cursor-pointer border-b-2 ${
+                    drawerTab === "template"
+                      ? "border-[#003F28] text-[#003F28]"
+                      : "border-transparent text-slate-400 hover:text-slate-700"
+                  }`}
+                >
+                  Template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab("preview")}
+                  className={`pb-1.5 text-xs font-bold transition cursor-pointer border-b-2 ${
+                    drawerTab === "preview"
+                      ? "border-[#003F28] text-[#003F28]"
+                      : "border-transparent text-slate-400 hover:text-slate-700"
+                  }`}
+                >
+                  Preview
+                </button>
+              </div>
+
+              {/* Tab 1: Template Editor */}
+              {drawerTab === "template" && (
+                <div className="space-y-3">
+                  {/* Notification Title */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Notification Title <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="text"
+                      value={selectedConfig.title_template || ''}
+                      onChange={e => handleUpdateField(selectedConfig.trigger_event, 'title_template', e.target.value)}
+                      placeholder="e.g. Pending Approval: {{document_number}}"
+                      className="w-full text-xs font-medium px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/25 outline-none shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Notification Message */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Notification Message <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea 
+                      rows={3}
+                      value={selectedConfig.message_template || ''}
+                      onChange={e => handleUpdateField(selectedConfig.trigger_event, 'message_template', e.target.value)}
+                      placeholder="e.g. Document {{document_number}} has been assigned to you for approval..."
+                      className="w-full text-xs font-normal p-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/25 outline-none shadow-2xs resize-none leading-relaxed transition"
+                    />
+                  </div>
+
+                  {/* Available Template Variables Helper */}
+                  <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-800">
+                      <Info className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                      <span>Available Template Variables</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {TEMPLATE_VARS.map(varName => (
+                        <button
+                          key={varName}
+                          type="button"
+                          onClick={() => insertVariable(varName)}
+                          className="px-1.5 py-0.5 rounded-md bg-white border border-slate-200 hover:border-emerald-300 hover:text-emerald-800 text-slate-700 font-mono text-[10.5px] shadow-3xs transition cursor-pointer"
+                          title={`Click to insert {{${varName}}}`}
+                        >
+                          {`{{${varName}}}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Live Preview */}
+              {drawerTab === "preview" && (
+                <div className="py-1">
+                  {renderSimulatedPreview(selectedConfig.title_template, selectedConfig.message_template)}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2.5 mt-3">
+              <button
+                type="button"
+                onClick={() => setSelectedEventKey(null)}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-3xs cursor-pointer transition"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={saveAllConfigs}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#003F28] hover:bg-[#004B32] text-white font-bold text-xs rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                <span>Save Template</span>
+              </button>
+            </div>
+
+          </div>
+        )}
+
       </div>
+
     </div>
   );
 }

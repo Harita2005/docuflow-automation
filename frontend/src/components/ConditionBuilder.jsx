@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Edit2, Trash2, X, ArrowRight, Search, 
   AlertTriangle, GitMerge, CheckCircle2, ChevronDown, Check, 
-  ArrowLeft, Layers, Sliders, Clipboard
+  ArrowLeft, Layers, Sliders, Clipboard, Copy, GripVertical, Link2
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -531,6 +531,15 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
 
   const handleRemoveCondition = handleDeleteCondition;
 
+  const handleDuplicateCondition = (idx) => {
+    if (conditions.length >= 10) return;
+    const toCopy = conditions[idx];
+    if (!toCopy) return;
+    const newConds = [...conditions];
+    newConds.splice(idx + 1, 0, { ...toCopy });
+    setConditions(newConds);
+  };
+
   const handleClearAll = () => {
     if (conditions.length > 1) {
       setShowClearConfirm(true);
@@ -818,59 +827,70 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   }, [workflows]);
 
   // =========================================================================
-  // VIEW 1: ONE-PAGE WORKFLOW CONDITION BUILDER (COMPACT TYPOGRAPHY & SIZING)
+  // VIEW 1: ONE-PAGE WORKFLOW CONDITION BUILDER (COMPACT ENTERPRISE SIZING)
   // =========================================================================
   if (editingRule) {
+    const selectedWorkflowObj = workflows.find(w => 
+      w.profile_name === targetWorkflowId || 
+      w.workflow_code === targetWorkflowId ||
+      (w.id && String(w.id) === String(targetWorkflowId))
+    );
+    const derivedWfCode = selectedWorkflowObj?.workflow_code || (targetWorkflowId && targetWorkflowId.startsWith('WF-') ? targetWorkflowId : (workflowCode || 'WF-360'));
+
     return (
-      <div className="flex flex-col gap-2 max-w-7xl mx-auto w-full pb-6 animate-in fade-in duration-150">
+      <div className="flex flex-col gap-3 w-full pb-6 animate-in fade-in duration-150 font-sans">
         {workflowNotice && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-300 text-amber-800 text-xs rounded-md flex items-center justify-between">
+          <div className="px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 text-[11px] rounded-lg flex items-center justify-between">
             <span>⚠️ {workflowNotice}</span>
             <button onClick={() => setWorkflowNotice(null)} className="text-amber-600 hover:text-amber-800 font-bold ml-2">×</button>
           </div>
         )}
         
-        {/* 1. COMPACT HEADER */}
-        <div className="bg-white border border-slate-200/80 rounded-lg px-3 py-2 shadow-2xs">
+        {/* Header Bar */}
+        <div>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 text-[8.5px] font-extrabold uppercase tracking-widest text-slate-500 mb-0.5">
+            <button 
+              type="button" 
+              onClick={handleCancel}
+              className="flex items-center gap-1 text-[#003F28] hover:underline cursor-pointer"
+            >
+              <span>←Policy Matrix</span>
+            </button>
+            <span className="text-slate-300">&gt;</span>
+            <span className="text-slate-600 font-bold">Configure Condition</span>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <div 
-                onClick={handleCancel}
-                className="flex items-center gap-1.5 text-[8.5px] font-extrabold uppercase tracking-widest text-[#003F28] hover:text-emerald-900 cursor-pointer transition-colors mb-0.5 group"
-              >
-                <ArrowLeft className="h-2.5 w-2.5 group-hover:-translate-x-0.5 transition-transform" />
-                <span>POLICY MATRIX</span>
-                <span className="text-slate-300 font-normal">&gt;</span>
-                <span className="text-slate-500">CONFIGURE CONDITION</span>
-              </div>
-              <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>Configure Condition</span>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">Configure Condition</h1>
                 {editingRule.is_new ? (
-                  <span className="text-[8px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                  <span className="text-[8px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
                     New
                   </span>
                 ) : (
-                  <span className="text-[8px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                  <span className="text-[8px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded uppercase tracking-wider">
                     Editing
                   </span>
                 )}
-              </h1>
+              </div>
               {targetWorkflowId && (
-                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 mt-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9px] font-bold">
-                  <GitMerge className="h-2.5 w-2.5 text-emerald-700 shrink-0" />
-                  <span>Workflow: <strong className="text-slate-900">{workflowCode || targetWorkflowId}</strong> ({selectedWorkflowObj?.profile_name || targetWorkflowId})</span>
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 mt-0.5 bg-emerald-50 text-emerald-900 border border-emerald-200/80 rounded text-[9.5px] font-semibold">
+                  <GitMerge className="h-3 w-3 text-emerald-700 shrink-0" />
+                  <span>Workflow: <strong className="font-bold">{derivedWfCode}</strong> ({selectedWorkflowObj?.profile_name || targetWorkflowId})</span>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   handleCancel();
                   window.dispatchEvent(new CustomEvent("set-admin-tab", { detail: "routing" }));
                 }}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1"
+                className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[9px] uppercase tracking-wider rounded transition shadow-2xs flex items-center gap-1 cursor-pointer"
                 title="Return to Flow Builder"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -879,7 +899,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] rounded transition-colors cursor-pointer"
+                className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[8.5px] uppercase tracking-wide rounded transition shadow-2xs cursor-pointer"
               >
                 Cancel
               </button>
@@ -887,113 +907,38 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                 type="button"
                 onClick={handleSaveCondition}
                 disabled={isSaving}
-                className="px-3 py-1 bg-[#003F28] hover:bg-[#002f1e] disabled:opacity-50 text-white font-bold text-[10px] rounded transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1 bg-[#003F28] hover:bg-[#002f1e] disabled:opacity-50 text-white font-bold text-[8.5px] uppercase tracking-wide rounded transition shadow-2xs flex items-center gap-1 cursor-pointer"
               >
-                <Check className="h-3 w-3" />
+                <Check className="h-3.5 w-3.5" />
                 <span>{isSaving ? 'Saving...' : 'Save Condition'}</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* 2-COLUMN RESPONSIVE LAYOUT (FITS HORIZONTALLY & VERTICALLY) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-start">
+        {/* 2-Column Responsive Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
           
-          {/* LEFT COLUMN: CONFIGURATION (8 cols) */}
-          <div className="lg:col-span-8 flex flex-col gap-2.5">
+          {/* LEFT COLUMN: Section 1 & Section 2 (8 cols) */}
+          <div className="lg:col-span-8 flex flex-col gap-3">
             
-            {/* 1. CONDITION & TARGET WORKFLOW ROUTING */}
-            {isWorkflowLinkedContext ? (
-              <section className="bg-white border border-slate-200/90 rounded-lg p-3 shadow-2xs space-y-2.5">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
-                      1
-                    </div>
-                    <div>
-                      <span className="text-[8px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-1 py-0.2 rounded">
-                        Condition For
-                      </span>
-                      <h2 className="text-xs font-black text-slate-900 mt-0.5 flex items-center gap-1.5">
-                        <span>{ruleName || targetWorkflowId}</span>
-                        <span className="text-slate-300 font-normal">·</span>
-                        <span className="font-mono text-[10.5px] text-emerald-700 font-bold">
-                          {workflowCode || 'WF-001'}
-                        </span>
-                      </h2>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                    Workflow Linked
-                  </span>
+            {/* 1. CONDITION & TARGET WORKFLOW */}
+            <section className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full bg-[#003F28] text-white flex items-center justify-center text-[9px] font-bold shrink-0">1</span>
+                  <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                    Condition &amp; Target Workflow
+                  </h2>
                 </div>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Routing Destination</span>
+              </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {/* Condition Name */}
-                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
-                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
-                      Condition Name
-                    </span>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10.5px] font-bold text-slate-900 truncate" title={ruleName}>
-                        {ruleName || targetWorkflowId}
-                      </span>
-                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-slate-200 text-slate-700">
-                        Auto
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Target Workflow */}
-                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
-                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
-                      Target Workflow
-                    </span>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10.5px] font-bold text-slate-900 truncate" title={targetWorkflowId}>
-                        {targetWorkflowId}
-                      </span>
-                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Linked
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Workflow Code */}
-                  <div className="bg-slate-50/70 border border-slate-200/80 rounded p-2">
-                    <span className="block text-[8px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
-                      Workflow Code
-                    </span>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10.5px] font-mono font-bold text-slate-900 truncate">
-                        {workflowCode || '—'}
-                      </span>
-                      <span className="text-[7.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Linked
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            ) : (
-              <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
-                      1
-                    </div>
-                    <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                      Condition & Target Workflow
-                    </h2>
-                  </div>
-                  <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Destination</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  {/* Condition Name */}
-                  <div className="sm:col-span-2">
-                    <label htmlFor="condNameInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+              <div className="space-y-3">
+                {/* Row 1: Condition Name (2 cols) & Document Type (1 col) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-2">
+                    <label htmlFor="condNameInput" className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
                       Condition Name <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1008,23 +953,22 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                           setValidationErrors(errs);
                         }
                       }}
-                      placeholder="e.g. High Value Purchase Approval"
-                      className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 transition-colors ${
+                      placeholder="RULE_RAMRAJ_DEMO_WORKFLOW"
+                      className={`w-full text-[10.5px] px-2 py-1 bg-white border rounded font-semibold text-slate-900 outline-none transition-colors shadow-2xs ${
                         validationErrors.ruleName 
                           ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
-                          : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                          : 'border-slate-200 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]'
                       }`}
                     />
                     {validationErrors.ruleName && (
-                      <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                        <AlertTriangle className="h-2 w-2" /> {validationErrors.ruleName}
+                      <p className="text-[9px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                        <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.ruleName}
                       </p>
                     )}
                   </div>
 
-                  {/* Document Type */}
                   <div>
-                    <label htmlFor="docTypeSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    <label htmlFor="docTypeSelect" className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
                       Document Type <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
@@ -1039,10 +983,10 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                             setValidationErrors(errs);
                           }
                         }}
-                        className={`w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border rounded outline-none font-semibold text-slate-800 appearance-none cursor-pointer ${
+                        className={`w-full text-[10.5px] px-2 py-1 pr-6 bg-white border rounded font-medium text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs transition-colors ${
                           validationErrors.docType 
                             ? 'border-rose-400 focus:border-rose-500 bg-rose-50/30' 
-                            : 'border-slate-200 focus:border-[#003F28] focus:bg-white'
+                            : 'border-slate-200 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]'
                         }`}
                       >
                         <option value="">-- Select Type --</option>
@@ -1050,13 +994,15 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                           <option key={type} value={type}>{type}</option>
                         ))}
                       </select>
-                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                     </div>
                   </div>
+                </div>
 
-                  {/* Category Filter */}
+                {/* Row 2: Category Filter, Target Workflow, Workflow Code */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label htmlFor="wfCategorySelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    <label htmlFor="wfCategorySelect" className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
                       Category Filter
                     </label>
                     <div className="relative">
@@ -1064,20 +1010,19 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                         id="wfCategorySelect"
                         value={wfCategoryFilter}
                         onChange={e => setWfCategoryFilter(e.target.value)}
-                        className="w-full text-[10.5px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                        className="w-full text-[10.5px] px-2 py-1 pr-6 bg-white border border-slate-200 rounded font-medium text-slate-800 outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] appearance-none cursor-pointer shadow-2xs transition-colors"
                       >
                         <option value="ALL">All Categories ({workflows.length})</option>
                         {workflowCategories.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
                       </select>
-                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                     </div>
                   </div>
 
-                  {/* Target Workflow */}
                   <div>
-                    <label htmlFor="targetWfSelect" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    <label htmlFor="targetWfSelect" className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
                       Target Workflow <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
@@ -1097,10 +1042,10 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                             setValidationErrors(errs);
                           }
                         }}
-                        className={`w-full text-[10.5px] px-2 py-1 bg-white border rounded outline-none font-bold appearance-none cursor-pointer ${
+                        className={`w-full text-[10.5px] px-2 py-1 pr-6 bg-white border rounded font-semibold text-slate-800 outline-none appearance-none cursor-pointer shadow-2xs transition-colors truncate ${
                           validationErrors.targetWorkflowId
                             ? 'border-rose-400 text-rose-900 focus:border-rose-500'
-                            : 'border-slate-200 text-slate-900 focus:border-[#003F28]'
+                            : 'border-slate-200 focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]'
                         }`}
                       >
                         <option value="">-- Select Workflow --</option>
@@ -1112,140 +1057,143 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                             </option>
                           ))}
                       </select>
-                      <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                     </div>
                     {validationErrors.targetWorkflowId && (
-                      <p className="text-[8.5px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
-                        <AlertTriangle className="h-2 w-2" /> {validationErrors.targetWorkflowId}
+                      <p className="text-[9px] font-bold text-rose-600 mt-0.5 flex items-center gap-1">
+                        <AlertTriangle className="h-2.5 w-2.5" /> {validationErrors.targetWorkflowId}
                       </p>
                     )}
                   </div>
 
-                  {/* Workflow Code */}
                   <div>
-                    <label className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
+                    <label className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
                       Workflow Code
                     </label>
-                    <div className="w-full text-[10.5px] px-2 py-1 bg-slate-50 border border-slate-200 rounded font-mono font-bold flex items-center justify-between">
-                      <span className={workflowCode ? 'text-[#003F28] font-black' : 'text-slate-400 italic'}>
-                        {workflowCode || 'Derived'}
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-[11px] text-slate-900 inline-block shadow-2xs">
+                        {derivedWfCode}
                       </span>
-                      {workflowCode && (
-                        <span className="text-[7.5px] font-sans font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded flex items-center gap-0.5">
-                          <CheckCircle2 className="h-2 w-2" /> Linked
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded text-[9.5px] font-bold shadow-2xs">
+                        <Link2 className="h-3 w-3" />
+                        <span>Linked</span>
+                      </span>
                     </div>
                   </div>
-
-                  {/* Description */}
-                  <div className="sm:col-span-2 md:col-span-3">
-                    <label htmlFor="condDescInput" className="block text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mb-0.5">
-                      Description <span className="text-slate-400 font-normal">(Optional)</span>
-                    </label>
-                    <input
-                      id="condDescInput"
-                      type="text"
-                      value={description}
-                      onChange={e => setDescription(e.target.value)}
-                      placeholder="Brief summary of when this condition triggers and business justification..."
-                      className="w-full text-[10.5px] px-2 py-1 bg-slate-50/50 border border-slate-200 rounded outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white transition-colors"
-                    />
-                  </div>
                 </div>
-              </section>
-            )}
 
-            {/* 2. MATCH CONDITIONS (Compact) */}
-            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-100 pb-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
-                    2
-                  </div>
-                  <div>
-                    <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                      Match Conditions
-                    </h2>
-                  </div>
+                {/* Row 3: Description */}
+                <div>
+                  <label htmlFor="condDescInput" className="block text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 mb-0.5">
+                    Description <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    id="condDescInput"
+                    type="text"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Routes invoices from Ramraj Demo Mills to DEMO_ENTERPRISE_WORKFLOW"
+                    className="w-full text-[10.5px] px-2 py-1 bg-white border border-slate-200 rounded text-slate-700 outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] shadow-2xs transition-colors"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* 2. MATCH CONDITIONS */}
+            <section className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full bg-[#003F28] text-white flex items-center justify-center text-[9px] font-bold shrink-0">2</span>
+                  <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                    Match Conditions
+                  </h2>
                 </div>
 
                 {/* Match Logic Selector: ALL vs ANY */}
-                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded border border-slate-200 self-start sm:self-auto">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase px-1">Match:</span>
+                <div className="flex items-center gap-1.5 bg-emerald-50/70 border border-emerald-200/80 px-2 py-0.5 rounded-lg">
+                  <span className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500">MATCH:</span>
                   <label className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                    matchType === 'ALL' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    matchType === 'ALL' ? 'bg-[#003F28] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                   }`}>
                     <input
                       type="radio"
                       name="matchType"
                       checked={matchType === 'ALL'}
                       onChange={() => setMatchType('ALL')}
-                      className="accent-[#003F28] h-2.5 w-2.5"
+                      className="sr-only"
                     />
+                    <span className={`w-2 h-2 rounded-full border flex items-center justify-center ${
+                      matchType === 'ALL' ? 'bg-white border-white' : 'border-slate-400'
+                    }`}></span>
                     <span>ALL conditions</span>
                   </label>
                   <label className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                    matchType === 'ANY' ? 'bg-white text-[#003F28] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    matchType === 'ANY' ? 'bg-[#003F28] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                   }`}>
                     <input
                       type="radio"
                       name="matchType"
                       checked={matchType === 'ANY'}
                       onChange={() => setMatchType('ANY')}
-                      className="accent-[#003F28] h-2.5 w-2.5"
+                      className="sr-only"
                     />
+                    <span className={`w-2 h-2 rounded-full border flex items-center justify-center ${
+                      matchType === 'ANY' ? 'bg-white border-white' : 'border-slate-400'
+                    }`}></span>
                     <span>ANY condition</span>
                   </label>
                 </div>
               </div>
 
               {validationErrors.conditions && (
-                <div className="p-1.5 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-700 flex items-center gap-1">
-                  <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                <div className="p-1.5 mb-2 bg-rose-50 border border-rose-200 rounded text-[9.5px] font-bold text-rose-700 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
                   <span>{validationErrors.conditions}</span>
                 </div>
               )}
 
               {/* Condition Rows List */}
-              <div className="space-y-1.5 pt-0.5">
+              <div className="relative pl-5 space-y-2 pt-0.5">
+                {/* Connecting vertical line on left when multiple conditions */}
+                {conditions.length > 1 && (
+                  <div className="absolute left-[9px] top-5 bottom-5 w-[2px] bg-slate-200 -translate-x-1/2" aria-hidden="true" />
+                )}
+
                 {conditions.map((cond, idx) => {
                   const fieldMeta = getFieldMeta(cond.field);
                   const fieldType = fieldMeta.type || 'text';
                   const validOperators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.text;
-                  const masterOptions = getFieldMasterOptions(cond.field);
                   const rowError = validationErrors[`row_${idx}`];
 
                   return (
-                    <div 
-                      key={idx} 
-                      className={`flex flex-col gap-1 p-2 rounded border transition-all ${
-                        rowError 
-                          ? 'bg-rose-50/20 border-rose-300' 
-                          : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-white'
-                      }`}
-                    >
-                      {/* Logical Operator Badge */}
+                    <div key={idx} className="relative">
+                      {/* Operator Badge between conditions */}
                       {idx > 0 && (
-                        <div className="self-start -mt-0.5 mb-0.5">
-                          <span className={`text-[7.5px] font-black uppercase px-1 py-0.2 rounded border tracking-wider ${
-                            matchType === 'ANY' 
-                              ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          }`}>
+                        <div className="relative -ml-5 flex items-center gap-1.5 py-0.5">
+                          <div className="w-4 h-[2px] bg-slate-200" />
+                          <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[8.5px] font-bold px-1.5 py-0.2 rounded shadow-2xs">
                             {matchType === 'ANY' ? 'OR' : 'AND'}
                           </span>
                         </div>
                       )}
 
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full">
+                      <div className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all ${
+                        rowError 
+                          ? 'bg-rose-50/20 border-rose-300' 
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                      }`}>
+                        {/* Drag grip handle */}
+                        <div className="cursor-move p-0.5 text-slate-400 hover:text-slate-600">
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </div>
+
                         {/* 1. Field Dropdown */}
-                        <div className="w-full sm:w-44 shrink-0">
+                        <div className="w-44 sm:w-48 shrink-0">
                           <div className="relative">
                             <select
                               value={cond.field}
                               onChange={e => handleFieldChange(idx, e.target.value)}
-                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                              className="w-full text-xs font-bold text-slate-800 px-2.5 py-1.5 pr-6 bg-white border border-slate-200 rounded outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] appearance-none cursor-pointer shadow-2xs transition-colors"
                             >
                               <optgroup label="SYNCED DOCUMENT FIELDS">
                                 {DEFAULT_CONDITION_FIELDS.map(f => (
@@ -1263,203 +1211,57 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                 <option value="__ADD_NEW_FIELD__">+ Add Custom Field...</option>
                               </optgroup>
                             </select>
-                            <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                           </div>
                         </div>
 
                         {/* 2. Operator Dropdown */}
-                        <div className="w-full sm:w-36 shrink-0">
+                        <div className="w-32 sm:w-36 shrink-0">
                           <div className="relative">
                             <select
                               value={cond.operator}
                               onChange={e => handleOperatorChange(idx, e.target.value)}
-                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] appearance-none cursor-pointer"
+                              className="w-full text-xs font-bold text-slate-800 px-2.5 py-1.5 pr-6 bg-white border border-slate-200 rounded outline-none focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28] appearance-none cursor-pointer shadow-2xs transition-colors"
                             >
                               {validOperators.map(op => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
                               ))}
                             </select>
-                            <ChevronDown className="h-2.5 w-2.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                           </div>
                         </div>
 
-                        {/* 3. Value Control */}
-                        <div className="flex-1 min-w-0">
-                          {/* IS EMPTY / IS NOT EMPTY - NO VALUE REQUIRED */}
-                          {(cond.operator === 'is empty' || cond.operator === 'is not empty') && (
-                            <div className="w-full text-[10px] py-1 px-2.5 bg-slate-100/80 border border-dashed border-slate-300 rounded text-slate-400 font-semibold italic flex items-center justify-between select-none">
-                              <span>No value required (Matches {cond.operator === 'is empty' ? 'empty / blank' : 'non-empty'} fields)</span>
+                        {/* 3. Value Control (Chips & Multi-input) */}
+                        <div className="flex-1 min-w-[180px]">
+                          {(cond.operator === 'is empty' || cond.operator === 'is not empty') ? (
+                            <div className="w-full text-[10px] py-1 px-2 bg-slate-100/80 border border-dashed border-slate-300 rounded text-slate-400 font-semibold italic flex items-center justify-between select-none">
+                              <span>No value required ({cond.operator === 'is empty' ? 'empty' : 'non-empty'})</span>
                             </div>
-                          )}
+                          ) : (
+                            (() => {
+                              const selectedItems = cond.value 
+                                ? String(cond.value).split(',').map(s => s.trim()).filter(Boolean) 
+                                : [];
 
-                          {/* NUMBER: BETWEEN (MIN & MAX) */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'number' && cond.operator === 'between' && (() => {
-                            const parts = String(cond.value || '').split(' - ');
-                            const minVal = parts[0] !== undefined ? parts[0].trim() : '';
-                            const maxVal = parts[1] !== undefined ? parts[1].trim() : '';
-                            return (
-                              <div className="flex items-center gap-1.5 w-full">
-                                <div className="relative flex-1">
-                                  {fieldMeta.isCurrency && (
-                                    <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
-                                  )}
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    value={minVal}
-                                    onChange={e => handleValueChange(idx, `${e.target.value} - ${maxVal}`)}
-                                    placeholder="Min"
-                                    className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
-                                      fieldMeta.isCurrency ? 'pl-5 pr-1.5' : 'px-2'
-                                    }`}
-                                  />
-                                </div>
-                                <span className="text-[9px] font-extrabold text-slate-400 shrink-0 uppercase">to</span>
-                                <div className="relative flex-1">
-                                  {fieldMeta.isCurrency && (
-                                    <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">₹</span>
-                                  )}
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    value={maxVal}
-                                    onChange={e => handleValueChange(idx, `${minVal} - ${e.target.value}`)}
-                                    placeholder="Max"
-                                    className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
-                                      fieldMeta.isCurrency ? 'pl-5 pr-1.5' : 'px-2'
-                                    }`}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* DATE: BETWEEN (FROM & TO) */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'date' && cond.operator === 'between' && (() => {
-                            const parts = String(cond.value || '').split(' - ');
-                            const minDate = parts[0] !== undefined ? parts[0].trim() : '';
-                            const maxDate = parts[1] !== undefined ? parts[1].trim() : '';
-                            return (
-                              <div className="flex items-center gap-1.5 w-full">
-                                <input
-                                  type="date"
-                                  value={minDate}
-                                  onChange={e => handleValueChange(idx, `${e.target.value} - ${maxDate}`)}
-                                  className="w-full text-[10px] px-1.5 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
-                                />
-                                <span className="text-[9px] font-extrabold text-slate-400 shrink-0 uppercase">to</span>
-                                <input
-                                  type="date"
-                                  value={maxDate}
-                                  onChange={e => handleValueChange(idx, `${minDate} - ${e.target.value}`)}
-                                  className="w-full text-[10px] px-1.5 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
-                                />
-                              </div>
-                            );
-                          })()}
-
-                          {/* NUMBER: STANDARD OPERATORS */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'number' && cond.operator !== 'between' && (
-                            <div className="relative">
-                              {fieldMeta.isCurrency && (
-                                <span className="absolute left-2 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">
-                                  ₹
-                                </span>
-                              )}
-                              <input
-                                type="number"
-                                step="any"
-                                value={cond.value}
-                                onChange={e => handleValueChange(idx, e.target.value)}
-                                placeholder={fieldMeta.isCurrency ? "100000" : "0"}
-                                className={`w-full text-[10px] py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] ${
-                                  fieldMeta.isCurrency ? 'pl-5 pr-2' : 'px-2'
-                                }`}
-                              />
-                            </div>
-                          )}
-
-                          {/* DATE: STANDARD OPERATORS */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'date' && cond.operator !== 'between' && (
-                            <input
-                              type="date"
-                              value={cond.value}
-                              onChange={e => handleValueChange(idx, e.target.value)}
-                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
-                            />
-                          )}
-
-                          {/* BOOLEAN SELECT */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && fieldType === 'boolean' && (
-                            <select
-                              value={cond.value}
-                              onChange={e => handleValueChange(idx, e.target.value)}
-                              className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28] cursor-pointer"
-                            >
-                              <option value="true">True (Yes)</option>
-                              <option value="false">False (No)</option>
-                            </select>
-                          )}
-
-                          {/* CATEGORICAL & TEXT: ENTERPRISE MULTI-VALUE INPUT */}
-                          {cond.operator !== 'is empty' && cond.operator !== 'is not empty' && (fieldType === 'select' || fieldType === 'text') && (() => {
-                            const selectedItems = cond.value 
-                              ? cond.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) 
-                              : [];
-
-                            const handlePaste = (e) => {
-                              const pasteData = e.clipboardData?.getData('text');
-                              if (pasteData) {
-                                const parsed = pasteData.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean);
-                                if (parsed.length > 0) {
-                                  e.preventDefault();
-                                  const combined = Array.from(new Set([...selectedItems, ...parsed]));
-                                  handleValueChange(idx, combined.join(', '));
-                                  e.currentTarget.value = '';
-                                }
-                              }
-                            };
-
-                            const handleKeyDown = (e) => {
-                              if (e.key === 'Enter' || e.key === ',') {
-                                e.preventDefault();
-                                const val = e.currentTarget.value.trim();
-                                if (val) {
-                                  const combined = Array.from(new Set([...selectedItems, val]));
-                                  handleValueChange(idx, combined.join(', '));
-                                  e.currentTarget.value = '';
-                                }
-                              } else if (e.key === 'Backspace' && !e.currentTarget.value && selectedItems.length > 0) {
-                                const next = selectedItems.slice(0, -1);
+                              const removeItem = (itemToRemove) => {
+                                const next = selectedItems.filter(item => item !== itemToRemove);
                                 handleValueChange(idx, next.join(', '));
-                              }
-                            };
+                              };
 
-                            const removeItem = (itemToRemove) => {
-                              const next = selectedItems.filter(item => item !== itemToRemove);
-                              handleValueChange(idx, next.join(', '));
-                            };
-
-                            const filteredMaster = masterOptions.filter(opt => 
-                              opt.toLowerCase().includes(multiSelectSearch.toLowerCase())
-                            );
-
-                            return (
-                              <div className="relative">
+                              return (
                                 <div 
-                                  className="w-full min-h-[30px] px-1.5 py-1 bg-white border border-slate-200 rounded flex flex-wrap items-center gap-1 focus-within:border-[#003F28] cursor-text transition-colors"
+                                  className="w-full min-h-[30px] px-2 py-1 bg-white border border-slate-200 rounded flex flex-wrap items-center gap-1 focus-within:border-[#003F28] focus-within:ring-1 focus-within:ring-[#003F28] shadow-2xs transition-colors"
                                   onClick={(e) => {
                                     const inputEl = e.currentTarget.querySelector('input');
                                     if (inputEl) inputEl.focus();
                                   }}
                                 >
-                                  {/* Chips for first 3 items */}
-                                  {selectedItems.slice(0, 3).map((item, itemIdx) => (
+                                  {selectedItems.map((item, itemIdx) => (
                                     <span 
                                       key={itemIdx} 
-                                      className="inline-flex items-center gap-1 bg-emerald-50 text-[#003F28] border border-emerald-200 rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 max-w-[150px]"
+                                      className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-900 border border-emerald-200 rounded px-1.5 py-0.2 text-[9.5px] font-bold shrink-0 shadow-2xs"
                                     >
-                                      <span className="truncate" title={item}>{item}</span>
+                                      <span className="truncate max-w-[120px]" title={item}>{item}</span>
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -1474,329 +1276,189 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
                                     </span>
                                   ))}
 
-                                  {/* [+N more] button if > 3 */}
-                                  {selectedItems.length > 3 && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setValueListModalIdx(idx);
-                                        setValueListSearch('');
-                                        setValueListBulkInput('');
-                                      }}
-                                      className="inline-flex items-center gap-0.5 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-900 text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[8.5px] font-black shrink-0 transition cursor-pointer"
-                                      title={`Click to view and manage all ${selectedItems.length} selected values`}
-                                    >
-                                      <span>+{selectedItems.length - 3} more</span>
-                                    </button>
-                                  )}
-
-                                  {/* Inline Type + Enter, Search, and Paste Input */}
                                   <input
                                     type="text"
-                                    onKeyDown={handleKeyDown}
-                                    onPaste={handlePaste}
-                                    placeholder={selectedItems.length === 0 ? "Search, type value + Enter, or paste list..." : "Search / Add..."}
-                                    className="flex-1 min-w-[90px] bg-transparent outline-none text-[10px] font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal py-0.5"
+                                    placeholder={selectedItems.length === 0 ? "Search / Add..." : "Add..."}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ',') {
+                                        e.preventDefault();
+                                        const val = e.currentTarget.value.trim();
+                                        if (val) {
+                                          const combined = Array.from(new Set([...selectedItems, val]));
+                                          handleValueChange(idx, combined.join(', '));
+                                          e.currentTarget.value = '';
+                                        }
+                                      } else if (e.key === 'Backspace' && !e.currentTarget.value && selectedItems.length > 0) {
+                                        const next = selectedItems.slice(0, -1);
+                                        handleValueChange(idx, next.join(', '));
+                                      }
+                                    }}
+                                    onBlur={(e) => {
+                                      const val = e.target.value.trim();
+                                      if (val) {
+                                        const combined = Array.from(new Set([...selectedItems, val]));
+                                        handleValueChange(idx, combined.join(', '));
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                    className="flex-1 min-w-[70px] text-xs font-medium text-slate-800 outline-none bg-transparent placeholder-slate-400 py-0"
                                   />
-
-                                  {/* Actions inside container */}
-                                  <div className="flex items-center gap-1 shrink-0 ml-auto pl-1">
-                                    {selectedItems.length > 0 && (
-                                      <span className="text-[8px] font-extrabold text-slate-400 select-none">
-                                        ({selectedItems.length})
-                                      </span>
-                                    )}
-
-                                    {/* Quick Bulk Paste Button */}
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setValueListModalIdx(idx);
-                                        setValueListSearch('');
-                                        setValueListBulkInput('');
-                                      }}
-                                      className="p-0.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition cursor-pointer"
-                                      title="Search, paste from Excel/CSV, or type multiple values"
-                                    >
-                                      <Clipboard className="h-3 w-3" />
-                                    </button>
-
-                                    {/* Master options dropdown toggle */}
-                                    {masterOptions.length > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setActiveMultiSelectIdx(activeMultiSelectIdx === idx ? null : idx);
-                                          setMultiSelectSearch('');
-                                        }}
-                                        className="p-0.5 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
-                                        title="Search and select options"
-                                      >
-                                        <ChevronDown className="h-3 w-3" />
-                                      </button>
-                                    )}
-                                  </div>
                                 </div>
-
-                                {/* Master Options Dropdown Popover */}
-                                {activeMultiSelectIdx === idx && masterOptions.length > 0 && (
-                                  <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
-                                    <div className="flex items-center justify-between gap-1 pb-1 border-b border-slate-100">
-                                      <div className="relative flex-1">
-                                        <Search className="h-3 w-3 text-slate-400 absolute left-2 top-1.5 pointer-events-none" />
-                                        <input
-                                          type="text"
-                                          value={multiSelectSearch}
-                                          onChange={e => setMultiSelectSearch(e.target.value)}
-                                          placeholder="Search options..."
-                                          className="w-full pl-6 pr-2 py-0.5 text-[9.5px] bg-slate-50 border border-slate-200 rounded outline-none font-bold text-slate-800 focus:border-[#003F28]"
-                                          autoFocus
-                                        />
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setActiveMultiSelectIdx(null)}
-                                        className="p-1 text-slate-400 hover:text-slate-600 rounded transition cursor-pointer"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </button>
-                                    </div>
-
-                                     <div className="flex items-center justify-between text-[9px] font-bold px-1 text-slate-500">
-                                       <button
-                                         type="button"
-                                         onClick={() => {
-                                           setConditions(prev => prev.map((c, i) => {
-                                             if (i !== idx) return c;
-                                             const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
-                                             const combined = Array.from(new Set([...cur, ...filteredMaster]));
-                                             return { ...c, value: combined.join(', ') };
-                                           }));
-                                         }}
-                                         className="text-[#003F28] hover:underline cursor-pointer"
-                                       >
-                                         Select All ({filteredMaster.length})
-                                       </button>
-                                       <button
-                                         type="button"
-                                         onClick={() => {
-                                           setConditions(prev => prev.map((c, i) => {
-                                             if (i !== idx) return c;
-                                             const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
-                                             const remaining = cur.filter(s => !filteredMaster.includes(s));
-                                             return { ...c, value: remaining.join(', ') };
-                                           }));
-                                         }}
-                                         className="text-rose-600 hover:underline cursor-pointer"
-                                       >
-                                         Clear Filtered
-                                       </button>
-                                     </div>
-
-                                     <div className="max-h-48 overflow-y-auto space-y-0.5 pt-0.5 border-t border-slate-100">
-                                       {filteredMaster.length === 0 ? (
-                                         <p className="text-[9.5px] text-slate-400 italic py-2 text-center">
-                                           No options matched "{multiSelectSearch}"
-                                         </p>
-                                       ) : (
-                                         filteredMaster.map(opt => {
-                                           const checked = selectedItems.includes(opt);
-                                           return (
-                                             <label
-                                               key={opt}
-                                               className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-[10px] transition-colors ${
-                                                 checked ? 'bg-emerald-50 text-emerald-950 font-bold' : 'hover:bg-slate-50 text-slate-700 font-medium'
-                                               }`}
-                                             >
-                                               <input
-                                                 type="checkbox"
-                                                 checked={checked}
-                                                 onChange={() => {
-                                                   setConditions(prev => prev.map((c, i) => {
-                                                     if (i !== idx) return c;
-                                                     const cur = c.value ? c.value.split(/[\r\n\t,;]+/).map(s => s.trim()).filter(Boolean) : [];
-                                                     const isAlreadyChecked = cur.includes(opt);
-                                                     const next = isAlreadyChecked
-                                                       ? cur.filter(s => s !== opt)
-                                                       : [...cur, opt];
-                                                     return { ...c, value: next.join(', ') };
-                                                   }));
-                                                 }}
-                                                 className="h-3 w-3 accent-[#003F28] rounded cursor-pointer"
-                                               />
-                                               <span className="truncate">{opt}</span>
-                                             </label>
-                                           );
-                                         })
-                                       )}
-                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                              );
+                            })()
+                          )}
                         </div>
 
-                        {/* 4. Delete Row Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveCondition(idx)}
-                          disabled={conditions.length === 1}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-20 rounded transition cursor-pointer shrink-0 self-end sm:self-center"
-                          title="Remove condition"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {/* Actions: Duplicate & Delete */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateCondition(idx)}
+                            disabled={conditions.length >= 10}
+                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition cursor-pointer disabled:opacity-30"
+                            title="Duplicate condition"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCondition(idx)}
+                            disabled={conditions.length === 1}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer disabled:opacity-30"
+                            title="Delete condition"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-
-                      {rowError && (
-                        <p className="text-[8.5px] font-bold text-rose-600 pl-1 flex items-center gap-1">
-                          <AlertTriangle className="h-2 w-2" /> {rowError}
-                        </p>
-                      )}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Add Condition & Clear Actions */}
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+              {/* Bottom Actions Bar */}
+              <div className="flex items-center justify-between pt-3 mt-1.5 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={handleAddCondition}
                   disabled={conditions.length >= 10}
-                  className="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 text-[#003F28] font-bold text-[9.5px] rounded transition shadow-2xs cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50/70 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 text-[#003F28] font-bold text-[8.5px] uppercase tracking-wide rounded transition shadow-2xs cursor-pointer"
                 >
-                  <Plus className="h-2.5 w-2.5" />
+                  <Plus className="h-3 w-3" />
                   <span>Add Condition ({conditions.length}/10)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleClearAll}
-                  className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-700 text-slate-600 font-bold text-[9.5px] rounded transition cursor-pointer"
+                  className="flex items-center gap-1 text-slate-500 hover:text-rose-600 font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded transition cursor-pointer"
+                  title="Clear all conditions"
                 >
-                  <Trash2 className="h-2.5 w-2.5" />
+                  <Trash2 className="h-3 w-3" />
                   <span>Clear All</span>
                 </button>
               </div>
             </section>
           </div>
 
-          {/* RIGHT COLUMN: LIVE RULE PREVIEW & ACTIONS (4 cols) */}
-          <div className="lg:col-span-4 flex flex-col gap-2.5 sticky top-2">
-            
-            {/* 3. RULE PREVIEW (Compact) */}
-            <section className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="h-4 w-4 rounded bg-emerald-50 text-[#003F28] flex items-center justify-center font-black text-[9px]">
-                    3
-                  </div>
+          {/* RIGHT COLUMN: 3 LIVE EVALUATION (4 cols) */}
+          <div className="lg:col-span-4 flex flex-col gap-3 sticky top-2">
+            <section className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full bg-[#003F28] text-white flex items-center justify-center text-[9px] font-bold shrink-0">3</span>
                   <h2 className="text-[10px] font-black uppercase tracking-wider text-slate-800">
                     Live Evaluation
                   </h2>
                 </div>
-                <span className="text-[8.5px] font-bold text-slate-400 uppercase">Routing Preview</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Routing Preview</span>
               </div>
 
-              {previewData.isComplete ? (
-                <div className="bg-slate-50 border border-slate-200 rounded p-2 space-y-2 font-mono text-[9.5px]">
-                  {/* IF BLOCK */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1">
-                      <span className="bg-[#003F28] text-white text-[8px] font-black px-1 py-0.2 rounded uppercase">
-                        IF
-                      </span>
-                      <span className="text-[9px] font-bold text-slate-500 font-sans">
-                        Matches ({matchType === 'ANY' ? 'ANY' : 'ALL'}):
-                      </span>
-                    </div>
+              {/* IF Section */}
+              <div className="bg-slate-50/90 rounded-lg p-3 border border-slate-200/60 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-[#003F28] text-white font-black text-[8px] px-1.5 py-0.2 rounded shadow-2xs uppercase">
+                    IF
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-700">
+                    Matches ({matchType === 'ANY' ? 'ANY' : 'ALL'}):
+                  </span>
+                </div>
 
-                    <div className="pl-3 space-y-0.5">
-                      {previewData.formattedConditions.map((fc, i) => (
-                        <div key={i} className="flex flex-wrap items-center gap-1 text-slate-800">
-                          {i > 0 && (
-                            <span className={`text-[7.5px] font-black uppercase px-0.5 py-0.2 rounded ${
-                              matchType === 'ANY' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
-                            }`}>
+                <div className="space-y-1.5 pt-0.5">
+                  {conditions.map((cond, cIdx) => {
+                    const fMeta = getFieldMeta(cond.field);
+                    const validOps = OPERATORS_BY_TYPE[fMeta.type || 'text'] || OPERATORS_BY_TYPE.text;
+                    const opObj = validOps.find(o => o.value === cond.operator);
+                    const opLabel = opObj ? opObj.label.toLowerCase() : (cond.operator || 'equals');
+                    const items = cond.value ? String(cond.value).split(',').map(s => s.trim()).filter(Boolean) : [];
+
+                    return (
+                      <React.Fragment key={cIdx}>
+                        {cIdx > 0 && (
+                          <div className="ml-5 my-0.5">
+                            <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[8px] font-bold px-1.5 py-0.2 rounded shadow-2xs">
                               {matchType === 'ANY' ? 'OR' : 'AND'}
                             </span>
-                          )}
-                          <span className="font-bold text-slate-900 font-sans">{fc.fieldLabel}</span>
-                          <span className="text-slate-500 font-sans italic">{fc.operatorLabel}</span>
-                          <span className="font-black text-[#003F28] font-mono bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
-                            {fc.valueLabel}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="w-4 h-4 rounded bg-white border border-slate-200 text-slate-700 text-[9px] font-bold flex items-center justify-center shadow-2xs shrink-0">
+                            {cIdx + 1}
                           </span>
+                          <span className="font-bold text-[11px] text-slate-900">
+                            {fMeta.label || cond.field}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {opLabel}
+                          </span>
+                          {items.length > 0 ? (
+                            items.map((val, vIdx) => (
+                              <span key={vIdx} className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-1.5 py-0.2 rounded shadow-2xs">
+                                {val}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">
+                              {cond.operator === 'is empty' ? '(Empty)' : cond.operator === 'is not empty' ? '(Not Empty)' : '—'}
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* THEN Section */}
+              <div className="bg-slate-50/90 rounded-lg p-3 border border-slate-200/60 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-[#003F28] text-white font-black text-[8px] px-1.5 py-0.2 rounded shadow-2xs uppercase">
+                    THEN
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-700">
+                    Routing Action:
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-medium text-slate-500 min-w-[50px]">Route to:</span>
+                    <span className="bg-white border border-slate-200 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded shadow-2xs inline-block truncate max-w-[200px]">
+                      {targetWorkflowId || 'DEMO_ENTERPRISE_WORKFLOW'}
+                    </span>
                   </div>
-
-                  {/* THEN BLOCK */}
-                  <div className="pt-1.5 border-t border-slate-200/80 space-y-1">
-                    <div className="flex items-center gap-1">
-                      <span className="bg-emerald-600 text-white text-[8px] font-black px-1 py-0.2 rounded uppercase">
-                        THEN
-                      </span>
-                      <span className="text-[9px] font-bold text-slate-500 font-sans">
-                        Routing Action:
-                      </span>
-                    </div>
-
-                    <div className="pl-3 space-y-0.5 font-sans">
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-500 font-medium text-[9.5px]">Route to:</span>
-                        <span className="font-black text-slate-900 text-[10px] bg-white border border-slate-200 px-1 py-0.2 rounded shadow-2xs">
-                          {previewData.targetWorkflowName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-500 font-medium text-[9.5px]">Code:</span>
-                        <span className="font-mono font-bold text-[#003F28] bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 text-[9.5px]">
-                          {previewData.workflowCode}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-medium text-slate-500 min-w-[50px]">Code:</span>
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-mono font-bold text-[10px] px-1.5 py-0.2 rounded inline-block">
+                      {derivedWfCode}
+                    </span>
                   </div>
                 </div>
-              ) : (
-                <div className="p-2.5 bg-slate-50 border border-dashed border-slate-200 rounded text-center">
-                  <p className="text-[9.5px] font-bold text-slate-500">
-                    Complete conditions to preview rule.
-                  </p>
-                  <p className="text-[8.5px] text-slate-400 mt-0.5 font-medium">
-                    Missing: {previewData.issues.join(', ')}
-                  </p>
-                </div>
-              )}
+              </div>
             </section>
-
-            {/* QUICK ACTIONS CARD */}
-            <div className="bg-white border border-slate-200/80 rounded-lg p-2.5 shadow-2xs flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={handleSaveCondition}
-                disabled={isSaving}
-                className="w-full py-1.5 bg-[#003F28] hover:bg-[#003220] disabled:opacity-50 text-white font-bold text-[10.5px] rounded transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Check className="h-3 w-3" />
-                <span>{isSaving ? 'Saving...' : 'Save & Publish Condition'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="w-full py-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-[10px] rounded transition cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
-
         {/* MODAL: CLEAR ALL CONFIRMATION */}
         {showClearConfirm && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-100">

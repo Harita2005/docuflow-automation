@@ -349,10 +349,24 @@ class AuditLogResponse(BaseModel):
     details: Optional[str] = Field(None, validation_alias='notes')
     ip_address: Optional[str] = None
     timestamp: datetime.datetime
+    approver_user_id: Optional[int] = None
+    stage_id: Optional[int] = None
+    previous_status: Optional[str] = None
+    new_status: Optional[str] = None
+    remarks: Optional[str] = None
+    outcome: Optional[str] = None
+    category: Optional[str] = None
 
     class Config:
         from_attributes = True
         populate_by_name = True
+
+class PaginatedAuditLogsResponse(BaseModel):
+    items: List[AuditLogResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 class DocumentSyncRequest(BaseModel):
     doc_key: Optional[Union[str, int]] = Field(None, alias='DocKey', description='Unique ERP/MS SQL Primary Key for idempotent upsert')

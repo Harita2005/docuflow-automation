@@ -139,7 +139,11 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
                     </td>
                     <td className="py-2.5 px-4 text-right">
                       <button 
-                        className="inline-flex items-center justify-center gap-1 px-2.5 py-1 bg-blue-600 text-white hover:bg-blue-500 rounded font-bold text-[9px] uppercase tracking-widest transition-all shadow-sm shadow-blue-500/20 group-hover:-translate-y-px"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onViewDocument(inv.id); }}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-1 bg-[#003F28] hover:bg-[#002d1d] text-white rounded font-bold text-[9px] uppercase tracking-widest transition-all shadow-sm shadow-emerald-950/20 group-hover:-translate-y-px cursor-pointer"
+                        title="Verify Document"
+                        aria-label="Verify Document"
                       >
                         Verify
                         <ChevronRight className="w-3 h-3" />

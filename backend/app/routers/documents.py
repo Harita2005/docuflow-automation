@@ -3038,7 +3038,10 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     # Require expected_version and increment version
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None))
     if expected_ver is None:
-        expected_ver = inv.version or 1
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing mandatory 'expected_version' for concurrency control."
+        )
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(

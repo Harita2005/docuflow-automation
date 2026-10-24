@@ -69,7 +69,8 @@ export default function LoginPage({
   const [sessionConflict, setSessionConflict] =
     useState<SessionConflictData | null>(null);
 
-  const otpInputRef = useRef<HTMLInputElement>(null);
+  const otpBoxesRef = useRef<(HTMLInputElement | null)[]>([]);
+  const [focusedOtpIndex, setFocusedOtpIndex] = useState<number | null>(0);
 
   // ---------------------------------------------------------------------------
   // Device information
@@ -130,12 +131,64 @@ export default function LoginPage({
   useEffect(() => {
     if (step === 3) {
       const timer = window.setTimeout(() => {
-        otpInputRef.current?.focus();
+        otpBoxesRef.current[0]?.focus();
+        setFocusedOtpIndex(0);
       }, 150);
 
       return () => window.clearTimeout(timer);
     }
   }, [step]);
+
+  const handleBoxChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/[^0-9]/g, "");
+    if (!rawVal) {
+      const chars = otpCode.split("");
+      chars[index] = "";
+      setOtpCode(chars.join("").trimEnd());
+      return;
+    }
+    const char = rawVal.slice(-1);
+    const chars = (otpCode.padEnd(6, " ")).split("");
+    chars[index] = char;
+    const nextCode = chars.join("").trimEnd();
+    setOtpCode(nextCode);
+
+    if (index < 5) {
+      otpBoxesRef.current[index + 1]?.focus();
+    }
+  };
+
+  const handleBoxKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (!otpCode[index] && index > 0) {
+        e.preventDefault();
+        const chars = (otpCode.padEnd(6, " ")).split("");
+        chars[index - 1] = " ";
+        setOtpCode(chars.join("").trimEnd());
+        otpBoxesRef.current[index - 1]?.focus();
+      } else {
+        const chars = (otpCode.padEnd(6, " ")).split("");
+        chars[index] = " ";
+        setOtpCode(chars.join("").trimEnd());
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      e.preventDefault();
+      otpBoxesRef.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      e.preventDefault();
+      otpBoxesRef.current[index + 1]?.focus();
+    }
+  };
+
+  const handleBoxPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 6);
+    if (pasted) {
+      setOtpCode(pasted);
+      const nextIdx = Math.min(pasted.length, 5);
+      otpBoxesRef.current[nextIdx]?.focus();
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // Step 1: Identification (Employee ID or Username)
@@ -561,15 +614,15 @@ export default function LoginPage({
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-white flex font-sans w-full overflow-hidden select-none">
+    <div className="min-h-screen bg-[#FAF8F3] flex font-sans w-full overflow-hidden select-none">
       {/* LEFT BRAND PANEL */}
-      <div className="hidden lg:flex lg:w-[30%] relative bg-[#006B3F] overflow-hidden rounded-r-[28px] flex-col justify-center items-center p-8 min-h-screen text-white">
+      <div className="hidden lg:flex lg:w-[30%] relative bg-gradient-to-b from-[#004B32] via-[#003F29] to-[#002E1E] overflow-hidden rounded-r-[28px] flex-col justify-center items-center p-8 min-h-screen text-white">
         {/* Dot matrix */}
         <div className="absolute left-8 top-1/2 -translate-y-1/2 grid grid-cols-4 gap-2.5 opacity-30 pointer-events-none">
           {[...Array(16)].map((_, i) => (
             <div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+              className="w-1.5 h-1.5 rounded-full bg-[#9FD7C0]"
             />
           ))}
         </div>
@@ -605,14 +658,14 @@ export default function LoginPage({
         {/* Brand */}
         <div className="relative z-30 -translate-y-10 flex flex-col items-center text-center space-y-3">
           <div className="w-24 h-24 rounded-full bg-[#F4FAF7] flex items-center justify-center shadow-[0_12px_32px_rgba(0,0,0,0.22)] mb-1">
-            <Layers className="w-12 h-12 text-[#006B3F]" />
+            <Layers className="w-12 h-12 text-[#003F29]" />
           </div>
 
           <h1 className="text-4xl font-extrabold tracking-wider text-white uppercase font-display drop-shadow-sm">
             DAAS
           </h1>
 
-          <p className="text-emerald-100/90 text-[11px] font-semibold tracking-[0.16em] uppercase leading-relaxed max-w-xs">
+          <p className="text-white/80 text-[11px] font-semibold tracking-[0.16em] uppercase leading-relaxed max-w-xs">
             Document Approval &amp;
             <br />
             Automation System
@@ -621,8 +674,9 @@ export default function LoginPage({
       </div>
 
       {/* RIGHT PANEL */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 bg-white relative min-h-screen">
-        <div className="w-full max-w-md mx-auto">
+      <div className="flex-1 flex flex-col justify-between px-8 sm:px-16 lg:px-24 py-8 bg-[#FAF8F3] relative min-h-screen">
+        <div className="hidden lg:block h-2" />
+        <div className="w-full max-w-md mx-auto my-auto py-4">
           {/* Session kicked alert */}
           {kickedReason && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-3">
@@ -664,7 +718,7 @@ export default function LoginPage({
           {step === 1 && (
             <div className="space-y-6">
               <div className="text-left space-y-1">
-                <h2 className="text-3xl font-bold text-[#006B3F] tracking-tight">
+                <h2 className="text-3xl font-bold text-[#003F29] tracking-tight">
                   Welcome Back
                 </h2>
 
@@ -701,14 +755,14 @@ export default function LoginPage({
                       required
                       autoFocus
                       autoComplete="username"
-                      className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] transition-colors"
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29] transition-colors"
                     />
                   </div>
                 </div>
 
                 {/* 2FA info badge */}
                 <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-                  <ShieldCheck className="h-4 w-4 text-[#006B3F] mt-0.5 shrink-0" />
+                  <ShieldCheck className="h-4 w-4 text-[#003F29] mt-0.5 shrink-0" />
 
                   <p className="text-xs text-emerald-800 leading-relaxed">
                     Secure passwordless login via <strong>Email OTP</strong>,{" "}
@@ -720,7 +774,7 @@ export default function LoginPage({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3.5 px-4 bg-[#006B3F] hover:bg-[#005A35] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer mt-6"
+                  className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer mt-6"
                 >
                   {loading ? (
                     <div className="flex items-center space-x-2">
@@ -748,7 +802,7 @@ export default function LoginPage({
                 <button
                   type="button"
                   onClick={handleBackToId}
-                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#006B3F] cursor-pointer"
+                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#003F29] cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Change User ({employeeId})
@@ -756,7 +810,7 @@ export default function LoginPage({
               </div>
 
               <div className="text-left space-y-1">
-                <h2 className="text-2xl font-bold text-[#006B3F] tracking-tight">
+                <h2 className="text-2xl font-bold text-[#003F29] tracking-tight">
                   Choose Verification Method
                 </h2>
 
@@ -783,7 +837,7 @@ export default function LoginPage({
                   <button
                     type="button"
                     onClick={handleBackToId}
-                    className="w-full py-3.5 px-4 bg-[#006B3F] hover:bg-[#005A35] text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
+                    className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     <span>Back to login</span>
@@ -797,10 +851,10 @@ export default function LoginPage({
                       type="button"
                       disabled={loading}
                       onClick={() => void handleSelectMethod("EMAIL")}
-                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs"
                     >
                       <div className="flex items-center space-x-3.5">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#006B3F] flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#003F29] flex items-center justify-center shrink-0">
                           <Mail className="h-5 w-5" />
                         </div>
                         <div>
@@ -841,7 +895,7 @@ export default function LoginPage({
                       type="button"
                       disabled={loading}
                       onClick={() => void handleSelectMethod("SMS")}
-                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs"
                     >
                       <div className="flex items-center space-x-3.5">
                         <div className="w-10 h-10 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
@@ -885,7 +939,7 @@ export default function LoginPage({
                       type="button"
                       disabled={loading}
                       onClick={() => void handleSelectMethod("AUTHENTICATOR")}
-                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#006B3F] hover:bg-emerald-50/50 bg-white shadow-xs"
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs"
                     >
                       <div className="flex items-center space-x-3.5">
                         <div className="w-10 h-10 rounded-lg bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0">
@@ -950,7 +1004,7 @@ export default function LoginPage({
                 <button
                   type="button"
                   onClick={handleBackToMethods}
-                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#006B3F] cursor-pointer"
+                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#003F29] cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Choose another method
@@ -967,7 +1021,7 @@ export default function LoginPage({
 
               {/* Title & Description */}
               <div className="text-left space-y-1">
-                <h2 className="text-2xl font-bold text-[#006B3F] tracking-tight">
+                <h2 className="text-2xl font-bold text-[#003F29] tracking-tight">
                   {selectedMethod === "AUTHENTICATOR"
                     ? isEnrollingTotp
                       ? "Set Up Authenticator"
@@ -1045,7 +1099,7 @@ export default function LoginPage({
                     <button
                       type="button"
                       onClick={() => setShowManualKey((prev) => !prev)}
-                      className="text-xs font-semibold text-[#006B3F] hover:underline inline-flex items-center space-x-1 cursor-pointer"
+                      className="text-xs font-semibold text-[#003F29] hover:underline inline-flex items-center space-x-1 cursor-pointer"
                     >
                       <Key className="h-3.5 w-3.5" />
                       <span>{showManualKey ? "Hide manual key" : "Can't scan QR? View key"}</span>
@@ -1066,28 +1120,59 @@ export default function LoginPage({
                   <label className="text-xs font-semibold text-gray-800">
                     {selectedMethod === "AUTHENTICATOR"
                       ? "6-Digit Authenticator Code"
-                      : "6-Digit Passcode"}
+                      : "6-digit passcode"}
                   </label>
 
-                  <input
-                    ref={otpInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={(e) =>
-                      setOtpCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-                    }
-                    placeholder="••••••"
-                    className="w-full text-center text-2xl tracking-[0.5em] font-mono py-3 px-4 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F] text-gray-900"
-                  />
+                  {/* 6-Box OTP Input */}
+                  <div className="flex items-center justify-between gap-2 sm:gap-2.5">
+                    {[0, 1, 2, 3, 4, 5].map((i) => {
+                      const digit = otpCode[i] || "";
+                      const isFocused = focusedOtpIndex === i;
+                      return (
+                        <div
+                          key={i}
+                          className="relative flex-1 aspect-square max-w-[56px] min-h-[52px]"
+                        >
+                          <input
+                            ref={(el) => { otpBoxesRef.current[i] = el; }}
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete={i === 0 ? "one-time-code" : "off"}
+                            maxLength={2}
+                            value={digit}
+                            onFocus={() => setFocusedOtpIndex(i)}
+                            onBlur={() => setFocusedOtpIndex(null)}
+                            onChange={(e) => handleBoxChange(i, e)}
+                            onKeyDown={(e) => handleBoxKeyDown(i, e)}
+                            onPaste={handleBoxPaste}
+                            className={`w-full h-full text-center text-xl font-bold font-mono rounded-xl bg-white transition-all cursor-text outline-none select-none ${
+                              isFocused
+                                ? "border-2 border-[#003F29] ring-3 ring-[#003F29]/15 shadow-sm text-gray-900"
+                                : digit
+                                ? "border border-gray-300 text-gray-900 shadow-2xs"
+                                : "border border-gray-200 text-transparent hover:border-gray-300"
+                            }`}
+                          />
+                          {/* Centered dot indicator matching design when empty */}
+                          {!digit && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div
+                                className={`w-2 h-2 rounded-full transition-colors ${
+                                  isFocused ? "bg-[#003F29]" : "bg-slate-400/80"
+                                }`}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading || otpCode.length !== 6}
-                  className="w-full py-3.5 px-4 bg-[#006B3F] hover:bg-[#005A35] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
+                  className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   {loading ? (
                     <div className="flex items-center space-x-2">
@@ -1118,7 +1203,7 @@ export default function LoginPage({
                         type="button"
                         onClick={() => void handleResendOtp()}
                         disabled={loading}
-                        className="text-xs font-semibold text-[#006B3F] hover:underline cursor-pointer"
+                        className="text-xs font-semibold text-[#003F29] hover:underline cursor-pointer"
                       >
                         Didn't receive code? Resend OTP
                       </button>
@@ -1139,6 +1224,22 @@ export default function LoginPage({
             </div>
           )}
         </div>
+
+        {/* LOGIN FOOTER */}
+        <footer className="w-full max-w-lg mx-auto pt-4 pb-1 text-center text-[10.5px] text-slate-500 select-none space-y-1">
+          <p className="font-medium text-slate-600 tracking-tight">
+            &copy; 2026 DAAS. All rights reserved. | Document Approval &amp; Automation System
+          </p>
+          <div className="flex items-center justify-center gap-2 text-slate-400 text-[10px]">
+            <span className="hover:text-[#003F29] transition-colors cursor-pointer">
+              Privacy Policy
+            </span>
+            <span>&middot;</span>
+            <span className="hover:text-[#003F29] transition-colors cursor-pointer">
+              Help &amp; Support
+            </span>
+          </div>
+        </footer>
       </div>
 
       {/* =============================================================== */}
@@ -1177,7 +1278,7 @@ export default function LoginPage({
               <button
                 type="button"
                 onClick={sessionConflict.onConfirm}
-                className="flex-1 py-2 bg-[#006B3F] text-white rounded-lg text-xs font-semibold hover:bg-[#005A35]"
+                className="flex-1 py-2 bg-[#003F29] text-white rounded-lg text-xs font-semibold hover:bg-[#002E1E]"
               >
                 Sign In Here
               </button>

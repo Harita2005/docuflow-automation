@@ -315,7 +315,7 @@ export default function WorkflowRulesPage() {
         </div>
 
         {/* 4 Engine Switcher Tabs */}
-        <div className='flex items-center bg-slate-100/90 p-0.5 rounded-md border border-slate-200/80'>
+        <div className='flex items-center gap-1.5'>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -323,14 +323,14 @@ export default function WorkflowRulesPage() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={'flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ' + (
+                className={'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ' + (
                   isActive
-                    ? 'bg-white text-[#003F28] font-bold shadow-2xs border border-slate-200/60'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    ? 'bg-emerald-50/80 text-[#003F28] font-bold border border-emerald-400 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/50 border border-transparent font-medium'
                 )}
                 title={item.desc}
               >
-                <Icon className={'h-3 w-3 ' + (isActive ? 'text-[#003F28]' : 'text-slate-400')} />
+                <Icon className={'h-3.5 w-3.5 ' + (isActive ? 'text-[#003F28]' : 'text-slate-500')} />
                 <span>{item.label}</span>
               </button>
             );

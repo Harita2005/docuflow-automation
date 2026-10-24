@@ -15,6 +15,9 @@ import {
   FolderOpen,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
+  ArrowUpDown,
+  Settings,
   Lock,
   MoreVertical,
   Info,
@@ -22,7 +25,8 @@ import {
   UserCheck,
   Edit2,
   Eye,
-  UserPlus
+  UserPlus,
+  Filter
 } from "lucide-react";
 
 // Standard Baseline Roles
@@ -325,7 +329,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const [_selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [userStatusFilter, setUserStatusFilter] = useState("ALL"); // "ALL" | "ACTIVE" | "DISABLED"
+  const [roleStatusFilter, setRoleStatusFilter] = useState("ALL"); // "ALL" | "ACTIVE" | "DISABLED"
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [menuOpenUserId, setMenuOpenUserId] = useState(null);
+  const [menuOpenRoleId, setMenuOpenRoleId] = useState(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
 
   const filteredUsers = users.filter(u => {
@@ -334,21 +342,239 @@ export default function AdminRBAC({ onRefreshSignal }) {
       (u.email || "").toLowerCase().includes(search.toLowerCase()) || 
       (u.employee_id || u.username || "").toLowerCase().includes(search.toLowerCase());
     
-    if (roleFilter === "ALL") return matchesSearch;
-    const uRole = (u.role || "").toLowerCase();
-    const filterRole = roleFilter.toLowerCase();
-    return uRole === filterRole && matchesSearch;
+    if (!matchesSearch) return false;
+
+    if (roleFilter !== "ALL") {
+      const uRole = String(u.role || "").toLowerCase().trim();
+      const filterRole = String(roleFilter).toLowerCase().trim();
+      if (uRole !== filterRole) return false;
+    }
+
+    if (userStatusFilter !== "ALL") {
+      const isActive = u.is_active !== false;
+      if (userStatusFilter === "ACTIVE" && !isActive) return false;
+      if (userStatusFilter === "DISABLED" && isActive) return false;
+    }
+
+    return true;
   });
 
+  // Role table state & helpers
+  const [selectedRoleIds, setSelectedRoleIds] = useState(new Set());
+  const [rolePage, setRolePage] = useState(1);
+  const [rolePageSize, setRolePageSize] = useState(10);
+  const [roleSortField, setRoleSortField] = useState("");
+  const [roleSortDir, setRoleSortDir] = useState("asc");
+
+  const getRoleDescription = (role) => {
+    if (role.description) return role.description;
+    const key = String(role.code || role.id || role.name || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    if (key.includes("admin")) return "Full system access and configuration control.";
+    if (key === "gm" || key.includes("general_manager") || key.includes("general manager")) return "Management oversight and approvals.";
+    if (key === "jmd" || key.includes("joint_managing") || key.includes("joint managing")) return "Executive level access and document approvals.";
+    if (key === "md" || key.includes("managing_director") || key.includes("managing director")) return "Executive access with full approval rights.";
+    if (key.includes("operations") || key.includes("manager")) return "Operations and workflow management.";
+    if (key.includes("finance_auditor") || key.includes("auditor") || key.includes("audit")) return "Financial review and audit access.";
+    if (key.includes("accounts_uploader")) return "Upload accounts documents.";
+    if (key.includes("accounts_approver")) return "Approve accounts related documents.";
+    if (key.includes("accounts")) return "Access to accounts related documents.";
+    if (key.includes("employee")) return "Basic access for document submission.";
+    if (key.includes("ap_specialist")) return "Accounts payable processing and invoice management.";
+    if (key.includes("hr")) return "Human resources and personnel document management.";
+    return "Standard role access and workflow permissions.";
+  };
+
+  const getRoleIconStyle = (role) => {
+    const key = String(role.code || role.id || role.name || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    if (key.includes("admin")) return "bg-blue-50 text-blue-600 border-blue-100";
+    if (key === "gm" || key.includes("general_manager") || key.includes("general manager")) return "bg-purple-50 text-purple-600 border-purple-100";
+    if (key === "jmd" || key.includes("joint_managing") || key.includes("joint managing")) return "bg-slate-100 text-slate-700 border-slate-200";
+    if (key === "md" || key.includes("managing_director") || key.includes("managing director")) return "bg-emerald-50 text-emerald-600 border-emerald-100";
+    if (key.includes("operations") || key.includes("manager")) return "bg-slate-100 text-slate-700 border-slate-200";
+    if (key.includes("finance_auditor") || key.includes("auditor") || key.includes("audit")) return "bg-orange-50 text-orange-600 border-orange-100";
+    if (key.includes("accounts_uploader")) return "bg-emerald-50 text-emerald-600 border-emerald-100";
+    if (key.includes("accounts_approver")) return "bg-blue-50 text-blue-600 border-blue-100";
+    if (key.includes("accounts")) return "bg-sky-50 text-sky-600 border-sky-100";
+    if (key.includes("employee")) return "bg-slate-100 text-slate-700 border-slate-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  };
+
+  const getRoleUserCount = (role) => {
+    const rIdStr = String(role.id || '').trim().toLowerCase();
+    const rCodeStr = String(role.code || '').trim().toLowerCase();
+    const rNameStr = String(role.name || '').trim().toLowerCase();
+    return users.filter(u => {
+      if (!u.role) return false;
+      const uRoleStr = String(u.role).trim().toLowerCase();
+      return (rCodeStr && uRoleStr === rCodeStr) || 
+             (rIdStr && uRoleStr === rIdStr) || 
+             (rNameStr && uRoleStr === rNameStr);
+    }).length;
+  };
+
   const filteredRoles = roles.filter(r => {
+    if (roleStatusFilter !== "ALL") {
+      const isActive = r.is_active !== false;
+      if (roleStatusFilter === "ACTIVE" && !isActive) return false;
+      if (roleStatusFilter === "DISABLED" && isActive) return false;
+    }
+
     if (!search || !search.trim()) return true;
     const term = search.toLowerCase().trim();
     const rName = (r.name || "").toLowerCase();
     const rBadge = (r.badge || "").toLowerCase();
     const rCode = (r.code || "").toLowerCase();
     const rId = (r.id || "").toLowerCase();
-    return rName.includes(term) || rBadge.includes(term) || rCode.includes(term) || rId.includes(term);
+    const rDesc = getRoleDescription(r).toLowerCase();
+    return rName.includes(term) || rBadge.includes(term) || rCode.includes(term) || rId.includes(term) || rDesc.includes(term);
   });
+
+  const handleSortRole = (field) => {
+    if (roleSortField === field) {
+      setRoleSortDir(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setRoleSortField(field);
+      setRoleSortDir("asc");
+    }
+  };
+
+  const sortedRoles = [...filteredRoles].sort((a, b) => {
+    if (!roleSortField) return 0;
+    let comp = 0;
+    if (roleSortField === "name") {
+      comp = (a.name || "").localeCompare(b.name || "");
+    } else if (roleSortField === "status") {
+      comp = 0;
+    } else if (roleSortField === "employees") {
+      comp = getRoleUserCount(a) - getRoleUserCount(b);
+    } else if (roleSortField === "code") {
+      comp = (a.badge || a.code || "").localeCompare(b.badge || b.code || "");
+    }
+    return roleSortDir === "asc" ? comp : -comp;
+  });
+
+  const totalRolePages = Math.max(1, Math.ceil(sortedRoles.length / rolePageSize));
+  const validRolePage = Math.min(rolePage, totalRolePages);
+  const startRoleIdx = (validRolePage - 1) * rolePageSize;
+  const endRoleIdx = Math.min(startRoleIdx + rolePageSize, sortedRoles.length);
+  const paginatedRoles = sortedRoles.slice(startRoleIdx, endRoleIdx);
+
+  const allCurrentRolesSelected = paginatedRoles.length > 0 && paginatedRoles.every(r => selectedRoleIds.has(r.id));
+
+  const toggleSelectAllRoles = () => {
+    if (allCurrentRolesSelected) {
+      setSelectedRoleIds(prev => {
+        const next = new Set(prev);
+        paginatedRoles.forEach(r => next.delete(r.id));
+        return next;
+      });
+    } else {
+      setSelectedRoleIds(prev => {
+        const next = new Set(prev);
+        paginatedRoles.forEach(r => next.add(r.id));
+        return next;
+      });
+    }
+  };
+
+  const toggleRoleSelect = (roleId, e) => {
+    e.stopPropagation();
+    setSelectedRoleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(roleId)) next.delete(roleId);
+      else next.add(roleId);
+      return next;
+    });
+  };
+
+  const handleToggleRoleStatus = async (role) => {
+    setMenuOpenRoleId(null);
+    const newStatus = !(role.is_active !== false);
+    const actionName = newStatus ? "enable" : "disable";
+
+    if (String(role.code || role.id || '').toLowerCase() === "admin" && !newStatus) {
+      setErrorMsg("Cannot disable the Administrator role.");
+      setTimeout(() => setErrorMsg(""), 3000);
+      return;
+    }
+
+    setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: newStatus } : r));
+
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+      };
+
+      const res = await fetch(`/api/admin/roles/${role.db_id || role.id}/status`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ is_active: newStatus })
+      });
+
+      if (!res.ok) {
+        setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: !newStatus } : r));
+        const err = await res.json().catch(() => ({}));
+        setErrorMsg(err.detail || `Failed to ${actionName} role.`);
+        setTimeout(() => setErrorMsg(""), 4000);
+      } else {
+        setSuccessMsg(`Role "${role.name}" ${newStatus ? 'enabled' : 'disabled'} successfully.`);
+        setTimeout(() => setSuccessMsg(""), 3000);
+      }
+    } catch (err) {
+      setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: !newStatus } : r));
+      setErrorMsg(`Network error while trying to ${actionName} role.`);
+      setTimeout(() => setErrorMsg(""), 4000);
+    }
+  };
+
+  const handleDeleteRole = async (role) => {
+    setMenuOpenRoleId(null);
+    if (String(role.code || role.id || '').toLowerCase() === "admin") {
+      setErrorMsg("Cannot delete the Administrator role.");
+      setTimeout(() => setErrorMsg(""), 3000);
+      return;
+    }
+
+    const userCount = getRoleUserCount(role);
+    if (userCount > 0) {
+      alert(`Cannot delete role "${role.name}" because ${userCount} employee${userCount > 1 ? 's are' : ' is'} currently assigned to it.`);
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete role "${role.name}"?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+      const res = await fetch(`/api/admin/roles/${role.db_id || role.id}`, {
+        method: "DELETE",
+        headers
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setErrorMsg(err.detail || `Failed to delete role "${role.name}".`);
+        setTimeout(() => setErrorMsg(""), 4000);
+      } else {
+        setRoles(prev => prev.filter(r => r.id !== role.id));
+        setSelectedRoleIds(prev => {
+          const next = new Set(prev);
+          next.delete(role.id);
+          return next;
+        });
+        setSuccessMsg(`Role "${role.name}" deleted successfully.`);
+        setTimeout(() => setSuccessMsg(""), 3000);
+      }
+    } catch (err) {
+      setErrorMsg(`Network error while trying to delete role "${role.name}".`);
+      setTimeout(() => setErrorMsg(""), 4000);
+    }
+  };
 
   // Filter approval divisions by Main Division for Add User modal
   const activeAddMainDiv = newUserDivision || (availableDivisions[0]?.code || "");
@@ -444,6 +670,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
     const handleOutsideClick = () => {
       setMenuOpenUserId(null);
+      setMenuOpenRoleId(null);
+      setShowFilterDropdown(false);
     };
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
@@ -496,6 +724,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             name: r.name,
             badge: r.code ? r.code.toUpperCase() : r.name.slice(0, 10),
             color: "bg-blue-50 text-blue-700 border-blue-200",
+            is_active: r.is_active !== undefined ? r.is_active : true,
             permissions: r.permissions || []
           }));
           setRoles(loadedRoles);
@@ -1378,32 +1607,34 @@ export default function AdminRBAC({ onRefreshSignal }) {
     <div className="flex flex-col h-full font-sans bg-white border border-slate-200/80 rounded-xl shadow-xs overflow-hidden text-[11px]">
       
       {/* 1. COMPACT TOP TOOLBAR */}
-      <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+      <div className="px-4 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
         
         {/* Left: View Switcher (By Roles vs By Users) */}
-        <div className="flex items-center gap-2.5">
-          <div className="inline-flex p-1 bg-slate-200/60 rounded-lg border border-slate-300/40 text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab("roles")}
-              className={`px-3 py-1 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === "roles" ? "bg-white text-blue-700 shadow-2xs font-extrabold" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Shield className="h-3.5 w-3.5" />
-              <span>By Roles ({filteredRoles.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("users")}
-              className={`px-3 py-1 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === "users" ? "bg-white text-blue-700 shadow-2xs font-extrabold" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Users className="h-3.5 w-3.5" />
-              <span>By Users ({filteredUsers.length})</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("roles")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "roles"
+                ? "bg-[#003F28] hover:bg-[#004B32] text-white shadow-sm"
+                : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs"
+            }`}
+          >
+            <Shield className="h-3.5 w-3.5" />
+            <span>By Roles ({roles.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("users")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "users"
+                ? "bg-[#003F28] hover:bg-[#004B32] text-white shadow-sm"
+                : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs"
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            <span>By Users ({users.length})</span>
+          </button>
 
           {/* Admin Edit Protection Badge */}
           {!isAdmin && (
@@ -1415,29 +1646,173 @@ export default function AdminRBAC({ onRefreshSignal }) {
         </div>
 
         {/* Right: Search & Action Buttons */}
-        <div className="flex items-center gap-1.5">
-          <div className="relative w-52">
+        <div className="flex items-center gap-2">
+          <div className="relative w-64 md:w-80">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input 
               type="text"
               value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="w-full text-xs pl-8 pr-2.5 h-8 bg-white border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 outline-none text-slate-800 shadow-2xs transition-all duration-200"
+              onChange={e => { setSearch(e.target.value); setRolePage(1); }}
+              placeholder="Search role name, code, or description..."
+              className="w-full text-xs pl-8 pr-2.5 h-8 bg-white border border-slate-200 rounded-lg focus:border-[#003F28] focus:ring-1 focus:ring-[#003F28]/25 outline-none text-slate-800 shadow-2xs transition-all duration-200"
             />
           </div>
 
+          {/* Filter Dropdown Container */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowFilterDropdown(prev => !prev);
+              }}
+              className={`h-8 flex items-center gap-1.5 px-3 text-xs font-semibold rounded-lg shadow-2xs cursor-pointer transition ${
+                (activeTab === "users" ? (roleFilter !== "ALL" || userStatusFilter !== "ALL") : roleStatusFilter !== "ALL")
+                  ? "bg-emerald-50 text-[#003F28] border border-emerald-300 font-bold"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200"
+              }`}
+              title="Filter records"
+            >
+              <Filter className="h-3.5 w-3.5 text-slate-500" />
+              <span>Filter</span>
+              {(activeTab === "users" ? (roleFilter !== "ALL" || userStatusFilter !== "ALL") : roleStatusFilter !== "ALL") && (
+                <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+              )}
+              <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${showFilterDropdown ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Filter Menu Dropdown */}
+            {showFilterDropdown && (
+              <div 
+                className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3 text-left"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2.5">
+                  <span className="text-xs font-bold text-slate-800">
+                    {activeTab === "users" ? "Filter Users" : "Filter Roles"}
+                  </span>
+                  {((activeTab === "users" && (roleFilter !== "ALL" || userStatusFilter !== "ALL")) ||
+                    (activeTab === "roles" && roleStatusFilter !== "ALL")) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTab === "users") {
+                          setRoleFilter("ALL");
+                          setUserStatusFilter("ALL");
+                        } else {
+                          setRoleStatusFilter("ALL");
+                        }
+                      }}
+                      className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold cursor-pointer underline"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                {activeTab === "users" && (
+                  <div className="space-y-3">
+                    {/* Role Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        By Role
+                      </label>
+                      <select
+                        value={roleFilter}
+                        onChange={e => setRoleFilter(e.target.value)}
+                        className="w-full h-8 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                      >
+                        <option value="ALL">All Roles ({users.length})</option>
+                        {roles.map(r => {
+                          const rCode = r.code || r.id;
+                          const count = users.filter(u => String(u.role || '').toLowerCase() === String(rCode).toLowerCase()).length;
+                          return (
+                            <option key={rCode} value={rCode}>
+                              {r.name} ({count})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* User Status Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        By Status
+                      </label>
+                      <select
+                        value={userStatusFilter}
+                        onChange={e => setUserStatusFilter(e.target.value)}
+                        className="w-full h-8 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="ACTIVE">Active Users ({users.filter(u => u.is_active !== false).length})</option>
+                        <option value="DISABLED">Disabled Users ({users.filter(u => u.is_active === false).length})</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "roles" && (
+                  <div className="space-y-3">
+                    {/* Role Status Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        By Status
+                      </label>
+                      <select
+                        value={roleStatusFilter}
+                        onChange={e => {
+                          setRoleStatusFilter(e.target.value);
+                          setRolePage(1);
+                        }}
+                        className="w-full h-8 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                      >
+                        <option value="ALL">All Roles ({roles.length})</option>
+                        <option value="ACTIVE">Active Roles ({roles.filter(r => r.is_active !== false).length})</option>
+                        <option value="DISABLED">Disabled Roles ({roles.filter(r => r.is_active === false).length})</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowFilterDropdown(false)}
+                    className="px-3 py-1 bg-[#003F28] hover:bg-[#004B32] text-white text-[11px] font-bold rounded-md shadow-3xs cursor-pointer transition"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {isAdmin && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {activeTab === "roles" && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddRoleModal(true)}
-                  className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Role</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddRoleModal(true)}
+                    className="h-8 flex items-center gap-1 px-3 bg-emerald-50/50 hover:bg-emerald-50 text-[#003F28] border border-emerald-300 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                    <span>Role</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPermCategory(permissionsList[0]?.category || "Documents & OCR Extraction");
+                      setShowAddPermissionModal(true);
+                    }}
+                    className="h-8 flex items-center gap-1.5 px-3 bg-emerald-50/50 hover:bg-emerald-50 text-[#003F28] border border-emerald-300 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    <span>Permission</span>
+                  </button>
+                </>
               )}
               {activeTab === "users" && (
                 <button
@@ -1460,20 +1835,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <span>User</span>
                 </button>
               )}
-              
-              {activeTab === "roles" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewPermCategory(permissionsList[0]?.category || "Documents & OCR Extraction");
-                    setShowAddPermissionModal(true);
-                  }}
-                  className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Permission</span>
-                </button>
-              )}
             </div>
           )}
 
@@ -1482,7 +1843,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
               type="button"
               onClick={handleSaveAll}
               disabled={saving}
-              className="h-8 flex items-center gap-1 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="h-8 flex items-center gap-1.5 px-3.5 bg-[#003F28] hover:bg-[#004B32] text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               <span>Save Changes</span>
@@ -1511,97 +1872,259 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* ========================================================= */}
       {activeTab === "roles" && (
         <div className="flex-1 flex flex-col overflow-hidden min-h-[500px]">
-          {/* LEFT COMPONENT: Roles Table Grid */}
+          {/* Roles Table Grid */}
           <div className="flex-1 flex flex-col overflow-y-auto min-w-0 bg-white">
             
             {/* Roles List Data Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[500px]">
+              <table className="w-full text-left border-collapse whitespace-nowrap min-w-[850px]">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[11px] font-bold text-slate-500 uppercase tracking-wider select-none">
-                    <th className="px-3.5 py-2.5 w-[35%]">Role Group</th>
-                    <th className="px-3.5 py-2.5 w-[20%]">Status</th>
-                    <th className="px-3.5 py-2.5 w-[25%]">Assigned Employees</th>
-                    <th className="px-3.5 py-2.5 w-[20%]">Role Code</th>
-                    <th className="px-3.5 py-2.5 pr-6 text-right"></th>
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-[10px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                    <th className="px-3 py-2 w-12 text-center whitespace-nowrap">
+                      S.No.
+                    </th>
+                    <th 
+                      className="px-3.5 py-2 cursor-pointer hover:text-slate-800 transition-colors whitespace-nowrap"
+                      onClick={() => handleSortRole("name")}
+                    >
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span>ROLE GROUP</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-3.5 py-2 cursor-pointer hover:text-slate-800 transition-colors whitespace-nowrap"
+                      onClick={() => handleSortRole("status")}
+                    >
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span>STATUS</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-3.5 py-2 cursor-pointer hover:text-slate-800 transition-colors whitespace-nowrap"
+                      onClick={() => handleSortRole("employees")}
+                    >
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span>ASSIGNED EMPLOYEES</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-3.5 py-2 cursor-pointer hover:text-slate-800 transition-colors whitespace-nowrap"
+                      onClick={() => handleSortRole("code")}
+                    >
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span>ROLE CODE</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </th>
+                    <th className="px-3.5 py-2 whitespace-nowrap">
+                      DESCRIPTION
+                    </th>
+                    <th className="px-3.5 py-2 text-center whitespace-nowrap">
+                      ACTIONS
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-[11px]">
-                  {filteredRoles.map(r => {
-                    const rIdStr = String(r.id || '').trim().toLowerCase();
-                    const rCodeStr = String(r.code || '').trim().toLowerCase();
-                    const rNameStr = String(r.name || '').trim().toLowerCase();
-                    
-                    const userCount = users.filter(u => {
-                      if (!u.role) return false;
-                      const uRoleStr = String(u.role).trim().toLowerCase();
-                      return (rCodeStr && uRoleStr === rCodeStr) || 
-                             (rIdStr && uRoleStr === rIdStr) || 
-                             (rNameStr && uRoleStr === rNameStr);
-                    }).length;
-                    
-                    return (
-                      <tr 
-                        key={r.id}
-                        onClick={() => setSelectedRoleId(r.id)}
-                        className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
-                      >
-                        {/* Name + Shield Icon */}
-                        <td className="px-3 py-2 w-[35%] align-middle font-bold text-slate-800">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border ${
-                              r.id === "admin" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                              r.id === "manager" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                              r.id === "auditor" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                              r.id === "ap_specialist" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                              "bg-slate-50 text-slate-600 border-slate-200"
-                            }`}>
-                              <Shield className="h-4 w-4" />
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedRoles.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-xs text-slate-400 italic">
+                        No roles found.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedRoles.map((r, index) => {
+                      const userCount = getRoleUserCount(r);
+                      const serialNo = startRoleIdx + index + 1;
+
+                      return (
+                        <tr 
+                          key={r.id}
+                          onClick={() => setSelectedRoleId(r.id)}
+                          className="hover:bg-slate-50/80 transition-colors select-none cursor-pointer group"
+                        >
+                          {/* S.No. */}
+                          <td className="px-3 py-2 w-12 text-center align-middle whitespace-nowrap font-medium text-slate-500 text-[11px]">
+                            {serialNo}
+                          </td>
+
+                          {/* Role Group */}
+                          <td className="px-3.5 py-2 align-middle font-semibold text-slate-900 whitespace-nowrap text-xs">
+                            {r.name}
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-3.5 py-2 align-middle whitespace-nowrap">
+                            {r.is_active !== false ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                Disabled
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Assigned Employees */}
+                          <td className="px-3.5 py-2 align-middle text-slate-600 font-medium text-[11px] whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <Users className="h-3 w-3 text-slate-400 stroke-[1.75]" />
+                              <span>{userCount} employee{userCount !== 1 ? 's' : ''}</span>
                             </div>
-                            <span className="font-semibold text-slate-900 text-[13px]">{r.name}</span>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Status */}
-                        <td className="px-3 py-2 w-[20%] align-middle">
-                          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/60 shadow-3xs">
-                            Active
-                          </span>
-                        </td>
+                          {/* Role Code / Badge */}
+                          <td className="px-3.5 py-2 align-middle whitespace-nowrap">
+                            <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 tracking-wide uppercase">
+                              {r.badge || r.code || r.id}
+                            </span>
+                          </td>
 
-                        {/* Assigned Employees */}
-                        <td className="px-3 py-2 w-[25%] align-middle text-slate-600 font-medium text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <Users className="h-3.5 w-3.5 text-slate-400" />
-                            <span>{userCount} employee{userCount !== 1 ? 's' : ''}</span>
-                          </div>
-                        </td>
-
-                        {/* Role Code / Badge */}
-                        <td className="px-3 py-2 w-[20%] align-middle">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 uppercase leading-none">
-                            {r.badge}
-                          </span>
-                        </td>
-
-                        {/* Action Link */}
-                        <td className="px-3 py-2 text-right pr-6 align-middle" onClick={e => e.stopPropagation()}>
-                          <button 
-                            type="button" 
-                            onClick={() => setSelectedRoleId(r.id)}
-                            className="text-[11px] font-semibold text-slate-400 hover:text-blue-600 transition cursor-pointer inline-flex items-center gap-0.5 mr-1"
+                          {/* Description */}
+                          <td 
+                            className="px-3.5 py-2 align-middle text-slate-500 text-[11px] whitespace-nowrap truncate max-w-sm xl:max-w-md"
+                            title={getRoleDescription(r)}
                           >
-                            <Edit2 className="h-3 w-3" />
-                            <span>Edit</span>
-                          </button>
-                          <MoreVertical className="h-3 w-3" />
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            {getRoleDescription(r)}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-3.5 py-2 align-middle text-center whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5 relative">
+                              <button 
+                                type="button" 
+                                onClick={() => setSelectedRoleId(r.id)}
+                                className="h-6 w-6 rounded-md border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center transition shadow-3xs cursor-pointer"
+                                title="Edit Permissions"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+
+                              <div className="relative">
+                                <button 
+                                  type="button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpenRoleId(prev => prev === r.id ? null : r.id);
+                                  }}
+                                  className={`h-6 w-6 rounded-md border transition shadow-3xs cursor-pointer flex items-center justify-center ${
+                                    menuOpenRoleId === r.id 
+                                      ? "bg-slate-100 border-slate-300 text-slate-700" 
+                                      : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-500"
+                                  }`}
+                                  title="More Options"
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                </button>
+
+                                {/* Role Context Menu: Only 2 options (Disable role, Delete role) */}
+                                {menuOpenRoleId === r.id && (
+                                  <div 
+                                    className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-left"
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleRoleStatus(r)}
+                                      className="w-full px-3 py-1.5 hover:bg-slate-50 text-[10.5px] font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
+                                    >
+                                      {r.is_active !== false ? (
+                                        <>
+                                          <UserX className="h-3.5 w-3.5 text-slate-400" />
+                                          <span>Disable role</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
+                                          <span>Enable role</span>
+                                        </>
+                                      )}
+                                    </button>
+                                    
+                                    <div className="border-t border-slate-100 my-0.5"></div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteRole(r)}
+                                      className="w-full px-3 py-1.5 hover:bg-rose-50 text-[10.5px] font-medium text-rose-600 flex items-center gap-2 cursor-pointer transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                                      <span>Delete role</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Roles Table Pagination Bar */}
+            <div className="px-4 py-2.5 border-t border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 select-none text-xs text-slate-600 shrink-0">
+              <div>
+                Showing {sortedRoles.length === 0 ? 0 : startRoleIdx + 1} - {endRoleIdx} of {sortedRoles.length} roles
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setRolePage(p => Math.max(1, p - 1))} 
+                    disabled={validRolePage <= 1} 
+                    className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none text-slate-600 text-xs font-medium cursor-pointer transition"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  {Array.from({ length: totalRolePages }, (_, i) => i + 1).map(page => (
+                    <button 
+                      key={page} 
+                      type="button" 
+                      onClick={() => setRolePage(page)} 
+                      className={`h-7 min-w-[28px] px-2 flex items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
+                        validRolePage === page 
+                          ? 'bg-[#003F28] text-white shadow-2xs' 
+                          : 'border border-slate-200 hover:bg-slate-50 text-slate-700 bg-white'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button 
+                    type="button" 
+                    onClick={() => setRolePage(p => Math.min(totalRolePages, p + 1))} 
+                    disabled={validRolePage >= totalRolePages} 
+                    className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none text-slate-600 text-xs font-medium cursor-pointer transition"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>Rows per page</span>
+                  <div className="relative">
+                    <select 
+                      value={rolePageSize} 
+                      onChange={e => { setRolePageSize(Number(e.target.value)); setRolePage(1); }} 
+                      className="appearance-none h-7 pl-2.5 pr-6 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-700 cursor-pointer focus:outline-none focus:border-[#003F28]"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <ChevronDown className="h-3 w-3 text-slate-400 absolute right-1.5 top-2 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* DIALOG: Role Permissions / Clearances Modal */}

@@ -293,9 +293,9 @@ export default function GoodsReceiptPage({ onWorkflowTriggered, currentUserEmail
             >
               Previous
             </button>
-            <button className="px-2.5 py-1 bg-blue-600 text-white font-bold rounded text-[11px] shadow-sm">
+            <span className="px-2.5 py-1 bg-[#003F28] text-white font-bold rounded text-[11px] shadow-sm select-none" aria-current="page">
               {currentPage}
-            </button>
+            </span>
             <button 
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}

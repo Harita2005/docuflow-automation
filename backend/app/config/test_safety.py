@@ -62,8 +62,21 @@ def enforce_test_database_safety(
             "CRITICAL TEST SAFETY VIOLATION: Running tests in a production environment is strictly forbidden!"
         )
 
-    # If targeting DocuFlowDB (or settings.DB_NAME)
-    if clean_lower == live_db_lower or clean_lower == "docuflowdb":
+    # Explicit test/dev databases are recognized as safe test targets
+    is_explicit_test_db = (
+        clean_lower.endswith("_test")
+        or "_test" in clean_lower
+        or clean_lower.startswith("test_")
+        or clean_lower.endswith("_dev")
+        or clean_lower.endswith("_qa")
+    )
+
+    # If targeting DocuFlowDB (live production database) without explicit test suffix
+    is_live_db = (clean_lower == "docuflowdb") or (
+        not is_explicit_test_db and clean_lower == live_db_lower
+    )
+
+    if is_live_db:
         if not allow_live:
             raise RuntimeError(
                 f"CRITICAL TEST SAFETY VIOLATION: Target database is the live database '{clean_name}'. "
