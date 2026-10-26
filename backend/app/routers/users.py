@@ -181,7 +181,7 @@ def create_user_master(
         # Cryptographically secure unguessable random token, hashed with bcrypt (never plaintext, never predictable)
         hashed_pwd = get_password_hash(secrets.token_urlsafe(32))
 
-    div_id, dept_id, role_id = resolve_user_foreign_keys(db, payload.division_id or payload.division, payload.department, payload.role)
+    div_id, _dept_id, role_id = resolve_user_foreign_keys(db, payload.division_id or payload.division, payload.department, payload.role)
 
     effective_div_code = payload.division
     if div_id and not effective_div_code:
@@ -295,7 +295,7 @@ def update_user_master(
 
     # Sync foreign keys
     target_div = user.division_id or user.division
-    div_id, dept_id, role_id = resolve_user_foreign_keys(db, target_div, user.department, user.role)
+    div_id, _dept_id, role_id = resolve_user_foreign_keys(db, target_div, user.department, user.role)
     if div_id:
         user.division_id = div_id
         if not user.division:

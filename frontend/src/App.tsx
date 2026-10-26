@@ -357,7 +357,7 @@ export default function App() {
   };
 
   // Sync aggregations stats
-  const fetchStats = async (silent = false) => {
+  const fetchStats = async (_silent = false) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {

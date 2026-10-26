@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Edit2, Trash2, Network, X, Settings2, GripVertical, CheckCircle2, 
+  Plus, Edit2, Trash2, Network, X, CheckCircle2, 
   ArrowRight, ArrowUp, ArrowDown, Search, AlertTriangle, Users, ListChecks, 
   GitMerge, ChevronLeft, ChevronRight, Save, CheckSquare, SlidersHorizontal,
   ChevronDown

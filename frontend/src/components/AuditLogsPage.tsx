@@ -82,7 +82,7 @@ interface AuditLogsPageProps {
   isEmbedded?: boolean;
 }
 
-export default function AuditLogsPage({ isEmbedded = false }: AuditLogsPageProps) {
+export default function AuditLogsPage({ isEmbedded: _isEmbedded = false }: AuditLogsPageProps) {
   // 1. Data States
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -123,7 +123,7 @@ export default function AuditLogsPage({ isEmbedded = false }: AuditLogsPageProps
   const [appliedSearch, setAppliedSearch] = useState<string>("");
 
   // 4. Filter Options (from DB)
-  const [filterOptions, setFilterOptions] = useState<{
+  const [_filterOptions, setFilterOptions] = useState<{
     users: string[];
     actions: string[];
     stages: string[];
@@ -138,7 +138,7 @@ export default function AuditLogsPage({ isEmbedded = false }: AuditLogsPageProps
   // 5. Pagination & Table States
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
-  const [selectedLogIds, setSelectedLogIds] = useState<Set<number>>(new Set());
+  const [_selectedLogIds, _setSelectedLogIds] = useState<Set<number>>(new Set());
   const [activeLog, setActiveLog] = useState<AuditLogItem | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [copiedMetadata, setCopiedMetadata] = useState<boolean>(false);

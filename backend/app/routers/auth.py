@@ -79,9 +79,9 @@ async def login(
     device_info = None
 
     if isinstance(request, str):
-        import urllib.parse
+        from urllib.parse import parse_qsl
         try:
-            req_dict = dict(urllib.parse.parse_qsl(request))
+            req_dict = dict(parse_qsl(request))
         except Exception:
             req_dict = {}
         request = req_dict

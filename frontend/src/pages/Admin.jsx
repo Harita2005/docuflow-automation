@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Search, Activity, Settings2, Database, Clock, CheckCircle2, RotateCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Activity, Settings2 } from 'lucide-react';
 import AdminSystem from '../components/AdminSystem.jsx';
 import AdminRACI from '../components/AdminRACI.jsx';
 import AdminInApp from '../components/AdminInApp.jsx';
@@ -51,7 +51,7 @@ export default function Admin() {
     return "rbac";
   });
   const [selectedTemplateCategory, setSelectedTemplateCategory] = useState(null);
-  const [auditLogs, setAuditLogs] = useState([]);
+  const [_auditLogs, setAuditLogs] = useState([]);
   const [isRootView, setIsRootView] = useState(true);
 
   useEffect(() => {
@@ -67,8 +67,8 @@ export default function Admin() {
   }, []);
   
   // New States for Search and Diagnostics
-  const [logSearchQuery, setLogSearchQuery] = useState("");
-  const [auditCategoryFilter, setAuditCategoryFilter] = useState("ALL");
+  const [_logSearchQuery, _setLogSearchQuery] = useState("");
+  const [_auditCategoryFilter, _setAuditCategoryFilter] = useState("ALL");
   const [_syncingData, _setSyncingData] = useState(false);
   const [templateDeleteConfirmTarget, setTemplateDeleteConfirmTarget] = useState(null);
   const [templateCategoryDeleteTarget, setTemplateCategoryDeleteTarget] = useState(null);
@@ -90,10 +90,10 @@ export default function Admin() {
   const [retentionDraft, setRetentionDraft] = useState("7");
   const [customDays, setCustomDays] = useState("");
   const [isCustomRetention, setIsCustomRetention] = useState(false);
-  const [retentionSaving, setRetentionSaving] = useState(false);
+  const [_retentionSaving, setRetentionSaving] = useState(false);
   const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
   const [cleaningUpLogs, setCleaningUpLogs] = useState(false);
-  const [retentionNotice, setRetentionNotice] = useState(null);
+  const [_retentionNotice, setRetentionNotice] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -150,7 +150,7 @@ export default function Admin() {
     }
   };
 
-  const handleSaveRetention = async () => {
+  const _handleSaveRetention = async () => {
     setRetentionSaving(true);
     setRetentionNotice(null);
     try {

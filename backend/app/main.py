@@ -99,8 +99,8 @@ async def lifespan(app: FastAPI):
 
             # Tune AnyIO thread limiter to 200 tokens for 150+ concurrent requests
             try:
-                import anyio.to_thread
-                anyio.to_thread.current_default_thread_limiter().total_tokens = 200
+                from anyio.to_thread import current_default_thread_limiter
+                current_default_thread_limiter().total_tokens = 200
                 logger.info("Configured AnyIO default thread limiter tokens to 200 for high concurrency.")
             except Exception as thread_err:
                 logger.debug(f"AnyIO thread limiter configuration deferred: {thread_err}")

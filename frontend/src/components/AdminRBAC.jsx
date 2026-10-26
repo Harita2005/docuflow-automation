@@ -384,7 +384,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     return "Standard role access and workflow permissions.";
   };
 
-  const getRoleIconStyle = (role) => {
+  const _getRoleIconStyle = (role) => {
     const key = String(role.code || role.id || role.name || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
     if (key.includes("admin")) return "bg-emerald-50 text-emerald-800 border-emerald-200";
     if (key === "gm" || key.includes("general_manager") || key.includes("general manager")) return "bg-purple-50 text-purple-600 border-purple-100";
@@ -461,7 +461,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const allCurrentRolesSelected = paginatedRoles.length > 0 && paginatedRoles.every(r => selectedRoleIds.has(r.id));
 
-  const toggleSelectAllRoles = () => {
+  const _toggleSelectAllRoles = () => {
     if (allCurrentRolesSelected) {
       setSelectedRoleIds(prev => {
         const next = new Set(prev);
@@ -477,7 +477,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
-  const toggleRoleSelect = (roleId, e) => {
+  const _toggleRoleSelect = (roleId, e) => {
     e.stopPropagation();
     setSelectedRoleIds(prev => {
       const next = new Set(prev);
@@ -522,7 +522,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         setSuccessMsg(`Role "${role.name}" ${newStatus ? 'enabled' : 'disabled'} successfully.`);
         setTimeout(() => setSuccessMsg(""), 3000);
       }
-    } catch (err) {
+    } catch (_err) {
       setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: !newStatus } : r));
       setErrorMsg(`Network error while trying to ${actionName} role.`);
       setTimeout(() => setErrorMsg(""), 4000);
@@ -570,7 +570,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         setSuccessMsg(`Role "${role.name}" deleted successfully.`);
         setTimeout(() => setSuccessMsg(""), 3000);
       }
-    } catch (err) {
+    } catch (_err) {
       setErrorMsg(`Network error while trying to delete role "${role.name}".`);
       setTimeout(() => setErrorMsg(""), 4000);
     }

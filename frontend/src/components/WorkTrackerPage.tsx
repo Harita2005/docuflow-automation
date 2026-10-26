@@ -38,7 +38,7 @@ export default function WorkTrackerPage({
   const [divisionFilter, setDivisionFilter] = useState<string>(() => {
     return localStorage.getItem("workTrackerDivisionFilter") || "ALL";
   });
-  const [selectedDocIds, _setSelectedDocIds] = useState<string[]>([]);
+  const [_selectedDocIds, _setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
     return saved === "approved" || saved === "cancelled" ? "all" : saved;

@@ -3055,7 +3055,6 @@ def workflow_hold_payload(req: Request, payload: dict, db: Session=Depends(get_d
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
-    username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record placed on temporary hold.'
     
     target_val = payload.get('target_completion_date') or payload.get('scheduled_time')
@@ -3230,7 +3229,6 @@ def hold_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceActi
     current_version = inv.version or 1
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
-    username = (user.employee_name or user.name) if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record placed on temporary administrative hold.'
     
     target_val = (payload.get('target_completion_date') if payload else None) or \
@@ -3348,7 +3346,7 @@ async def extract_document_preview(
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")
 
     content = await file.read()
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     
     staged_filename = f"TEMP_STAGE_U{current_user.id}_{uuid.uuid4().hex[:8]}_{unique_filename}"
     file_path = settings.UPLOAD_DIR / staged_filename
@@ -3544,7 +3542,7 @@ async def confirm_and_ingest_document(
         final_file_size = final_file_path.stat().st_size
     elif file:
         content = await file.read()
-        unique_filename, detected_type = validate_uploaded_file(file, content)
+        unique_filename, _detected_type = validate_uploaded_file(file, content)
         final_file_path = (settings.UPLOAD_DIR / unique_filename).resolve()
         with open(final_file_path, 'wb') as buffer:
             buffer.write(content)
@@ -3790,7 +3788,7 @@ async def upload_document(
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")
 
     content = await file.read()
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
@@ -3963,7 +3961,7 @@ async def upload_document_auto_workflow(
         raise HTTPException(status_code=403, detail="Access Denied: Missing required permission 'doc:create' to upload documents.")
 
     content = await file.read()
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
@@ -4228,7 +4226,7 @@ async def upload_and_route(
         )
 
     content = await file.read()
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
@@ -4316,12 +4314,12 @@ async def compress_pdf_standalone(
     
     content = await file.read()
     orig_size = len(content)
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / f"auto_comp_{unique_filename}"
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
     
-    was_compressed, o_size, new_size = compress_pdf(file_path)
+    _was_compressed, _o_size, new_size = compress_pdf(file_path)
     
     from fastapi.responses import FileResponse
     return FileResponse(
@@ -4384,7 +4382,7 @@ async def upload_invoice_version(
         )
 
     content = await file.read()
-    unique_filename, detected_type = validate_uploaded_file(file, content)
+    unique_filename, _detected_type = validate_uploaded_file(file, content)
     file_path = settings.UPLOAD_DIR / unique_filename
     with open(file_path, 'wb') as buffer:
         buffer.write(content)

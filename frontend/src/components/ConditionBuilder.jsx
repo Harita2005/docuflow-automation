@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Edit2, Trash2, X, ArrowRight, Search, 
   AlertTriangle, GitMerge, CheckCircle2, ChevronDown, Check, 
-  ArrowLeft, Layers, Sliders, Clipboard, Copy, GripVertical, Link2
+  ArrowLeft, Layers, Sliders, Copy, GripVertical, Link2
 } from 'lucide-react';
 import matrixOptions from '../matrix_options.json';
 
@@ -141,7 +141,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedConditionSuccessModal, setSavedConditionSuccessModal] = useState(null);
-  const [isWorkflowLinkedContext, setIsWorkflowLinkedContext] = useState(false);
+  const [_isWorkflowLinkedContext, setIsWorkflowLinkedContext] = useState(false);
   const [linkedWorkflowContext, setLinkedWorkflowContext] = useState(null);
 
   // Custom Fields System
@@ -163,8 +163,8 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   const [addFieldTargetIdx, setAddFieldTargetIdx] = useState(null);
 
   // Value multi-select / picker modal for dropdowns
-  const [activeMultiSelectIdx, setActiveMultiSelectIdx] = useState(null);
-  const [multiSelectSearch, setMultiSelectSearch] = useState('');
+  const [_activeMultiSelectIdx, _setActiveMultiSelectIdx] = useState(null);
+  const [_multiSelectSearch, _setMultiSelectSearch] = useState('');
   const [valueListModalIdx, setValueListModalIdx] = useState(null);
   const [valueListSearch, setValueListSearch] = useState('');
   const [valueListBulkInput, setValueListBulkInput] = useState('');
@@ -326,7 +326,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   }, [workflows, rules]);
 
   // Master options helper
-  const getFieldMasterOptions = (fieldName) => {
+  const _getFieldMasterOptions = (fieldName) => {
     if (fieldName === 'Cost Center') return matrixOptions?.cost_centers || [];
     if (fieldName === 'Category') return matrixOptions?.categories || [];
     if (fieldName === 'Branch' || fieldName === 'Plant') return matrixOptions?.branches || [];
@@ -554,7 +554,7 @@ export default function ConditionBuilder({ rules = [], setRules, setHasChanges, 
   };
 
   // Dynamic Rule Preview Generator
-  const previewData = useMemo(() => {
+  const _previewData = useMemo(() => {
     const issues = [];
     if (!ruleName.trim()) issues.push('Condition Name');
     if (!docType.trim()) issues.push('Document Type');

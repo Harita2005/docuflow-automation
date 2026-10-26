@@ -138,7 +138,7 @@ export default function CustomerFeedbackDetails({
   currentUserUsername,
   onRefreshDocument,
   onGoBack,
-  onSelectDocument,
+  onSelectDocument: _onSelectDocument,
 }: CustomerFeedbackDetailsProps) {
   const [freshDoc, setFreshDoc] = useState<DbInvoice | null>(null);
   const activeDoc = freshDoc || document;

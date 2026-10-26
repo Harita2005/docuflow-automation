@@ -18,9 +18,7 @@ import {
   Check,
   Copy,
   RefreshCw,
-  AlertCircle,
   CheckCircle2,
-  FileText,
   Zap
 } from 'lucide-react';
 import { ThirdPartyApplication, SyncRule, Condition, AuthType, FieldMapping } from '../../types/dapiSyncBack';
