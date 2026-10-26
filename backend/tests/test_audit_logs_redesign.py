@@ -1,9 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.database.models import AuditLog, User
+from app.database.models import User
 from app.routers.audit import classify_audit_log, sanitize_csv_cell
 from app.main import app
 
