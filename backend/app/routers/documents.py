@@ -42,6 +42,56 @@ from app.services.integration_service import dispatch_outgoing_webhook
 from app.services.callback_service import dispatch_approval_callback_events
 from app.services.rbac_service import authorize_document_access, check_permission, get_user_approval_divisions
 from app.services.file_security import validate_uploaded_file, get_safe_file_path
+from app.services.security_middleware import resolve_client_ip
+
+def extract_client_request_ip(req: Optional[Request] = None) -> str:
+    if req:
+        try:
+            return resolve_client_ip(req)
+        except Exception:
+            pass
+    return "127.0.0.1"
+
+def record_document_audit_event(
+    db: Session,
+    inv: Any,
+    action: str,
+    stage: str,
+    remarks: str,
+    user: Optional[User] = None,
+    client_ip: Optional[str] = None,
+    previous_status: Optional[str] = None,
+    new_status: Optional[str] = None,
+    notes_extra: Optional[str] = None
+) -> AuditLog:
+    emp_id = (getattr(user, 'employee_id', None) or getattr(user, 'user_uid', None) or 'N/A') if user else 'N/A'
+    role = (getattr(user, 'role', None) or 'Approver') if user else 'Approver'
+    username = (getattr(user, 'username', None) or 'system') if user else 'system'
+    name = (getattr(user, 'employee_name', None) or getattr(user, 'name', None) or username) if user else 'System Approver'
+    display_user = f"{name} ({emp_id}) [{role}]"
+    ip_addr = client_ip or "127.0.0.1"
+
+    detail_parts = [remarks] if remarks else []
+    if notes_extra:
+        detail_parts.append(notes_extra)
+    detail_parts.append(f"Approver: {name} (Emp ID: {emp_id}, Role: {role}, User: {username}, IP: {ip_addr})")
+    full_notes = " ➔ ".join(detail_parts)
+
+    entry = AuditLog(
+        invoice_id=str(inv.id),
+        user=display_user,
+        action=action,
+        stage=stage,
+        notes=full_notes,
+        remarks=remarks,
+        ip_address=ip_addr,
+        approver_user_id=getattr(user, 'id', None) if user else None,
+        stage_id=getattr(inv, 'current_stage', 1),
+        previous_status=previous_status or getattr(inv, 'status', None),
+        new_status=new_status or getattr(inv, 'status', None)
+    )
+    db.add(entry)
+    return entry
 
 logger = logging.getLogger(__name__)
 
@@ -1550,7 +1600,9 @@ def complete_document_lifecycle(
     remarks: Optional[str] = None,
     prev_stage_num: Optional[int] = None,
     stage_name: Optional[str] = None,
-    next_assigned_info: Optional[str] = None
+    next_assigned_info: Optional[str] = None,
+    approver_user: Optional[User] = None,
+    client_ip: Optional[str] = None
 ) -> bool:
     """
     Unified post-approval lifecycle handler called by:
@@ -1615,27 +1667,31 @@ def complete_document_lifecycle(
             next_stage_name=None,
             next_approver_handle=None
         )
-        db.add(AuditLog(
-            invoice_id=str(inv.id),
-            user=approver_name,
+        record_document_audit_event(
+            db=db,
+            inv=inv,
             action=f'Approved ({stg_name})',
             stage=stg_name,
-            notes=f'{remarks} ➔ {next_info}',
-            remarks=remarks
-        ))
+            remarks=remarks,
+            user=approver_user,
+            client_ip=client_ip,
+            previous_status=f'In Progress ({stg_name})',
+            new_status='Approved',
+            notes_extra=next_info
+        )
 
     # Commit approval, storage status, and audit log to DB FIRST
     db.commit()
     db.refresh(inv)
 
-    # 3. Step 3: Trigger async integration push (back sync) ONLY after DB commit AND ONLY if archiving succeeded
-    if archive_success:
-        if getattr(inv, 'external_sync_status', None) not in ['SYNCED', 'PENDING', 'QUEUED']:
-            inv.external_sync_status = 'PENDING'
-            db.commit()
-            trigger_async_integration_push(str(inv.id))
-    else:
-        logger.warning(f"[complete_document_lifecycle] Back sync push skipped because storage is pending for doc {inv.id}.")
+    # 3. Step 3: Trigger async integration push (back sync) unconditionally upon document completion
+    try:
+        inv.external_sync_status = 'QUEUED'
+        db.commit()
+        trigger_async_integration_push(str(inv.id), decision='APPROVED')
+        logger.info(f"[complete_document_lifecycle] Back sync push triggered for approved doc {inv.id}")
+    except Exception as push_err:
+        logger.error(f"[complete_document_lifecycle] Failed to trigger back sync push for doc {inv.id}: {push_err}")
 
     safe_broadcast_event('STAGE_APPROVED', {
         'document_id': str(inv.id),
@@ -1732,7 +1788,7 @@ def dispatch_rejection_inapp_notifications(db: Session, inv: Invoice, approver_n
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
-def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remarks: str, action_type: str='Reject', expected_version: Optional[int]=None):
+def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remarks: str, action_type: str='Reject', expected_version: Optional[int]=None, approver_user: Optional[User] = None, client_ip: Optional[str] = None):
     """
     Step-down rejection:
     - If Stage N (N > 1): Returns document to Stage N-1 previous approver.
@@ -1800,7 +1856,18 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             next_stage_name=prev_step_name,
             next_approver_handle=inv.assigned_approver
         )
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Rejected / Returned to Stage {prev_stage}', stage=f'Stage {current_stage}', notes=f'Rejected at Stage {current_stage} by {approver_name} ➔ Returned to Stage {prev_stage} ({prev_step_name}, Assigned: {inv.assigned_approver}). Reason: {remarks}'))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action=f'Rejected / Returned to Stage {prev_stage}',
+            stage=f'Stage {current_stage}',
+            remarks=remarks,
+            user=approver_user,
+            client_ip=client_ip,
+            previous_status=f'In Progress (Stage {current_stage})',
+            new_status=inv.status,
+            notes_extra=f'Returned to Stage {prev_stage} ({prev_step_name}, Assigned: {inv.assigned_approver})'
+        )
         trigger_async_integration_push(str(inv.id), decision='REJECTED')
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': f'Document returned to Stage {prev_stage} ({prev_step_name}) for previous approver review.'}
@@ -1820,7 +1887,17 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
 
         inv.version = cur_ver + 1
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Placed on Hold', stage=f'Stage {current_stage}', notes=f'Placed on hold / returned for clarification: {remarks}'))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action='Placed on Hold',
+            stage=f'Stage {current_stage}',
+            remarks=remarks,
+            user=approver_user,
+            client_ip=client_ip,
+            previous_status=f'In Progress (Stage {current_stage})',
+            new_status='On Hold'
+        )
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
@@ -1852,7 +1929,17 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             approver_handle=approver_name,
             remarks=remarks
         )
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action='Process Cancelled', stage='Stage 1 (Attachment Status)', notes=f'Workflow process cancelled/voided by {approver_name} at Stage 1. Reason: {remarks}'))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action='Process Cancelled',
+            stage='Stage 1 (Attachment Status)',
+            remarks=remarks,
+            user=approver_user,
+            client_ip=client_ip,
+            previous_status=f'In Progress (Stage {current_stage})',
+            new_status='Cancelled'
+        )
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
         invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'message': 'Workflow process cancelled and voided at Attachment Stage.'}
@@ -2322,7 +2409,8 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
 
 @router.post('/api/workflows/approve')
 @router.post('/api/workflow/approve')
-def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+    client_ip = extract_client_request_ip(req)
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
@@ -2433,7 +2521,9 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
             remarks=remarks,
             prev_stage_num=prev_stage_num,
             stage_name=stage_name,
-            next_assigned_info=next_assigned_info
+            next_assigned_info=next_assigned_info,
+            approver_user=user,
+            client_ip=client_ip
         )
     else:
         dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
@@ -2448,7 +2538,18 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
             next_stage_name=next_step.step_name if next_step else None,
             next_approver_handle=next_assigned_val
         )
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action=f'Approved ({stage_name})',
+            stage=stage_name,
+            remarks=remarks,
+            user=user,
+            client_ip=client_ip,
+            previous_status=inv.status,
+            new_status=next_status_val,
+            notes_extra=next_assigned_info
+        )
         db.commit()
         db.refresh(inv)
         safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
@@ -2467,7 +2568,8 @@ def workflow_approve_payload(payload: dict, db: Session=Depends(get_db), user: U
 @router.post('/api/records/{invoice_id}/approve')
 @router.post('/api/documents/{invoice_id}/approve')
 @router.post('/api/invoices/{invoice_id}/approve')
-def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+def approve_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
+    client_ip = extract_client_request_ip(req)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
         raise HTTPException(
@@ -2564,7 +2666,9 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
             remarks=remarks,
             prev_stage_num=prev_stage_num,
             stage_name=stage_name,
-            next_assigned_info=next_assigned_info
+            next_assigned_info=next_assigned_info,
+            approver_user=user,
+            client_ip=client_ip
         )
     else:
         dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=username, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
@@ -2579,7 +2683,18 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
             next_stage_name=next_step.step_name if next_step else None,
             next_approver_handle=next_assigned_val
         )
-        db.add(AuditLog(invoice_id=str(inv.id), user=username, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{remarks} ➔ {next_assigned_info}', remarks=remarks))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action=f'Approved ({stage_name})',
+            stage=stage_name,
+            remarks=remarks,
+            user=user,
+            client_ip=client_ip,
+            previous_status=inv.status,
+            new_status=next_status_val,
+            notes_extra=next_assigned_info
+        )
         db.commit()
         db.refresh(inv)
         safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': username})
@@ -2599,7 +2714,8 @@ def approve_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=
 @router.post('/api/records/{invoice_id}/step-action')
 @router.post('/api/documents/{invoice_id}/step-action')
 @router.post('/api/invoices/{invoice_id}/step-action')
-def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
     if expected_ver is None:
@@ -2701,7 +2817,9 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
                 remarks=comments,
                 prev_stage_num=prev_stage_num,
                 stage_name=stage_name,
-                next_assigned_info=next_assigned_info
+                next_assigned_info=next_assigned_info,
+                approver_user=user,
+                client_ip=client_ip
             )
         else:
             dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
@@ -2716,7 +2834,18 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
                 next_stage_name=next_step.step_name if next_step else None,
                 next_approver_handle=next_assigned_val
             )
-            db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'Approved ({stage_name})', stage=stage_name, notes=f'{comments} ➔ {next_assigned_info}', remarks=comments))
+            record_document_audit_event(
+                db=db,
+                inv=inv,
+                action=f'Approved ({stage_name})',
+                stage=stage_name,
+                remarks=comments,
+                user=user,
+                client_ip=client_ip,
+                previous_status=inv.status,
+                new_status=next_status_val,
+                notes_extra=next_assigned_info
+            )
             db.commit()
             db.refresh(inv)
             safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
@@ -2733,7 +2862,7 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             'is_final_approval': inv.status == 'Approved'
         }
     elif 'reject' in act_lower or 'send back' in act_lower or 'return' in act_lower:
-        result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type, expected_version=current_version)
+        result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type, expected_version=current_version, approver_user=user, client_ip=client_ip)
         db.commit()
         db.refresh(inv)
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
@@ -2753,7 +2882,17 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
             raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
 
         inv.version = current_version + 1
-        db.add(AuditLog(invoice_id=str(inv.id), user=approver_name, action=f'{action_type} (Hold)', stage=stage_name, notes=comments))
+        record_document_audit_event(
+            db=db,
+            inv=inv,
+            action=f'{action_type} (Hold)',
+            stage=stage_name,
+            remarks=comments,
+            user=user,
+            client_ip=client_ip,
+            previous_status=inv.status,
+            new_status='On Hold'
+        )
         db.commit()
         db.refresh(inv)
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
@@ -2761,7 +2900,8 @@ def invoice_step_action(invoice_id: str, payload: dict, db: Session=Depends(get_
 
 @router.post('/api/workflows/reject')
 @router.post('/api/workflow/reject')
-def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def workflow_reject_payload(req: Request, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in rejection payload')
@@ -2778,7 +2918,7 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     approver_name = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record rejected / returned to previous approver.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject', expected_version=current_version)
+    result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
@@ -2786,7 +2926,8 @@ def workflow_reject_payload(payload: dict, db: Session=Depends(get_db), user: Op
 @router.post('/api/records/{invoice_id}/reject')
 @router.post('/api/documents/{invoice_id}/reject')
 @router.post('/api/invoices/{invoice_id}/reject')
-def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def reject_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
@@ -2800,7 +2941,7 @@ def reject_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=N
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record rejected / returned to previous approver.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject', expected_version=current_version)
+    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'invoice': inv, **result}
@@ -2898,7 +3039,8 @@ def parse_and_validate_scheduled_clock_time(val: Any) -> Optional[str]:
 
 @router.post('/api/workflows/hold')
 @router.post('/api/workflow/hold')
-def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def workflow_hold_payload(req: Request, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in hold payload')
@@ -2948,7 +3090,17 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
 
     inv.version = current_version + 1
-    db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
+    record_document_audit_event(
+        db=db,
+        inv=inv,
+        action='Placed on Hold',
+        stage=f'Stage {inv.current_stage or 1}',
+        remarks=remarks,
+        user=user,
+        client_ip=client_ip,
+        previous_status=inv.status,
+        new_status='On Hold'
+    )
     db.commit()
     db.refresh(inv)
     safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
@@ -2956,7 +3108,8 @@ def workflow_hold_payload(payload: dict, db: Session=Depends(get_db), user: Opti
 
 @router.post('/api/workflows/sendback')
 @router.post('/api/workflow/sendback')
-def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def workflow_sendback_payload(req: Request, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId in sendback payload')
@@ -2973,7 +3126,7 @@ def workflow_sendback_payload(payload: dict, db: Session=Depends(get_db), user: 
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
     remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record returned to previous stage.'
-    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back', expected_version=current_version)
+    result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
@@ -3064,7 +3217,8 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
 @router.post('/api/records/{invoice_id}/hold')
 @router.post('/api/documents/{invoice_id}/hold')
 @router.post('/api/invoices/{invoice_id}/hold')
-def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def hold_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceActionRequest]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    client_ip = extract_client_request_ip(req)
     inv = find_invoice_by_identifier(db, invoice_id)
     expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None)) or (action.expected_version if action and action.expected_version is not None else None)
     if expected_ver is None:
@@ -3115,7 +3269,17 @@ def hold_invoice_url(invoice_id: str, action: Optional[InvoiceActionRequest]=Non
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
 
     inv.version = current_version + 1
-    db.add(AuditLog(invoice_id=str(inv.id), user=username, action='Placed on Hold', stage=f'Stage {inv.current_stage or 1}', notes=remarks))
+    record_document_audit_event(
+        db=db,
+        inv=inv,
+        action='Placed on Hold',
+        stage=f'Stage {inv.current_stage or 1}',
+        remarks=remarks,
+        user=user,
+        client_ip=client_ip,
+        previous_status=inv.status,
+        new_status='On Hold'
+    )
     db.commit()
     db.refresh(inv)
     return {'success': True, 'status': inv.status, 'invoice': inv}

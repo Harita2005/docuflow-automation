@@ -10,6 +10,7 @@ import datetime
 import urllib.request
 import urllib.parse
 from typing import Dict, Any, List, Optional, Tuple
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication
 
@@ -210,28 +211,29 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
         cfg = json.loads(decrypted_json) if isinstance(decrypted_json, str) else decrypted_json
         if not isinstance(cfg, dict):
             return headers
-        if auth_type == 'API_KEY':
-            header_name = cfg.get('header_name') or cfg.get('headerName') or 'X-API-Key'
-            api_key = cfg.get('api_key') or cfg.get('apiKey') or cfg.get('secret') or ''
+        clean_auth = (auth_type or '').upper().replace(' ', '_').replace('.', '')
+        if clean_auth in ['API_KEY', 'APIKEY']:
+            header_name = cfg.get('header_name') or cfg.get('headerName') or cfg.get('apiKeyHeader') or 'X-API-Key'
+            api_key = cfg.get('api_key') or cfg.get('apiKey') or cfg.get('apiKeyValue') or cfg.get('secret') or ''
             prefix = cfg.get('prefix', '')
             val = f'{prefix} {api_key}'.strip() if prefix else api_key
             if header_name and val:
                 headers[header_name] = val
-        elif auth_type == 'BEARER_TOKEN':
-            token = cfg.get('token') or cfg.get('bearer_token') or ''
+        elif clean_auth in ['BEARER_TOKEN', 'BEARER']:
+            token = cfg.get('token') or cfg.get('bearer_token') or cfg.get('bearerToken') or ''
             if token:
                 headers['Authorization'] = f'Bearer {token}' if not token.startswith('Bearer ') else token
-        elif auth_type == 'BASIC_AUTH':
-            username = cfg.get('username') or ''
-            password = cfg.get('password') or ''
+        elif clean_auth in ['BASIC_AUTH', 'BASIC']:
+            username = cfg.get('username') or cfg.get('basicUsername') or ''
+            password = cfg.get('password') or cfg.get('basicPassword') or ''
             creds = f'{username}:{password}'.encode('utf-8')
             encoded = base64.b64encode(creds).decode('utf-8')
             headers['Authorization'] = f'Basic {encoded}'
-        elif auth_type == 'OAUTH2':
+        elif clean_auth in ['OAUTH2', 'OAUTH_20', 'OAUTH_2', 'OAUTH']:
             access_token = cfg.get('access_token') or cfg.get('token') or ''
-            client_id = cfg.get('client_id') or ''
-            client_secret = cfg.get('client_secret') or ''
-            token_url = cfg.get('token_url') or ''
+            client_id = cfg.get('client_id') or cfg.get('oauthClientId') or ''
+            client_secret = cfg.get('client_secret') or cfg.get('oauthClientSecret') or ''
+            token_url = cfg.get('token_url') or cfg.get('tokenUrl') or ''
             if not access_token and client_id and client_secret and token_url:
                 try:
                     validate_url_ssrf(token_url)
@@ -499,14 +501,14 @@ def dispatch_approval_callback_events(db: Session, document_id: str, decision: s
     doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
     if not doc:
         return []
-    rules = db.query(CallbackRule).join(ThirdPartyApplication).filter(CallbackRule.status == 'ACTIVE', ThirdPartyApplication.status == 'Active', CallbackRule.trigger_event == 'FDO_FINAL_DECISION', CallbackRule.run_when.in_([decision.upper(), 'BOTH'])).order_by(CallbackRule.priority.asc()).all()
+    rules = db.query(CallbackRule).join(ThirdPartyApplication).filter(func.upper(CallbackRule.status) == 'ACTIVE', func.upper(ThirdPartyApplication.status) == 'ACTIVE', CallbackRule.trigger_event == 'FDO_FINAL_DECISION', CallbackRule.run_when.in_([decision.upper(), 'BOTH'])).order_by(CallbackRule.priority.asc()).all()
     if not rules:
         return []
     results = []
     base_doc_context = build_document_context(doc, decision=decision)
     for rule in rules:
         app = rule.application
-        if not app or app.status != 'Active':
+        if not app or (app.status or '').upper() != 'ACTIVE':
             continue
         doc_context = dict(base_doc_context)
         doc_context['applicationCode'] = app.code

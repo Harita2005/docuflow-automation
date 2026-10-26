@@ -629,7 +629,7 @@ export default function WorkTrackerPage({
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold whitespace-nowrap shadow-2xs ml-1">
             <Receipt className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
             <span>Total Amount:</span>
-            <span className="font-mono font-bold text-emerald-950">
+            <span className="font-sans font-extrabold text-emerald-950 tracking-tight">
               ₹{totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
@@ -999,7 +999,7 @@ export default function WorkTrackerPage({
                     {/* DOCUMENT ID */}
                     <td className="py-2.5 px-3 align-middle">
                       <div className="flex flex-col min-w-0 leading-tight">
-                        <span className="text-xs font-bold text-slate-900 group-hover:text-[#003F28] transition-colors truncate" title={displayId}>
+                        <span className="text-xs font-sans font-extrabold text-slate-900 group-hover:text-[#003F28] transition-colors truncate tracking-tight" title={displayId}>
                           {displayId}
                         </span>
                         {docDate && (
@@ -1026,7 +1026,7 @@ export default function WorkTrackerPage({
 
                     {/* AMOUNT (₹) */}
                     <td className="py-2.5 px-3 align-middle text-right whitespace-nowrap">
-                      <span className="text-xs font-bold text-slate-900">
+                      <span className="text-xs font-sans font-extrabold text-slate-900 tracking-tight">
                         ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>

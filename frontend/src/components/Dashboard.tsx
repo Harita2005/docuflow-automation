@@ -914,7 +914,7 @@ export default function Dashboard({
                       <span className="text-slate-300">|</span>
 
                       {/* Doc ID */}
-                      <span className="font-mono text-slate-600 text-[10px] font-normal">
+                      <span className="font-sans text-slate-900 text-[11px] font-extrabold tracking-tight">
                         {doc.id}
                       </span>
 

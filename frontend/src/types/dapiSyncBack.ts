@@ -86,6 +86,10 @@ export interface SyncRule {
   rejectedAction: EndpointConfig;
   payloadMappings: FieldMapping[];
   lastModified?: string;
+  payloadSource?: 'SQL_PROCEDURE' | 'JSON_MAPPING' | 'RAW_TEMPLATE';
+  storedProcedureName?: string;
+  rawPayloadTemplate?: string;
+  decisionTrigger?: 'APPROVED' | 'REJECTED' | 'BOTH';
 }
 
 export interface ConditionalEndpointRule {

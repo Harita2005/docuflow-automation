@@ -31,8 +31,8 @@ import {
 
 // Standard Baseline Roles
 export const INITIAL_ROLES = [
-  { id: "admin", name: "Administrator", badge: "Admin", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  { id: "manager", name: "Approver / Manager", badge: "Manager", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { id: "admin", name: "Administrator", badge: "Admin", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  { id: "manager", name: "Approver / Manager", badge: "Manager", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
   { id: "auditor", name: "Internal Auditor", badge: "Auditor", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   { id: "ap_specialist", name: "AP Specialist", badge: "AP Staff", color: "bg-amber-50 text-amber-700 border-amber-200" },
   { id: "employee", name: "General Employee", badge: "Employee", color: "bg-slate-100 text-slate-700 border-slate-200" }
@@ -45,7 +45,7 @@ const INITIAL_PERMISSIONS = [
     category: "OPERATIONS PAGES",
     icon: "Folder",
     items: [
-      { id: "dashboard", label: "Dashboard Page", desc: "Overview dashboard, analytics counters, pending work alerts & system status", iconName: "BarChart3", iconColor: "bg-blue-50 text-blue-600 border-blue-100" },
+      { id: "dashboard", label: "Dashboard Page", desc: "Overview dashboard, analytics counters, pending work alerts & system status", iconName: "BarChart3", iconColor: "bg-emerald-50 text-emerald-700 border-emerald-200" },
       { id: "work-tracker", label: "Work Tracker Page", desc: "Active document work tracker, stage progression & metadata verification", iconName: "Layers", iconColor: "bg-emerald-50 text-emerald-600 border-emerald-100" },
       { id: "approved-documents", label: "Approved Docs Page", desc: "Archived & settled documents, payment readiness & PDF download", iconName: "CheckSquare", iconColor: "bg-amber-50 text-amber-600 border-amber-100" },
       { id: "upload", label: "Upload Document Page", desc: "Single & batch invoice file uploads & drag-and-drop file ingestion", iconName: "FileText", iconColor: "bg-purple-50 text-purple-600 border-purple-100" }
@@ -386,14 +386,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const getRoleIconStyle = (role) => {
     const key = String(role.code || role.id || role.name || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    if (key.includes("admin")) return "bg-blue-50 text-blue-600 border-blue-100";
+    if (key.includes("admin")) return "bg-emerald-50 text-emerald-800 border-emerald-200";
     if (key === "gm" || key.includes("general_manager") || key.includes("general manager")) return "bg-purple-50 text-purple-600 border-purple-100";
     if (key === "jmd" || key.includes("joint_managing") || key.includes("joint managing")) return "bg-slate-100 text-slate-700 border-slate-200";
     if (key === "md" || key.includes("managing_director") || key.includes("managing director")) return "bg-emerald-50 text-emerald-600 border-emerald-100";
     if (key.includes("operations") || key.includes("manager")) return "bg-slate-100 text-slate-700 border-slate-200";
     if (key.includes("finance_auditor") || key.includes("auditor") || key.includes("audit")) return "bg-orange-50 text-orange-600 border-orange-100";
     if (key.includes("accounts_uploader")) return "bg-emerald-50 text-emerald-600 border-emerald-100";
-    if (key.includes("accounts_approver")) return "bg-blue-50 text-blue-600 border-blue-100";
+    if (key.includes("accounts_approver")) return "bg-emerald-50 text-emerald-800 border-emerald-200";
     if (key.includes("accounts")) return "bg-sky-50 text-sky-600 border-sky-100";
     if (key.includes("employee")) return "bg-slate-100 text-slate-700 border-slate-200";
     return "bg-slate-100 text-slate-700 border-slate-200";
@@ -607,7 +607,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
   const getAvatarColor = (name = "") => {
     const colors = [
-      "bg-blue-100 text-blue-700 border border-blue-200",
+      "bg-emerald-100 text-emerald-800 border border-emerald-200",
       "bg-emerald-100 text-emerald-700 border border-emerald-200",
       "bg-amber-100 text-amber-700 border border-amber-200",
       "bg-purple-100 text-purple-700 border border-purple-200",
@@ -723,7 +723,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             code: r.code,
             name: r.name,
             badge: r.code ? r.code.toUpperCase() : r.name.slice(0, 10),
-            color: "bg-blue-50 text-blue-700 border-blue-200",
+            color: "bg-emerald-50 text-emerald-800 border-emerald-200",
             is_active: r.is_active !== undefined ? r.is_active : true,
             permissions: r.permissions || []
           }));
@@ -1598,7 +1598,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-700" />
       </div>
     );
   }
@@ -1829,7 +1829,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     }
                     setShowAddUserModal(true);
                   }}
-                  className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                  className="h-8 flex items-center gap-1 px-2.5 bg-white hover:bg-slate-50 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>User</span>
@@ -2135,7 +2135,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 {/* Panel Header */}
                 <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-blue-50 text-blue-600 border-blue-100 shadow-3xs">
+                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-3xs">
                       <Shield className="h-4.5 w-4.5" />
                     </div>
                     <div className="text-left">
@@ -2150,7 +2150,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
                   <div className="flex items-center gap-3">
                     <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                      ROLE: <span className="text-blue-600 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
+                      ROLE: <span className="text-emerald-700 font-extrabold">{roles.find(r => r.id === selectedRoleId)?.badge || selectedRoleId}</span>
                     </div>
                     <button 
                       type="button" 
@@ -2163,8 +2163,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 </div>
 
                 {/* Alert Info Banner */}
-                <div className="px-4 py-2.5 bg-blue-50/70 border-b border-blue-100/70 text-blue-700 text-xs font-semibold flex items-center gap-2 shrink-0 select-none">
-                  <Info className="h-4 w-4 text-blue-500 shrink-0" />
+                <div className="px-4 py-2.5 bg-emerald-50/80 border-b border-emerald-200/80 text-emerald-800 text-xs font-semibold flex items-center gap-2 shrink-0 select-none">
+                  <Info className="h-4 w-4 text-emerald-600 shrink-0" />
                   <span>Modifications apply to all assigned employees immediately. Save top-right to commit.</span>
                 </div>
 
@@ -2182,7 +2182,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           className="bg-slate-50/90 hover:bg-slate-100/80 px-3.5 py-2.5 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-150"
                         >
                           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
-                            {isCollapsed ? <Folder className="h-3.5 w-3.5 text-slate-400" /> : <FolderOpen className="h-3.5 w-3.5 text-blue-600" />}
+                            {isCollapsed ? <Folder className="h-3.5 w-3.5 text-slate-400" /> : <FolderOpen className="h-3.5 w-3.5 text-emerald-700" />}
                             <span>{cat.category}</span>
                             <span className="text-[9px] text-slate-400 font-bold border border-slate-200 px-1.5 py-0.2 rounded-md bg-white">
                               {cat.items.length}
@@ -2335,7 +2335,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                       setSelectedRoleId("");
                     }}
                     disabled={savingRolePerms}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-6 py-2 bg-[#005A36] hover:bg-[#00482B] text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                   >
                     {savingRolePerms ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     <span>Save & Apply Clearances</span>
@@ -2364,7 +2364,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 onClick={() => setRoleFilter("ALL")}
                 className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
                   roleFilter === "ALL" 
-                    ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
+                    ? "bg-emerald-50/90 text-emerald-800 border-emerald-300/80 shadow-3xs" 
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
@@ -2380,7 +2380,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     onClick={() => setRoleFilter(rCode)}
                     className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold transition cursor-pointer border ${
                       isSelected
-                        ? "bg-blue-50/80 text-blue-700 border-blue-200/60 shadow-3xs" 
+                        ? "bg-emerald-50/90 text-emerald-800 border-emerald-300/80 shadow-3xs" 
                         : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
@@ -2426,7 +2426,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-semibold text-slate-900 truncate max-w-[120px]">{u.name}</span>
                                   {u.is_new && (
-                                    <span className="px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-600 text-[8px] font-bold border border-blue-100">
+                                    <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 text-[8px] font-bold border border-emerald-200">
                                       New
                                     </span>
                                   )}
@@ -2446,7 +2446,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                           {/* Status badge */}
                           <td className="px-3.5 py-2.5 w-[14%] align-middle">
                             {u.status === "Onboarded" ? (
-                              <span className="px-2 py-0.5 rounded-full text-[8.5px] font-semibold bg-blue-50 text-blue-700 border border-blue-100/60 shadow-3xs">
+                              <span className="px-2 py-0.5 rounded-full text-[8.5px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-3xs">
                                 Onboarded
                               </span>
                             ) : u.status === "Active" || u.is_active ? (
@@ -2498,7 +2498,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                     password: ""
                                   });
                                 }}
-                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50/70 hover:bg-blue-100 px-2 py-0.5 rounded transition cursor-pointer inline-flex items-center gap-1"
+                                className="text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-50/80 hover:bg-emerald-100 px-2 py-0.5 rounded transition cursor-pointer inline-flex items-center gap-1"
                                 title="Edit Employee ID & Profile"
                               >
                                 <Edit2 className="h-2.5 w-2.5" />
@@ -2544,7 +2544,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                   }}
                                   className="w-full px-3 py-1.5 hover:bg-slate-50 text-[10.5px] font-medium text-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
                                 >
-                                  <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                                  <Edit2 className="h-3.5 w-3.5 text-emerald-700" />
                                   <span>Edit Profile & ID</span>
                                 </button>
                                 
@@ -2617,7 +2617,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     }
                   }}
                   placeholder="e.g. Treasury Officer"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25"
+                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/25"
                 />
               </div>
 
@@ -2630,7 +2630,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   value={newRoleCode}
                   onChange={e => setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''))}
                   placeholder="e.g. treasury_officer"
-                  className="w-full text-xs p-2 font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/25 text-slate-700"
+                  className="w-full text-xs p-2 font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/25 text-slate-700"
                 />
                 <p className="text-[9px] text-slate-400 mt-1">Unique identifier used in backend DB. Duplicates auto-suffix (_2, _3).</p>
               </div>
@@ -2646,7 +2646,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 <button
                   type="submit"
                   disabled={!newRoleName.trim() || isCreatingRole}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00482B] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
                 >
                   {isCreatingRole ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                   <span>{isCreatingRole ? "Creating..." : "Add Role"}</span>

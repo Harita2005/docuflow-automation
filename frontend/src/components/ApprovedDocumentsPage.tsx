@@ -664,7 +664,7 @@ export default function ApprovedDocumentsPage({
               {totalRecordsCount > 0 && (
                 <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
                   <span className="text-emerald-600 uppercase tracking-wide text-[9px]">Total:</span>
-                  <span className="font-mono text-emerald-900 font-bold">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-sans text-emerald-950 font-extrabold tracking-tight">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </span>
               )}
             </div>
@@ -1108,7 +1108,7 @@ export default function ApprovedDocumentsPage({
                       {/* 2. Document ID & Date */}
                       <td className="py-1.5 px-2.5 w-[16%] min-w-0">
                         <div className="flex flex-col min-w-0 leading-tight">
-                          <span className="text-[12px] font-semibold text-slate-900 group-hover:text-[#003F28] transition-colors truncate" title={doc.id}>
+                          <span className="text-[12.5px] font-sans font-extrabold text-slate-900 group-hover:text-[#003F28] transition-colors truncate tracking-tight" title={doc.id}>
                             {doc.id}
                           </span>
                           {formattedDate && formattedDate !== "-" && (
@@ -1135,7 +1135,7 @@ export default function ApprovedDocumentsPage({
 
                       {/* 5. Amount */}
                       <td className="py-1.5 px-2.5 text-right w-[14%] whitespace-nowrap">
-                        <span className="text-[12px] font-semibold text-slate-900 font-mono">
+                        <span className="text-[12.5px] font-sans font-extrabold text-slate-900 tracking-tight">
                           {formatCurrency(doc.amount)}
                         </span>
                       </td>
@@ -1206,7 +1206,7 @@ export default function ApprovedDocumentsPage({
                   <td colSpan={4} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px] text-slate-600 font-bold">
                     Page Total ({displayedDocs.length} {displayedDocs.length === 1 ? 'Record' : 'Records'}):
                   </td>
-                  <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-800 whitespace-nowrap text-[12.5px]">
+                  <td className="py-2.5 px-2.5 text-right font-sans font-extrabold text-emerald-900 whitespace-nowrap text-[12.5px] tracking-tight">
                     ₹{pageTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td colSpan={3} className="py-2.5 px-2.5"></td>
@@ -1262,7 +1262,7 @@ export default function ApprovedDocumentsPage({
 
               <span className="text-slate-300 mx-1">|</span>
               <span className="font-semibold text-slate-700">
-                Total Amount: <strong className="text-emerald-700 font-mono font-bold text-[11.5px]">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                Total Amount: <strong className="text-emerald-800 font-sans font-extrabold text-[12px] tracking-tight">₹{filteredTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </span>
 
               <span className="text-slate-300 mx-1">|</span>

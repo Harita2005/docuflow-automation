@@ -92,6 +92,11 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
         const body = await res.json();
         if (body.success && Array.isArray(body.data)) {
           const mapped: SyncRule[] = body.data.map((r: any) => {
+            let parsedMappings: any[] = [];
+            try {
+              const pMap = typeof r.payload_mapping_json === 'string' ? JSON.parse(r.payload_mapping_json) : r.payload_mapping_json;
+              if (Array.isArray(pMap)) parsedMappings = pMap;
+            } catch {}
             let parsedConditions: any[] = [];
             try {
               const parsed = typeof r.conditions_json === 'string' ? JSON.parse(r.conditions_json) : r.conditions_json;
@@ -133,7 +138,11 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
                 headers: [],
                 requestBodyTemplate: r.raw_payload_template || ''
               },
-              payloadMappings: []
+              payloadMappings: parsedMappings,
+              payloadSource: r.payload_source || 'SQL_PROCEDURE',
+              storedProcedureName: r.stored_procedure_name || 'sp_GetApprovalCallbackPayload',
+              rawPayloadTemplate: r.raw_payload_template || '',
+              decisionTrigger: r.run_when || 'BOTH'
             };
           });
           setRules(mapped);
@@ -293,15 +302,17 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
         status: status === 'Active' ? 'ACTIVE' : 'DRAFT',
         priority: rule.priority || 1,
         trigger_event: 'FDO_FINAL_DECISION',
-        run_when: 'BOTH',
+        run_when: rule.decisionTrigger || 'BOTH',
         conditions_json: { logicalOperator: 'AND', conditions: rule.conditions },
         http_method: rule.approvedAction?.method || 'POST',
-        url_mode: 'CUSTOM',
+        url_mode: 'OVERRIDE',
         custom_url: rule.approvedAction?.url || 'https://api.example.com/callback',
         endpoint_path: '',
         body_type: 'JSON',
-        payload_source: 'SQL_PROCEDURE',
-        stored_procedure_name: 'sp_GetApprovalCallbackPayload',
+        payload_source: rule.payloadSource || 'SQL_PROCEDURE',
+        stored_procedure_name: rule.storedProcedureName || 'sp_GetApprovalCallbackPayload',
+        raw_payload_template: rule.rawPayloadTemplate || '',
+        payload_mapping_json: rule.payloadMappings || [],
         content_type: 'application/json'
       };
 
@@ -440,6 +451,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
             selectedAppId={selectedAppIdForConfig}
             onBackToApps={() => setActiveTab('applications')}
             onSaveRule={handleSaveRule}
+            onUpdateApp={handleUpdateApp}
           />
         )}
 

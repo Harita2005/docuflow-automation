@@ -209,7 +209,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
                     <div className="space-y-1 text-[10.5px]">
                       <div className="flex justify-between">
                         <span className={selectedInvoice?.id === inv.id ? "text-blue-100" : "text-slate-400"}>Invoice Reference:</span>
-                        <strong className="font-mono">{inv.invoice_number}</strong>
+                        <strong className="font-sans font-extrabold text-slate-900 tracking-tight">{inv.invoice_number}</strong>
                       </div>
                       <div className="flex justify-between">
                         <span className={selectedInvoice?.id === inv.id ? "text-blue-100" : "text-slate-400"}>PO number match:</span>

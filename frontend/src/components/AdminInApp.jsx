@@ -322,7 +322,7 @@ export default function AdminInApp() {
       )}
 
       {/* 2. CARD WITH TABLE + OPTIONAL EDIT DRAWER (ONLY WHEN EDIT CLICKED) */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col lg:flex-row">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         
         {/* LEFT COMPONENT: Templates Table View */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -457,26 +457,45 @@ export default function AdminInApp() {
 
         </div>
 
-        {/* RIGHT COMPONENT: Edit Notification Template Drawer (OPENS ONLY WHEN EDIT IS CLICKED) */}
-        {selectedConfig && selectedMeta && (
-          <div className="w-full lg:w-[400px] xl:w-[440px] bg-white border-t lg:border-t-0 lg:border-l border-slate-200 p-4 flex flex-col justify-between shrink-0 animate-fadeIn">
-            
-            <div className="space-y-3.5">
-              {/* Header */}
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Edit Notification Template</h3>
-                <button 
-                  type="button" 
-                  onClick={() => setSelectedEventKey(null)}
-                  className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
-                  title="Close Drawer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+      </div>
 
-              {/* Event Info & Toggle Switch */}
-              <div className="flex items-center justify-between gap-3">
+      {/* 3. MODAL DIALOG: Edit Notification Template (Centered Popup with Backdrop) */}
+      {selectedConfig && selectedMeta && typeof document !== "undefined" && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-fadeIn"
+          onClick={() => setSelectedEventKey(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-[560px] w-full max-h-[85vh] flex flex-col overflow-hidden animate-scaleIn text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-3xs">
+                  <Bell className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm tracking-tight">Edit Notification Template</h3>
+                  <div className="text-xs text-slate-400 mt-0.5 font-medium">
+                    Configure in-app notification alerts for workflow transitions
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedEventKey(null)}
+                className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition cursor-pointer"
+                title="Close Modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-3.5 custom-scrollbar bg-slate-50/30 flex-1">
+              {/* Event Info & Toggle Switch Card */}
+              <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
                 <div>
                   <h4 className="font-bold text-xs text-slate-900">{selectedMeta.label}</h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">{selectedMeta.desc}</p>
@@ -557,9 +576,9 @@ export default function AdminInApp() {
                   </div>
 
                   {/* Available Template Variables Helper */}
-                  <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-3 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-800">
-                      <Info className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                  <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800">
+                      <Info className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                       <span>Available Template Variables</span>
                     </div>
                     <div className="flex flex-wrap gap-1 pt-0.5">
@@ -587,31 +606,33 @@ export default function AdminInApp() {
               )}
             </div>
 
-            {/* Action Buttons Footer */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2.5 mt-3">
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-white border-t border-slate-100 shrink-0 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setSelectedEventKey(null)}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-3xs cursor-pointer transition"
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition cursor-pointer"
               >
                 Cancel
               </button>
 
               <button
                 type="button"
-                onClick={saveAllConfigs}
+                onClick={async () => {
+                  await saveAllConfigs();
+                  setSelectedEventKey(null);
+                }}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#003F28] hover:bg-[#004B32] text-white font-bold text-xs rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+                className="px-6 py-2 bg-[#005A36] hover:bg-[#00482B] text-white font-bold text-xs uppercase tracking-wider rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 <span>Save Template</span>
               </button>
             </div>
-
           </div>
-        )}
-
-      </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );
