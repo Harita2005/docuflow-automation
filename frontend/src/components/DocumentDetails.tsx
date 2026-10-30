@@ -919,10 +919,7 @@ export default function DocumentDetails({
         sample_value: entry.value,
       }));
     }
-    return fields.map((f) => ({
-      ...f,
-      field_key: f.field_key,
-    }));
+    return fields;
   }, [moreInfoConfig, dynamicSyncPayload]);
 
   const getFieldValueByKey = (key: string, sampleValue?: string): string => {
@@ -4001,13 +3998,7 @@ export default function DocumentDetails({
         onClose={() => setShowConfigDrawer(false)}
         documentType={moreInfoConfig?.document_type || canonicalDocType}
         availableFields={moreInfoConfig?.available_fields || []}
-        selectedFields={
-          (moreInfoConfig?.user_selected_fields && moreInfoConfig.user_selected_fields.length > 0)
-            ? moreInfoConfig.user_selected_fields
-            : (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0)
-            ? moreInfoConfig.selected_fields
-            : effectiveMoreInfoFields
-        }
+        selectedFields={effectiveMoreInfoFields}
         scope={moreInfoConfig?.scope || "GLOBAL"}
         hasUserOverride={Boolean(moreInfoConfig?.has_user_override)}
         canManageDefault={Boolean(moreInfoConfig?.can_manage_default || currentUserRole === "admin")}

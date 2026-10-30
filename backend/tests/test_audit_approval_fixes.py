@@ -539,7 +539,6 @@ def test_aud07_sync_retry_mechanism_and_error_logging(db_session, test_setup, ca
     - Push sends stable idempotency key in headers and payload.
     - GET /api/integrations/failed-syncs lists failed syncs for admin retry.
     """
-    import logging
     from unittest.mock import patch
     from app.services.integration_service import dispatch_outgoing_webhook, get_sync_retry_meta
     from app.database.models import ThirdPartyWebhookConfig
