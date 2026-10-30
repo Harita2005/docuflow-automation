@@ -23,6 +23,12 @@ def get_encryption_key() -> bytes:
             raw_key = None
 
     if not raw_key:
+        env = os.getenv("ENVIRONMENT", "").strip().lower()
+        if env in ("production", "prod"):
+            raise RuntimeError(
+                "FATAL: DOCUFLOW_ENCRYPTION_KEY must be configured in production environment. "
+                "Fallback keys are strictly prohibited."
+            )
         raw_key = "docuflow-default-secure-fallback-encryption-key-32b"
 
     # If already 32 bytes hex or base64 or raw string, normalize to 32 bytes

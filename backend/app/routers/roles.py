@@ -40,7 +40,7 @@ REGISTERED_SUBPAGES = {
 
 REGISTERED_ACTIONS = [
     "VIEW", "CREATE", "EDIT", "DELETE", "APPROVE", "REJECT",
-    "HOLD", "SENDBACK", "ASSIGN", "DOWNLOAD", "EXPORT", "MANAGE", "TEST", "EXECUTE"
+    "HOLD", "SENDBACK", "SEND_BACK", "ASSIGN", "DOWNLOAD", "EXPORT", "MANAGE", "TEST", "EXECUTE"
 ]
 
 REGISTERED_SCOPES = ["OWN", "ASSIGNED", "DEPARTMENT", "DIVISION", "ALL"]
@@ -81,6 +81,9 @@ class CustomPermissionCreate(BaseModel):
 class CustomPermissionUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    module: Optional[str] = None
+    subpage: Optional[str] = None
+    action: Optional[str] = None
     supported_scopes: Optional[List[str]] = None
 
 
@@ -303,20 +306,14 @@ def update_custom_permission(
     db: Session = Depends(get_db)
 ):
     """
-    Updates display metadata of a custom permission.
-    Technical definitions (code, module, subpage, action) cannot be modified.
-    Built-in system permissions cannot be edited via this endpoint.
+    Updates display metadata and definitions of a permission.
+    For custom permissions, module/subpage/action and code can be updated.
+    For system built-in permissions, name, description, and supported_scopes can be customized.
     """
     _require_rbac_admin(current_user, db)
     perm = db.query(Permission).filter(Permission.id == permission_id).first()
     if not perm:
         raise HTTPException(status_code=404, detail="Permission not found.")
-
-    if not perm.is_custom:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Built-in system permissions cannot be modified via custom permissions API."
-        )
 
     if payload.name is not None:
         clean_name = payload.name.strip()
@@ -339,6 +336,36 @@ def update_custom_permission(
                 clean_scopes.append(sc_upper)
         perm.supported_scopes = ",".join(clean_scopes)
 
+    # For custom permissions, allow updating technical Module, Subpage, Action
+    if perm.is_custom:
+        if payload.module is not None:
+            clean_mod = payload.module.strip().upper()
+            if clean_mod not in REGISTERED_MODULES:
+                raise HTTPException(status_code=422, detail=f"Invalid module '{payload.module}'. Allowed: {', '.join(REGISTERED_MODULES)}")
+            perm.module = clean_mod
+
+        if payload.subpage is not None:
+            clean_sub = payload.subpage.strip().lower()
+            valid_subpages = REGISTERED_SUBPAGES.get(perm.module, [])
+            if valid_subpages and clean_sub not in valid_subpages:
+                if not re.match(r"^[a-z0-9_]{2,30}$", clean_sub):
+                    raise HTTPException(status_code=422, detail=f"Invalid subpage '{payload.subpage}'.")
+            perm.subpage = clean_sub
+
+        if payload.action is not None:
+            clean_act = payload.action.strip().upper()
+            if clean_act not in REGISTERED_ACTIONS:
+                raise HTTPException(status_code=422, detail=f"Invalid action '{payload.action}'. Allowed: {', '.join(REGISTERED_ACTIONS)}")
+            perm.action = clean_act
+
+        if any([payload.module, payload.subpage, payload.action]):
+            new_code = f"{perm.module.lower()}:{perm.subpage.lower()}:{perm.action.lower()}"
+            if new_code != perm.code:
+                existing = db.query(Permission).filter(Permission.code == new_code, Permission.id != perm.id).first()
+                if existing:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Permission code '{new_code}' already exists.")
+                perm.code = new_code
+
     perm.updated_at = datetime.datetime.utcnow()
 
     # Record Audit Log
@@ -346,7 +373,7 @@ def update_custom_permission(
         invoice_id=None,
         action="PERMISSION_UPDATE",
         user=current_user.username or "Admin",
-        notes=f"Updated custom permission {perm.code}"
+        notes=f"Updated permission {perm.code} ('{perm.name}')"
     ))
 
     db.commit()

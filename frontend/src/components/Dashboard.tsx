@@ -979,7 +979,7 @@ export default function Dashboard({
                   ? "All caught up! You have no documents currently awaiting your stage approval."
                   : "Try resetting your document type or date range filters."}
               </p>
-              {kpiFilter === 'pending' && pendingScope === 'my' && allPendingDocs.length > 0 && (
+              {kpiFilter === 'pending' && pendingScope === 'my' && isAdmin && allPendingDocs.length > 0 && (
                 <button
                   type="button"
                   onClick={() => { setPendingScope('all'); setActiveDocType('ALL'); }}

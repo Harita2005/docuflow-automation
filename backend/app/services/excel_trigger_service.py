@@ -32,7 +32,8 @@ logger = logging.getLogger(__name__)
 
 # Configurable local Ollama model for classification
 DEFAULT_LLM_MODEL = os.environ.get("EXCEL_LLM_MODEL", "qwen2.5:3b")
-OLLAMA_API_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+from app.config.settings import settings
+OLLAMA_API_URL = getattr(settings, "OLLAMA_URL", "")
 
 
 def find_invoice_by_num_or_id(db: Session, identifier: str) -> Optional[Invoice]:

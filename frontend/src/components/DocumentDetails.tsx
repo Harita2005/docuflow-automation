@@ -699,11 +699,11 @@ export default function DocumentDetails({
     const seenKeys = new Set<string>();
     const uniqueFields: any[] = [];
     fields.forEach((f) => {
-      const canonicalKey = getCanonicalKey(f.field_key);
-      if (!canonicalKey || seenKeys.has(canonicalKey)) return;
-      seenKeys.add(canonicalKey);
+      const cleanKey = (f.field_key || "").trim();
+      if (!cleanKey || seenKeys.has(cleanKey.toLowerCase())) return;
+      seenKeys.add(cleanKey.toLowerCase());
       uniqueFields.push({
-        field_key: canonicalKey,
+        field_key: cleanKey,
         label: f.label,
         category: f.category,
         source: f.source,
@@ -901,18 +901,18 @@ export default function DocumentDetails({
     return new Set(adminTop3Fields.map((f) => getCanonicalKey(f.field_key)));
   }, [adminTop3Fields]);
 
-  // Effective fields to display in More Info (excluding Admin Top 3 Defaults)
+  // Effective fields to display in More Info
   const effectiveMoreInfoFields = useMemo(() => {
     let fields: ConfigFieldItem[] = [];
     if (moreInfoConfig?.user_selected_fields && moreInfoConfig.user_selected_fields.length > 0) {
       fields = moreInfoConfig.user_selected_fields;
     } else if (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0) {
-      fields = moreInfoConfig.selected_fields.filter((f) => !adminTop3Keys.has(getCanonicalKey(f.field_key)));
-    } else if (moreInfoConfig?.available_fields && moreInfoConfig.available_fields.length > 0) {
-      fields = moreInfoConfig.available_fields.filter((f) => !adminTop3Keys.has(getCanonicalKey(f.field_key)));
+      fields = moreInfoConfig.selected_fields;
+    } else if (moreInfoConfig?.admin_default_fields && moreInfoConfig.admin_default_fields.length > 0) {
+      fields = moreInfoConfig.admin_default_fields;
     } else {
       fields = dynamicSyncPayload.entries.map((entry, idx) => ({
-        field_key: getCanonicalKey(entry.key),
+        field_key: entry.key,
         label: entry.label,
         category: "INFORMATION",
         source: "ERP",
@@ -921,13 +921,11 @@ export default function DocumentDetails({
         sample_value: entry.value,
       }));
     }
-    return fields
-      .map((f) => ({
-        ...f,
-        field_key: getCanonicalKey(f.field_key),
-      }))
-      .filter((field) => !adminTop3Keys.has(field.field_key));
-  }, [moreInfoConfig, dynamicSyncPayload, adminTop3Keys]);
+    return fields.map((f) => ({
+      ...f,
+      field_key: f.field_key,
+    }));
+  }, [moreInfoConfig, dynamicSyncPayload]);
 
   const getFieldValueByKey = (key: string, sampleValue?: string): string => {
     const canonicalKey = getCanonicalKey(key);
@@ -1381,9 +1379,7 @@ export default function DocumentDetails({
   const [commentsList, setCommentsList] = useState<any[]>([]);
   const [_newComment, _setNewComment] = useState("");
   const [_commentsLoading, _setCommentsLoading] = useState(false);
-  const [_n8nHookUrl, _setN8nHookUrl] = useState(
-    "https://n8n.your-domain.com/webhook/doc-received",
-  );
+  const [_n8nHookUrl, _setN8nHookUrl] = useState("");
   const [_n8nLoading, _setN8nLoading] = useState(false);
   const [_n8nLogs, _setN8nLogs] = useState<string | null>(null);
 
@@ -4007,7 +4003,13 @@ export default function DocumentDetails({
         onClose={() => setShowConfigDrawer(false)}
         documentType={moreInfoConfig?.document_type || canonicalDocType}
         availableFields={moreInfoConfig?.available_fields || []}
-        selectedFields={effectiveMoreInfoFields}
+        selectedFields={
+          (moreInfoConfig?.user_selected_fields && moreInfoConfig.user_selected_fields.length > 0)
+            ? moreInfoConfig.user_selected_fields
+            : (moreInfoConfig?.selected_fields && moreInfoConfig.selected_fields.length > 0)
+            ? moreInfoConfig.selected_fields
+            : effectiveMoreInfoFields
+        }
         scope={moreInfoConfig?.scope || "GLOBAL"}
         hasUserOverride={Boolean(moreInfoConfig?.has_user_override)}
         canManageDefault={Boolean(moreInfoConfig?.can_manage_default || currentUserRole === "admin")}

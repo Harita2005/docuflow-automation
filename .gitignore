@@ -12,6 +12,7 @@ backend/uploads/
 backend/backend/
 backend/flowapprove.db
 backend/docuflow.db
+backend/data/.*.json
 playwright-report/
 test-results/
 compile_errors.txt

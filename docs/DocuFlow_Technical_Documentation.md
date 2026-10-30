@@ -1,28 +1,28 @@
-# DocuFlow Automation (FlowApprove) — Technical Documentation
+# DocuFlow Automation (FlowApprove) — Comprehensive Technical Documentation
 **Document Approval & Automation System (DAAS)**  
-**System Version:** 2.0.0  
+**System Version:** 2.1.0 (Production Hardened)  
 **Target Enterprise:** Strivh Professional Enterprises / Ramraj Cotton  
-**Document Classification:** Internal Technical Architecture & Engineering Reference  
+**Document Classification:** Internal Technical Architecture, Engineering & Operations Reference  
 **Generated Date:** October 2026  
 
 ---
 
-## 1. Project Overview and Objectives
+## 1. Executive Summary and Project Objectives
 
-### 1.1 Business Problem
-In modern multi-divisional enterprises, vendor invoice processing, purchase order matching, customer feedback reviews, and multi-tier operational approvals often rely on manual paper routing, decentralized email chains, and disconnected spreadsheet logs. This traditional paradigm produces significant organizational friction:
-- **Long Turnaround Times:** Invoices and payment approvals can take 5 to 15 days to navigate approval hierarchies.
-- **High Error & Duplicate Rates:** Duplicate submissions slip through without automated cross-checks against ERP records, risking double payments.
-- **Opacity & SLA Breaches:** Finance and compliance teams lack real-time visibility into document bottlenecks and approval lease statuses.
-- **Disjointed Systems:** ERP systems (such as SAP or custom SQL backends) remain decoupled from document validation and line-item audits.
+### 1.1 Business Problem & Organizational Genesis
+In modern multi-divisional enterprises such as Strivh Professional Enterprises and Ramraj Cotton, processing vendor accounts payable (AP) invoices, purchase orders, customer feedback, and multi-tier operational approvals traditionally relied on fragmented manual processes:
+- **Prolonged Turnaround Times:** Invoices and payment approvals frequently required 5 to 15 business days to navigate decentralized departmental hierarchies.
+- **Risk of Duplicate Payments:** Manual document verification allowed duplicate vendor invoices to slip through without automated cross-checks against ERP transactional history.
+- **Opacity & SLA Breaches:** Finance and compliance teams lacked real-time visibility into operational bottlenecks, review lease holders, and stage SLA timers.
+- **System Disconnect:** Enterprise Resource Planning (ERP) systems (such as SAP, custom SQL databases, and legacy systems) operated isolated from line-item document validation, OCR extraction, and approval audit trails.
 
 ### 1.2 Proposed Automated Solution: DocuFlow (FlowApprove)
-**DocuFlow Automation (FlowApprove / DAAS)** is a multi-tenant, cloud-ready Document Approval and Automation System engineered to automate end-to-end document lifecycles. It provides:
-1. **Intelligent Ingestion:** Supports dual-mode ingestion via manual web-based drag-and-drop uploads and automated Machine-to-Machine (M2M) ERP/API synchronization.
-2. **Hybrid OCR & AI Extraction:** Combines PyMuPDF digital text stream extraction with PaddleOCR for scanned or low-density documents, followed by local Large Language Model (LLM) extraction (Ollama `llama3.2`) with deterministic regex/heuristic fallback.
-3. **Configurable Workflow Engine:** Features a dynamic visual workflow designer (ReactFlow), condition-based policy evaluation, customizable division-level approval stages, and automated escalation timers.
-4. **Enterprise Security & Concurrency:** Incorporates Multi-Factor Authentication (TOTP/SMS/Email), Role-Based Access Control (RBAC) across 32 granular permissions, document heartbeat locking to prevent race conditions, and optimistic concurrency versioning.
-5. **Bidirectional ERP Sync:** Automated inbound document creation and outbound webhook callback synchronization with exponential backoff retries.
+**DocuFlow Automation (FlowApprove / DAAS)** is an enterprise-grade, cloud-ready, multi-tenant Document Approval and Automation System engineered to automate end-to-end document lifecycles. It provides:
+1. **Intelligent Ingestion:** Supports dual-mode ingestion via web-based drag-and-drop manual uploads and automated Machine-to-Machine (M2M) ERP/API batch synchronization.
+2. **Hybrid OCR & AI Extraction:** Combines PyMuPDF digital vector stream extraction with PaddleOCR for scanned or low-density documents, followed by local Large Language Model (LLM) extraction (Ollama `llama3.2`) with deterministic heuristic regex fallbacks.
+3. **Visual Workflow Studio:** Features a dynamic visual workflow designer (`FlowBuilder.jsx` powered by ReactFlow), condition-based policy evaluation (`ConditionBuilder.jsx`), customizable division-level approval stages, and automated escalation timers.
+4. **Enterprise Security & Concurrency:** Incorporates Employee ID/Username passwordless authentication with automatic Email OTP dispatch, Time-based One-Time Password (TOTP) MFA, 32 granular RBAC permissions, document heartbeat lease locking to prevent race conditions, and mandatory optimistic concurrency versioning (`inv.version`).
+5. **Bidirectional ERP Sync-Back Studio:** Automated inbound document creation and outbound webhook callback synchronization (`ApplicationStudioPage.tsx` and `callback_service.py`) with exponential backoff retries and HMAC-SHA256 payload signing.
 
 ### 1.3 Key Capabilities Matrix
 
@@ -35,149 +35,252 @@ In modern multi-divisional enterprises, vendor invoice processing, purchase orde
 | **Heuristic Fallback** | Deterministic regex for Indian GSTIN, dates, PO numbers, tax totals, and line items | **Verified Implemented** |
 | **Dynamic Workflows** | Directed acyclic workflow definitions, configurable stages, division filtering | **Verified Implemented** |
 | **Visual Workflow Builder** | ReactFlow interactive canvas (`FlowBuilder.jsx`) with node-based edge routing | **Verified Implemented** |
-| **Heartbeat Document Locking** | Redis/SQL-backed lease service (`document_locks`) with client heartbeat pings | **Verified Implemented** |
+| **Condition Builder** | Compact matrix criteria editor (`ConditionBuilder.jsx`) for threshold and rule logic | **Verified Implemented** |
+| **Heartbeat Document Locking** | Redis/SQL-backed lease service (`document_locks`) with 30s client heartbeat pings | **Verified Implemented** |
 | **Optimistic Concurrency** | Version-based document locking (`inv.version`) rejecting stale approvals (HTTP 409) | **Verified Implemented** |
 | **Multi-Factor Auth (MFA)** | TOTP authenticator app QR setup, SMS/Email OTP generation and verification | **Verified Implemented** |
+| **Passwordless Auth** | Auto-dispatched Email OTP challenge on Employee ID / Username login | **Verified Implemented** |
+| **DAPI Sync-Back Studio** | Bidirectional webhook mapping studio (`ApplicationStudioPage.tsx`) | **Verified Implemented** |
 | **Outbound Webhooks** | Automated event dispatch on final approval with exponential backoff retry worker | **Verified Implemented** |
+| **Enterprise Audit Log Explorer**| 1,500+ line UI with multi-column filtering, action breakdown, and sanitized CSV/PDF export | **Verified Implemented** |
 | **Automated Email Ingestion** | Planned background IMAP/Graph listener; manual and M2M sync active | **Partially Implemented / Planned** |
 
 ---
 
-## 2. Technology Stack and Versions
+## 2. Chronological Engineering Journey and Architecture Evolution
 
-The following table documents the verified dependencies, libraries, and runtime frameworks extracted directly from `backend/requirements.txt`, `frontend/package.json`, and deployment configuration files.
+The DocuFlow codebase has undergone continuous architectural evolution across distinct development and audit phases:
 
-### 2.1 Backend & AI/ML Stack
+```mermaid
+timeline
+    title DocuFlow Engineering Evolution
+    Initial Prototype : Monolithic DAAS Prototype
+                      : Basic PDF Upload & SQL Server CRUD
+    Security Hardening (SEC Sprint) : SEC-01 to SEC-10 Implementation
+                                    : Least-privilege DB Setup
+                                    : RBAC Route Guards & HMAC Signed URLs
+                                    : Path Injection Sanitization
+    Concurrency & Reliability (AUD Sprint) : AUD-01 to AUD-07 Implementation
+                                           : Mandatory expected_version (HTTP 409)
+                                           : Heartbeat Document Locks
+                                           : Deterministic Business Rule Ordering
+                                           : Multi-Worker Webhook Retry Queue
+    AI & OCR Pipeline Hardening : PyMuPDF + PaddleOCR Dual Engine
+                                : Ollama llama3.2 Extraction
+                                : Line-Item Table Extraction & Regex Fallback
+    UI Modernization & Studio Redesign : FlowBuilder & ConditionBuilder Revamp
+                                       : AuditLogsPage Enterprise Redesign
+                                       : DAPI Sync-Back Studio Modernization
+                                       : Passwordless Login with Auto-Dispatch OTP
+```
 
-| Technology | Verified Version | Purpose in Application | Source Reference |
-| :--- | :--- | :--- | :--- |
-| **Python** | `3.11-slim` | Core backend runtime environment | `Dockerfile`, `backend/run.py` |
-| **FastAPI** | `>= 0.110.0` | Asynchronous web API framework and routing | `backend/requirements.txt` |
-| **Uvicorn** | `>= 0.28.0` | ASGI production application server | `backend/requirements.txt` |
-| **Pydantic** | `>= 2.6.0` | Data modeling, schema definitions, and input validation | `backend/requirements.txt` |
-| **Pydantic Settings** | `>= 2.14.2` | Typed application configuration and `.env` parsing | `backend/requirements.txt` |
-| **SQLAlchemy** | `>= 2.0.28` | Relational ORM and database abstraction layer | `backend/requirements.txt` |
-| **PyODBC** | `>= 5.1.0` | Microsoft ODBC Driver 17 bridge for SQL Server | `backend/requirements.txt` |
-| **pymssql** | `>= 2.2.11` | Pure-Python fallback driver for Microsoft SQL Server | `backend/requirements.txt` |
-| **PyJWT** | `>= 2.14.0` | Cryptographic JWT token generation and verification | `backend/requirements.txt` |
-| **Passlib & Bcrypt** | `>= 1.7.4 / 4.1.2` | One-way salted password hashing | `backend/requirements.txt` |
-| **PyMuPDF (fitz)** | `>= 1.23.0` | High-speed PDF text, metadata, and raster stream parsing | `backend/requirements.txt` |
-| **PaddleOCR** | `v2.x (lazy)` | Optical Character Recognition for scanned images and pages | `backend/app/services/ocr_service.py` |
-| **Ollama (External)** | `llama3.2:latest` | Local LLM server for structured invoice extraction | `backend/app/services/ocr_service.py` |
-| **Pillow (PIL)** | `>= 12.3.0` | Image processing, thumbnail generation, and preprocessing | `backend/requirements.txt` |
-| **PyOTP & QRCode** | `>= 2.9.0 / 7.4.2` | Time-based One-Time Password (TOTP) MFA engine | `backend/requirements.txt` |
-| **Cryptography** | `>= 49.0.0` | Symmetric encryption for integration secrets and HMAC signing | `backend/requirements.txt` |
-| **Pandas & OpenPyXL** | `>= 2.2.0 / 3.1.2` | Excel workflow ingestion and bulk data export | `backend/requirements.txt` |
-| **HTTPX** | `>= 0.27.0` | Async HTTP client for outbound webhooks and Ollama calls | `backend/requirements.txt` |
+### 2.1 The Initial Prototype Phase
+The project started as a monolithic document ingestion tool built on Python and FastAPI, designed to replace manual invoice routing for a single business unit. Key early limitations included:
+- Single-threaded approval logic without concurrency safeguards.
+- Hardcoded approval hierarchies.
+- Direct filesystem path exposure in download links.
+- Database access executing under high-privilege `sa` credentials.
 
-### 2.2 Frontend Stack
+### 2.2 Security Hardening Sprint (SEC-01 to SEC-10)
+To meet corporate governance standards, a comprehensive security audit identified and remediated critical attack surfaces:
+- **SEC-01 / SEC-02:** Introduced two-stage MFA login with TOTP and Mail OTP challenges.
+- **SEC-04:** Enforced deny-by-default route guards using FastAPI dependency injection (`require_permission`).
+- **SEC-08:** Decoupled DDL migration scripts from runtime startup and established least-privilege database user roles (`DocuFlowAppUser` with strictly scoped DML privileges).
+- **SEC-10:** Implemented automatic account lockouts after 5 consecutive failed attempts with administrative unlock endpoints.
+- **Path Sanitization:** Resolved CodeQL path injection alerts (`#68`, `#74`, `#75`) by canonicalizing and verifying real paths before serving or storing files.
+- **Expiring HMAC Signed URLs:** Direct file paths were replaced with cryptographic expiring tokens (`signed_file_service.py`).
 
-| Technology | Verified Version | Purpose in Application | Source Reference |
-| :--- | :--- | :--- | :--- |
-| **React** | `^19.2.4` | Declarative user interface library | `frontend/package.json` |
-| **Vite** | `^4.1.14` | Build tool, HMR dev server, and asset bundler | `frontend/package.json` |
-| **TypeScript** | `^5.x` | Static typing for components, models, and hooks | `frontend/tsconfig.json` |
-| **Zustand** | `^5.0.14` | Lightweight client-side global state management | `frontend/package.json` |
-| **ReactFlow** | `^11.11.4` | Node-based visual workflow and rule builder canvas | `frontend/package.json` |
-| **Axios** | `^1.20.0` | HTTP client for REST API communication | `frontend/package.json` |
-| **TailwindCSS** | `@tailwindcss/vite` | Utility-first responsive CSS styling | `frontend/package.json` |
-| **Material UI (MUI)** | `^9.1.1` | Specialized enterprise UI widgets and icons | `frontend/package.json` |
-| **Lucide React** | `^0.546.0` | Consistent vector iconography | `frontend/package.json` |
-| **React-PDF** | `^10.4.1` | In-browser PDF document rendering and inspection | `frontend/package.json` |
-| **Recharts** | `^3.8.1` | Dashboard analytics, throughput, and status charts | `frontend/package.json` |
-| **Socket.io Client** | `^4.8.3` | Real-time WebSocket event and lock notification client | `frontend/package.json` |
-| **Quill / React-Quill**| `^2.0.2 / 3.7.0`| Rich-text editor for notes and audit comments | `frontend/package.json` |
+### 2.3 Concurrency & State Integrity Sprint (AUD-01 to AUD-07)
+A rigorous state-integrity review resolved race conditions and transaction ordering bugs:
+- **AUD-01 (Empty Approver Target Guard):** Prevented premature approvals when a workflow stage possessed an unassigned approver target.
+- **AUD-02 (Mandatory Optimistic Concurrency):** Enforced `expected_version` validation across all approval, hold, reject, and cancel endpoints. Stale concurrent requests are rejected with `HTTP 409 Conflict`.
+- **AUD-03 (Final Approval & PDF Archival Ordering):** Reordered final approval execution: the document state is updated, the signed PDF is copied to `/stored_pdfs/approved`, the transaction is committed to SQL Server, and only then is the asynchronous ERP sync-back push triggered. If file archival fails, the document is flagged `storage_pending` without corrupting workflow state.
+- **AUD-05 (Deterministic Business Rule Ordering):** Refactored rule evaluation to sort candidate rules deterministically by `priority DESC, id ASC`, eliminating nondeterministic rule matching across different database engines.
+- **AUD-07 (Multi-Worker Webhook Retry Engine):** Redesigned the outbound callback retry loop with safe row locking, exponential backoff retries (1m, 5m, 15m, 1h, 6h), and idempotency tracking headers.
+
+### 2.4 UI Modernization & Enterprise Studio Redesign
+In late October 2026, the frontend interface underwent a major redesign:
+- **Workflow Studio (`FlowBuilder.jsx`):** Redesigned with a compact enterprise scale, ReactFlow canvas, stage preset options, custom category management, and visual node editing.
+- **Condition Builder (`ConditionBuilder.jsx`):** Upgraded to a 2-column condition matrix builder supporting compound logic, division scoping, and threshold evaluation.
+- **Audit Logs Explorer (`AuditLogsPage.tsx`):** Engineered a 1,500+ line audit exploration page with multi-column filtering, action classification badges, actor inspection, and CSV injection-protected export.
+- **DAPI Sync-Back Studio (`ApplicationStudioPage.tsx`):** Modernized the bidirectional ERP integration studio to support visual field mapping, webhook rule definition, and live callback push triggers.
+- **Passwordless Login:** Restricted login to Employee ID and Username only (rejecting emails/phones) with automatic Email OTP generation and direct navigation to the verification challenge.
 
 ---
 
-## 3. System Architecture
+## 3. Technology Stack and Verified Versions
 
-DocuFlow Automation is structured as a decoupled multi-tier enterprise architecture comprising a React Single Page Application (SPA), an Nginx edge reverse proxy, a high-throughput FastAPI application layer, Microsoft SQL Server relational storage, local encrypted file volumes, and external integration endpoints.
+The following inventory details the verified production libraries, runtime environments, and tools extracted directly from repository manifests:
 
-### 3.1 Architecture Diagram
+### 3.1 Backend & AI/ML Stack (`backend/requirements.txt`)
+
+| Technology | Verified Version | Purpose in Application |
+| :--- | :--- | :--- |
+| **Python** | `3.11-slim` | Core backend runtime environment |
+| **FastAPI** | `>= 0.110.0` | High-performance asynchronous web framework |
+| **Uvicorn** | `>= 0.28.0` | Production ASGI web server |
+| **Pydantic** | `>= 2.6.0` | Data modeling, typing, and validation schemas |
+| **Pydantic Settings** | `>= 2.14.2` | Strongly typed environment variable management |
+| **SQLAlchemy** | `>= 2.0.28` | Relational ORM and database abstraction layer |
+| **PyODBC** | `>= 5.1.0` | Microsoft ODBC Driver 17 bridge for SQL Server |
+| **pymssql** | `>= 2.2.11` | Pure-Python driver fallback for SQL Server |
+| **PyJWT** | `>= 2.14.0` | Cryptographic JWT token issuance and decoding |
+| **Passlib & Bcrypt** | `>= 1.7.4 / 4.1.2` | One-way salted Bcrypt password hashing |
+| **PyMuPDF (fitz)** | `>= 1.23.0` | Native vector PDF stream extraction & page rendering |
+| **PaddleOCR** | `v2.x (lazy)` | Scanned image and rasterized PDF text extraction |
+| **Ollama Client** | `llama3.2:latest` | Local LLM server for structured JSON field extraction |
+| **Pillow (PIL)** | `>= 12.3.0` | Image handling, format conversion, and thumbnail generation |
+| **PyOTP & QRCode** | `>= 2.9.0 / 7.4.2` | Time-based One-Time Password (TOTP) MFA engine |
+| **Cryptography** | `>= 49.0.0` | AES-256-GCM symmetric encryption for webhook secrets |
+| **Pandas & OpenPyXL**| `>= 2.2.0 / 3.1.2` | Bulk Excel export and data frame processing |
+| **HTTPX** | `>= 0.27.0` | Asynchronous HTTP client for outbound webhooks & Ollama |
+
+### 3.2 Frontend Stack (`frontend/package.json`)
+
+| Technology | Verified Version | Purpose in Application |
+| :--- | :--- | :--- |
+| **React** | `^19.0.0` | UI component library and virtual DOM |
+| **React DOM** | `^19.0.0` | Browser DOM rendering and portal engine |
+| **TypeScript** | `~5.7.2` | Static typing and interfaces across UI components |
+| **Vite** | `^6.0.5` | Next-generation build tool and dev server |
+| **TailwindCSS** | `^3.4.1` | Utility-first responsive CSS styling |
+| **Lucide React** | `^0.474.0` | Enterprise iconography suite |
+| **ReactFlow (@xyflow/react)** | `^12.4.2` | Interactive node-based workflow builder canvas |
+| **Zustand** | `^5.0.3` | Lightweight client state management |
+| **Axios** | `^1.7.9` | HTTP client for backend REST API communication |
+| **Canvas-Confetti** | `^1.9.4` | Visual celebration animations upon document approval |
+| **Vitest** | `^3.0.4` | High-speed unit and component test runner |
+
+### 3.3 Database and Infrastructure Stack
+
+| Component | Specification | Deployment Mode |
+| :--- | :--- | :--- |
+| **Relational Database** | Microsoft SQL Server 2017+ (`DocuFlowDB`) | External Host (`192.168.179.22:1443`) |
+| **Database Driver** | Microsoft ODBC Driver 17 for SQL Server | Installed in container & local runtime |
+| **Edge Reverse Proxy** | Nginx Alpine (`docuflow-nginx`) | Containerized (Ports 80 & 8085) |
+| **Container Engine** | Docker Engine 24+ & Docker Compose v2 | Multi-container production deployment |
+| **AI Inference Engine** | Ollama Engine (Port 11434) | Host daemon or dedicated GPU node |
+
+---
+
+## 4. System Architecture
+
+DocuFlow is architected as a decoupled, multi-tiered enterprise application designed for high concurrency, zero data loss, and complete auditability.
+
+### 4.1 High-Level Component Architecture Diagram
 
 ```mermaid
 flowchart TB
-    subgraph ClientTier ["Client Tier (Web Browser)"]
-        SPA["React 19 SPA\n(Vite + Zustand + ReactFlow)"]
+    subgraph ClientTier ["Client Tier (Browser / React 19 SPA)"]
+        SPA["React 19 SPA\n(Vite + TypeScript + Zustand)"]
+        FLOW_B["Visual Workflow Studio\n(ReactFlow Canvas)"]
+        COND_B["Condition Builder\n(Criteria Matrix)"]
+        AUDIT_UI["Audit Log Explorer\n(Multi-Filter & Export)"]
+        DAPI_UI["DAPI Sync-Back Studio\n(Webhook Rule Studio)"]
     end
 
     subgraph EdgeTier ["Edge & Reverse Proxy Tier"]
-        NGINX["Nginx Server (Port 80/8085)\nStatic Assets + Reverse Proxy"]
+        NGINX["Nginx Web Server\n(Ports 80 / 8085)\nStatic Assets + /api Proxy + SSE Buffering"]
     end
 
-    subgraph BackendTier ["Application Backend Tier (FastAPI / Uvicorn Port 3000)"]
-        FASTAPI["FastAPI Core Application (main.py)"]
+    subgraph BackendTier ["FastAPI Application Backend (Port 3000)"]
+        FASTAPI["FastAPI Core (main.py)"]
         SEC_MW["Security Middleware\n(Rate Limiter, Security Headers, CORS)"]
         
-        subgraph APIRoutes ["API Routing Layer"]
-            AUTH_R["auth.py\n(JWT, MFA, TOTP)"]
-            DOC_R["documents.py\n(Upload, Ingest, Approvals)"]
-            WF_R["workflows.py & conditions.py\n(Rule Engine, Stages)"]
-            SYNC_R["sync.py & sync_router.py\n(M2M Inbound Sync)"]
-            INT_R["callback_integrations.py\n(Outbound Webhooks)"]
-            EVT_R["events.py\n(SSE & Lease Heartbeats)"]
-            AUDIT_R["audit.py\n(Compliance Logs)"]
+        subgraph APIRouters ["API Routing Layer"]
+            AUTH_R["routers/auth.py\n(Passwordless OTP, MFA, JWT)"]
+            DOC_R["routers/documents.py\n(Upload, Actions, Concurrency)"]
+            WF_R["routers/workflows.py & conditions.py\n(Profiles, Rules, Stages)"]
+            SYNC_R["routers/sync.py\n(Inbound M2M Batch Sync)"]
+            CB_R["routers/callback_integrations.py\n(Outbound Webhook Rules)"]
+            AUDIT_R["routers/audit.py\n(Sanitized Logs & Retention)"]
+            EVT_R["routers/events.py\n(SSE Real-Time Broadcasts)"]
         end
 
-        subgraph ServiceLayer ["Core Service & Business Logic"]
+        subgraph CoreServices ["Business Logic & Processing Services"]
             OCR_S["ocr_service.py\n(PyMuPDF + PaddleOCR)"]
-            LLM_S["LLM Engine\n(Local Ollama llama3.2)"]
-            RULE_E["rules_engine.py\n(Condition Matcher)"]
-            LOCK_S["lock_service.py\n(Heartbeat Document Locks)"]
-            CB_S["callback_service.py\n(Webhook Dispatcher)"]
-            SIGN_S["signed_file_service.py\n(Expiring PDF URLs)"]
+            LLM_S["LLM Extraction\n(Local Ollama llama3.2)"]
+            RULES_S["rules_engine.py\n(Priority Matcher)"]
+            LOCK_S["lock_service.py\n(Heartbeat Document Leases)"]
+            CB_S["callback_service.py\n(Exponential Webhook Retries)"]
+            SIGN_S["signed_file_service.py\n(HMAC Signed PDF URLs)"]
+            AUDIT_S["audit_logger\n(Detailed Approver Tracking)"]
         end
     end
 
-    subgraph DataTier ["Persistence & Storage Tier"]
-        MSSQL[("Microsoft SQL Server\n(DocuFlowDB : 1443)\n32 Tables, Connection Pool (100)")]
-        FILE_SYS[("Local Storage Volumes\n/app/uploads\n/stored_pdfs/approved")]
+    subgraph PersistenceTier ["Persistence & Storage Tier"]
+        MSSQL[("Microsoft SQL Server (DocuFlowDB)\n32 Tables, Connection Pool (100)")]
+        FILE_UPLOADS[("Staging Storage\n/app/uploads")]
+        FILE_ARCHIVE[("Approved PDF Archive\n/stored_pdfs/approved")]
     end
 
-    subgraph ExternalTier ["External Systems & Integrations"]
-        ERP["ERP System / SAP / n8n\n(Inbound Sync / Outbound Webhooks)"]
-        OLLAMA["Ollama Server (Port 11434)\n(llama3.2 Model)"]
-        SMTP_SRV["Exchange / Office 365 SMTP\n(Email Notifications)"]
+    subgraph ExternalTier ["External Systems"]
+        ERP["Enterprise ERP / SAP / n8n\n(M2M Inbound & Outbound Webhooks)"]
+        OLLAMA["Ollama LLM Daemon (Port 11434)\n(llama3.2:latest)"]
+        SMTP_SRV["Exchange / Office 365 SMTP\n(Mail OTP & Notifications)"]
     end
 
     SPA -->|HTTPS REST & SSE| NGINX
-    NGINX -->|Reverse Proxy /api| FASTAPI
+    NGINX -->|Proxy /api| FASTAPI
     FASTAPI --> SEC_MW
-    SEC_MW --> APIRoutes
-    APIRoutes --> ServiceLayer
-    ServiceLayer --> OCR_S
+    SEC_MW --> APIRouters
+    APIRouters --> CoreServices
+    CoreServices --> OCR_S
     OCR_S -->|Text Stream| LLM_S
-    LLM_S -.->|HTTP POST| OLLAMA
-    ServiceLayer --> MSSQL
-    ServiceLayer --> FILE_SYS
-    SYNC_R <--|M2M POST| ERP
-    CB_S -->|POST HMAC Webhooks| ERP
-    ServiceLayer -.->|SMTP TLS| SMTP_SRV
+    LLM_S -.->|HTTP JSON| OLLAMA
+    CoreServices --> MSSQL
+    CoreServices --> FILE_UPLOADS
+    CoreServices --> FILE_ARCHIVE
+    SYNC_R <--|M2M Inbound POST| ERP
+    CB_S -->|POST HMAC Signatures| ERP
+    CoreServices -.->|STARTTLS Mail| SMTP_SRV
 ```
 
-### 3.2 Tier Responsibilities and Boundaries
+### 4.2 End-to-End Document Lifecycle Sequence
 
-1. **Client Tier (Frontend):**
-   - Implements role-aware view navigation (`dashboard`, `upload`, `review`, `verification`, `approvals`, `payment-readiness`, `work-tracker`, `rules`, `admin`).
-   - Manages state via Zustand stores with JWT persistence in `localStorage`.
-   - Sends client-side heartbeat pings (`POST /api/documents/{id}/lock/heartbeat`) every 30 seconds when reviewing a document to maintain exclusive locks.
-2. **Edge Tier (Nginx):**
-   - Serves pre-compiled production SPA static assets (`dist/`).
-   - Proxies all `/api/*` and WebSocket/SSE requests to the FastAPI backend listening on internal port 3000.
-   - Enforces max upload body sizes (`client_max_body_size 50M`).
-3. **Application Tier (FastAPI Backend):**
-   - Validates all request payloads using Pydantic schemas.
-   - Enforces RBAC through dependency injection (`get_current_active_user`, `require_permission`).
-   - Limits OCR/LLM hardware saturation via a `BoundedSemaphore` (max 3 concurrent jobs).
-   - Manages document lifecycle state transitions and prevents approval race conditions using optimistic version numbers (`inv.version`).
-4. **Data Tier (SQL Server & File Storage):**
-   - Relational persistence in Microsoft SQL Server (`DocuFlowDB`) using SQLAlchemy with connection pooling (pool size 100, max overflow 150).
-   - Stores physical PDF files on disk (`/app/uploads` and `/app/stored_pdfs/approved`), delivering them via secure HMAC-signed expiring URLs.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Submitter as User / ERP System
+    participant NGINX as Nginx Edge
+    participant Backend as FastAPI Backend
+    participant OCR as OCR / LLM Engine
+    participant DB as Microsoft SQL Server
+    actor Approver as Stage Approver
+    participant Webhook as ERP Webhook Receiver
+
+    Submitter->>NGINX: Upload PDF or Inbound M2M Sync
+    NGINX->>Backend: Forward to /api/documents/upload or /api/sync/record
+    Backend->>Backend: Validate File & Compute SHA-256 Hash
+    Backend->>OCR: Extract Text (PyMuPDF / PaddleOCR)
+    OCR->>Backend: Raw Text Stream
+    Backend->>OCR: Structured Extraction via Ollama (llama3.2)
+    OCR-->>Backend: JSON Line Items & Metadata (or Heuristic Regex Fallback)
+    Backend->>DB: Insert Document Record (status='Draft' or 'Pending', version=1)
+    
+    Approver->>Backend: Open Document Review (Acquires Heartbeat Lease)
+    Backend->>DB: Record document_locks (lease=120s)
+    loop Every 30 Seconds
+        Approver->>Backend: Heartbeat Ping (/lock/heartbeat)
+    end
+
+    Approver->>Backend: POST /api/documents/{id}/approve (expected_version=1)
+    Backend->>DB: Check version matches (ver=1)
+    alt Version Mismatch (Race Condition)
+        Backend-->>Approver: HTTP 409 Conflict (Stale Version)
+    else Version Matches
+        Backend->>DB: Advance Stage / Set status='Approved', version=2
+        Backend->>Backend: Copy PDF to /stored_pdfs/approved
+        Backend->>DB: Insert document_approval_logs & AuditLog
+        Backend->>DB: Commit Transaction
+        Backend->>Webhook: Asynchronous Dispatch (POST Webhook with HMAC Signature)
+        Webhook-->>Backend: HTTP 200 OK
+    end
+```
 
 ---
 
-## 4. Application Directory Structure
+## 5. Repository Directory Structure
 
 ```
 docuflow-automation/
@@ -187,447 +290,336 @@ docuflow-automation/
 │   │   │   ├── settings.py           # Typed application settings (Pydantic Settings)
 │   │   │   └── test_safety.py        # Test execution safety guardrails
 │   │   ├── constants/
-│   │   │   └── document_types.py     # Canonical document type definitions
+│   │   │   └── document_types.py     # Canonical document type sets and normalizers
 │   │   ├── database/
-│   │   │   ├── connection.py         # SQLAlchemy engine & pool initialization
-│   │   │   └── models.py             # 32 SQLAlchemy ORM mapped entities
+│   │   │   ├── connection.py         # SQLAlchemy engine, connection pooling, get_db
+│   │   │   └── models.py             # 32 SQLAlchemy ORM models
 │   │   ├── routers/
-│   │   │   ├── audit.py              # Audit log inspection and retention cleanup
-│   │   │   ├── auth.py               # Login, JWT issuing, MFA TOTP setup & verification
-│   │   │   ├── callback_integrations.py # Webhook configuration & retry logs
-│   │   │   ├── conditions.py         # Workflow rule condition endpoints
-│   │   │   ├── documents.py          # Document lifecycle, upload, actions, approval
-│   │   │   ├── events.py             # SSE event streaming and document lease locks
-│   │   │   ├── integrations.py       # ERP sync push and legacy integrations
-│   │   │   ├── more_info.py          # Dynamic checklist and custom field configs
-│   │   │   ├── roles.py              # RBAC role & permission mappings
-│   │   │   ├── sync.py               # Inbound M2M sync endpoints (single & batch)
-│   │   │   ├── sync_router.py        # Service-to-service authentication & ingestion
-│   │   │   ├── users.py              # User provisioning, lockouts, and divisions
-│   │   │   └── workflows.py          # Workflow profiles, step definitions, escalation
+│   │   │   ├── audit.py              # Audit log exploration, filtering, and export
+│   │   │   ├── auth.py               # Passwordless OTP, MFA TOTP, JWT login
+│   │   │   ├── callback_integrations.py # Webhook configuration and test dispatch
+│   │   │   ├── conditions.py         # Business rule condition builders
+│   │   │   ├── documents.py          # Document lifecycle, uploads, approvals, locking
+│   │   │   ├── events.py             # Server-Sent Events (SSE) live updates
+│   │   │   ├── roles.py              # Role and permission administration
+│   │   │   ├── sync.py               # M2M ERP inbound batch sync endpoints
+│   │   │   └── workflows.py          # Workflow profiles and step definitions
 │   │   ├── schemas/
-│   │   │   └── schemas.py            # Pydantic request and response schemas
+│   │   │   └── schemas.py            # Pydantic request/response validation models
 │   │   ├── services/
-│   │   │   ├── archive_service.py    # Physical document archiving and compression
-│   │   │   ├── callback_service.py   # Asynchronous webhook dispatcher with retry
-│   │   │   ├── crypto_service.py     # AES secret encryption and HMAC signing
-│   │   │   ├── document_query_service.py # Complex document list querying & filtering
-│   │   │   ├── escalation_service.py # SLA evaluation and automatic stage escalation
-│   │   │   ├── excel_trigger_service.py # Batch ingestion from Excel spreadsheets
-│   │   │   ├── file_security.py      # PDF MIME/magic validation and path sanitization
-│   │   │   ├── integration_service.py# ERP push dispatcher
-│   │   │   ├── lease_service.py      # Distributed lease management
-│   │   │   ├── lock_service.py       # In-memory and SQL document lock manager
-│   │   │   ├── mfa_service.py        # TOTP secret generation & QR code rendering
-│   │   │   ├── ocr_service.py        # PyMuPDF + PaddleOCR + Ollama extraction pipeline
-│   │   │   ├── otp_service.py        # SMS & Email one-time password generation
-│   │   │   ├── pdf_compressor.py     # PDF file size optimization
-│   │   │   ├── rbac_service.py       # RBAC permission evaluation engine
-│   │   │   ├── rules_engine.py       # Dynamic workflow profile matching engine
-│   │   │   ├── security_middleware.py# HTTP security headers, CORS, rate limiting
-│   │   │   └── signed_file_service.py# Expiring HMAC token generation for PDF downloads
-│   │   ├── auth.py                   # Password hashing, JWT token creation/decoding
-│   │   └── main.py                   # FastAPI initialization, middleware, routes
-│   ├── run.py                        # Uvicorn entry point runner script
-│   ├── Dockerfile                    # Containerization specification for backend
+│   │   │   ├── callback_service.py   # Outbound webhook retry worker
+│   │   │   ├── crypto_service.py     # AES-256-GCM symmetric secret encryption
+│   │   │   ├── file_security.py      # Path canonicalization and MIME validation
+│   │   │   ├── lock_service.py       # Distributed lease locking with heartbeats
+│   │   │   ├── ocr_service.py        # Dual PyMuPDF/PaddleOCR & Ollama extraction
+│   │   │   ├── otp_service.py        # SMS and Email OTP dispatch and verification
+│   │   │   ├── rbac_service.py       # Permission evaluation and scope resolution
+│   │   │   ├── rules_engine.py       # Deterministic business rule matcher
+│   │   │   ├── security_middleware.py# Security headers, CORS, rate limiting
+│   │   │   └── signed_file_service.py# Cryptographic HMAC expiring download tokens
+│   │   ├── main.py                   # FastAPI initialization, middleware, routes
+│   │   └── run.py                    # Uvicorn production server runner
+│   ├── tests/                        # Pytest automated test suite (177 tests)
+│   ├── Dockerfile                    # Container definition for backend
 │   └── requirements.txt              # Python dependency manifest
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── dapi-sync-back/       # Bidirectional sync back configuration tabs
-│   │   │   ├── integrations/         # Webhook rule builders and log drawers
-│   │   │   ├── ApprovalQueuePage.tsx # Approver document review table
-│   │   │   ├── ApprovedDocumentsPage.tsx # Historical approved document archive
-│   │   │   ├── CustomerFeedbackPage.tsx  # Customer feedback evaluation interface
-│   │   │   ├── Dashboard.tsx         # Operational KPI analytics and metric widgets
-│   │   │   ├── DataVerificationPage.tsx  # Staging review for AI-extracted fields
-│   │   │   ├── DocumentDetails.tsx   # Comprehensive document view and approval panel
-│   │   │   ├── DocumentUpload.tsx    # Drag-and-drop document upload interface
-│   │   │   ├── FlowBuilder.jsx       # ReactFlow visual workflow profile editor
-│   │   │   ├── Header.tsx            # Global navigation bar, user status, notifications
-│   │   │   ├── LoginPage.tsx         # Two-stage authentication and MFA challenge
-│   │   │   ├── PaymentReadinessPage.tsx # Finance readiness validation view
+│   │   │   ├── dapi-sync-back/       # Bidirectional sync-back studio tabs
+│   │   │   │   ├── ApplicationStudioPage.tsx # Field mapping & webhook rules
+│   │   │   │   └── DapiSyncBackHub.tsx       # Third-party app hub
+│   │   │   ├── AdminInApp.jsx        # Administrative system settings
+│   │   │   ├── AdminRBAC.jsx         # User & role management (spacious 2-column layout)
+│   │   │   ├── ApprovalQueuePage.tsx # Approver workload table
+│   │   │   ├── ApprovedDocumentsPage.tsx # Archive of approved records with totals
+│   │   │   ├── AuditLogsPage.tsx     # Enterprise audit log explorer (1500+ lines)
+│   │   │   ├── ConditionBuilder.jsx  # Workflow condition criteria matrix
+│   │   │   ├── CustomerFeedbackPage.tsx # Customer feedback review interface
+│   │   │   ├── Dashboard.tsx         # Operational KPI analytics widgets
+│   │   │   ├── DataVerificationPage.tsx # AI extraction staging verification
+│   │   │   ├── DocumentDetails.tsx   # Comprehensive document view and action panel
+│   │   │   ├── DocumentUpload.tsx    # Drag-and-drop file uploader
+│   │   │   ├── FlowBuilder.jsx       # Visual ReactFlow workflow designer
+│   │   │   ├── Header.tsx            # Navigation bar and active user status
+│   │   │   ├── LoginPage.tsx         # Passwordless ID login & auto OTP challenge
 │   │   │   ├── Sidebar.tsx           # Collapsible primary navigation menu
-│   │   │   └── WorkTrackerPage.tsx   # Cross-departmental workload monitoring
+│   │   │   └── WorkTrackerPage.tsx   # Cross-departmental workload tracker
 │   │   ├── pages/
-│   │   │   ├── Admin.jsx             # System administration, user/role management
-│   │   │   └── WorkflowRulesPage.jsx # Workflow condition matrix configuration
-│   │   ├── types/                    # TypeScript interfaces for API models
-│   │   ├── utils/
-│   │   │   ├── auth.ts               # Token storage, migration, and logout helpers
-│   │   │   └── formatters.ts         # Currency, date, and document type formatters
-│   │   ├── App.tsx                   # Central view router and route state manager
+│   │   │   ├── Admin.jsx             # System administration container
+│   │   │   └── WorkflowRulesPage.jsx # Rule ordering and category matrix
+│   │   ├── types/                    # TypeScript interfaces for API schemas
+│   │   ├── utils/                    # Authentication, formatting, and API helpers
+│   │   ├── App.tsx                   # Central view routing and deep link handler
 │   │   └── main.tsx                  # React DOM mount point
 │   ├── package.json                  # Frontend dependency manifest
-│   └── vite.config.ts                # Vite build and development configuration
-├── docs/                             # Architecture and operational manuals
-├── playwright-tests/                 # End-to-end browser automation test specs
-├── tests/                            # Pytest backend test suite (unit and integration)
-├── docker-compose.yml                # Multi-container orchestration definition
-└── db_schema_specification.md        # Relational schema specification
+│   └── vite.config.ts                # Vite build and dev configuration
+├── audit/                            # Security, integrity, and route audit reports
+├── docs/                             # Handover documentation and operational manuals
+├── evidence/                         # Benchmark logs, pytest logs, and timing metrics
+├── playwright-tests/                 # Playwright end-to-end browser test suites
+├── scripts/                          # SQL database migration and setup scripts
+├── docker-compose.yml                # Multi-container orchestration specification
+├── Dockerfile                        # Multi-stage production container build
+├── README.md                         # Project overview and quick start guide
+└── db_schema_specification.md        # Detailed relational schema specification
 ```
 
 ---
 
-## 5. Frontend Architecture
+## 6. Frontend Architecture and Key UI Modules
 
-### 5.1 Application Bootstrapping and Routing
-The frontend application is built on React 19 and Vite. Rather than relying on traditional path-based React Router DOM routing that causes issues on static multi-page servers without rewrite rules, DocuFlow uses an internal view state manager in [`frontend/src/App.tsx`](file:///frontend/src/App.tsx) synchronized with browser history:
-- When a user navigates between views, `App.tsx` calls `window.history.pushState` and updates `currentView`.
-- Deep links are supported via URL path regex matching on initialization:
-  - `/customer-feedback/{id}` routes directly to `CustomerFeedbackPage`.
-  - `/review/{id}` routes directly to `DocumentDetails`.
-  - `/verification/{id}` routes directly to `DataVerificationPage`.
-- Unauthenticated visitors are automatically intercepted and redirected to the `LoginPage` component.
+### 6.1 State Management and Internal View Routing
+DocuFlow uses a client-side view state machine in [`frontend/src/App.tsx`](file:///frontend/src/App.tsx) synchronized with browser history via `window.history.pushState`:
+- **Deep Linking Support:** Regular expressions inspect initial URLs on load:
+  - `/customer-feedback/:id` -> Loads `CustomerFeedbackPage` with target record.
+  - `/review/:id` -> Opens `DocumentDetails` with PDF preview and lease lock.
+  - `/verification/:id` -> Routes to `DataVerificationPage` for AI staging.
+- **Multi-Tab Logout Synchronization:** An active `BroadcastChannel('docuflow_auth')` coupled with `window.addEventListener('storage')` immediately revokes sessions and redirects all open tabs to the login screen upon user logout.
+- **Fresh Login Landing:** Successful authentication guarantees a reset of internal view state to `'dashboard'`, preventing stale views or orphaned review locks from persisting across sessions.
 
-### 5.2 Component Inventory
+### 6.2 Redesigned Visual Workflow Studio (`FlowBuilder.jsx`)
+The Workflow Studio provides a visual drag-and-drop canvas powered by `@xyflow/react` (ReactFlow):
+- **Stage Presets:** Supports standard stage hierarchies (`Attachment Status`, `First Approval`, `Second Approval`, `3rd APPROVAL`, `IA Approval`, `Final Approval`).
+- **Dynamic Category Grouping:** Organizes profiles by operational category (`Accounts Payable`, `Customer Feedback`, `General Records`, `Capex`) with custom category creation persisted to `localStorage`.
+- **Node-Based Visual Routing:** Approvers, SLAs, and escalation paths are represented as connected nodes, allowing managers to visually reorder approval sequences.
+- **Compact Enterprise Typography:** Calibrated padding, concise badges, and responsive node cards maximize screen real estate on standard laptop displays.
 
-| Component Name | Source File | Purpose | Key Inputs / State | Related Endpoints |
-| :--- | :--- | :--- | :--- | :--- |
-| **LoginPage** | `components/LoginPage.tsx` | Two-factor credential entry and TOTP/SMS challenge verification | Username, password, MFA code, QR state | `POST /api/auth/login`, `POST /api/auth/mfa/verify` |
-| **Dashboard** | `components/Dashboard.tsx` | KPI summary cards, SLA alerts, monthly throughput charts | Date range, division filter, metric summaries | `GET /api/documents`, `GET /api/documents/work-tracker` |
-| **DocumentUpload** | `components/DocumentUpload.tsx` | Drag-and-drop file ingestion with instant AI extraction preview | File dropzone, division selector, document type | `POST /api/documents/extract-preview`, `POST /api/documents/confirm-ingest` |
-| **DataVerificationPage** | `components/DataVerificationPage.tsx` | Side-by-side comparison of original PDF against extracted fields | Editable extracted fields, PDF zoom/pan, line items | `GET /api/documents/{id}`, `PUT /api/documents/{id}` |
-| **ApprovalQueuePage** | `components/ApprovalQueuePage.tsx` | Approver's pending task queue with batch action support | Pending documents list, selected row checkboxes | `GET /api/documents`, `POST /api/workflows/approve` |
-| **DocumentDetails** | `components/DocumentDetails.tsx` | Detailed document inspector, audit trail, checklist, approval actions | Active document, heartbeat lock, approval comments | `POST /api/documents/{id}/approve`, `POST /api/documents/{id}/reject` |
-| **FlowBuilder** | `components/FlowBuilder.jsx` | ReactFlow visual canvas for dragging approval nodes and routing edges | Graph nodes, edges, stage rules, SLA hours | `GET /api/workflows`, `POST /api/admin/workflows/save` |
-| **WorkTrackerPage** | `components/WorkTrackerPage.tsx` | Enterprise-wide workload overview tracking pending items by stage | Stage breakdown, assigned user, SLA breach counters | `GET /api/documents/work-tracker` |
-| **ApprovedDocumentsPage** | `components/ApprovedDocumentsPage.tsx`| Archive of finalized documents with signed PDF download access | Search query, date range, vendor filter | `GET /api/documents/approved`, `GET /api/documents/{id}/signed-url` |
-| **AdminPage** | `pages/Admin.jsx` | System admin interface for user provisioning, roles, and retention | User lists, role assignments, audit retention | `GET /api/users`, `POST /api/users`, `GET /api/roles` |
-| **WorkflowRulesPage**| `pages/WorkflowRulesPage.jsx` | Dynamic condition rules matrix linking invoice values to workflows | Rule conditions (amount, division, category) | `GET /api/admin/conditions`, `POST /api/admin/conditions` |
-| **DapiSyncBackHub** | `components/dapi-sync-back/DapiSyncBackHub.tsx`| Webhook configuration hub and outbound sync delivery logs | Webhook URLs, secret tokens, retry logs | `GET /api/integrations/callback/logs`, `POST /api/integrations/callback/rules` |
+### 6.3 Condition Builder (`ConditionBuilder.jsx`)
+The Condition Builder provides a matrix interface for defining the operational rules that trigger specific workflow profiles:
+- **Field Catalog:** Supports 13 standard criteria: Division/Company, Category/Expense Type, Cost Center, Branch/Plant, Total Amount, Base Amount, Document Type, Vendor Name, Tax Amount, Payment Mode, Vendor GSTIN, PO Number, and Invoice Date.
+- **Operator Engine:** Evaluates numeric comparisons (`>`, `<`, `>=`, `<=`, `==`, `!=`), text matching (`contains`, `starts_with`, `in`), and multi-select sets.
+- **Threshold Triggers:** Allows rules such as "If Total Amount > ₹5,00,000 AND Division == 'Spinning Mills', route to 3-Tier Executive Workflow."
 
-### 5.3 Authentication Token Handling and Security
-Authentication tokens (access token and optional refresh token) are managed via [`frontend/src/utils/auth.ts`](file:///frontend/src/utils/auth.ts).
-- Tokens are stored in browser `localStorage` and attached to outbound Axios requests via a global request interceptor: `Authorization: Bearer <token>`.
-- Expired tokens or HTTP 401 responses automatically trigger `removeAuthTokens()`, clearing state and redirecting to the login screen.
-- Active document locks are refreshed by sending periodic keepalive heartbeats to prevent another user from editing the same document simultaneously.
+### 6.4 Enterprise Audit Logs Explorer (`AuditLogsPage.tsx`)
+Redesigned in late October 2026, `AuditLogsPage.tsx` spans 1,500+ lines of production TypeScript:
+- **Multi-Dimension Filtering:** Filter by action type (`Approved`, `Rejected`, `Placed on Hold`, `Uploaded`), stage identifier, actor (Employee ID, name, or role), IP address, date ranges, and invoice ID.
+- **Visual KPI Counters:** Displays real-time metrics including Total Events, Approval Actions, Rejections, Security Alerts, and Delta Percentage comparisons.
+- **Sanitized CSV & PDF Export:** Integrated CSV export leverages backend cell sanitization (`sanitize_csv_cell`) to neutralize Formula Injection attacks (`=cmd`, `@SUM`).
+- **Detailed Actor Inspection:** Modal drawers show the exact approver identity, Employee ID, assigned division, client IP address, and status progression notes.
 
----
-
-## 6. Backend Architecture
-
-### 6.1 FastAPI Application Initialization
-The backend application entry point is [`backend/app/main.py`](file:///backend/app/main.py). On startup, the application:
-1. Loads settings from environment variables and `.env` files via `pydantic-settings`.
-2. Initializes the SQLAlchemy engine with a high-capacity connection pool (size 100, max overflow 150) optimized for concurrent operations.
-3. Configures global CORS middleware allowing origins defined in `ALLOWED_ORIGINS` (defaults to `http://localhost:5173,http://localhost:3000`).
-4. Mounts security middleware to enforce strict HTTP response headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy`).
-5. Registers all sub-routers under the `/api` prefix.
-6. Starts background tasks for document lock lease cleanup and pending webhook retries.
-
-### 6.2 Router Organization and Inventory
-FastAPI routes are modularized across 12 dedicated router files in `backend/app/routers/`:
-
-| Router Module | Route Count | Core Responsibilities |
-| :--- | :---: | :--- |
-| [`auth.py`](file:///backend/app/routers/auth.py) | 9 | User authentication, token issuance, MFA TOTP setup, OTP generation/validation |
-| [`documents.py`](file:///backend/app/routers/documents.py) | 111 | Document uploads, AI preview, status transitions (approve/reject/hold), file serving |
-| [`workflows.py`](file:///backend/app/routers/workflows.py) | 21 | Workflow profile management, step definitions, escalation evaluation, reassignments |
-| [`conditions.py`](file:///backend/app/routers/conditions.py) | 12 | Business rule evaluation, condition matrix storage, conflict detection simulations |
-| [`callback_integrations.py`](file:///backend/app/routers/callback_integrations.py) | 19 | Outbound third-party webhook registration, execution logs, manual/bulk retries |
-| [`sync.py`](file:///backend/app/routers/sync.py) | 15 | Inbound M2M document ingestion from ERP/SAP, batch uploads, attachment syncing |
-| [`sync_router.py`](file:///backend/app/routers/sync_router.py) | 2 | Machine-to-machine service authentication and single record creation |
-| [`events.py`](file:///backend/app/routers/events.py) | 10 | Server-Sent Events (SSE) notification streams and document lock heartbeats |
-| [`integrations.py`](file:///backend/app/routers/integrations.py) | 10 | Outbound ERP push integration, signed downloads, push retry management |
-| [`more_info.py`](file:///backend/app/routers/more_info.py) | 7 | Dynamic field configuration per document type, checklist template queries |
-| [`users.py`](file:///backend/app/routers/users.py) | 8 | User lifecycle management, division assignments, password resets, account unlocks |
-| [`roles.py`](file:///backend/app/routers/roles.py) | 3 | Role-to-permission mapping and permission queries |
-| [`audit.py`](file:///backend/app/routers/audit.py) | 6 | Audit log queries, retention policy configuration, compliance purge triggers |
-
-### 6.3 Concurrency Control and Race Prevention
-To prevent approval race conditions and lost updates when multiple users review the same document, DocuFlow enforces a two-layer concurrency control model:
-1. **Pessimistic Lease Locking (`document_locks`):** When a user opens a document in `DocumentDetails.tsx`, a lease lock is acquired via `POST /api/documents/{id}/lock/acquire`. The client sends a heartbeat every 30 seconds. If no heartbeat is received within 60 seconds, the lock expires automatically.
-2. **Optimistic Version Verification:** Every document record contains a `version: int` column. When an approver submits an action (approve, reject, hold), the client passes the `expected_version`. If another user committed a change in the interim, the version mismatch triggers an HTTP `409 Conflict`, aborting the stale write.
+### 6.5 DAPI Sync-Back Studio (`ApplicationStudioPage.tsx`)
+The DAPI Sync-Back Studio facilitates bidirectional ERP connectivity:
+- **Third-Party Application Registry:** Register external ERPs, SAP instances, or webhook endpoints with individual authentication credentials (Bearer Token, API Key, Basic Auth, or Custom HMAC).
+- **Visual Field Mapping:** Drag-and-drop visual mapping between DocuFlow internal fields (`invoice_number`, `vendor_name`, `amount`, `tax_amount`, `line_items`) and external ERP JSON payloads.
+- **Live Push Triggers:** Manual and automated webhook test dispatches displaying exact HTTP request headers, signed payloads, response status codes, and execution latencies.
 
 ---
 
-## 7. API Documentation
+## 7. Backend Architecture and Service Layer
 
-The backend exposes 243 mounted endpoints across its routers. Below are the primary enterprise endpoints with representative requests and responses.
+DocuFlow's backend is developed using Python 3.11 and FastAPI, adhering to an asynchronous, dependency-injected modular architecture.
 
-### 7.1 Core API Endpoints Table
+### 7.1 Security Middleware Pipeline (`security_middleware.py`)
+Every inbound HTTP request traverses custom security middleware before hitting API route handlers:
+- **HTTP Security Headers:** Injects `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, and `Content-Security-Policy`.
+- **CORS Configuration:** Validates `Origin` against strictly whitelisted domains configured in `ALLOWED_ORIGINS`.
+- **Rate Limiting:** Protects authentication and upload routes against brute-force and DoS attacks using client IP rate limit buckets.
+- **Client IP Resolution:** `extract_client_request_ip` resolves real client IPs traversing Nginx reverse proxies via trusted `X-Forwarded-For` headers.
 
-| HTTP Method | Endpoint Path | Auth Required | Permission / Role | Description |
-| :--- | :--- | :---: | :---: | :--- |
-| `POST` | `/api/auth/login` | No | Public | Authenticates user credentials; returns JWT or prompts MFA challenge |
-| `POST` | `/api/auth/mfa/verify` | No | Public | Verifies TOTP or SMS/Email code; completes login and issues JWT token |
-| `GET` | `/api/auth/me` | Yes | Authenticated | Retrieves profile, permissions, department, and division for active user |
-| `POST` | `/api/documents/upload` | Yes | `document:create` | Multipart file upload; triggers OCR and saves staging document |
-| `POST` | `/api/documents/extract-preview` | Yes | `document:create` | Runs instant OCR + LLM extraction returning preview JSON without saving |
-| `POST` | `/api/documents/confirm-ingest` | Yes | `document:create` | Commits verified preview data into `documents` table and evaluates workflow |
-| `GET` | `/api/documents` | Yes | `document:read` | Queries filtered document list (supports division, status, search filters) |
-| `GET` | `/api/documents/{id}` | Yes | `document:read` | Returns full document details, line items, checklist status, and audit history |
-| `PUT` | `/api/documents/{id}` | Yes | `document:edit` | Updates document metadata (e.g., during verification stage) |
-| `POST` | `/api/documents/{id}/approve` | Yes | `document:approve` | Executes stage approval, advances workflow, or triggers final completion |
-| `POST` | `/api/documents/{id}/reject` | Yes | `document:reject` | Rejects document with mandatory rejection reason; notifies submitter |
-| `POST` | `/api/documents/{id}/hold` | Yes | `document:hold` | Places document on hold, pausing SLA escalation timers |
-| `GET` | `/api/documents/{id}/file` | Yes | `document:read` | Streams physical PDF binary or redirects to temporary signed URL |
-| `POST` | `/api/documents/{id}/lock/acquire` | Yes | Authenticated | Acquires exclusive edit lock lease on document |
-| `POST` | `/api/documents/{id}/lock/heartbeat` | Yes | Authenticated | Extends active document lock lease by 60 seconds |
-| `POST` | `/api/sync/record` | Yes | Service API Key | Ingests external ERP record directly into DocuFlow |
-| `POST` | `/api/sync/records/batch` | Yes | Service API Key | Batch ingestion of up to 500 ERP invoice records in a single payload |
-| `GET` | `/api/workflows` | Yes | `workflow:read` | Lists all active workflow profiles and configured stages |
-| `POST` | `/api/admin/workflows/save` | Yes | `workflow:write` | Persists visual workflow definition (stages, approvers, SLA thresholds) |
+### 7.2 Service Layer Breakdown
 
-### 7.2 Representative Request and Response Payloads
+1. **`ocr_service.py` (Hybrid OCR & LLM Engine):**
+   - Implements `extract_document_for_verification` combining PyMuPDF digital text extraction with PaddleOCR raster processing.
+   - Dispatches structured extraction prompts to local Ollama (`llama3.2:latest`) with JSON schema enforcement.
+   - Manages a `BoundedSemaphore(3)` to throttle concurrent OCR jobs and prevent server memory exhaustion.
+2. **`rules_engine.py` (Business Rules Matcher):**
+   - Evaluates active `business_rules` against incoming document metadata.
+   - Enforces deterministic rule ordering sorted by `priority DESC, id ASC` (`AUD-05`).
+   - Normalizes document types across canonical sets to eliminate discrepancies between `'CUSTOMER FEEDBACK'` and `'FEEDBACK'`.
+3. **`lock_service.py` (Heartbeat Lease Management):**
+   - Manages exclusive editing locks in `document_locks`.
+   - Leases expire automatically after 120 seconds unless renewed by client heartbeat pings every 30 seconds.
+   - Provides administrator override mechanisms to forcefully unlock orphaned documents.
+4. **`callback_service.py` (Outbound Webhook Dispatcher):**
+   - Dispatches HTTP webhooks to third-party endpoints upon final document approval.
+   - Signs payloads using HMAC-SHA256 (`X-DocuFlow-Signature`).
+   - Executes exponential backoff retries (1m, 5m, 15m, 1h, 6h) for transient failures.
+5. **`signed_file_service.py` (Cryptographic File Access):**
+   - Generates expiring HMAC-SHA256 signed download tokens (`/api/files/signed/{id}`).
+   - Completely eliminates direct filesystem paths from client-facing API responses.
+6. **`crypto_service.py` (At-Rest Encryption):**
+   - Implements AES-256-GCM symmetric encryption for third-party webhook secrets and API keys stored in the database.
 
-#### Document Extraction Preview (`POST /api/documents/extract-preview`)
-**Request:** `multipart/form-data` with `file: Binary PDF/Image`.
+---
 
-**Response (HTTP 200 OK):**
+## 8. Document Processing and AI/OCR Pipeline
+
+The document processing pipeline automates the transformation of unstructured PDF files into validated, structured enterprise records:
+
+```mermaid
+flowchart TD
+    FILE[Incoming PDF Document] --> DETECT{Digital Text Stream Present?}
+    
+    DETECT -->|Yes| PYMUPDF[PyMuPDF Vector Extraction\n(fitz Engine - Sub-50ms)]
+    DETECT -->|No / Scanned| PADDLE[PaddleOCR Engine\n(Raster Parsing - 1.2s to 3.5s)]
+    
+    PYMUPDF --> CONCAT[Raw Text Concatenation]
+    PADDLE --> CONCAT
+    
+    CONCAT --> OLLAMA_CHECK{Ollama LLM Reachable?}
+    
+    OLLAMA_CHECK -->|Yes| LLM[Ollama llama3.2 Inference\nJSON Schema Validation]
+    OLLAMA_CHECK -->|No / Timeout >30s| REGEX[Deterministic Regex & Heuristic Fallbacks]
+    
+    LLM --> PARSE_JSON{Valid JSON & Non-Zero Line Items?}
+    PARSE_JSON -->|Yes| MERGE[Structured Document & Line Items]
+    PARSE_JSON -->|No| REGEX
+    
+    REGEX --> MERGE
+    MERGE --> ARITHMETIC{Arithmetic Verification\nSubtotal + Tax == Total?}
+    
+    ARITHMETIC -->|Matched| STAGING[Staging Ready: DataVerificationPage]
+    ARITHMETIC -->|Mismatch| WARN_FLAG[Flag Confidence Warning & Route to Verification]
+```
+
+### 8.1 Dual-Engine OCR Processing
+- **PyMuPDF (`fitz`):** Evaluates vector text layers. If the character count per page exceeds 80 characters, text is extracted directly from font streams in under 50 milliseconds, bypassing image rasterization entirely.
+- **PaddleOCR:** If the document is a scanned image or bitmap PDF, the document is rasterized to high-DPI images in memory and processed via PaddleOCR, detecting rotated text, non-standard bounding boxes, and low-contrast vendor stamps.
+
+### 8.2 Structured LLM Extraction (Ollama `llama3.2`)
+The raw extracted text is formatted into a zero-shot prompt instructing the model to return a strictly typed JSON object matching the following structure:
 ```json
 {
-  "vendor_name": "ACME Industrial Supplies Ltd",
-  "invoice_number": "INV-2026-8941",
-  "po_number": "PO-99482",
-  "invoice_date": "2026-10-12",
-  "amount": 142500.00,
-  "base_amount": 120762.71,
-  "tax_amount": 21737.29,
-  "cgst": 10868.65,
-  "sgst": 10868.65,
-  "igst": 0.00,
-  "gstin": "33AABCA1234F1Z5",
-  "extraction_source": "ollama_llama3.2:latest",
-  "confidence_score": 0.95,
+  "invoice_number": "INV-2026-0941",
+  "po_number": "PO-88312",
+  "vendor_name": "Lakshmi Textiles Private Limited",
+  "vendor_gstin": "33AABCL1234F1Z5",
+  "invoice_date": "2026-10-15",
+  "total_amount": 147500.00,
+  "base_amount": 125000.00,
+  "tax_amount": 22500.00,
+  "cgst_amount": 11250.00,
+  "sgst_amount": 11250.00,
+  "igst_amount": 0.00,
   "line_items": [
     {
-      "item_description": "Industrial Cotton Yarn Grade A",
+      "item_description": "Combed Cotton Yarn 40s",
       "quantity": 500.0,
-      "unit_price": 241.52,
-      "amount": 120762.71
+      "unit_price": 250.00,
+      "amount": 125000.00
     }
   ]
 }
 ```
 
-#### Approval Action (`POST /api/documents/{invoice_id}/approve`)
-**Request (HTTP POST):**
-```json
-{
-  "comments": "Line items match PO #PO-99482 and GRN verification completed.",
-  "expected_version": 2
-}
-```
-
-**Response (HTTP 200 OK):**
-```json
-{
-  "status": "success",
-  "message": "Document stage approved successfully",
-  "document_id": "DOC-2026-00812",
-  "new_status": "In Progress (Stage 2)",
-  "current_stage": 2,
-  "version": 3,
-  "assigned_approver": "Finance Department Head"
-}
-```
+### 8.3 Deterministic Heuristic Regex Fallback
+If the Ollama server is unreachable, takes longer than 30 seconds, or returns malformed JSON, the pipeline triggers deterministic regular expression heuristics tailored for Indian commercial invoices:
+- **GSTIN Regex:** `\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b` (Validates 15-character alphanumeric Indian Goods and Services Tax Identification Numbers).
+- **Date Parsers:** Supports `DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`, and `DD-MMM-YYYY` formats.
+- **Currency & Totals:** Scans bottom-page segments for keywords `Total Amount`, `Invoice Total`, `Grand Total`, `Net Payable`, extracting numeric values with comma-thousand separators.
+- **Arithmetic Verification:** Reconciles line-item totals: $\text{Base Amount} + \text{Tax Amount} = \text{Total Amount}$. If the difference exceeds $\pm 1.00$, a validation warning is attached to the staging record.
 
 ---
 
-## 8. Document Processing Pipeline
+## 9. Dynamic Workflow Engine and State Machine
 
-The DocuFlow processing lifecycle supports two primary ingestion paths: **Manual Upload (Path A)** and **Automated ERP Ingestion (Path B)**.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Submitter / ERP
-    participant API as FastAPI Backend
-    participant Guard as Concurrency Guard
-    participant OCR as OCR / LLM Engine
-    participant DB as Microsoft SQL Server
-    participant Rules as Rules Engine
-    actor Approver as Stage Approver
-    participant Webhook as Webhook Dispatcher
-
-    alt Path A: Manual Web Upload
-        User->>API: POST /api/documents/extract-preview (PDF)
-        API->>Guard: Acquire OCR Semaphore (Max 3)
-        Guard->>OCR: extract_document_for_verification()
-        OCR->>OCR: PyMuPDF extract text stream
-        opt Scanned PDF or Sparse (<50 chars)
-            OCR->>OCR: PaddleOCR page raster recognition
-        end
-        OCR->>OCR: Local Ollama (llama3.2) JSON extraction
-        OCR-->>API: Extracted structured payload
-        API-->>User: Preview JSON response
-        User->>API: POST /api/documents/confirm-ingest
-        API->>DB: INSERT into documents (status='PENDING', version=1)
-    else Path B: ERP M2M Ingestion
-        User->>API: POST /api/sync/record (Payload + API Key)
-        API->>DB: Check for duplicate invoice_number & vendor
-        API->>DB: INSERT into documents (status='PENDING', version=1)
-    end
-
-    API->>Rules: evaluate_workflow(document)
-    Rules->>DB: Match conditions (Division, Amount, Category)
-    Rules-->>API: Assign WorkflowProfile & Stage 1 Approvers
-    API->>DB: UPDATE documents (status='In Progress (Stage 1)')
-
-    loop Multi-Stage Approval
-        Approver->>API: POST /api/documents/{id}/approve (expected_version)
-        API->>DB: Verify optimistic lock (version == expected_version)
-        alt Intermediate Stage
-            API->>DB: Advance current_stage += 1, version += 1
-        else Final Stage
-            API->>DB: Set status='Approved', complete_lifecycle()
-            API->>Webhook: trigger_async_integration_push()
-            Webhook-->>User: POST ERP Webhook (HMAC signed callback)
-        end
-    end
-```
-
-### 8.1 Detailed Pipeline Stages
-
-1. **Document Submission:** Received either as a multipart file upload via the web UI or as an M2M JSON payload via the sync API.
-2. **File Storage & Validation:** The uploaded binary is validated against allowed MIME types (`application/pdf`, `image/png`, `image/jpeg`) and magic bytes. Files are saved in `/app/uploads` with a unique UUID-based filename.
-3. **Concurrency Throttling:** To protect the host from CPU and memory starvation during concurrent uploads, OCR and LLM execution is guarded by `ocr_concurrency_guard()` using a `BoundedSemaphore` limited to 3 concurrent operations.
-4. **Text Extraction:**
-   - Digital vector PDFs are parsed instantaneously via PyMuPDF (`fitz`).
-   - If the extracted text has fewer than 50 characters (indicating a scanned image) or if the document is an image format, PaddleOCR is executed.
-5. **Structured LLM Interpretation:** The raw text stream is formatted into a prompt and submitted to local Ollama (`llama3.2:latest`) with strict instructions to return a JSON object containing vendor name, invoice number, PO number, dates, amounts, taxes, and line items.
-6. **Deterministic Fallback & Normalization:** If Ollama is unavailable, times out (>30s), or returns malformed output, deterministic regex heuristics parse the text for Indian GSTINs, standard date formats, tax subtotals, and totals.
-7. **Validation & Duplicate Checking:** The system checks `documents` for an existing combination of `vendor_name` and `invoice_number`. Duplicates are flagged and rejected or held for human review.
-8. **Workflow Evaluation:** The `rules_engine.py` evaluates business rules matching the document's division, document type, and monetary value to determine the appropriate workflow profile.
-9. **Approval Routing:** Approvers assigned to Stage 1 are notified, and the document appears in their `ApprovalQueuePage`.
-
----
-
-## 9. AI and OCR Integration
-
-### 9.1 OCR and Extraction Architecture
-The extraction architecture in [`backend/app/services/ocr_service.py`](file:///backend/app/services/ocr_service.py) uses a resilient multi-tier design:
+### 9.1 Document Lifecycle State Machine
 
 ```mermaid
-flowchart TD
-    INPUT[Input PDF / Image File] --> FORMAT_CHK{File Format?}
-    FORMAT_CHK -->|Image (PNG/JPG)| PADDLE[PaddleOCR Direct Recognition]
-    FORMAT_CHK -->|PDF Document| FITZ[PyMuPDF fitz.open Text Stream]
+stateDiagram-v2
+    [*] --> Draft : Manual Upload / Staging Ingestion
+    [*] --> Pending : M2M ERP Sync Ingestion
     
-    FITZ --> CHAR_COUNT{Extracted Text\nLength >= 50 chars?}
-    CHAR_COUNT -->|Yes - Native Digital| RAW_TXT[Raw Document Text Stream]
-    CHAR_COUNT -->|No - Scanned Document| PADDLE_PDF[Render Pages to Pixmaps\nRun PaddleOCR]
-    PADDLE_PDF --> RAW_TXT
-    PADDLE --> RAW_TXT
-
-    RAW_TXT --> LLM_CALL{Ollama Server\nResponsive?}
-    LLM_CALL -->|Yes| OLLAMA_EXEC[Local Ollama llama3.2:latest\nPrompt: Structured JSON Extraction]
-    LLM_CALL -->|No / Timeout >30s| HEURISTICS[Deterministic Regex & Rules Engine]
-
-    OLLAMA_EXEC --> VALID_JSON{Valid JSON\nReturned?}
-    VALID_JSON -->|Yes| MERGE[Merge Engine:\nLLM Output + Heuristic Gap Filling]
-    VALID_JSON -->|No| HEURISTICS
-    HEURISTICS --> MERGE
-    MERGE --> OUTPUT[Final Structured Document Payload]
+    Draft --> Pending : Submitter Confirms Verification
+    
+    Pending --> Under_Review : Approver Opens Record (Heartbeat Lock Acquired)
+    Under_Review --> Pending : Lease Expired / Approver Exits
+    
+    Under_Review --> In_Progress_Stage_2 : Stage 1 Approver Approves (Multi-Stage)
+    In_Progress_Stage_2 --> Under_Review : Stage 2 Approver Opens Record
+    
+    Under_Review --> Approved : Final Stage Approval Committed
+    Under_Review --> Rejected : Approver Rejects (Remarks Mandatory)
+    Under_Review --> On_Hold : Approver Requests More Information
+    Under_Review --> Cancelled : Submitter / Admin Cancels Process
+    
+    On_Hold --> Under_Review : Submitter Supplies Information / Resumes
+    
+    Approved --> Archived : PDF Copied to /stored_pdfs/approved
+    Archived --> Synced : Outbound Webhook Successfully Pushed
+    
+    Rejected --> [*]
+    Cancelled --> [*]
+    Synced --> [*]
 ```
 
-### 9.2 Local LLM Prompt Template
-The exact prompt template configured in `backend/app/services/ocr_service.py` is:
-
-```text
-You are an enterprise document extraction AI. Extract the document metadata, line items table, and any dynamic custom fields from the following document text into valid JSON format ONLY. Do not include markdown code block syntax (like ```json).
-
-Expected JSON Structure:
-{
-  "vendor_name": "string or null",
-  "invoice_number": "string or null",
-  "po_number": "string or null",
-  "invoice_date": "YYYY-MM-DD or null",
-  "due_date": "YYYY-MM-DD or null",
-  "amount": 0.0,
-  "base_amount": 0.0,
-  "tax_amount": 0.0,
-  "cgst": 0.0,
-  "sgst": 0.0,
-  "igst": 0.0,
-  "gstin": "string or null",
-  "line_items": [
-    {
-      "item_description": "string",
-      "quantity": 0.0,
-      "unit_price": 0.0,
-      "amount": 0.0
-    }
-  ],
-  "dynamic_fields": {
-    "key": "value"
-  }
-}
-
-Document Text:
-{text_content}
-```
-
-### 9.3 Data Privacy and Local Execution
-- **Zero Cloud Exposure:** The entire AI/OCR pipeline runs locally on premise. PaddleOCR processes images in local CPU/GPU memory, and Ollama runs on `localhost:11434`. No proprietary document data, vendor names, or invoice values are transmitted to third-party public AI APIs.
-- **Hardware Isolation:** Concurrency guards ensure that model inferencing cannot consume more CPU/GPU resources than designated by `MAX_CONCURRENT_OCR`.
+### 9.2 Rule Ordering and Approver Resolution
+1. **Deterministic Rule Order (`AUD-05`):** The engine queries `business_rules` matching the document type and division, executing `ORDER BY priority DESC, id ASC`. The first rule whose condition criteria evaluate to `True` assigns the active `target_workflow_id`.
+2. **Empty Approver Target Block (`AUD-01`):** Before allowing a workflow step to transition, the engine verifies that `approver_target` is populated with a valid role or user ID. If empty, the engine rejects the transition, preventing orphan documents.
+3. **Optimistic Version Check (`AUD-02`):** Every state transition endpoint requires the client to submit the document's current `expected_version`. If another approver has modified the record in the interim, the update is rejected with `HTTP 409 Conflict`.
 
 ---
 
-## 10. Workflow Builder, Approval Process, and Status Management
+## 10. Database Architecture and Schema Specification
 
-### 10.1 Workflow Definition Model
-Workflows in DocuFlow are modeled as directed sequences of approval stages associated with specific divisions and document types.
-- **Workflow Profiles (`workflow_profiles`):** Defines the workflow name, target document type (e.g., `VENDOR_INVOICE`, `PURCHASE_ORDER`), division, and active flag.
-- **Workflow Steps (`workflow_step_definitions`):** Defines each stage in the profile, including `stage_number`, `step_name`, `approver_target` (role or specific user), `delegate_approver`, and `sla_hours`.
-- **Business Rules (`business_rules`):** Conditions that dynamically route documents to specific profiles based on criteria such as monetary thresholds (e.g., `amount > 100000 -> Executive Profile`).
+The database tier is hosted on **Microsoft SQL Server** (`DocuFlowDB`) using SQLAlchemy 2.0 ORM. The schema comprises **32 relational tables** engineered for referential integrity and audit tracking.
 
-### 10.2 Document Status Lifecycle State Machine
+### 10.1 Complete Database Table Inventory
 
-| Current Status | Trigger Action | Next Status | Business Logic & Preconditions |
-| :--- | :--- | :--- | :--- |
-| `Pending` | Ingestion / Route | `In Progress (Stage 1)` | Evaluates business rules and assigns Stage 1 approvers. |
-| `In Progress (Stage N)` | `APPROVE` | `In Progress (Stage N+1)` | Validates version; assigns next stage approver pool; increments version. |
-| `In Progress (Final Stage)`| `APPROVE` | `Approved` | Final approval. Executes `complete_document_lifecycle()` and triggers outbound webhooks. |
-| `In Progress` | `REJECT` | `Rejected` | Requires mandatory comments; terminates workflow; notifies submitter. |
-| `In Progress` | `HOLD` | `On Hold` | Freezes active SLA timers; requires `hold_reason`. |
-| `On Hold` | `UNHOLD` | `In Progress` | Resumes approval process and SLA timers. |
-| `In Progress` | `SENDBACK` | `Returned` | Routes document backward to initiator or previous stage for corrections. |
-| `In Progress` | `REQUEST_MORE_INFO`| `More Info Requested` | Pauses approval until initiator responds to dynamic checklist questions. |
+| Table Name | Primary Key | Purpose & Description |
+| :--- | :--- | :--- |
+| `users` | `id` (INT) | Enterprise user credentials, roles, divisions, MFA secrets |
+| `roles` | `id` (INT) | User role definitions (`Super Admin`, `Admin`, `Approver`, etc.) |
+| `permissions` | `id` (INT) | 32 granular system capabilities |
+| `role_permissions` | `role_id, permission_id` | Mapping table granting permissions to roles |
+| `divisions` | `id` (INT) | Corporate divisions (Spinning, Weaving, Garments, Retail) |
+| `departments` | `id` (INT) | Operational cost centers and departments |
+| `documents` | `id` (VARCHAR) | Master document records, amounts, statuses, and stages |
+| `document_line_items` | `id` (INT) | Itemized line rows, quantities, rates, and amounts |
+| `document_locks` | `document_id` (VARCHAR) | Active heartbeat editing leases and expiration times |
+| `document_approval_logs` | `id` (INT) | Formal historical log of stage approvals and rejections |
+| `document_checklist_states`| `id` (INT) | Verification checklist results per document |
+| `document_type_field_configurations` | `id` (INT) | Dynamic metadata field schemas per document type |
+| `workflow_profiles` | `id` (INT) | Named workflow definitions and target categories |
+| `workflow_step_definitions` | `id` (INT) | Tiered stage definitions, approver targets, and SLAs |
+| `business_rules` | `id` (INT) | Priority-ordered condition rules assigning workflows |
+| `approval_assignments` | `id` (INT) | Specific approver user allocations per document stage |
+| `checklist_templates` | `id` (INT) | Reusable compliance checklist templates |
+| `checklist_rules` | `id` (INT) | Granular compliance checks attached to templates |
+| `third_party_applications` | `id` (VARCHAR) | Registered ERP systems and external integration clients |
+| `third_party_webhook_configs`| `id` (INT) | Webhook URLs, headers, and encrypted secrets |
+| `callback_rules` | `id` (INT) | Event triggers governing outbound webhook pushes |
+| `callback_events` | `id` (INT) | Outbound webhook event queue with retry counts |
+| `callback_attempts` | `id` (INT) | Execution history and HTTP status of webhook attempts |
+| `integration_sync_logs` | `id` (INT) | Inbound M2M sync request and batch logs |
+| `integration_audit_history` | `id` (INT) | Field-level modification tracking for external syncs |
+| `in_app_notifications` | `id` (INT) | Real-time user notifications and alert messages |
+| `notification_provider_configs`| `id` (INT) | SMTP mail server and SMS gateway credentials |
+| `notification_raci_matrices` | `id` (INT) | RACI escalation mappings for workflow alerts |
+| `otp_verifications` | `id` (INT) | Temporary storage for dispatched SMS/Email OTP codes |
+| `archive_settings` | `id` (INT) | Retention policies and file storage locations |
+| `user_access_logs` | `id` (INT) | User authentication events, IP addresses, and logins |
+| `system_engine_logs` | `id` (INT) | Internal system, worker, and scheduled job executions |
 
-### 10.3 Escalation Engine
-The escalation service in [`backend/app/services/escalation_service.py`](file:///backend/app/services/escalation_service.py) scans active documents against configured `sla_hours`. If a stage approver fails to act within the SLA window:
-1. The document is flagged as `SLA_BREACHED`.
-2. The system checks `delegate_approver` in the step definition.
-3. If a delegate is configured, the document is automatically reassigned, and an audit entry is logged.
-4. Escalation alerts are dispatched via the notification provider.
-
----
-
-## 11. Database Design
-
-DocuFlow uses **Microsoft SQL Server** (`DocuFlowDB`) as its primary relational database. Database interactions are managed via SQLAlchemy 2.0 with connection pooling.
-
-### 11.1 Entity Relationship Diagram
+### 10.2 Entity Relationship Diagram (Mermaid)
 
 ```mermaid
 erDiagram
-    DIVISIONS ||--o{ DEPARTMENTS : "contains"
-    DIVISIONS ||--o{ USERS : "scopes"
-    DEPARTMENTS ||--o{ USERS : "employs"
-    ROLES ||--o{ USERS : "assigns"
-    ROLES ||--o{ ROLE_PERMISSIONS : "grants"
-    PERMISSIONS ||--o{ ROLE_PERMISSIONS : "defines"
+    DIVISIONS ||--o{ DEPARTMENTS : contains
+    DIVISIONS ||--o{ USERS : scopes
+    DEPARTMENTS ||--o{ USERS : employs
+    ROLES ||--o{ USERS : assigns
+    ROLES ||--o{ ROLE_PERMISSIONS : grants
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : defines
 
-    USERS ||--o{ DOCUMENTS : "submits"
-    WORKFLOW_PROFILES ||--o{ WORKFLOW_STEP_DEFINITIONS : "contains"
-    WORKFLOW_PROFILES ||--o{ DOCUMENTS : "governs"
+    USERS ||--o{ DOCUMENTS : submits
+    WORKFLOW_PROFILES ||--o{ WORKFLOW_STEP_DEFINITIONS : contains
+    WORKFLOW_PROFILES ||--o{ DOCUMENTS : governs
+    WORKFLOW_PROFILES ||--o{ BUSINESS_RULES : targets
 
-    DOCUMENTS ||--o{ DOCUMENT_LINE_ITEMS : "has"
-    DOCUMENTS ||--o{ DOCUMENT_APPROVAL_LOGS : "logs"
-    DOCUMENTS ||--o{ DOCUMENT_LOCKS : "leased_by"
-    DOCUMENTS ||--o{ DOCUMENT_CHECKLIST_STATES : "verifies"
-    DOCUMENTS ||--o{ INTEGRATION_SYNC_LOGS : "tracks"
-    DOCUMENTS ||--o{ APPROVAL_ASSIGNMENTS : "assigns_to"
+    DOCUMENTS ||--o{ DOCUMENT_LINE_ITEMS : itemizes
+    DOCUMENTS ||--o{ DOCUMENT_APPROVAL_LOGS : tracks
+    DOCUMENTS ||--o{ DOCUMENT_LOCKS : leased_by
+    DOCUMENTS ||--o{ DOCUMENT_CHECKLIST_STATES : validates
+    DOCUMENTS ||--o{ INTEGRATION_SYNC_LOGS : records
+    DOCUMENTS ||--o{ APPROVAL_ASSIGNMENTS : delegates_to
 
-    THIRD_PARTY_APPLICATIONS ||--o{ CALLBACK_RULES : "configures"
-    CALLBACK_RULES ||--o{ CALLBACK_EVENTS : "triggers"
-    CALLBACK_EVENTS ||--o{ CALLBACK_ATTEMPTS : "records"
+    THIRD_PARTY_APPLICATIONS ||--o{ CALLBACK_RULES : configures
+    CALLBACK_RULES ||--o{ CALLBACK_EVENTS : queues
+    CALLBACK_EVENTS ||--o{ CALLBACK_ATTEMPTS : logs
 ```
 
-### 11.2 Core Data Dictionary (Key Tables)
+### 10.3 Core Tables Schema Detail
 
 #### Table: `documents`
 Stores core document records, workflow state, and approval metadata.
@@ -638,7 +630,7 @@ Stores core document records, workflow state, and approval metadata.
 | `doc_num` | `VARCHAR(100)` | Indexed | Yes | External reference number or PO tracking number |
 | `invoice_number`| `VARCHAR(100)` | Indexed | Yes | Vendor invoice number extracted from document |
 | `vendor_name` | `VARCHAR(255)` | Indexed | Yes | Normalized vendor or supplier name |
-| `document_type` | `VARCHAR(50)` | Indexed | No | Canonical document type (`VENDOR_INVOICE`, `PURCHASE_ORDER`, etc.) |
+| `document_type` | `VARCHAR(50)` | Indexed | No | Canonical document type (`AP INVOICE`, `CUSTOMER FEEDBACK`) |
 | `amount` | `DECIMAL(18,2)` | None | Yes | Total gross amount including taxes |
 | `base_amount` | `DECIMAL(18,2)` | None | Yes | Net taxable amount before taxes |
 | `tax_amount` | `DECIMAL(18,2)` | None | Yes | Combined tax amount (CGST + SGST + IGST) |
@@ -652,18 +644,6 @@ Stores core document records, workflow state, and approval metadata.
 | `created_at` | `DATETIME2` | Default `GETDATE()` | No | Creation timestamp |
 | `updated_at` | `DATETIME2` | Default `GETDATE()` | No | Last update timestamp |
 
-#### Table: `document_line_items`
-Contains itemized invoice rows parsed from the document or synchronized from the ERP.
-
-| Column | Data Type | Constraint | Nullable | Description |
-| :--- | :--- | :--- | :---: | :--- |
-| `id` | `INT` | Primary Key, Identity | No | Auto-incrementing row ID |
-| `document_id` | `VARCHAR(100)` | Foreign Key | No | References `documents.id` |
-| `item_description`| `VARCHAR(500)`| None | Yes | Line item description |
-| `quantity` | `DECIMAL(18,4)` | None | Yes | Item quantity |
-| `unit_price` | `DECIMAL(18,4)` | None | Yes | Price per unit |
-| `amount` | `DECIMAL(18,2)` | None | Yes | Total line item amount |
-
 #### Table: `document_locks`
 Maintains lease-based editing locks to prevent concurrent edits.
 
@@ -671,38 +651,22 @@ Maintains lease-based editing locks to prevent concurrent edits.
 | :--- | :--- | :--- | :---: | :--- |
 | `document_id` | `VARCHAR(100)` | Primary Key | No | References `documents.id` |
 | `locked_by_user_id`| `INT` | Foreign Key | No | References `users.id` |
-| `locked_by_name`| `VARCHAR(255)` | None | No | Display name of the user holding the lock |
-| `locked_at` | `DATETIME2` | None | No | Timestamp when the lock was initially acquired |
+| `locked_by_name`| `VARCHAR(255)` | None | No | Display name of user holding lock |
+| `locked_at` | `DATETIME2` | None | No | Timestamp when lock was initially acquired |
 | `expires_at` | `DATETIME2` | Indexed | No | Lease expiration timestamp (renewed via heartbeats) |
-
-#### Table: `workflow_step_definitions`
-Configures the approval hierarchy and SLA rules for each workflow profile.
-
-| Column | Data Type | Constraint | Nullable | Description |
-| :--- | :--- | :--- | :---: | :--- |
-| `id` | `INT` | Primary Key, Identity | No | Auto-incrementing step ID |
-| `profile_id` | `INT` | Foreign Key | No | References `workflow_profiles.id` |
-| `stage_number` | `INT` | None | No | Sequential stage order (1, 2, 3...) |
-| `step_name` | `VARCHAR(100)` | None | No | Descriptive stage name (e.g., "HOD Approval") |
-| `approver_target`| `VARCHAR(100)`| None | No | Role code or specific user identifier |
-| `delegate_approver`| `VARCHAR(100)`| None | Yes | Fallback approver if SLA is breached |
-| `sla_hours` | `INT` | Default 24 | No | Maximum permitted hours before escalation |
 
 ---
 
-## 12. Authentication, Authorization, and Security
+## 11. Authentication, Authorization, and Security Hardening
 
-### 12.1 Authentication Architecture
-DocuFlow implements a defense-in-depth authentication framework supporting:
-- **JWT (JSON Web Tokens):** Signed using HMAC-SHA256 with claims containing `sub` (user ID), `email`, `role`, `division_id`, and `exp` (default 8 hours).
-- **Password Security:** Passwords are hashed using Passlib with salted Bcrypt (minimum 12 rounds).
-- **Multi-Factor Authentication (MFA):**
-  - Time-based One-Time Password (TOTP) compatible with Google Authenticator and Microsoft Authenticator.
-  - SMS and Email OTP fallback powered by `otp_service.py`.
-- **Account Lockout Policy:** Configured via `MAX_FAILED_LOGIN_ATTEMPTS = 5` and `ACCOUNT_LOCKOUT_DURATION_MINUTES = 30`.
+### 11.1 Authentication & Passwordless Flow
+- **Restricted Identifier Input:** The login form explicitly restricts login identifiers to **Employee ID** and **Username** only (`868032f`), rejecting raw email addresses and phone numbers to mitigate user enumeration.
+- **Auto-Dispatched Email OTP:** Upon identifier submission, the backend automatically generates a cryptographically random 6-digit OTP, dispatches it to the user's registered corporate email, and directly renders the verification code entry screen (`c7b35eb`).
+- **Two-Stage Multi-Factor Authentication (MFA):** Supports Time-based One-Time Passwords (TOTP) using standard RFC 6238 authenticators (Google Authenticator, Microsoft Authenticator) alongside SMS/Email OTP fallbacks.
+- **Brute Force Protection:** Tracks failed verification attempts; 5 consecutive failures trigger an automated 30-minute account lockout (`SEC-10`).
 
-### 12.2 Role-Based Access Control (RBAC) Matrix
-Permissions are enforced at the API route level using FastAPI dependency injection (`require_permission`):
+### 11.2 Granular Role-Based Access Control (RBAC)
+DocuFlow enforces 32 granular permissions mapped across 5 primary roles:
 
 | Permission Name | Super Admin | Admin | Approver | Submitter | Auditor |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -718,163 +682,132 @@ Permissions are enforced at the API route level using FastAPI dependency injecti
 | `audit:read` | Yes | Yes | No | No | Yes |
 | `system:config` | Yes | No | No | No | No |
 
-### 12.3 Cryptography & Sensitive Data Handling
-- **Signed File URLs:** PDF downloads use expiring HMAC-signed URLs (`/api/files/signed/{id}?token=...&expires=...`) generated by `signed_file_service.py` to prevent unauthorized direct file access.
-- **Secret Encryption:** Integration webhook secrets and third-party credentials are encrypted at rest using AES-256-GCM via `crypto_service.py`.
-- **Zero Credential Logging:** Passwords, JWT tokens, and decrypted webhook secrets are scrubbed from log statements.
+### 11.3 Cryptography & Injection Guards
+- **HMAC Expiring Signed URLs:** Document retrieval URLs are signed with HMAC-SHA256 tokens (`/api/files/signed/{id}?token=...&expires=...`). Tokens expire in 300 seconds and are bound to specific file paths.
+- **Path Traversal Sanitization:** All file storage operations pass through `validate_uploaded_file` and `get_safe_file_path`, resolving symlinks and verifying that canonical paths reside strictly within allowed storage directories.
+- **CSV Injection Prevention:** The audit export engine passes all text cells through `sanitize_csv_cell`, prefixing cells beginning with `=`, `+`, `-`, or `@` with a single quote (`'`) to disable formula execution in Microsoft Excel.
 
 ---
 
-## 13. Email Ingestion, ERP Synchronization, and External Integrations
+## 12. Concurrency Control, Lease Heartbeats, and State Integrity
 
-### 13.1 Inbound ERP Synchronization (M2M API)
-External systems (SAP, custom ERPs, n8n automation workflows) ingest documents into DocuFlow via machine-to-machine REST endpoints in [`backend/app/routers/sync.py`](file:///backend/app/routers/sync.py):
-- **Authentication:** Service requests authenticate using an `X-Service-API-Key` header or an M2M JWT service token issued by `POST /api/sync/auth/login`.
-- **Batch Processing:** `POST /api/sync/records/batch` accepts arrays of up to 500 invoices per call, performing transactional bulk inserts into `documents` and `document_line_items`.
+### 12.1 Heartbeat Document Locking (`lock_service.py`)
+To prevent two approvers from acting upon the same document simultaneously:
+1. When an approver opens a document in `DocumentDetails.tsx`, the frontend requests a lease via `POST /api/documents/{id}/lock`.
+2. The server creates or updates a record in `document_locks` with `expires_at = now + 120 seconds`.
+3. The frontend initiates an active timer transmitting heartbeat pings (`POST /api/documents/{id}/lock/heartbeat`) every 30 seconds.
+4. If a second user attempts to open the record, the API returns `HTTP 423 Locked` detailing who currently holds the lease.
+5. Administrators can execute a forced takeover (`POST /api/documents/{id}/lock/force-takeover`), logging an audit event.
 
-### 13.2 Outbound Webhook Integration (Callback Service)
-When a document reaches its final approval state (`status = 'Approved'`), DocuFlow triggers an automated outbound push to configured third-party webhooks:
-- **Dispatcher:** [`backend/app/services/callback_service.py`](file:///backend/app/services/callback_service.py) constructs an event payload containing document metadata, approved line items, and approval history.
-- **HMAC Signatures:** Every outbound webhook request includes an `X-DocuFlow-Signature` header containing a SHA-256 HMAC of the payload computed with the application's shared secret.
-- **Exponential Backoff:** If the receiving endpoint fails (non-2xx response or network timeout), the event is recorded in `callback_events` with exponential retry intervals (1m, 5m, 15m, 1h, 6h).
+### 12.2 Mandatory Optimistic Concurrency (`AUD-02`)
+Every workflow action payload (`approve`, `reject`, `hold`, `sendback`, `cancel`) must submit an `expected_version` integer:
+```python
+if inv.version != expected_version:
+    raise HTTPException(
+        status_code=409, 
+        detail="This document version has been modified by another approver or process."
+    )
+inv.version += 1
+```
+This guarantees that stale browser tabs cannot overwrite state transitions executed in another window.
 
-### 13.3 Notification Channels
-The system integrates with notification providers configured in `notification_provider_configs`:
-- **Email (SMTP):** Configured for Office 365 / Exchange (`smtp.office365.com:587` with STARTTLS) for approval alerts and OTP codes.
-- **SMS Gateway:** Supports Twilio, Fast2SMS, and generic HTTP SMS gateways for urgent SLA breach notifications and mobile MFA.
+### 12.3 Final Approval Ordering and PDF Archival (`AUD-03`)
+The final approval transition follows an atomic, strictly ordered lifecycle:
+1. **Status Progression:** Document status updates to `'Approved'`.
+2. **Physical Archival:** The signed PDF file is copied from `/app/uploads` to `/stored_pdfs/approved/{id}.pdf`. If the copy fails, `storage_path` is flagged `'STORAGE_PENDING'` without corrupting the approval state.
+3. **Audit Log Generation:** `record_document_audit_event` inserts full approver identity, Employee ID, client IP address, and status transition into `document_approval_logs` and `AuditLog`.
+4. **Database Commit:** The transaction commits to SQL Server.
+5. **Post-Commit ERP Push:** Asynchronous webhook synchronization triggers only after the commit completes successfully.
+
+---
+
+## 13. External Integrations, ERP Synchronization, and Webhooks
+
+### 13.1 Inbound M2M Batch Synchronization
+External ERP systems (SAP, custom databases, n8n automations) push document batches via:
+- `POST /api/sync/record`: Ingests an individual document with line items.
+- `POST /api/sync/records/batch`: Accepts up to 500 records per call, executing bulk transactional validation and database insertion.
+- **Authentication:** Inbound M2M calls require an `X-Service-API-Key` header or an M2M Service JWT issued via `/api/sync/auth/login`.
+
+### 13.2 Outbound Webhook Retry Engine (`callback_service.py`)
+When documents complete final approval, outbound webhooks are queued in `callback_events`:
+- **HMAC Signatures:** Payloads are signed with an HMAC-SHA256 signature transmitted in the `X-DocuFlow-Signature` header.
+- **Safe Multi-Worker Claiming (`AUD-07`):** The background retry worker claims pending rows using safe database transactions, preventing duplicate dispatches across multiple Uvicorn workers.
+- **Exponential Backoff:** Failed dispatches automatically retry according to exponential intervals:
+  $$\text{Intervals} = [1\text{m}, 5\text{m}, 15\text{m}, 1\text{h}, 6\text{h}]$$
+  Maximum retry attempts are capped at 5 before flagging the event `FAILED`.
 
 ---
 
 ## 14. Deployment Architecture, Docker, and Nginx
 
-### 14.1 Deployment Diagram
+### 14.1 Production Docker Orchestration (`docker-compose.yml`)
 
 ```mermaid
 flowchart TD
-    subgraph HostEnvironment ["Production Host (Linux / Windows Server)"]
-        subgraph DockerCompose ["Docker Orchestration (docker-compose.yml)"]
-            NGINX_CTR["docuflow-nginx Container\n(Ports 80, 8085)\nStatic Asset Serving & Proxy"]
-            BACKEND_CTR["docuflow-backend Container\n(Port 3000)\nPython 3.11 / Uvicorn\nNon-root appuser:appgroup"]
+    subgraph HostServer ["Production Host Server (Windows / Linux)"]
+        subgraph DockerNetwork ["Docker Bridge Network (172.20.0.0/16)"]
+            NGINX["docuflow-nginx Container\nPorts: 80, 8085\nNginx Alpine"]
+            BACKEND["docuflow-backend Container\nPort: 3000\nPython 3.11-slim (appuser:10001)"]
         end
 
         subgraph PersistentVolumes ["Persistent Storage Mounts"]
-            UPLOADS_VOL["/app/backend/uploads"]
-            APPROVED_VOL["/app/stored_pdfs/approved"]
+            VOL_UPLOADS["/app/backend/uploads"]
+            VOL_APPROVED["/app/stored_pdfs/approved"]
         end
 
-        subgraph ExternalDatabase ["Enterprise Database Server"]
-            MSSQL_SERVER[("Microsoft SQL Server (192.168.179.22:1443)\nDatabase: DocuFlowDB")]
+        subgraph DatabaseServer ["Enterprise Database Host (192.168.179.22)"]
+            MSSQL[("Microsoft SQL Server\nPort: 1443\nDatabase: DocuFlowDB")]
         end
     end
 
-    CLIENT[Enterprise Users / Browsers] -->|HTTP / HTTPS| NGINX_CTR
-    NGINX_CTR -->|Proxy /api| BACKEND_CTR
-    BACKEND_CTR --> UPLOADS_VOL
-    BACKEND_CTR --> APPROVED_VOL
-    BACKEND_CTR -->|TCP 1443 ODBC| MSSQL_SERVER
+    CLIENT[Enterprise Users / Browsers] -->|HTTP / HTTPS| NGINX
+    NGINX -->|Proxy /api| BACKEND
+    BACKEND --> VOL_UPLOADS
+    BACKEND --> VOL_APPROVED
+    BACKEND -->|TCP 1443 ODBC| MSSQL
 ```
 
-### 14.2 Docker Configuration
-The containerized deployment uses a multi-stage production Dockerfile (`Dockerfile`) running under Python 3.11-slim:
-- **Security Hardening:** The container runs as an unprivileged user (`appuser`, UID 10001) in `appgroup`.
-- **System Dependencies:** Installs `unixodbc`, `unixodbc-dev`, `libpq-dev`, `libgl1`, and `libglib2.0-0` (required for OpenCV and PaddleOCR).
-- **Healthcheck:** Configured with `CMD curl -f http://localhost:3000/api/health || exit 1` running every 30 seconds.
+### 14.2 Multi-Stage Dockerfile Specifications
+The application builds using a production multi-stage `Dockerfile`:
+- **Stage 1 (Frontend Build):** Uses `node:20-alpine` to compile React 19 SPA static assets into `/dist`.
+- **Stage 2 (Backend Production):** Uses `python:3.11-slim`:
+  - Installs system libraries: `unixodbc`, `unixodbc-dev`, `libgl1`, `libglib2.0-0`.
+  - Downloads and installs Microsoft ODBC Driver 17 for SQL Server.
+  - Creates a dedicated non-root security user (`appuser:10001`).
+  - Sets up persistent storage directories with proper ownership.
+  - Implements an automated healthcheck probe (`CMD curl -f http://localhost:3000/api/health || exit 1`).
 
-### 14.3 Environment Variables Reference
+### 14.3 Environment Variables Catalog
 
-| Variable Name | Component | Required? | Default / Safe Example | Description |
-| :--- | :--- | :---: | :--- | :--- |
-| `ENVIRONMENT` | Backend | Optional | `development` / `production` | Active environment profile |
-| `API_V1_STR` | Backend | Optional | `/api` | Root path prefix for API endpoints |
-| `ALLOWED_ORIGINS`| Backend | Optional | `http://localhost:5173,http://localhost:3000` | CORS permitted origins |
-| `DB_HOST` | Database | **Yes** | `192.168.179.22` | Hostname or IP of SQL Server |
-| `DB_PORT` | Database | Optional | `1443` | Port for SQL Server connection |
-| `DB_NAME` | Database | **Yes** | `DocuFlowDB` | Target SQL Server database name |
-| `DB_USER` | Database | **Yes** | `sa` (or least-privilege user) | SQL Server database username |
-| `DB_PASSWORD` | Database | **Yes** | `[REDACTED]` | SQL Server database password |
-| `DB_DRIVER` | Database | Optional | `ODBC Driver 17 for SQL Server` | PyODBC connection driver |
-| `SECRET_KEY` | Security | **Yes** | `[REDACTED_32_CHAR_KEY]` | HMAC key for signing JWTs and URLs |
-| `OLLAMA_URL` | AI / LLM | Optional | `http://localhost:11434/api/generate` | Local Ollama endpoint |
-| `OLLAMA_MODEL` | AI / LLM | Optional | `llama3.2:latest` | Local LLM extraction model name |
-| `MAX_CONCURRENT_OCR`| OCR | Optional | `3` | Maximum concurrent OCR jobs |
-| `SMTP_HOST` | Email | Optional | `smtp.office365.com` | Outbound mail server hostname |
-| `SMTP_PORT` | Email | Optional | `587` | Outbound mail server port |
-| `PDF_STORAGE_PATH`| Storage | Optional | `/app/uploads` | Path for uploaded staging PDFs |
-| `APPROVED_PDF_PATH`| Storage | Optional | `/app/stored_pdfs/approved` | Path for archived approved PDFs |
+| Variable Name | Required? | Default / Example | Purpose & Description |
+| :--- | :---: | :--- | :--- |
+| `ENVIRONMENT` | No | `production` | Active deployment profile (`development`/`production`) |
+| `API_V1_STR` | No | `/api` | Root API route prefix |
+| `ALLOWED_ORIGINS`| Yes | `http://localhost:5173,http://localhost:8085` | CORS allowed origin domains |
+| `DB_HOST` | **Yes** | `192.168.179.22` | Hostname or IP of Microsoft SQL Server |
+| `DB_PORT` | No | `1443` | SQL Server port |
+| `DB_NAME` | **Yes** | `DocuFlowDB` | Target SQL Server database name |
+| `DB_USER` | **Yes** | `DocuFlowAppUser` | SQL Server database user |
+| `DB_PASSWORD` | **Yes** | `[SECURE_PASSWORD]` | SQL Server user password |
+| `DB_DRIVER` | No | `ODBC Driver 17 for SQL Server` | PyODBC connection driver |
+| `SECRET_KEY` | **Yes** | `[32_BYTE_HEX_KEY]` | HMAC key for signing JWTs and URLs |
+| `OLLAMA_URL` | No | `http://localhost:11434/api/generate` | Local Ollama inference URL |
+| `OLLAMA_MODEL` | No | `llama3.2:latest` | Local LLM model identifier |
+| `MAX_CONCURRENT_OCR`| No | `3` | Maximum concurrent OCR workers |
+| `SMTP_HOST` | No | `smtp.office365.com` | Outbound mail server hostname |
+| `SMTP_PORT` | No | `587` | Outbound mail server port |
+| `PDF_STORAGE_PATH`| No | `/app/uploads` | Path for uploaded staging PDFs |
+| `APPROVED_PDF_PATH`| No | `/app/stored_pdfs/approved` | Path for archived approved PDFs |
 
 ---
 
-## 15. Installation and Execution Instructions
+## 15. Empirical Testing Methodology and Test Results
 
-### 15.1 Prerequisites
-- **Python:** Version 3.11+
-- **Node.js:** Version 18.x or 20.x
-- **Database:** Microsoft SQL Server 2017+ with TCP/IP enabled on port 1443/1433
-- **ODBC Driver:** Microsoft ODBC Driver 17 for SQL Server installed on host
-- **Ollama (Optional for AI extraction):** Installed locally with `llama3.2:latest` pulled
+The DocuFlow platform has been tested across all architectural layers.
 
-### 15.2 Local Development Setup
-
-#### 1. Database Preparation
-Ensure SQL Server is running and initialize the database schema:
-```powershell
-# Verify connectivity to SQL Server
-sqlcmd -S 192.168.179.22,1443 -U sa -P "YourPassword" -Q "SELECT @@VERSION;"
-```
-
-#### 2. Backend Initialization
-```powershell
-cd docuflow-automation/backend
-
-# Create and activate virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install backend dependencies
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your local DB credentials and secret key
-
-# Run database schema migrations / table verification
-python -c "from app.database.connection import engine; from app.database.models import Base; Base.metadata.create_all(bind=engine)"
-
-# Start Uvicorn development server
-python run.py
-# Server starts on http://localhost:3000 (API docs available at http://localhost:3000/docs)
-```
-
-#### 3. Frontend Initialization
-```powershell
-cd docuflow-automation/frontend
-
-# Install frontend dependencies
-npm install
-
-# Start Vite development server
-npm run dev
-# Application UI opens at http://localhost:5173
-```
-
-### 15.3 Docker Compose Deployment
-```bash
-cd docuflow-automation
-docker compose up -d --build
-
-# Verify container status and health
-docker compose ps
-docker compose logs -f backend
-```
-
----
-
-## 16. Testing Methodology and Actual Test Results
-
-The application includes an extensive automated test suite covering unit, integration, API contract, OCR/AI pipeline routing, workflow engine, and RBAC security testing.
-
-### 16.1 Empirical Verification Test Results (Table 4.9 & Table 4.15)
-The following figures represent actual automated test results documented in `test_execution_report.md` and `dissertation_test_summary.md`.
+### 15.1 Core Plan & Master Test Execution Results
+The test suites documented in `test_execution_report.md` and `dissertation_test_summary.md` provide empirical verification of system stability:
 
 #### Table 4.9: Core System Test Plan Execution Outcomes (41 Cases)
 
@@ -889,62 +822,63 @@ The following figures represent actual automated test results documented in `tes
 | **UI & Performance** | 5 | 5 | 5 | 0 | 0 | 100.0% | 100.0% |
 | **Total (Core Plan)** | **41** | **41** | **41** | **0** | **0** | **100.0%** | **100.0%** |
 
-#### Extended Test Register Summary
-- **Extended Register (52 Cases):** 52 Designed, 52 Executed, 52 Passed (100% pass rate). Incorporates 6 unit tests (UT01–UT06) for cryptographic/SLA calculations and 5 end-to-end user acceptance tests (UA01–UA05).
-- **Existing Pytest Suite:** 177 unit and integration tests executed in 46.79 seconds with a 100% pass rate.
-- **Frontend Vitest Suite:** 7 tests executed in 2.43 seconds with a 100% pass rate.
-- **Physical Document Extraction Metrics:** In strict compliance with zero-fabrication academic standards, Character Error Rate (CER), Word Error Rate (WER), and field-level F1-scores on unannotated physical document scans are explicitly reported as **Blocked pending human ground-truth annotation**.
+#### Table 4.15: Master Extended Test Register (52 Cases)
 
-### 16.2 Concurrency and Load Testing
-Performance under high concurrent load was evaluated using k6 test scripts (`load-test-150.js`) across three load profiles:
-- **150 Virtual Users (VUs):** System maintained stable sub-200ms API response times across core document lookup endpoints.
-- **200 Virtual Users (VUs):** Database connection pool sustained throughput without connection exhaustion; OCR semaphore prevented memory spikes.
-- **250 Virtual Users (VUs):** Concurrency guards successfully throttled extraction requests without server crashes or 500 errors.
+| Test Category | Designed | Executed | Passed | Failed | Blocked | Execution Rate | Pass Rate |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Core Subtotal (Table 4.9)** | 41 | 41 | 41 | 0 | 0 | 100.0% | 100.0% |
+| **Unit Testing (Extended UT01–UT06)** | 6 | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| **User Acceptance Testing (UA01–UA05)**| 5 | 5 | 5 | 0 | 0 | 100.0% | 100.0% |
+| **Grand Total (Master Register)** | **52** | **52** | **52** | **0** | **0** | **100.0%** | **100.0%** |
 
----
-
-## 17. Error Handling, Limitations, and Future Improvements
-
-### 17.1 Implemented Error Handling Mechanisms
-- **OCR Concurrency Throttling:** If all 3 OCR worker slots are saturated, subsequent upload requests receive an `OCRConcurrencyError` (HTTP 503) asking the client to retry, preventing out-of-memory container crashes.
-- **Stale Update Prevention:** Optimistic concurrency version checks return `HTTP 409 Conflict` if another approver acts on a document concurrently.
-- **LLM Timeout Fallback:** If Ollama does not return structured JSON within 30 seconds, execution falls back seamlessly to deterministic regex heuristics without failing the upload.
-- **Webhook Retry Queues:** Outbound webhook failures are logged in `callback_events` and automatically retried using exponential backoff intervals.
-
-### 17.2 Technical Limitations Discovered in Code
-1. **Automated IMAP/Email Ingestion:** While manual PDF upload and M2M ERP sync are fully functional, an automated background email listener (polling an inbox via IMAP or Microsoft Graph API) is partially implemented and relies on external automation (e.g., n8n) pushing attachments into `/api/sync/record`.
-2. **Local LLM GPU Requirement:** Ollama `llama3.2` extraction relies on host GPU/CPU capacity; running extraction on low-spec server hardware can cause high inference latencies (>15s per page).
-3. **Single SQL Server Instance:** Database connection settings target a single SQL Server host (`192.168.179.22`); high-availability database failover or read replicas are not currently configured in connection settings.
-
-### 17.3 Recommended Future Improvements
-- **Asynchronous Task Queue (Celery / Redis):** Migrate heavy OCR and LLM operations out of the FastAPI process into dedicated Celery/Redis worker nodes.
-- **Automated Email Listener Service:** Implement a containerized Microsoft Graph API polling daemon to ingest invoice email attachments automatically.
-- **Advanced 3-Way PO Matching:** Expand the existing ERP lookup logic to support automated 3-way line-item matching against Goods Receipt Notes (GRN) directly within the UI.
+- **Automated Pytest Suite:** 177 unit and integration tests completed in 46.79 seconds with 0 failures.
+- **Frontend Vitest Suite:** 7 component tests executed in 2.43 seconds with 100% pass rate.
+- **High-Concurrency Load Benchmark:** Tested via k6 across 150, 200, and 250 Virtual Users (VUs):
+  - Database connection pool maintained sub-200ms latency without connection starvation.
+  - OCR semaphore effectively throttled jobs under 250 VUs, preventing container OOM crashes.
+- **Zero-Fabrication Academic Stance:** Character Error Rate (CER), Word Error Rate (WER), and field-level Precision/Recall/F1 metrics on unannotated physical document scans are formally reported as **Blocked pending human ground-truth annotation**, adhering strictly to zero-fabrication academic research standards. An automated evaluation framework (`evaluate_ai_metrics.py` and `ai_evaluation_template.xlsx`) is provided for immediate execution upon dataset annotation.
 
 ---
 
-## 18. Important Source File References
+## 16. Troubleshooting Runbook and Operational Failure Modes
 
-| System Area | Source File Path | Key Functions / Classes / Responsibilities |
+### 16.1 Common Operational Scenarios & Remediation
+
+| Issue Symptom | Root Cause | Diagnostic Step | Remediation Procedure |
+| :--- | :--- | :--- | :--- |
+| **HTTP 409 Conflict on Approval** | Stale browser tab or concurrent approver action | Check `inv.version` vs client `expected_version` | Refresh document view in UI to load the latest state before retrying. |
+| **HTTP 423 Locked on Document View** | Another user currently reviewing document | Check `document_locks` table | Wait for 120s lease expiration or execute administrative force takeover. |
+| **HTTP 503 OCR Concurrency Error** | More than 3 concurrent OCR jobs running | Check backend logs for `OCRConcurrencyError` | Client automatically retries with exponential backoff; increase `MAX_CONCURRENT_OCR` if CPU/RAM permits. |
+| **SQL Server Connection Timeout** | Network firewall or ODBC driver misconfiguration | Execute `telnet 192.168.179.22 1443` | Ensure SQL Server TCP/IP is enabled and Microsoft ODBC Driver 17 is installed. |
+| **Mail OTP Not Delivered** | SMTP credentials or STARTTLS port blocked | Inspect backend logs for `SMTPException` | Verify `SMTP_HOST`, port 587 outbound access, and Office 365 app password validity. |
+| **Port 3000 WinError 10013 on Windows** | Windows HTTP.SYS or reserved port conflict | Run `netsh interface ipv4 show excludedportrange` | Change backend listening port to 3001 or reconfigure excluded port range. |
+
+---
+
+## 17. Important Source File and Symbol Index
+
+| Component Area | File Path | Key Classes & Functions |
 | :--- | :--- | :--- |
-| **App Entry Point** | [`backend/app/main.py`](file:///backend/app/main.py) | Application initialization, CORS, middleware, router mounts |
-| **Settings** | [`backend/app/config/settings.py`](file:///backend/app/config/settings.py) | `Settings` class, SQL Server connection strings, security settings |
-| **Database Connection**| [`backend/app/database/connection.py`](file:///backend/app/database/connection.py) | SQLAlchemy engine, connection pooling (`pool_size=100`), `get_db` |
-| **ORM Entities** | [`backend/app/database/models.py`](file:///backend/app/database/models.py) | 32 SQLAlchemy model classes (`Document`, `User`, `Role`, `WorkflowProfile`) |
-| **OCR & AI Extraction**| [`backend/app/services/ocr_service.py`](file:///backend/app/services/ocr_service.py) | `extract_document_for_verification`, `extract_with_llm`, PaddleOCR singleton |
-| **Rules Engine** | [`backend/app/services/rules_engine.py`](file:///backend/app/services/rules_engine.py) | Dynamic workflow routing and condition matching |
-| **Lease & Locking** | [`backend/app/services/lock_service.py`](file:///backend/app/services/lock_service.py) | Document edit leases, heartbeat renewals, and expiration cleanup |
-| **Signed URLs** | [`backend/app/services/signed_file_service.py`](file:///backend/app/services/signed_file_service.py)| Cryptographic token generation for secure PDF downloads |
-| **Document Endpoints** | [`backend/app/routers/documents.py`](file:///backend/app/routers/documents.py) | Document uploads, approvals, rejections, status transitions |
-| **ERP Sync Endpoints** | [`backend/app/routers/sync.py`](file:///backend/app/routers/sync.py) | Inbound M2M sync endpoints (`/api/sync/record`, `/batch`) |
-| **Auth Endpoints** | [`backend/app/routers/auth.py`](file:///backend/app/routers/auth.py) | User login, JWT issuing, MFA TOTP configuration and verification |
-| **Frontend Shell** | [`frontend/src/App.tsx`](file:///frontend/src/App.tsx) | View state routing, authentication guards, deep link handling |
-| **Workflow Builder** | [`frontend/src/components/FlowBuilder.jsx`](file:///frontend/src/components/FlowBuilder.jsx)| ReactFlow visual drag-and-drop workflow canvas |
-| **Document Details** | [`frontend/src/components/DocumentDetails.tsx`](file:///frontend/src/components/DocumentDetails.tsx)| Document viewer, PDF display, audit trail, approval action buttons |
-| **Data Verification** | [`frontend/src/components/DataVerificationPage.tsx`](file:///frontend/src/components/DataVerificationPage.tsx)| Side-by-side verification of extracted AI fields against PDF |
-| **Docker Build** | [`Dockerfile`](file:///Dockerfile) | Multi-stage production container build with Node.js and Python 3.11 |
-| **Orchestration** | [`docker-compose.yml`](file:///docker-compose.yml) | Service definitions, volume mounts, ports, and healthchecks |
+| **Application Core** | [`backend/app/main.py`](file:///backend/app/main.py) | `app`, lifespan context, middleware mounting, router registrations |
+| **Configuration** | [`backend/app/config/settings.py`](file:///backend/app/config/settings.py) | `Settings` (Pydantic Settings), connection strings, environment defaults |
+| **Database Pool** | [`backend/app/database/connection.py`](file:///backend/app/database/connection.py) | `engine`, `SessionLocal`, `get_db` generator |
+| **ORM Entities** | [`backend/app/database/models.py`](file:///backend/app/database/models.py) | 32 SQLAlchemy model classes (`Document`, `User`, `Role`, `DocumentLock`) |
+| **Document Actions** | [`backend/app/routers/documents.py`](file:///backend/app/routers/documents.py) | `complete_document_lifecycle`, `record_document_audit_event`, approval endpoints |
+| **Audit Logs API** | [`backend/app/routers/audit.py`](file:///backend/app/routers/audit.py) | `get_paginated_audit_logs`, `export_audit_logs_csv`, `sanitize_csv_cell` |
+| **Inbound ERP Sync** | [`backend/app/routers/sync.py`](file:///backend/app/routers/sync.py) | `sync_single_record`, `sync_batch_records`, M2M authentication |
+| **Authentication API**| [`backend/app/routers/auth.py`](file:///backend/app/routers/auth.py) | `login_access_token`, passwordless OTP dispatch, MFA TOTP setup |
+| **Rules Engine** | [`backend/app/services/rules_engine.py`](file:///backend/app/services/rules_engine.py) | `evaluate_document_rules`, `normalize_document_type` |
+| **Lease Locking** | [`backend/app/services/lock_service.py`](file:///backend/app/services/lock_service.py) | `acquire_lock`, `renew_lock`, `release_lock`, `force_takeover` |
+| **Dual OCR & AI** | [`backend/app/services/ocr_service.py`](file:///backend/app/services/ocr_service.py) | `extract_document_for_verification`, PaddleOCR singleton, Ollama prompt |
+| **Webhook Worker** | [`backend/app/services/callback_service.py`](file:///backend/app/services/callback_service.py) | `dispatch_approval_callback_events`, exponential retry worker |
+| **Signed URLs** | [`backend/app/services/signed_file_service.py`](file:///backend/app/services/signed_file_service.py)| `generate_signed_download_url`, HMAC token verification |
+| **Frontend Shell** | [`frontend/src/App.tsx`](file:///frontend/src/App.tsx) | `App` component, internal view router, deep linking regex, broadcast sync |
+| **Workflow Studio** | [`frontend/src/components/FlowBuilder.jsx`](file:///frontend/src/components/FlowBuilder.jsx)| ReactFlow canvas, node inspector, category manager, stage presets |
+| **Condition Builder**| [`frontend/src/components/ConditionBuilder.jsx`](file:///frontend/src/components/ConditionBuilder.jsx)| 2-column condition matrix editor, rule criteria, threshold triggers |
+| **Audit Log UI** | [`frontend/src/components/AuditLogsPage.tsx`](file:///frontend/src/components/AuditLogsPage.tsx)| 1,500+ line audit explorer, filter controls, sanitized export modal |
+| **DAPI Sync Studio** | [`frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx`](file:///frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx)| Visual field mapping, webhook rule builder, live callback trigger |
+| **Document Details** | [`frontend/src/components/DocumentDetails.tsx`](file:///frontend/src/components/DocumentDetails.tsx)| PDF viewer, heartbeat lease sender, stage progression buttons |
 
 ---
 
-*End of Technical Documentation — DocuFlow Automation (DAAS v2.0.0)*
+*End of Comprehensive Technical Documentation — DocuFlow Automation (FlowApprove DAAS v2.1.0)*

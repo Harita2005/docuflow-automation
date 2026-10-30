@@ -11,9 +11,12 @@ import {
   AlertTriangle,
   X,
   Key,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 
-type MFAMethod = "EMAIL" | "SMS" | "AUTHENTICATOR";
+type MFAMethod = "PASSWORD" | "EMAIL" | "SMS" | "AUTHENTICATOR";
 
 interface LoginPageProps {
   onLoginSuccess: (
@@ -50,7 +53,11 @@ export default function LoginPage({
   const [maskedEmail, setMaskedEmail] = useState("");
   const [maskedPhone, setMaskedPhone] = useState("");
   const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<MFAMethod>("EMAIL");
+  const [selectedMethod, setSelectedMethod] = useState<MFAMethod>("PASSWORD");
+
+  // Password login state
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Code entry and feedback
   const [otpCode, setOtpCode] = useState("");
@@ -129,7 +136,7 @@ export default function LoginPage({
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (step === 3) {
+    if (step === 3 && selectedMethod !== "PASSWORD") {
       const timer = window.setTimeout(() => {
         otpBoxesRef.current[0]?.focus();
         setFocusedOtpIndex(0);
@@ -137,7 +144,7 @@ export default function LoginPage({
 
       return () => window.clearTimeout(timer);
     }
-  }, [step]);
+  }, [step, selectedMethod]);
 
   const handleBoxChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const rawVal = e.target.value.replace(/[^0-9]/g, "");
@@ -258,44 +265,14 @@ export default function LoginPage({
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
 
-        // Preselect the next available method
-        if (methods.includes("EMAIL")) {
-          setSelectedMethod("EMAIL");
-          // Auto-dispatch Email OTP directly to screen
-          try {
-            const sendRes = await fetch("/api/auth/mfa/send-otp", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                ticket: data.mfa_ticket,
-                method: "EMAIL",
-              }),
-            });
-            const sendData = await sendRes.json().catch(() => ({}));
-            if (sendRes.ok) {
-              const target = data.masked_email || "your registered email";
-              setOtpSentNotice(
-                sendData.message || `A verification code has been dispatched to ${target}.`
-              );
-              if (sendData.otp) {
-                setDisplayOtp(sendData.otp);
-              }
-              setResendTimer(60);
-              setStep(3);
-              return;
-            }
-          } catch (e) {
-            console.warn("Auto-dispatch email OTP failed, fallback to step 2:", e);
-          }
-        } else if (methods.includes("AUTHENTICATOR")) {
-          setSelectedMethod("AUTHENTICATOR");
-        } else if (methods.includes("SMS")) {
-          setSelectedMethod("SMS");
+        // Default selection to PASSWORD if available
+        if (methods.includes("PASSWORD")) {
+          setSelectedMethod("PASSWORD");
+        } else if (methods.length > 0) {
+          setSelectedMethod(methods[0]);
         }
 
-        // Advance to Step 2: Choose Verification Method
+        // Advance directly to Step 2: Choose Verification Method (User selects their method)
         setStep(2);
         return;
       }
@@ -336,8 +313,14 @@ export default function LoginPage({
   const handleSelectMethod = async (method: MFAMethod) => {
     setSelectedMethod(method);
     setOtpCode("");
+    setPasswordInput("");
     setOtpError("");
     setOtpSentNotice("");
+
+    if (method === "PASSWORD") {
+      setStep(3);
+      return;
+    }
 
     if (method === "EMAIL" || method === "SMS") {
       setLoading(true);
@@ -492,6 +475,92 @@ export default function LoginPage({
   ) => {
     e.preventDefault();
 
+    if (!mfaTicket) {
+      setOtpError(
+        "Your authentication session has expired. Please sign in again."
+      );
+      setStep(1);
+      return;
+    }
+
+    if (selectedMethod === "PASSWORD") {
+      const pwd = passwordInput.trim();
+      if (!pwd) {
+        setOtpError("Please enter your account password or Employee ID");
+        return;
+      }
+
+      setLoading(true);
+      setOtpError("");
+
+      try {
+        const res = await fetch("/api/auth/mfa/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ticket: mfaTicket,
+            method: "PASSWORD",
+            code: pwd,
+            force_login: forceLogin,
+            device_info: getDeviceLabel(),
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(
+            data.detail || "Invalid password. Default password is your Employee ID."
+          );
+        }
+
+        // Active session conflict handling
+        if (data.active_session_conflict) {
+          setSessionConflict({
+            deviceInfo:
+              data.active_device_info ||
+              "Another device/browser",
+            createdAt: data.session_created_at,
+            message: data.message,
+            onConfirm: () => {
+              setSessionConflict(null);
+              void handleVerifyOtp(e, true);
+            },
+          });
+          return;
+        }
+
+        if (!data.token || !data.user) {
+          throw new Error(
+            "Authentication succeeded but no login session was returned."
+          );
+        }
+
+        localStorage.setItem("authToken", data.token);
+        localStorage.setItem("currentUserUsername", data.user.username);
+        localStorage.setItem("currentUserRole", data.user.role || "");
+        localStorage.setItem("currentUserEmail", data.user.email || "");
+
+        onLoginSuccess(
+          data.user.id,
+          data.user.role,
+          data.user.email,
+          data.user.username
+        );
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Password verification failed";
+        setOtpError(message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     const code = otpCode.trim();
 
     if (!code) {
@@ -592,6 +661,7 @@ export default function LoginPage({
   const handleBackToId = () => {
     setStep(1);
     setOtpCode("");
+    setPasswordInput("");
     setOtpError("");
     setOtpSentNotice("");
     setMfaTicket("");
@@ -604,6 +674,7 @@ export default function LoginPage({
   const handleBackToMethods = () => {
     setStep(2);
     setOtpCode("");
+    setPasswordInput("");
     setOtpError("");
     setOtpSentNotice("");
     setResendTimer(0);
@@ -845,7 +916,37 @@ export default function LoginPage({
                 </div>
               ) : (
                 <div className="space-y-3 pt-2">
-                  {/* 1. EMAIL OTP */}
+                  {/* 1. PASSWORD LOGIN */}
+                  {availableMethods.includes("PASSWORD") || true ? (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleSelectMethod("PASSWORD")}
+                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs group"
+                    >
+                      <div className="flex items-center space-x-3.5">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-100 text-[#003F29] flex items-center justify-center shrink-0 group-hover:bg-[#003F29] group-hover:text-white transition-colors">
+                          <Lock className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            Password Login
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Enter your account password or Employee ID
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] uppercase font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                          Instant
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </div>
+                    </button>
+                  ) : null}
+
+                  {/* 2. EMAIL OTP */}
                   {availableMethods.includes("EMAIL") ? (
                     <button
                       type="button"
@@ -1011,7 +1112,9 @@ export default function LoginPage({
                 </button>
 
                 <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 uppercase">
-                  {selectedMethod === "AUTHENTICATOR"
+                  {selectedMethod === "PASSWORD"
+                    ? "Password"
+                    : selectedMethod === "AUTHENTICATOR"
                     ? isEnrollingTotp
                       ? "First-Time Setup"
                       : "Authenticator"
@@ -1022,7 +1125,9 @@ export default function LoginPage({
               {/* Title & Description */}
               <div className="text-left space-y-1">
                 <h2 className="text-2xl font-bold text-[#003F29] tracking-tight">
-                  {selectedMethod === "AUTHENTICATOR"
+                  {selectedMethod === "PASSWORD"
+                    ? "Enter Password"
+                    : selectedMethod === "AUTHENTICATOR"
                     ? isEnrollingTotp
                       ? "Set Up Authenticator"
                       : "Enter Authenticator Code"
@@ -1030,6 +1135,11 @@ export default function LoginPage({
                 </h2>
 
                 <p className="text-gray-500 text-xs leading-relaxed">
+                  {selectedMethod === "PASSWORD" && (
+                    <>
+                      Enter the password for <span className="font-semibold text-gray-700">{employeeId}</span>. Initial default password is your Employee ID.
+                    </>
+                  )}
                   {selectedMethod === "EMAIL" && (
                     <>
                       Enter the 6-digit code sent to{" "}
@@ -1057,14 +1167,14 @@ export default function LoginPage({
               </div>
 
               {/* Dispatch Notice for Email/SMS */}
-              {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && (
+              {otpSentNotice && selectedMethod !== "AUTHENTICATOR" && selectedMethod !== "PASSWORD" && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
                   {otpSentNotice}
                 </div>
               )}
 
               {/* Display Generated OTP for Testing / Presentation */}
-              {displayOtp && selectedMethod !== "AUTHENTICATOR" && (
+              {displayOtp && selectedMethod !== "AUTHENTICATOR" && selectedMethod !== "PASSWORD" && (
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between">
                   <div>
                     <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
@@ -1114,7 +1224,64 @@ export default function LoginPage({
                 </div>
               )}
 
-              {/* Code entry form */}
+              {/* Password entry form vs Code entry form */}
+              {selectedMethod === "PASSWORD" ? (
+                <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-5">
+                  <div className="space-y-2 text-left">
+                    <label className="text-xs font-semibold text-gray-800">
+                      Account Password / Employee ID
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="Enter password or Employee ID"
+                        autoFocus
+                        className="w-full pl-10 pr-10 py-3 text-sm font-medium border border-gray-300 rounded-xl focus:outline-none focus:border-[#003F29] focus:ring-2 focus:ring-[#003F29]/20 transition-all text-gray-900 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      Default initial password is your Employee ID (e.g. <span className="font-mono font-semibold">{employeeId}</span>).
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || !passwordInput.trim()}
+                    className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer"
+                  >
+                    {loading ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Verifying Password...</span>
+                      </div>
+                    ) : (
+                      <span>Sign In to Workspace</span>
+                    )}
+                  </button>
+
+                  <div className="pt-2 text-center border-t border-gray-100 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleBackToMethods}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 font-medium cursor-pointer"
+                    >
+                      ← Switch to Email OTP, SMS, or Authenticator App
+                    </button>
+                  </div>
+                </form>
+              ) : (
               <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-5">
                 <div className="space-y-2 text-left">
                   <label className="text-xs font-semibold text-gray-800">
@@ -1217,10 +1384,11 @@ export default function LoginPage({
                     onClick={handleBackToMethods}
                     className="text-xs text-emerald-700 hover:text-emerald-900 font-medium cursor-pointer"
                   >
-                    ← Switch to {selectedMethod === "EMAIL" ? "SMS OTP or Authenticator App" : "Email OTP"}
+                    ← Switch to {selectedMethod === "EMAIL" ? "Password, SMS OTP, or Authenticator App" : "Password or Email OTP"}
                   </button>
                 </div>
               </form>
+              )}
             </div>
           )}
         </div>

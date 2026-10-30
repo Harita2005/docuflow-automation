@@ -148,80 +148,50 @@ def infer_sql_server_datatype(val: Any) -> str:
         return "NVARCHAR(MAX)"
     return "NVARCHAR(MAX)"
 
-def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_value: Any) -> str:
+def ensure_dynamic_column_and_get_name(db: Session, raw_field_name: str, sample_value: Any) -> Optional[str]:
     """
     Safely checks whether a real column exists in `documents` table using database metadata.
     If column exists (case-insensitive) -> returns the existing column name.
-    If column does NOT exist -> safely executes ALTER TABLE to create column and returns new column name.
+    If column does NOT exist -> returns None so the field is preserved in custom_data
+    WITHOUT executing dangerous runtime DDL ALTER TABLE statements.
     """
     col_name = sanitize_column_name(raw_field_name)
     if not col_name:
-        return raw_field_name
+        return None
 
     col_lower = col_name.lower()
     with _KNOWN_COLUMNS_LOCK:
         if col_lower in _KNOWN_COLUMNS_CACHE:
             return col_name
 
-    with SCHEMA_ALTER_LOCK:
-        with _KNOWN_COLUMNS_LOCK:
-            if col_lower in _KNOWN_COLUMNS_CACHE:
-                return col_name
-
-        try:
-            from sqlalchemy import text
-            dialect_name = db.bind.dialect.name if (db.bind and hasattr(db.bind, 'dialect')) else 'mssql'
-            
-            if dialect_name == 'mssql':
-                check_query = text("""
-                    SELECT COLUMN_NAME 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_NAME = 'documents' AND LOWER(COLUMN_NAME) = LOWER(:col_name)
-                """)
-            else:
-                check_query = text("""
-                    SELECT name 
-                    FROM pragma_table_info('documents') 
-                    WHERE LOWER(name) = LOWER(:col_name)
-                """)
-            
-            existing = db.execute(check_query, {"col_name": col_name}).fetchone()
-            if existing:
-                canonical_name = existing[0]
-                with _KNOWN_COLUMNS_LOCK:
-                    _KNOWN_COLUMNS_CACHE.add(col_lower)
-                    _KNOWN_COLUMNS_CACHE.add(canonical_name.lower())
-                return canonical_name
-
-            sql_type = infer_sql_server_datatype(sample_value)
-            
-            if dialect_name == 'mssql':
-                alter_query = text(f"""
-                    IF NOT EXISTS (
-                        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
-                        WHERE TABLE_NAME = 'documents' AND LOWER(COLUMN_NAME) = LOWER(:col_name)
-                    )
-                    BEGIN
-                        ALTER TABLE dbo.documents ADD [{col_name}] {sql_type} NULL
-                    END
-                """)
-                db.execute(alter_query, {"col_name": col_name})
-                db.commit()
-            else:
-                try:
-                    alter_query = text(f"ALTER TABLE documents ADD COLUMN [{col_name}] {sql_type}")
-                    db.execute(alter_query)
-                    db.commit()
-                except Exception as exc:
-                    logging.getLogger(__name__).debug("Database alter column error (ignoring if exists): %s", exc)
-
+    try:
+        from sqlalchemy import text
+        dialect_name = db.bind.dialect.name if (db.bind and hasattr(db.bind, 'dialect')) else 'mssql'
+        
+        if dialect_name == 'mssql':
+            check_query = text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'documents' AND LOWER(COLUMN_NAME) = LOWER(:col_name)
+            """)
+        else:
+            check_query = text("""
+                SELECT name 
+                FROM pragma_table_info('documents') 
+                WHERE LOWER(name) = LOWER(:col_name)
+            """)
+        
+        existing = db.execute(check_query, {"col_name": col_name}).fetchone()
+        if existing:
+            canonical_name = existing[0]
             with _KNOWN_COLUMNS_LOCK:
                 _KNOWN_COLUMNS_CACHE.add(col_lower)
-            logger.info("Dynamically created REAL SQL Server column '%s' (%s) in documents table", col_name, sql_type)
-            return col_name
-        except Exception as e:
-            logger.error("Error creating dynamic column '%s': %s", col_name, e)
-            return col_name
+                _KNOWN_COLUMNS_CACHE.add(canonical_name.lower())
+            return canonical_name
+    except Exception as e:
+        logger.debug("Error checking column existence for '%s': %s", col_name, e)
+
+    return None
 
 def generate_compliance_checklist_for_category(category: Optional[str], doc_type: Optional[str], division: Optional[str]=None, plant: Optional[str]=None, document_id: Optional[str]=None, workflow_profile: Optional[str]=None, stage_name: Optional[str]=None, db: Optional[Any]=None) -> List[str]:
     """
@@ -244,37 +214,15 @@ def generate_compliance_checklist_for_category(category: Optional[str], doc_type
         logging.getLogger(__name__).debug('Handled exception: %s', e)
     return []
 
-_SCHEMA_STATE = {"production_initialized": False}
-
 def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv: Invoice):
+    """
+    Synchronizes incoming document record into production integration and core tables using standard DML.
+    NOTE: All schema creation and DDL migration logic has been migrated out of runtime execution into
+    DBA-approved migration scripts (see scripts/sql/02_integration_and_audit_schema_migration.sql).
+    Normal synchronization operates with a least-privilege SQL Server account (SELECT, INSERT, UPDATE).
+    """
     try:
         from sqlalchemy import text
-        if not _SCHEMA_STATE["production_initialized"]:
-            if db.bind and db.bind.dialect.name == 'mssql':
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'integration') EXEC('CREATE SCHEMA integration');"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'core') EXEC('CREATE SCHEMA core');"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'security') EXEC('CREATE SCHEMA security');"))
-                db.execute(text("IF OBJECT_ID('integration.source_systems', 'U') IS NULL CREATE TABLE integration.source_systems (source_system_id INT IDENTITY(1,1) PRIMARY KEY, system_code VARCHAR(50) NOT NULL UNIQUE, system_name VARCHAR(200) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('integration.sync_runs', 'U') IS NULL CREATE TABLE integration.sync_runs (sync_run_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, idempotency_key VARCHAR(100) NOT NULL, sync_status VARCHAR(50) NOT NULL DEFAULT 'COMPLETED', records_processed INT NOT NULL DEFAULT 1, started_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('integration.source_records', 'U') IS NULL CREATE TABLE integration.source_records (source_record_id INT IDENTITY(1,1) PRIMARY KEY, source_system_id INT NOT NULL, sync_run_id INT NULL, canonical_document_id INT NULL, external_record_key VARCHAR(100) NOT NULL, payload_json NVARCHAR(MAX) NULL, status VARCHAR(50) NULL DEFAULT 'RECEIVED', ingested_at DATETIME2 NULL DEFAULT SYSUTCDATETIME(), created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='sync_run_id') ALTER TABLE integration.source_records ADD sync_run_id INT NULL;"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='canonical_document_id') ALTER TABLE integration.source_records ADD canonical_document_id INT NULL;"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='status') ALTER TABLE integration.source_records ADD status VARCHAR(50) NULL DEFAULT 'RECEIVED';"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='integration' AND TABLE_NAME='source_records' AND COLUMN_NAME='ingested_at') ALTER TABLE integration.source_records ADD ingested_at DATETIME2 NULL DEFAULT SYSUTCDATETIME();"))
-                db.execute(text("IF OBJECT_ID('integration.source_record_versions', 'U') IS NULL CREATE TABLE integration.source_record_versions (version_id INT IDENTITY(1,1) PRIMARY KEY, source_record_id INT NOT NULL, version_number INT NOT NULL, payload_snapshot_json NVARCHAR(MAX) NULL, received_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('core.document_types', 'U') IS NULL CREATE TABLE core.document_types (document_type_id INT IDENTITY(1,1) PRIMARY KEY, type_code VARCHAR(50) NOT NULL UNIQUE, type_name VARCHAR(100) NOT NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('core.documents', 'U') IS NULL CREATE TABLE core.documents (document_id INT IDENTITY(1,1) PRIMARY KEY, document_type_id INT NOT NULL, source_record_id INT NULL, document_number VARCHAR(100) NOT NULL, created_by_user_id INT NULL, status VARCHAR(50) NOT NULL DEFAULT 'NEW', correlation_id UNIQUEIDENTIFIER NULL, is_deleted BIT NOT NULL DEFAULT 0, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), updated_at DATETIME2 NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='created_by_user_id') ALTER TABLE core.documents ADD created_by_user_id INT NULL;"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='correlation_id') ALTER TABLE core.documents ADD correlation_id UNIQUEIDENTIFIER NULL;"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='core' AND TABLE_NAME='documents' AND COLUMN_NAME='updated_at') ALTER TABLE core.documents ADD updated_at DATETIME2 NULL DEFAULT SYSUTCDATETIME();"))
-                db.execute(text("IF OBJECT_ID('core.document_versions', 'U') IS NULL CREATE TABLE core.document_versions (version_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, version_number INT NOT NULL, document_snapshot_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('core.document_metadata', 'U') IS NULL CREATE TABLE core.document_metadata (metadata_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, meta_key VARCHAR(100) NOT NULL, meta_value NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('security.app_users', 'U') IS NULL CREATE TABLE security.app_users (user_id INT IDENTITY(1,1) PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE, email VARCHAR(255) NULL, password_hash VARCHAR(255) NULL, external_user_key VARCHAR(100) NULL, is_active BIT NOT NULL DEFAULT 1, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'audit') EXEC('CREATE SCHEMA audit');"))
-                db.execute(text("IF OBJECT_ID('audit.audit_events', 'U') IS NULL CREATE TABLE audit.audit_events (event_id INT IDENTITY(1,1) PRIMARY KEY, correlation_id UNIQUEIDENTIFIER NULL, actor_user_id INT NULL, source_system_id INT NULL, event_category VARCHAR(50) NULL, event_type VARCHAR(100) NULL, entity_schema VARCHAR(50) NULL, entity_table VARCHAR(100) NULL, entity_id VARCHAR(100) NULL, action_type VARCHAR(50) NULL, before_json NVARCHAR(MAX) NULL, after_json NVARCHAR(MAX) NULL, metadata_json NVARCHAR(MAX) NULL, created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());"))
-                db.execute(text("IF OBJECT_ID('rules.rule_evaluation_runs', 'U') IS NULL CREATE TABLE rules.rule_evaluation_runs (evaluation_run_id INT IDENTITY(1,1) PRIMARY KEY, document_id INT NOT NULL, run_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), correlation_id UNIQUEIDENTIFIER NULL);"))
-                db.execute(text("IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='evaluation_run_id') AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rules' AND TABLE_NAME='rule_evaluation_runs' AND COLUMN_NAME='run_id') EXEC sp_rename 'rules.rule_evaluation_runs.run_id', 'evaluation_run_id', 'COLUMN';"))
-                _SCHEMA_STATE["production_initialized"] = True
         sys_code = req.company_code or req.division or 'APP_A'
         sys_name = f'System for {sys_code}'
         db.execute(text('\n            IF NOT EXISTS (SELECT 1 FROM integration.source_systems WHERE system_code = :sys_code)\n            BEGIN\n                INSERT INTO integration.source_systems (system_code, system_name, is_active, created_at)\n                VALUES (:sys_code, :sys_name, 1, SYSUTCDATETIME())\n            END\n        '), {'sys_code': sys_code, 'sys_name': sys_name})
@@ -302,7 +250,7 @@ def _sync_to_production_schema(req: DocumentSyncRequest, db: Session, target_inv
         type_row = db.execute(text('SELECT document_type_id FROM core.document_types WHERE type_code = :code'), {'code': doc_type_code}).fetchone()
         doc_type_id = type_row[0] if type_row else 1
         creator_name = 'system'
-        db.execute(text("\n            IF NOT EXISTS (SELECT 1 FROM security.app_users WHERE username = :uname)\n            BEGIN\n                INSERT INTO security.app_users (username, email, password_hash, external_user_key, is_active, created_at)\n                VALUES (:uname, :email, '$2b$12$Z0000000000000000000000000000000000000000000000000000', :uname, 1, SYSUTCDATETIME())\n            END\n        "), {'uname': creator_name, 'email': 'system@docuflow.local'})
+        db.execute(text("\n            IF NOT EXISTS (SELECT 1 FROM security.app_users WHERE username = :uname)\n            BEGIN\n                INSERT INTO security.app_users (username, email, password_hash, external_user_key, is_active, created_at)\n                VALUES (:uname, :email, '!LOCKED_SYSTEM_ACCOUNT!', :uname, 0, SYSUTCDATETIME())\n            END\n        "), {'uname': creator_name, 'email': 'system@docuflow.local'})
         user_row = db.execute(text('SELECT user_id FROM security.app_users WHERE username = :uname'), {'uname': creator_name}).fetchone()
         user_id = user_row[0] if user_row else 1
         doc_pref = get_doc_type_prefix(doc_type=req.document_type or '', category=req.category or '')
@@ -607,7 +555,10 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             dynamic_updates[col_name] = v
         else:
             col_name_real = ensure_dynamic_column_and_get_name(db, k, v)
-            dynamic_updates[col_name_real] = v
+            if col_name_real and col_name_real in real_doc_columns:
+                dynamic_updates[col_name_real] = v
+            else:
+                cleaned_custom_data[k] = v
 
     # 2. Process fields passed inside custom_data payload dictionary (if any)
     if req.custom_data and isinstance(req.custom_data, dict):
@@ -620,7 +571,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                 keys_to_remove.append(ck)
             else:
                 col_name_real = ensure_dynamic_column_and_get_name(db, ck, cv)
-                if col_name_real in real_doc_columns:
+                if col_name_real and col_name_real in real_doc_columns:
                     if cv is not None:
                         dynamic_updates[col_name_real] = cv
                     keys_to_remove.append(ck)
@@ -667,6 +618,10 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                     db.rollback()
                 except Exception as rb_exc:
                     logger.debug("Database rollback after batch update failure suppressed: %s", rb_exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed batch updating document columns: {exc}"
+                )
 
     db.commit()
     db.refresh(target_inv)
@@ -1235,7 +1190,7 @@ def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
     for inv in (invoices_data if isinstance(invoices_data, list) else []):
         existing = db.query(Invoice).filter(Invoice.id == inv.get('id')).first()
         if not existing:
-            new_inv = Invoice(id=inv.get('id'), doc_key=inv.get('doc_key'), doc_num=inv.get('doc_num'), doc_date=inv.get('doc_date'), vendor_name=inv.get('vendor_name'), vendor_code=inv.get('vendor_code'), vendor_gstin=inv.get('vendor_gstin'), invoice_number=inv.get('invoice_number'), invoice_date=inv.get('invoice_date'), po_number=inv.get('po_number'), amount=inv.get('amount', 0.0), base_amount=inv.get('base_amount', 0.0), tax_amount=inv.get('tax_amount', 0.0), currency=inv.get('currency') or 'INR', document_type=inv.get('document_type') or 'AP INVOICE', division=inv.get('division') or 'VCC', category=inv.get('category'), cost_center=inv.get('cost_center'), plant=inv.get('plant'), payment_terms=inv.get('payment_terms') or 'Net 30', status=inv.get('status') or 'Initiated (Attachment Status)', current_stage=inv.get('current_stage', 1), total_stages=inv.get('total_stages', 4), assigned_approver=inv.get('assigned_approver') or 'YUVASREE', workflow_profile_id=inv.get('workflow_profile_id') or 'EVOUCHER_INV SR10', file_url=inv.get('file_url'))
+            new_inv = Invoice(id=inv.get('id'), doc_key=inv.get('doc_key'), doc_num=inv.get('doc_num'), doc_date=inv.get('doc_date'), vendor_name=inv.get('vendor_name'), vendor_code=inv.get('vendor_code'), vendor_gstin=inv.get('vendor_gstin'), invoice_number=inv.get('invoice_number'), invoice_date=inv.get('invoice_date'), po_number=inv.get('po_number'), amount=inv.get('amount', 0.0), base_amount=inv.get('base_amount', 0.0), tax_amount=inv.get('tax_amount', 0.0), currency=inv.get('currency') or 'INR', document_type=inv.get('document_type') or 'AP INVOICE', division=inv.get('division') or 'VCC', category=inv.get('category'), cost_center=inv.get('cost_center'), plant=inv.get('plant'), payment_terms=inv.get('payment_terms') or 'Net 30', status=inv.get('status') or 'Initiated (Attachment Status)', current_stage=inv.get('current_stage', 1), total_stages=inv.get('total_stages', 4), assigned_approver=inv.get('assigned_approver'), workflow_profile_id=inv.get('workflow_profile_id'), file_url=inv.get('file_url'))
             db.add(new_inv)
             seeded_count += 1
     now_str = datetime.datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')

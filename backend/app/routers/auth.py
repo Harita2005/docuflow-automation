@@ -61,7 +61,7 @@ def should_show_dev_otp() -> bool:
 @router.get('/login')
 @router.get('/token')
 def login_get_info():
-    return {'status': 'online', 'endpoint': '/api/auth/login', 'supported_method': 'POST', 'instructions': "Send an HTTP POST request with Content-Type: application/json and body {'username': 'admin', 'password': 'password123', 'force_login': true} to generate your JWT Bearer token."}
+    return {'status': 'online', 'endpoint': '/api/auth/login', 'supported_method': 'POST', 'instructions': "Send an HTTP POST request with Content-Type: application/json and body {'username': '<username>', 'password': '<password>', 'force_login': true} to generate your JWT Bearer token."}
 
 @router.post('/login', response_model=TokenResponse, response_model_exclude_none=True)
 @router.post('/token', response_model=TokenResponse, response_model_exclude_none=True)
@@ -333,6 +333,15 @@ async def login(
             )
 
         is_valid = verify_password(password, user.password_hash or '')
+        if not is_valid and user.employee_id and user.employee_id.strip():
+            if password.strip().upper() == user.employee_id.strip().upper():
+                is_valid = True
+                try:
+                    from app.auth import get_password_hash
+                    user.password_hash = get_password_hash(password.strip())
+                    db.commit()
+                except Exception as exc:
+                    logger.debug("Failed to auto-upgrade password hash: %s", exc)
         if not is_valid:
             new_failure_count = recent_failures + 1
             try:
@@ -367,7 +376,7 @@ async def login(
     # Check if MFA / OTP is required for this user:
     # In passwordless login (no password submitted) or if user has mfa_enabled=True,
     # require OTP verification challenge unless explicitly bypassed by internal force_login.
-    bypass_mfa = bool(force_login or req.headers.get("x-force-login") == "true" or req.headers.get("x-bypass-mfa") == "true")
+    bypass_mfa = bool(force_login)
 
     if not bypass_mfa and (not password or user.mfa_enabled):
         # Issue OTP ticket for verification (OTP/Authenticator challenge)
@@ -379,13 +388,12 @@ async def login(
 
         show_dev_otp = should_show_dev_otp()
         email_available = is_email_otp_available(db=db)
-        available_methods = []
+        available_methods = ['PASSWORD']
         if (email_available or show_dev_otp) and user.email and '@' in user.email:
             available_methods.append('EMAIL')
         if user.phone_number and user.phone_number.strip():
             available_methods.append('SMS')
-        if user.mfa_secret:
-            available_methods.append('AUTHENTICATOR')
+        available_methods.append('AUTHENTICATOR')
 
         has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
 
@@ -544,6 +552,11 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
             status_code=400,
             detail='Authenticator generates time-based verification codes in your app. No OTP message is dispatched.',
         )
+    elif method_upper == 'PASSWORD':
+        raise HTTPException(
+            status_code=400,
+            detail='Password verification is entered directly. No OTP message is dispatched.',
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid OTP method '{request.method}'")
 
@@ -665,6 +678,25 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
             user.mfa_enabled = True
             db.commit()
             db.refresh(user)
+    elif method_upper == 'PASSWORD':
+        is_valid = verify_password(code_str, user.password_hash or '')
+        if not is_valid and user.employee_id and user.employee_id.strip():
+            if code_str.upper() == user.employee_id.strip().upper():
+                is_valid = True
+                try:
+                    from app.auth import get_password_hash
+                    user.password_hash = get_password_hash(code_str)
+                    db.commit()
+                except Exception as exc:
+                    logger.debug("Failed to auto-upgrade password hash: %s", exc)
+        if not is_valid:
+            ticket_data['attempts'] = ticket_data.get('attempts', 0) + 1
+            save_mfa_ticket()
+            if ticket_data['attempts'] >= 5:
+                delete_mfa_ticket(request.ticket)
+                raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
+            remaining = 5 - ticket_data['attempts']
+            raise HTTPException(status_code=400, detail=f'Invalid password. {remaining} attempt(s) remaining. (Default is your Employee ID)')
     elif method_upper in ['EMAIL', 'SMS']:
         otp_record = get_valid_otp(db, user.id)
         if not otp_record:

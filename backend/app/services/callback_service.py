@@ -239,7 +239,8 @@ def build_auth_headers(auth_type: str, auth_config_json: Optional[str]) -> Dict[
                     validate_url_ssrf(token_url)
                     auth_data = urllib.parse.urlencode({'grant_type': 'client_credentials', 'client_id': client_id, 'client_secret': client_secret, 'scope': cfg.get('scope', '')}).encode('utf-8')
                     tok_req = urllib.request.Request(token_url, data=auth_data, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-                    with urllib.request.urlopen(tok_req, timeout=10) as tok_res:
+                    opener = urllib.request.build_opener(NoRedirectHandler)
+                    with opener.open(tok_req, timeout=10) as tok_res:
                         tok_body = json.loads(tok_res.read().decode('utf-8'))
                         access_token = tok_body.get('access_token') or ''
                 except Exception as ex:

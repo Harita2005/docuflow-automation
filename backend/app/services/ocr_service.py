@@ -79,10 +79,10 @@ def get_ocr_engine():
 
 def extract_raw_text(file_path: Path, force_paddle: bool = False) -> str:
     """
-    Extract raw text from PDF or Image files using PyMuPDF (fitz) with PaddleOCR.
+    Extract raw text from PDF or Image files using pypdf (BSD-3-Clause) with PaddleOCR (Apache 2.0).
     Supports .pdf, .jpg, .jpeg, .png, .tiff, .bmp, .webp.
     For images, uses PaddleOCR directly.
-    For PDFs, extracts digital text stream; if scanned/sparse or forced, runs PaddleOCR.
+    For PDFs, extracts digital text stream via pypdf; if scanned/sparse or forced, runs PaddleOCR on embedded page images.
     """
     text_content = ""
     if not file_path.exists():
@@ -105,45 +105,48 @@ def extract_raw_text(file_path: Path, force_paddle: bool = False) -> str:
                 logger.warning("[OCR] Direct image PaddleOCR extraction failed: %s", ocr_err)
         return text_content
 
-    # 2. PDF files: PyMuPDF extraction + PaddleOCR fallback for scanned/sparse pages
+    # 2. PDF files: pypdf extraction (permissive BSD-3-Clause license)
     try:
-        import fitz
+        import pypdf
     except ImportError:
-        fitz = None
+        pypdf = None
 
-    if suffix == ".pdf" and fitz:
+    if suffix == ".pdf" and pypdf:
         try:
-            doc = fitz.open(str(file_path))
-            for page in doc:
-                text_content += page.get_text() + "\n"
-            doc.close()
+            reader = pypdf.PdfReader(str(file_path))
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text_content += extracted + "\n"
         except Exception as e:
-            logger.warning("[OCR] fitz text extraction failed: %s", e)
+            logger.warning("[OCR] pypdf text extraction failed: %s", e)
 
-    # 3. If extracted text is empty/sparse (scanned PDF) or forced, run PaddleOCR on pages
+    # 3. If extracted text is empty/sparse (scanned PDF) or forced, run PaddleOCR on page images
     if force_paddle or len(text_content.strip()) < 50:
         ocr = get_ocr_engine()
-        if ocr and fitz and suffix == ".pdf":
+        if ocr and pypdf and suffix == ".pdf":
             try:
-                doc = fitz.open(str(file_path))
-                max_pages = min(len(doc), 3)
+                reader = pypdf.PdfReader(str(file_path))
+                max_pages = min(len(reader.pages), 3)
                 scanned_text = ""
                 for page_idx in range(max_pages):
-                    page = doc[page_idx]
-                    pix = page.get_pixmap(dpi=150)
-                    img_bytes = pix.tobytes("png")
-                    result = ocr.ocr(img_bytes, cls=False)
-                    if result and result[0]:
-                        for line in result[0]:
-                            if line and len(line) >= 2 and line[1]:
-                                scanned_text += str(line[1][0]) + "\n"
-                doc.close()
+                    page = reader.pages[page_idx]
+                    for img_obj in page.images:
+                        try:
+                            result = ocr.ocr(img_obj.data, cls=False)
+                            if result and result[0]:
+                                for line in result[0]:
+                                    if line and len(line) >= 2 and line[1]:
+                                        scanned_text += str(line[1][0]) + "\n"
+                        except Exception as img_err:
+                            logger.debug("[OCR] Page image OCR failed: %s", img_err)
                 if scanned_text.strip():
                     text_content = scanned_text
             except Exception as ocr_err:
                 logger.warning("[OCR] Scanned PDF PaddleOCR fallback error: %s", ocr_err)
 
     return text_content
+
 
 
 MONTH_MAP = {
@@ -550,7 +553,7 @@ def extract_with_llm(text_content: str) -> Optional[Dict[str, Any]]:
         f"Document Text:\n{snippet}"
     )
 
-    ollama_url = (getattr(settings, "OLLAMA_URL", None) or os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")).strip()
+    ollama_url = (getattr(settings, "OLLAMA_URL", None) or os.environ.get("OLLAMA_URL", "")).strip()
     ollama_model = (getattr(settings, "OLLAMA_MODEL", None) or os.environ.get("OLLAMA_MODEL", "llama3.2:latest")).strip()
     try:
         timeout_sec = float(getattr(settings, "OLLAMA_TIMEOUT", None) or os.environ.get("OLLAMA_TIMEOUT", "30.0"))

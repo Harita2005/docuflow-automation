@@ -12,7 +12,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 * **Policy Compliance & Condition Matrix Engine**: Dynamically evaluates routing rules based on organizational metadata including Company Division, Branch / Plant Location, Document Category, and Invoice Financial Amounts.
 * **Enterprise ERP Integration**: Bidirectional data synchronization supporting live reconciliation with enterprise ERP systems and database ledgers.
 * **Security & Access Control (RBAC & FLAC)**: Implements Role-Based Access Control and Field-Level Access Control to enforce field visibility, edit rights, and active reviewer collision locking.
-* **Document Management & Compression**: Native PDF processing powered by PyMuPDF, providing document viewing, attachment management, and stream optimization.
+* **Document Management & Compression**: Native PDF processing powered by pypdf and Pillow, providing document viewing, attachment management, and stream optimization.
 * **Auditability & Traceability**: Comprehensive audit logging recording user actions, sign-offs, timestamps, and compliance verification checkpoints.
 
 ---
@@ -24,7 +24,7 @@ The platform combines a modern React interface with a high-performance Python Fa
 * **ORM & Database Connection**: SQLAlchemy 2.0+
 * **Database Management System**: Enterprise Relational DBMS (SQLAlchemy supported)
 * **Authentication**: OAuth2 JWT Bearer Tokens with bcrypt password encryption
-* **Document & Image Engine**: PyMuPDF (fitz), Pillow, ReportLab
+* **Document & Image Engine**: pypdf, Pillow, ReportLab
 
 ### Frontend Services
 * **Core Framework**: React 19, TypeScript

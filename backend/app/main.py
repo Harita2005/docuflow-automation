@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
                     import httpx
                     from .services.ocr_service import get_ocr_engine
                     get_ocr_engine()
-                    ollama_url = getattr(settings, "OLLAMA_URL", "http://localhost:11434/api/generate")
+                    ollama_url = getattr(settings, "OLLAMA_URL", "")
                     ollama_model = getattr(settings, "OLLAMA_MODEL", "llama3.2:latest")
                     with httpx.Client(timeout=10.0) as client:
                         client.post(ollama_url, json={"model": ollama_model, "prompt": "ping", "stream": False})

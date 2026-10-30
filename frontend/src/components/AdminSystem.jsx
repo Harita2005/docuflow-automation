@@ -8,7 +8,7 @@ const SYSTEM_KEYS = [
   { key: "AI_PRIMARY_MODEL", default: "llama3.2-vision:latest", desc: "Preferred Ollama model for primary OCR extraction (Vision preferred)", category: "AI", type: "select", options: ["llama3.2-vision:latest", "llama3.1:latest", "mistral:latest", "gemini-1.5-flash"] },
   { key: "AI_FALLBACK_MODEL", default: "llama3.2:latest", desc: "Stable fallback text-only model", category: "AI", type: "select", options: ["llama3.2:latest", "llama3:latest", "qwen2.5:latest"] },
   { key: "AUTO_APPROVE_THRESHOLD", default: "0.95", desc: "Confidence score required for straight-through processing (0.0 to 1.0)", category: "System", type: "text" },
-  { key: "OCR_ENGINE", default: "Tesseract+Ollama", desc: "Active OCR Pipeline Engine", category: "System", type: "select", options: ["Tesseract+Ollama", "Vision API", "Tesseract Only", "Ollama Only"] },
+  { key: "OCR_ENGINE", default: "PaddleOCR", desc: "Active OCR Pipeline Engine (PaddleOCR + pypdf)", category: "System", type: "select", options: ["PaddleOCR", "PaddleOCR + Ollama", "Vision API", "Ollama Only"] },
   { key: "APPROVAL_SLA_HOURS", default: "72", desc: "Hours before a pending approval is escalated", category: "System", type: "text" },
   { key: "DATA_RETENTION_DAYS", default: "365", desc: "Days before old invoices and logs are automatically deleted", category: "System", type: "text" },
   { key: "AUDIT_LOG_RETENTION_DAYS", default: "7", desc: "Days to retain audit logs in application (default: 7 days / 1 week). Expired logs are pruned.", category: "System", type: "text" },

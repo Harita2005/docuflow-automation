@@ -3,7 +3,7 @@ import logging
 import secrets
 import threading
 import time
-from typing import Optional, Any
+from   typing import Optional, Any
 
 import bcrypt
 from fastapi import Depends, HTTPException, Header, status
@@ -344,11 +344,7 @@ async def verify_service_api_key(
             if scope == "data:sync":
                 return True
 
-            # 2. Service client roles
-            if role in {"service", "service_client"} or subject in {"backend_sync_client", "sync_service"}:
-                return True
-
-            # 3. Active authenticated user JWT
+            # 2. Active authenticated administrator JWT
             if subject:
                 from sqlalchemy import or_
                 user = (
@@ -363,7 +359,15 @@ async def verify_service_api_key(
                 )
 
                 if user and user.is_active:
-                    return True
+                    from app.services.rbac_service import check_permission
+                    is_admin = (user.role or "").lower() in {
+                        "admin",
+                        "administrator",
+                        "system_admin",
+                        "superadmin",
+                    } or check_permission(user, "admin:rbac", db) or check_permission(user, "integration:manage", db)
+                    if is_admin:
+                        return True
 
         except JWTError as exc:
             logger.debug(

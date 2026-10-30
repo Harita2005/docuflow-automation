@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 import json
@@ -25,12 +26,34 @@ router = APIRouter(tags=['Real-Time Events & Collision Locks'])
 class StreamTicketManager:
     """
     Manages short-lived (30s) single-use tickets for establishing SSE connections.
-    Avoids putting long-lived JWT access tokens in URLs, browser history, or server access logs.
+    Synchronizes tickets across worker processes using atomic disk caching to prevent
+    connection drops in multi-worker cluster deployments.
     """
     def __init__(self, ttl_seconds: int = 30):
         self._tickets: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
+        from app.config.settings import settings
+        self._cache_file = settings.DATA_DIR / ".stream_tickets.json"
+
+    def _sync_from_disk(self):
+        if self._cache_file.exists():
+            try:
+                with open(self._cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        self._tickets.update(data)
+            except Exception:
+                pass
+
+    def _sync_to_disk(self):
+        try:
+            tmp = f"{self._cache_file}.tmp.{os.getpid()}_{int(time.time()*1000)}"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._tickets, f)
+            os.replace(tmp, self._cache_file)
+        except Exception:
+            pass
 
     def _cleanup_expired(self):
         now = time.time()
@@ -40,6 +63,7 @@ class StreamTicketManager:
 
     def create_ticket(self, user: User) -> str:
         with self._lock:
+            self._sync_from_disk()
             self._cleanup_expired()
             ticket = secrets.token_urlsafe(32)
             self._tickets[ticket] = {
@@ -47,13 +71,16 @@ class StreamTicketManager:
                 "username": (user.username or "").strip().lower(),
                 "expires_at": time.time() + self._ttl,
             }
+            self._sync_to_disk()
             return ticket
 
     def consume_ticket(self, ticket: str) -> Optional[int]:
         """Consumes a ticket in a single-use manner."""
         with self._lock:
+            self._sync_from_disk()
             self._cleanup_expired()
             info = self._tickets.pop(ticket, None)
+            self._sync_to_disk()
             if not info:
                 return None
             if info.get("expires_at", 0) < time.time():

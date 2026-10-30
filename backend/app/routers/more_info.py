@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.auth import get_current_active_user, get_current_user_optional
 from app.database.connection import get_db
@@ -24,7 +25,7 @@ from app.schemas.schemas import (
     MoreInfoConfigSaveRequest,
     MoreInfoFieldConfigItem,
 )
-from app.services.rbac_service import check_permission
+from app.services.rbac_service import check_permission, authorize_document_access
 
 logger = logging.getLogger(__name__)
 
@@ -635,6 +636,7 @@ def discover_available_fields_for_doc(
         try:
             live_db_cols = _get_live_db_columns(db)
             orm_col_set_norm = {c.lower() for c in orm_columns}
+            candidate_cols = []
             for col_name in live_db_cols:
                 col_norm = col_name.lower()
                 if col_norm in seen_keys or col_name in seen_raw_keys:
@@ -643,36 +645,41 @@ def discover_available_fields_for_doc(
                     continue  # Already handled in Layer 2
                 if col_name in EXCLUDED_COLUMNS or col_norm in EXCLUDED_COLUMNS:
                     continue
-                # Read value directly via raw SQL since ORM doesn't know this column
-                raw_val = None
+                if not re.match(r'^[a-zA-Z0-9_]+$', col_name):
+                    continue
+                candidate_cols.append(col_name)
+
+            if candidate_cols:
+                cols_sql = ", ".join(f"[{c}]" for c in candidate_cols)
                 try:
                     from sqlalchemy import text as _text
                     row = db.execute(
-                        _text(f"SELECT [{col_name}] FROM documents WHERE id = :doc_id"),
+                        _text(f"SELECT {cols_sql} FROM documents WHERE id = :doc_id"),
                         {"doc_id": str(doc.id)}
                     ).fetchone()
-                    raw_val = row[0] if row else None
-                except Exception:
+                    if row:
+                        for idx, col_name in enumerate(candidate_cols):
+                            raw_val = row[idx]
+                            if raw_val is None:
+                                continue
+                            str_val = str(raw_val).strip()
+                            if not str_val or str_val.lower() == "null":
+                                continue
+                            col_norm = col_name.lower()
+                            meta = ALL_COLUMN_LABELS.get(col_norm, ALL_COLUMN_LABELS.get(col_name, {}))
+                            label = meta.get("label") or col_name.replace("_", " ").title()
+                            col_category = meta.get("category") or "SYNCED DATA"
+                            source = meta.get("source") or "ERP"
+                            formatted_val = format_field_value(raw_val, col_name)
+                            seen_keys.add(col_norm)
+                            seen_raw_keys.add(col_name)
+                            fields_result.append(_make_field_item(col_name, label, col_category, source, formatted_val))
+                except Exception as exc:
+                    logger.debug("Handled non-fatal exception batch reading dynamic columns: %s", exc)
                     try:
                         db.rollback()
                     except Exception:
-                        # Intentionally ignored: rollback error on already-aborted transaction is benign
-                        logger.debug("Handled non-fatal exception")
-                    continue
-                if raw_val is None:
-                    continue
-                str_val = str(raw_val).strip()
-                if not str_val or str_val.lower() == "null":
-                    continue
-
-                meta = ALL_COLUMN_LABELS.get(col_norm, ALL_COLUMN_LABELS.get(col_name, {}))
-                label = meta.get("label") or col_name.replace("_", " ").title()
-                col_category = meta.get("category") or "SYNCED DATA"
-                source = meta.get("source") or "ERP"
-                formatted_val = format_field_value(raw_val, col_name)
-                seen_keys.add(col_norm)
-                seen_raw_keys.add(col_name)
-                fields_result.append(_make_field_item(col_name, label, col_category, source, formatted_val))
+                        pass
         except Exception as exc:
             logger.debug("Layer 3 dynamic column discovery error: %s", exc)
 
@@ -808,9 +815,7 @@ def resolve_effective_configuration(
         if user_configs:
             has_user_override = True
             for cfg in user_configs:
-                if cfg.field_key in admin_default_keys:
-                    continue
-                base = avail_map.get(cfg.field_key)
+                base = avail_map.get(cfg.field_key) or avail_map.get(cfg.field_key.lower().strip())
                 item = MoreInfoFieldConfigItem(
                     field_key=cfg.field_key,
                     label=cfg.field_label or (base.label if base else cfg.field_key.replace("_", " ").title()),
@@ -834,6 +839,70 @@ def resolve_effective_configuration(
     return admin_defaults, user_selected, combined, scope, has_user_override
 
 
+
+def is_user_admin_or_privileged(user: User, db: Session) -> bool:
+    """Checks if the user has administrative privileges or role management permission."""
+    if not user or not user.is_active:
+        return False
+    u_role = (user.role or "").lower().strip()
+    if u_role in ["admin", "administrator", "system_admin", "superadmin"]:
+        return True
+    if check_permission(user, "role:manage", db) or check_permission(user, "admin:rbac", db):
+        return True
+    return False
+
+
+def user_has_doc_config_access(user: User, db: Session) -> bool:
+    """
+    Validates whether the user has authorization to view document configuration.
+    Adheres to RBAC policy:
+    - Administrators (role admin/administrator/system_admin/superadmin or role:manage/admin:rbac) have full access.
+    - Active users with document/workflow read permissions have access.
+    - Active standard users with designated roles have access.
+    - Inactive users, unassigned/unauthorized roles, or users explicitly lacking access return False.
+    """
+    if not user or not user.is_active:
+        return False
+    if is_user_admin_or_privileged(user, db):
+        return True
+    allowed_permissions = [
+        "doc:work_tracker:view",
+        "doc:dashboard:view",
+        "doc:approved_docs:view",
+        "doc:upload:view",
+        "doc:upload:create",
+        "doc:verification:view",
+        "document:read",
+        "workflow:read",
+    ]
+    for perm in allowed_permissions:
+        if check_permission(user, perm, db):
+            return True
+    u_role = (user.role or "").lower().strip()
+    if u_role in ["employee", "approver", "manager", "accounts", "finance", "reviewer", "user", "viewer"]:
+        return True
+    return False
+
+
+def _sanitize_field_sample_values(fields: List[MoreInfoFieldConfigItem]) -> List[MoreInfoFieldConfigItem]:
+    """Redacts live sample values to prevent unprivileged invoice data exposure."""
+    if not fields:
+        return []
+    sanitized = []
+    for item in fields:
+        sanitized.append(
+            MoreInfoFieldConfigItem(
+                field_key=item.field_key,
+                label=item.label,
+                category=item.category,
+                source=item.source,
+                display_order=item.display_order,
+                is_visible=item.is_visible,
+                sample_value=None,
+            )
+        )
+    return sanitized
+
 # ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
@@ -841,12 +910,23 @@ def resolve_effective_configuration(
 @router.get("/api/document-types/{document_type}/more-info/config", response_model=MoreInfoConfigResponse)
 def get_doc_type_more_info_config(
     document_type: str,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Retrieves the effective More Info field configuration for a given document type.
+    Requires authenticated active user and enforces RBAC authorization.
+    Redacts sensitive sample values (vendor names, GSTINs, PO numbers, financial amounts) for non-admin callers.
+    """
+    if not user_has_doc_config_access(current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to access document type configuration."
+        )
+
     norm_type = normalize_doc_type(document_type)
-    user_key = current_user.id if (current_user and current_user.id) else "anon"
-    cache_key = f"{norm_type}:{user_key}"
+    is_admin = is_user_admin_or_privileged(current_user, db)
+    cache_key = f"{norm_type}:{current_user.id}:{is_admin}"
     now = time.monotonic()
     with _MORE_INFO_CONFIG_LOCK:
         entry = _MORE_INFO_CONFIG_CACHE.get(cache_key)
@@ -881,12 +961,12 @@ def get_doc_type_more_info_config(
             db, norm_type, current_user, available_fields
         )
 
-        is_admin = False
-        if current_user:
-            u_role = (current_user.role or "").lower().strip()
-            is_admin = u_role in ["admin", "administrator", "system_admin", "superadmin"] or check_permission(
-                current_user, "role:manage", db
-            )
+        # Redact sensitive sample values for non-admin users to prevent invoice data exposure
+        if not is_admin:
+            available_fields = _sanitize_field_sample_values(available_fields)
+            admin_defaults = _sanitize_field_sample_values(admin_defaults)
+            user_selected = _sanitize_field_sample_values(user_selected)
+            combined = _sanitize_field_sample_values(combined)
 
         resp = MoreInfoConfigResponse(
             document_type=norm_type,
@@ -901,6 +981,8 @@ def get_doc_type_more_info_config(
         with _MORE_INFO_CONFIG_LOCK:
             _MORE_INFO_CONFIG_CACHE[cache_key] = {"data": resp, "timestamp": now}
         return resp
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error getting doc type more info config for '%s': %s", document_type, exc, exc_info=True)
         try:
@@ -925,7 +1007,7 @@ def get_doc_type_more_info_config(
             document_type=norm_type,
             scope="GLOBAL",
             has_user_override=False,
-            can_manage_default=False,
+            can_manage_default=is_admin,
             admin_default_fields=fallback_fields,
             user_selected_fields=[],
             selected_fields=fallback_fields,
@@ -958,9 +1040,13 @@ def _resolve_document_custom_config(
     If found, builds and returns the ordered field items list.
     """
     custom_dict = _parse_custom_data_dict(getattr(doc, "custom_data", None))
-    stored_config = custom_dict.get("more_info_config")
-    if not stored_config or not isinstance(stored_config, list):
+    if "more_info_config" not in custom_dict:
         return None
+    stored_config = custom_dict.get("more_info_config")
+    if not isinstance(stored_config, list):
+        return None
+    if len(stored_config) == 0:
+        return []
 
     avail_map = {f.field_key.lower().strip(): f for f in available_fields}
     admin_default_keys = {f.field_key.lower().strip() for f in admin_defaults}
@@ -1014,14 +1100,21 @@ def _resolve_document_custom_config(
 @router.get("/api/invoices/{document_id}/more-info/config", response_model=MoreInfoConfigResponse)
 def get_document_more_info_config(
     document_id: str,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """
     Retrieves the effective More Info field configuration for a given document.
     Prioritizes document-specific configuration saved in doc.custom_data["more_info_config"].
     If no document-specific config exists, falls back to the document-type default / user override.
+    Enforces active user authentication, document access authorization, and RBAC rules.
     """
+    if not user_has_doc_config_access(current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to access document configuration."
+        )
+
     raw_str = str(document_id).strip()
     doc = None
     try:
@@ -1056,6 +1149,13 @@ def get_document_more_info_config(
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
 
+    is_admin = is_user_admin_or_privileged(current_user, db)
+    if not is_admin and not authorize_document_access(current_user, doc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: You do not have permission to view this document configuration."
+        )
+
     try:
         doc_type = normalize_doc_type(doc.document_type)
         available_fields = discover_available_fields_for_doc(doc, db=db)
@@ -1063,15 +1163,18 @@ def get_document_more_info_config(
             db, doc_type, current_user, available_fields
         )
 
-        is_admin = False
-        if current_user:
-            u_role = (current_user.role or "").lower().strip()
-            is_admin = u_role in ["admin", "administrator", "system_admin", "superadmin"] or check_permission(
-                current_user, "role:manage", db
-            )
+        doc_specific_fields = _resolve_document_custom_config(doc, available_fields, admin_defaults)
+
+        # Redact sensitive sample values for non-admin users
+        if not is_admin:
+            available_fields = _sanitize_field_sample_values(available_fields)
+            admin_defaults = _sanitize_field_sample_values(admin_defaults)
+            user_selected = _sanitize_field_sample_values(user_selected)
+            combined = _sanitize_field_sample_values(combined)
+            if doc_specific_fields is not None:
+                doc_specific_fields = _sanitize_field_sample_values(doc_specific_fields)
 
         # Check for per-document specific config override
-        doc_specific_fields = _resolve_document_custom_config(doc, available_fields, admin_defaults)
         if doc_specific_fields is not None:
             return MoreInfoConfigResponse(
                 document_type=doc_type,
@@ -1081,6 +1184,19 @@ def get_document_more_info_config(
                 admin_default_fields=admin_defaults,
                 user_selected_fields=doc_specific_fields,
                 selected_fields=doc_specific_fields,
+                available_fields=available_fields,
+            )
+
+        # If user has a personal configuration for this document type, use it
+        if has_user_override and user_selected:
+            return MoreInfoConfigResponse(
+                document_type=doc_type,
+                scope="USER",
+                has_user_override=True,
+                can_manage_default=is_admin,
+                admin_default_fields=admin_defaults,
+                user_selected_fields=user_selected,
+                selected_fields=user_selected,
                 available_fields=available_fields,
             )
 
@@ -1478,7 +1594,31 @@ def save_document_more_info_config(
 
     custom_dict["more_info_config"] = stored_field_configs
     doc.custom_data = json.dumps(custom_dict)
+    flag_modified(doc, "custom_data")
     db.add(doc)
+
+    # Persist user preference for this document_type so the user's field selection sticks across all documents
+    if current_user and current_user.id:
+        db.query(DocumentTypeFieldConfiguration).filter(
+            DocumentTypeFieldConfiguration.document_type == doc_type,
+            DocumentTypeFieldConfiguration.user_id == current_user.id,
+        ).delete()
+
+        for idx, item in enumerate(stored_field_configs):
+            user_row = DocumentTypeFieldConfiguration(
+                document_type=doc_type,
+                field_key=item["field_key"],
+                field_label=item["label"],
+                category=item["category"],
+                source=item["source"],
+                display_order=item["display_order"],
+                is_visible=True,
+                configuration_scope="USER",
+                user_id=current_user.id,
+                created_by=current_user.username,
+                updated_by=current_user.username,
+            )
+            db.add(user_row)
 
     try:
         audit_entry = AuditLog(
@@ -1526,8 +1666,17 @@ def get_document_type_available_fields(
     """
     Returns available fields catalogue for a given document type.
     Dynamically discovers fields from the most recent document of that type.
+    Enforces authorization and redacts live sample values for non-admin callers.
     """
+    if not user_has_doc_config_access(current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to access document type available fields."
+        )
+
     norm_type = normalize_doc_type(document_type)
+    is_admin = is_user_admin_or_privileged(current_user, db)
+
     sample_doc = (
         db.query(Invoice)
         .filter(Invoice.document_type == norm_type, Invoice.is_deleted == False)
@@ -1535,7 +1684,10 @@ def get_document_type_available_fields(
         .first()
     )
     if sample_doc:
-        return discover_available_fields_for_doc(sample_doc, db=db)
+        fields = discover_available_fields_for_doc(sample_doc, db=db)
+        if not is_admin:
+            return _sanitize_field_sample_values(fields)
+        return fields
 
     # No document found — return configured catalog for this type
     catalog = DOCUMENT_TYPE_ALLOWED_FIELDS.get(norm_type, DOCUMENT_TYPE_ALLOWED_FIELDS.get("AP INVOICE", []))

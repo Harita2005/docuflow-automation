@@ -19,7 +19,10 @@ import {
   Copy,
   RefreshCw,
   CheckCircle2,
-  Zap
+  Zap,
+  FileText,
+  Activity,
+  Settings
 } from 'lucide-react';
 import { ThirdPartyApplication, SyncRule, Condition, AuthType, FieldMapping } from '../../types/dapiSyncBack';
 import { SYSTEM_FIELDS, DEFAULT_FIELD_MAPPINGS } from './syncFields';
@@ -102,7 +105,7 @@ export default function ApplicationStudioPage({
     activeRule?.approvedAction?.method || 'POST'
   );
   const [targetEndpoint, setTargetEndpoint] = useState<string>(
-    activeRule?.approvedAction?.url || 'https://sap.company.com/api/v1/approval'
+    activeRule?.approvedAction?.url || activeRule?.approvedAction?.url || ''
   );
   const [decisionTrigger, setDecisionTrigger] = useState<'APPROVED' | 'REJECTED' | 'BOTH'>(
     activeRule?.decisionTrigger || 'APPROVED'
@@ -171,7 +174,7 @@ export default function ApplicationStudioPage({
       setPriority(activeRule.priority);
       setRuleStatus(activeRule.status);
       setHttpMethod(activeRule.approvedAction?.method || 'POST');
-      setTargetEndpoint(activeRule.approvedAction?.url || 'https://sap.company.com/api/v1/approval');
+      setTargetEndpoint(activeRule.approvedAction?.url || activeRule?.approvedAction?.url || '');
       setDecisionTrigger(activeRule.decisionTrigger || 'APPROVED');
       if (activeRule.conditions && activeRule.conditions.length > 0) {
         setConditions(activeRule.conditions);
@@ -213,7 +216,7 @@ export default function ApplicationStudioPage({
       ],
       approvedAction: {
         method: 'POST',
-        url: 'https://sap.company.com/api/v1/capex',
+        url: '',
         timeoutMs: 30000,
         retryCount: 3,
         auth: { type: authType },
@@ -222,7 +225,7 @@ export default function ApplicationStudioPage({
       },
       rejectedAction: {
         method: 'POST',
-        url: 'https://sap.company.com/api/v1/rejection',
+        url: '',
         timeoutMs: 30000,
         retryCount: 3,
         auth: { type: authType },
@@ -786,7 +789,7 @@ export default function ApplicationStudioPage({
                     type="url"
                     value={targetEndpoint}
                     onChange={(e) => setTargetEndpoint(e.target.value)}
-                    placeholder="https://sap.company.com/api/v1/capex-assets"
+                    placeholder="https://your-api.company.com/api/v1/endpoint"
                     className="flex-1 px-2.5 py-1 bg-white border border-slate-200 rounded font-mono text-[10.5px] font-bold text-slate-900 outline-none focus:border-[#005A36]"
                   />
                 </div>
@@ -1081,77 +1084,101 @@ export default function ApplicationStudioPage({
               )}
             </div>
 
-            {/* SECTION D: LIVE RULE TEST SANDBOX & PAYLOAD PREVIEW */}
-            <div className="p-3 bg-slate-900 text-white rounded-xl space-y-2.5 border border-slate-800 shadow-md">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h4 className="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <Code className="h-3.5 w-3.5" /> Section D: Live Rule Test Sandbox & Payload Preview
-                </h4>
+                        {/* SECTION D: LIVE RULE TEST SANDBOX & PAYLOAD PREVIEW */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4 space-y-4">
+              {/* Header */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={onBackToApps}
+                    className="p-1.5 rounded-full border border-slate-200 hover:bg-slate-50 text-[#005A36] transition cursor-pointer shadow-2xs"
+                    title="Back to Applications"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                      SECTION D: Live Rule Test Sandbox & Payload Preview
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Test rule payloads, view live responses, and debug rule decisions.
+                    </p>
+                  </div>
+                </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] font-bold text-slate-400">DocKey:</span>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">DocKey</span>
                     <input
                       type="text"
                       placeholder="e.g. CAPEX-101"
                       value={sampleDocKey}
                       onChange={(e) => setSampleDocKey(e.target.value)}
-                      className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[9.5px] font-mono text-white outline-none focus:border-emerald-500 w-28"
+                      className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 outline-none focus:border-[#005A36] w-32 shadow-2xs"
                     />
                   </div>
 
-                  <select
-                    value={sampleDecision}
-                    onChange={(e) => setSampleDecision(e.target.value as any)}
-                    className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[9.5px] font-bold text-slate-200 outline-none"
-                  >
-                    <option value="APPROVED">Decision: APPROVED</option>
-                    <option value="REJECTED">Decision: REJECTED</option>
-                  </select>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">Decision</span>
+                    <div className="relative">
+                      <select
+                        value={sampleDecision}
+                        onChange={(e) => setSampleDecision(e.target.value as any)}
+                        className="appearance-none pl-2.5 pr-7 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-[#005A36] cursor-pointer shadow-2xs"
+                      >
+                        <option value="APPROVED">APPROVED</option>
+                        <option value="REJECTED">REJECTED</option>
+                      </select>
+                      <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
 
                   <button
                     type="button"
                     onClick={handleRunLiveTest}
                     disabled={testing}
-                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                    className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00472A] text-white font-semibold text-xs rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
                   >
                     {testing ? (
-                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Play className="h-3 w-3 fill-current" />
+                      <Play className="h-3.5 w-3.5 fill-current" />
                     )}
-                    {testing ? 'Executing...' : 'Run Live Test'}
+                    <span>{testing ? 'Executing...' : 'Run Live Test'}</span>
                   </button>
                 </div>
               </div>
 
               {/* Console Tabs */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-1 text-[9.5px]">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setTestTab('request')}
-                    className={`px-2 py-0.5 rounded font-extrabold transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                       testTab === 'request'
-                        ? 'bg-slate-800 text-emerald-400 border border-slate-700'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-emerald-50 text-[#005A36] border border-emerald-200 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 border border-transparent hover:bg-slate-50'
                     }`}
                   >
-                    Request Preview
+                    <FileText className={`h-3.5 w-3.5 ${testTab === 'request' ? 'text-[#005A36]' : 'text-slate-400'}`} />
+                    <span>Request Preview</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setTestTab('response')}
-                    className={`px-2 py-0.5 rounded font-extrabold transition cursor-pointer flex items-center gap-1 ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                       testTab === 'response'
-                        ? 'bg-slate-800 text-emerald-400 border border-slate-700'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-emerald-50 text-[#005A36] border border-emerald-200 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 border border-transparent hover:bg-slate-50'
                     }`}
                   >
-                    Live Response
+                    <Activity className={`h-3.5 w-3.5 ${testTab === 'response' ? 'text-[#005A36]' : 'text-slate-400'}`} />
+                    <span>Live Response</span>
                     {testResult?.status_code && (
-                      <span className={`px-1 py-0.1 rounded text-[8px] font-black ${
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                         testResult.status_code < 400 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
                       }`}>
                         {testResult.status_code}
@@ -1162,116 +1189,150 @@ export default function ApplicationStudioPage({
                   <button
                     type="button"
                     onClick={() => setTestTab('diagnostics')}
-                    className={`px-2 py-0.5 rounded font-extrabold transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                       testTab === 'diagnostics'
-                        ? 'bg-slate-800 text-emerald-400 border border-slate-700'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-emerald-50 text-[#005A36] border border-emerald-200 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 border border-transparent hover:bg-slate-50'
                     }`}
                   >
-                    Diagnostics
+                    <Settings className={`h-3.5 w-3.5 ${testTab === 'diagnostics' ? 'text-[#005A36]' : 'text-slate-400'}`} />
+                    <span>Diagnostics</span>
                   </button>
                 </div>
 
                 {testResult?.response_time_ms !== undefined && (
-                  <span className="text-[9px] font-mono text-slate-400">
-                    Latency: <strong className="text-emerald-400">{testResult.response_time_ms} ms</strong>
+                  <span className="text-xs font-mono text-slate-500">
+                    Latency: <strong className="text-emerald-700">{testResult.response_time_ms} ms</strong>
                   </span>
                 )}
               </div>
 
               {/* Tab 1: Request Preview */}
-              {testTab === 'request' && (
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[9.5px] space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center justify-between text-slate-300 border-b border-slate-800 pb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.2 bg-emerald-600 text-white font-extrabold rounded text-[8.5px]">
-                        {httpMethod}
-                      </span>
-                      <span className="text-emerald-300 font-bold truncate max-w-sm">{targetEndpoint}</span>
+              {testTab === 'request' && (() => {
+                const samplePayloadText = testResult?.request_preview?.body
+                  ? (typeof testResult.request_preview.body === 'string'
+                      ? (testResult.request_preview.body.startsWith('{')
+                          ? JSON.stringify(JSON.parse(testResult.request_preview.body), null, 2)
+                          : testResult.request_preview.body)
+                      : JSON.stringify(testResult.request_preview.body, null, 2))
+                  : (payloadSource === 'SQL_PROCEDURE'
+                      ? `// Payload generated by executing ${storedProcedureName} @DocKey = '${sampleDocKey}'\n{\n  "documentId": "${sampleDocKey}",\n  "status": "${sampleDecision}",\n  "companyCode": "VCC"\n}`
+                      : (payloadSource === 'RAW_TEMPLATE'
+                          ? rawTemplate.replace('{{primaryKey}}', sampleDocKey).replace('{{approvalStatus}}', sampleDecision)
+                          : JSON.stringify({
+                              documentId: sampleDocKey,
+                              status: sampleDecision,
+                              companyCode: 'VCC'
+                            }, null, 2)));
+
+                const jsonLines = samplePayloadText.split('\n');
+
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                    {/* Inner Card Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 text-[#005A36] border border-emerald-100">
+                          <FileText className="h-4 w-4 text-[#005A36]" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900">API Request</h4>
+                          <p className="text-[11px] text-slate-500">Preview the request payload sent to the approval engine.</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => copyPayloadToClipboard(samplePayloadText)}
+                        className="px-3 py-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-[#005A36] text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                      >
+                        {copiedPayload ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedPayload ? 'Copied' : 'Copy Payload'}</span>
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const body = testResult?.request_preview?.body || JSON.stringify({
-                          primaryKey: sampleDocKey,
-                          approvalStatus: sampleDecision,
-                          company: 'VCC',
-                          decisionTrigger
-                        }, null, 2);
-                        copyPayloadToClipboard(body);
-                      }}
-                      className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedPayload ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                      {copiedPayload ? 'Copied' : 'Copy Payload'}
-                    </button>
-                  </div>
+                    {/* Method & Target Endpoint */}
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <span className="px-2.5 py-0.5 bg-[#005A36] text-white font-bold rounded-md text-[11px] uppercase tracking-wider">
+                        {httpMethod}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-800">{targetEndpoint || '/post'}</span>
+                    </div>
 
-                  {/* Headers */}
-                  <div className="text-slate-400 space-y-0.5 text-[9px]">
-                    <div><span className="text-slate-500">Authorization:</span> Bearer [Token API Endpoint 1]</div>
-                    <div><span className="text-slate-500">Content-Type:</span> application/json</div>
-                    <div><span className="text-slate-500">X-Approval-Event-ID:</span> TEST-EVT-{sampleDocKey}</div>
-                  </div>
+                    {/* Headers Block */}
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 font-mono text-xs text-slate-700 space-y-1">
+                      <div><span className="text-slate-500">Authorization:</span> Bearer [Token API Endpoint 1]</div>
+                      <div><span className="text-slate-500">Content-Type:</span> application/json</div>
+                      <div><span className="text-slate-500">X-Approval-Event-ID:</span> TEST-EVT-{sampleDocKey}</div>
+                    </div>
 
-                  {/* Body Preview */}
-                  <div className="text-emerald-300 pt-1 border-t border-slate-800/80">
-                    <pre className="whitespace-pre-wrap leading-relaxed">
-                      {testResult?.request_preview?.body
-                        ? (typeof testResult.request_preview.body === 'string'
-                            ? (testResult.request_preview.body.startsWith('{')
-                                ? JSON.stringify(JSON.parse(testResult.request_preview.body), null, 2)
-                                : testResult.request_preview.body)
-                            : JSON.stringify(testResult.request_preview.body, null, 2))
-                        : (payloadSource === 'SQL_PROCEDURE'
-                            ? `// Payload will be generated by executing ${storedProcedureName} @DocKey = '${sampleDocKey}'\n{\n  "documentId": "${sampleDocKey}",\n  "approvalStatus": "${sampleDecision}",\n  "companyCode": "VCC",\n  "grandTotal": 125000.00,\n  "executedStoredProcedure": "${storedProcedureName}"\n}`
-                            : (payloadSource === 'RAW_TEMPLATE'
-                                ? rawTemplate.replace('{{primaryKey}}', sampleDocKey).replace('{{approvalStatus}}', sampleDecision)
-                                : JSON.stringify({
-                                    documentId: sampleDocKey,
-                                    status: sampleDecision,
-                                    companyCode: 'VCC'
-                                  }, null, 2)))}
-                    </pre>
+                    {/* JSON Code block with line numbers and green string values */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-3 font-mono text-xs overflow-x-auto custom-scrollbar">
+                      <table className="border-collapse w-full">
+                        <tbody>
+                          {jsonLines.map((line, i) => {
+                            const colonIdx = line.indexOf(':');
+                            return (
+                              <tr key={i} className="leading-relaxed hover:bg-slate-50/50">
+                                <td className="w-8 select-none text-right pr-4 text-slate-400 font-mono text-[11px] align-top">
+                                  {i + 1}
+                                </td>
+                                <td className="font-mono text-xs whitespace-pre">
+                                  {colonIdx !== -1 ? (
+                                    <>
+                                      <span className="text-slate-700 font-medium">{line.substring(0, colonIdx + 1)}</span>
+                                      <span className={line.substring(colonIdx + 1).includes('"') ? 'text-emerald-700 font-semibold' : 'text-slate-800 font-semibold'}>
+                                        {line.substring(colonIdx + 1)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-slate-800 font-medium">{line}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Tab 2: Live Response */}
               {testTab === 'response' && (
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[9.5px] space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs font-mono text-xs">
                   {!testResult ? (
-                    <div className="text-slate-500 text-center py-4">
+                    <div className="text-slate-400 text-center py-8 text-xs font-sans">
                       No response yet. Click "Run Live Test" to test the target endpoint.
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded font-black text-[9px] ${
+                          <span className={`px-2.5 py-0.5 rounded-md font-bold text-xs ${
                             testResult.success
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-rose-600 text-white'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-rose-50 text-rose-800 border border-rose-200'
                           }`}>
                             {testResult.status_code || 500} {testResult.success ? 'OK' : 'ERROR'}
                           </span>
-                          <span className="text-slate-400">Response from {targetEndpoint}</span>
+                          <span className="text-slate-600 font-sans text-xs">Response from {targetEndpoint}</span>
                         </div>
                         {testResult.response_time_ms && (
-                          <span className="text-emerald-400 font-bold">{testResult.response_time_ms} ms</span>
+                          <span className="text-emerald-700 font-bold">{testResult.response_time_ms} ms</span>
                         )}
                       </div>
 
                       {testResult.error && (
-                        <div className="p-2 bg-rose-950/60 border border-rose-800 rounded text-rose-300">
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs font-sans">
                           {testResult.error}
                         </div>
                       )}
 
                       {testResult.response_body && (
-                        <div className="text-blue-300">
-                          <pre className="whitespace-pre-wrap leading-relaxed">
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-800 font-mono text-xs leading-relaxed overflow-x-auto max-h-64 custom-scrollbar">
+                          <pre className="whitespace-pre-wrap">
                             {testResult.response_body}
                           </pre>
                         </div>
@@ -1283,28 +1344,28 @@ export default function ApplicationStudioPage({
 
               {/* Tab 3: Diagnostics */}
               {testTab === 'diagnostics' && (
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-sans text-[10px] space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
-                  <div className="grid grid-cols-2 gap-2 text-slate-300">
-                    <div className="bg-slate-900 p-2 rounded border border-slate-800">
-                      <span className="text-slate-500 font-bold block text-[8.5px] uppercase">Payload Generation Engine:</span>
-                      <strong className="text-emerald-400 font-mono">{payloadSource}</strong>
+                <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs font-sans text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                      <span className="text-slate-500 font-semibold block text-[10px] uppercase mb-1">Payload Generation Engine:</span>
+                      <strong className="text-emerald-800 font-mono text-xs">{payloadSource}</strong>
                     </div>
 
-                    <div className="bg-slate-900 p-2 rounded border border-slate-800">
-                      <span className="text-slate-500 font-bold block text-[8.5px] uppercase">Stored Procedure / Template:</span>
-                      <strong className="text-emerald-400 font-mono truncate block">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                      <span className="text-slate-500 font-semibold block text-[10px] uppercase mb-1">Stored Procedure / Template:</span>
+                      <strong className="text-emerald-800 font-mono text-xs truncate block">
                         {payloadSource === 'SQL_PROCEDURE' ? storedProcedureName : (payloadSource === 'RAW_TEMPLATE' ? 'Custom Raw JSON' : `${fieldMappings.length} Fields Mapped`)}
                       </strong>
                     </div>
 
-                    <div className="bg-slate-900 p-2 rounded border border-slate-800">
-                      <span className="text-slate-500 font-bold block text-[8.5px] uppercase">Trigger Configuration:</span>
-                      <strong className="text-slate-200">{decisionTrigger} (Run When {decisionTrigger})</strong>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                      <span className="text-slate-500 font-semibold block text-[10px] uppercase mb-1">Trigger Configuration:</span>
+                      <strong className="text-slate-800 text-xs">{decisionTrigger} (Run When {decisionTrigger})</strong>
                     </div>
 
-                    <div className="bg-slate-900 p-2 rounded border border-slate-800">
-                      <span className="text-slate-500 font-bold block text-[8.5px] uppercase">Authentication Mode:</span>
-                      <strong className="text-slate-200">{authType}</strong>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                      <span className="text-slate-500 font-semibold block text-[10px] uppercase mb-1">Authentication Mode:</span>
+                      <strong className="text-slate-800 text-xs">{authType}</strong>
                     </div>
                   </div>
                 </div>

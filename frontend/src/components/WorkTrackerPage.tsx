@@ -599,7 +599,7 @@ export default function WorkTrackerPage({
       <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs">
         
         {/* Left: Category Navigation Tabs & Total Amount */}
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto custom-scrollbar">
+        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto custom-scrollbar">
           {TABS.map((t) => {
             const count = tabCounts[t] ?? 0;
             const isActive = activeTab === t;
@@ -611,14 +611,14 @@ export default function WorkTrackerPage({
                   setActiveTab(t);
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-md text-[11px] transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
                   isActive
-                    ? "bg-[#003F28] text-white font-bold shadow-xs"
-                    : "bg-white text-slate-700 border border-slate-200 font-semibold hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-[#003F28] text-white font-semibold shadow-xs"
+                    : "bg-white text-slate-700 border border-slate-200 font-medium hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
                 <span>{t}</span>
-                <span className={`text-[11px] ${isActive ? "text-emerald-200 font-medium" : "text-slate-400 font-normal"}`}>
+                <span className={`text-[10px] ${isActive ? "text-emerald-200 font-medium" : "text-slate-400 font-normal"}`}>
                   ({count})
                 </span>
               </button>
@@ -626,10 +626,10 @@ export default function WorkTrackerPage({
           })}
 
           {/* Total Amount Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold whitespace-nowrap shadow-2xs ml-1">
-            <Receipt className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[11px] font-medium whitespace-nowrap shadow-2xs ml-0.5">
+            <Receipt className="h-3 w-3 text-emerald-600 shrink-0" />
             <span>Total Amount:</span>
-            <span className="font-sans font-extrabold text-emerald-950 tracking-tight">
+            <span className="font-semibold text-emerald-950 tracking-tight">
               ₹{totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
@@ -658,7 +658,7 @@ export default function WorkTrackerPage({
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
               >
-                ✕
+                <X className="h-2.5 w-2.5" />
               </button>
             )}
           </div>
@@ -679,7 +679,7 @@ export default function WorkTrackerPage({
               <span>Filters</span>
               <ChevronDown className="h-3 w-3 text-slate-400" />
               {activeFilterCount > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#003F28] text-white text-[9px] font-bold">
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#003F28] text-white text-[10px] font-semibold">
                   {activeFilterCount}
                 </span>
               )}
@@ -691,7 +691,7 @@ export default function WorkTrackerPage({
                 <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100">
                   <div className="flex items-center gap-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-[#003F28]" />
-                    <h3 className="text-xs font-bold text-slate-800">Filter Documents</h3>
+                    <h3 className="text-xs font-semibold text-slate-800">Filter Documents</h3>
                   </div>
                   <button
                     type="button"
@@ -705,14 +705,14 @@ export default function WorkTrackerPage({
                 <div className="space-y-2.5 text-left">
                   {/* 1. DIVISION / BRANCH */}
                   <div>
-                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
                       Division / Branch
                     </label>
                     <div className="relative">
                       <select
                         value={draftDivision}
                         onChange={(e) => setDraftDivision(e.target.value)}
-                        className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                       >
                         <option value="ALL">All Divisions / Branches</option>
                         {availableDivisions.map((div) => (
@@ -726,13 +726,13 @@ export default function WorkTrackerPage({
 
                   {/* 2. DOCUMENT TYPE */}
                   <div>
-                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
                       Document Type
                     </label>
                     <select
                       value={draftDocType}
                       onChange={(e) => setDraftDocType(e.target.value)}
-                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                     >
                       <option value="ALL">All Document Types</option>
                       {dynamicTypes.filter((t) => t !== "ALL").map((type) => (
@@ -745,13 +745,13 @@ export default function WorkTrackerPage({
 
                   {/* 3. WORKFLOW STATUS */}
                   <div>
-                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
                       Workflow Status
                     </label>
                     <select
                       value={draftStatus}
                       onChange={(e) => setDraftStatus(e.target.value)}
-                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                     >
                       <option value="all">All Active / In Progress</option>
                       <option value="pending">Pending (Action Required)</option>
@@ -763,13 +763,13 @@ export default function WorkTrackerPage({
 
                   {/* 4. DATE RANGE */}
                   <div>
-                    <label className="block text-[9.5px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">
                       Time / Date
                     </label>
                     <select
                       value={draftTime}
                       onChange={(e) => setDraftTime(e.target.value as any)}
-                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-medium text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-800 focus:outline-none focus:border-[#003F28] focus:bg-white cursor-pointer"
                     >
                       <option value="all">All Time</option>
                       <option value="today">Today</option>
@@ -781,22 +781,22 @@ export default function WorkTrackerPage({
                     {draftTime === "custom" && (
                       <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
                         <div>
-                          <span className="block text-[8.5px] font-bold text-slate-400 uppercase mb-0.5">From</span>
+                          <span className="block text-[10px] font-medium text-slate-500 uppercase mb-0.5">From</span>
                           <input
                             type="date"
                             value={draftStartDate}
                             onChange={(e) => setDraftStartDate(e.target.value)}
-                            className="w-full text-[9.5px] px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-slate-700 outline-none"
+                            className="w-full text-xs px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 outline-none"
                           />
                         </div>
                         <div>
-                          <span className="block text-[8.5px] font-bold text-slate-400 uppercase mb-0.5">To</span>
+                          <span className="block text-[10px] font-medium text-slate-500 uppercase mb-0.5">To</span>
                           <input
                             type="date"
                             value={draftEndDate}
                             min={draftStartDate || undefined}
                             onChange={(e) => setDraftEndDate(e.target.value)}
-                            className="w-full text-[9.5px] px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-slate-700 outline-none"
+                            className="w-full text-xs px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 outline-none"
                           />
                         </div>
                       </div>
@@ -809,14 +809,14 @@ export default function WorkTrackerPage({
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="px-2 py-0.5 text-[9.5px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
+                    className="px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer"
                   >
                     Clear All
                   </button>
                   <button
                     type="button"
                     onClick={handleApplyFilters}
-                    className="px-3 py-1 bg-[#003F28] hover:bg-[#002F1E] text-white text-[10px] font-bold rounded transition shadow-2xs cursor-pointer"
+                    className="px-3 py-1.5 bg-[#003F28] hover:bg-[#002F1E] text-white text-xs font-semibold rounded-md transition shadow-2xs cursor-pointer"
                   >
                     Apply Filters
                   </button>
@@ -832,7 +832,7 @@ export default function WorkTrackerPage({
       {activeFilterCount > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap px-1">
           {divisionFilter !== "ALL" && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
               <span>Div: {divisionFilter}</span>
               <button
                 type="button"
@@ -843,12 +843,12 @@ export default function WorkTrackerPage({
                 }}
                 className="hover:text-emerald-950 cursor-pointer ml-0.5"
               >
-                ✕
+                <X className="h-2.5 w-2.5" />
               </button>
             </span>
           )}
           {activeTab !== "ALL" && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-medium">
               <span>Type: {activeTab}</span>
               <button
                 type="button"
@@ -858,12 +858,12 @@ export default function WorkTrackerPage({
                 }}
                 className="hover:text-blue-950 cursor-pointer ml-0.5"
               >
-                ✕
+                <X className="h-2.5 w-2.5" />
               </button>
             </span>
           )}
           {statusFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-medium">
               <span>Status: {statusFilter.toUpperCase()}</span>
               <button
                 type="button"
@@ -874,12 +874,12 @@ export default function WorkTrackerPage({
                 }}
                 className="hover:text-amber-950 cursor-pointer ml-0.5"
               >
-                ✕
+                <X className="h-2.5 w-2.5" />
               </button>
             </span>
           )}
           {timeFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-medium">
               <span>Date: {timeFilter.toUpperCase()}</span>
               <button
                 type="button"
@@ -889,7 +889,7 @@ export default function WorkTrackerPage({
                 }}
                 className="hover:text-purple-950 cursor-pointer ml-0.5"
               >
-                ✕
+                <X className="h-2.5 w-2.5" />
               </button>
             </span>
           )}
@@ -902,7 +902,7 @@ export default function WorkTrackerPage({
           <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             
             {/* Table Header (8 Columns) */}
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider uppercase">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] font-semibold tracking-wider uppercase">
               <tr>
                 <th className="py-2.5 px-3 w-12 text-center text-slate-500 font-semibold">#</th>
                 <th 
@@ -999,11 +999,11 @@ export default function WorkTrackerPage({
                     {/* DOCUMENT ID */}
                     <td className="py-2.5 px-3 align-middle">
                       <div className="flex flex-col min-w-0 leading-tight">
-                        <span className="text-xs font-sans font-extrabold text-slate-900 group-hover:text-[#003F28] transition-colors truncate tracking-tight" title={displayId}>
+                        <span className="text-xs font-semibold text-slate-900 group-hover:text-[#003F28] transition-colors truncate tracking-tight" title={displayId}>
                           {displayId}
                         </span>
                         {docDate && (
-                          <span className="text-[11px] text-slate-400 truncate mt-0.5">
+                          <span className="text-[11px] text-slate-500 font-normal truncate mt-0.5">
                             {docDate}
                           </span>
                         )}
@@ -1012,7 +1012,7 @@ export default function WorkTrackerPage({
 
                     {/* SUPPLIER / VENDOR */}
                     <td className="py-2.5 px-3 align-middle">
-                      <span className="text-xs font-bold text-slate-900 truncate block" title={vendorName}>
+                      <span className="text-xs font-medium text-slate-800 truncate block" title={vendorName}>
                         {vendorName}
                       </span>
                     </td>
@@ -1026,7 +1026,7 @@ export default function WorkTrackerPage({
 
                     {/* AMOUNT (₹) */}
                     <td className="py-2.5 px-3 align-middle text-right whitespace-nowrap">
-                      <span className="text-xs font-sans font-extrabold text-slate-900 tracking-tight">
+                      <span className="text-xs font-semibold text-slate-900 tracking-tight tabular-nums">
                         ₹{grossAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </td>
@@ -1084,7 +1084,7 @@ export default function WorkTrackerPage({
           {filteredAndSortedDocs.length === 0 && (
             <div className="text-center py-16 bg-slate-50/50">
               <FileText className="h-10 w-10 mx-auto mb-2.5 text-slate-300" />
-              <h3 className="text-sm font-bold text-slate-800">No records match the filter</h3>
+              <h3 className="text-sm font-semibold text-slate-800">No records match the filter</h3>
               <p className="text-xs text-slate-500 font-medium mt-1">Try resetting your search query or status filters.</p>
               <button
                 type="button"
@@ -1095,7 +1095,7 @@ export default function WorkTrackerPage({
                   setActiveTab(dynamicTypes[0] || "AP INVOICE");
                   setCurrentPage(1);
                 }}
-                className="mt-3 px-3.5 py-1.5 bg-[#003F28] text-white font-bold text-xs rounded-lg shadow-xs hover:bg-[#002F1E] transition cursor-pointer"
+                className="mt-3 px-3.5 py-1.5 bg-[#003F28] text-white font-semibold text-xs rounded-lg shadow-xs hover:bg-[#002F1E] transition cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -1113,9 +1113,9 @@ export default function WorkTrackerPage({
             <span>Showing 0 of 0 documents</span>
           ) : (
             <span>
-              Showing <strong className="text-slate-900 font-bold">{(currentPage - 1) * pageSize + 1}</strong> –{" "}
-              <strong className="text-slate-900 font-bold">{Math.min(currentPage * pageSize, totalItems)}</strong> of{" "}
-              <strong className="text-slate-900 font-bold">{totalItems}</strong> documents
+              Showing <strong className="text-slate-900 font-semibold">{(currentPage - 1) * pageSize + 1}</strong> –{" "}
+              <strong className="text-slate-900 font-semibold">{Math.min(currentPage * pageSize, totalItems)}</strong> of{" "}
+              <strong className="text-slate-900 font-semibold">{totalItems}</strong> documents
             </span>
           )}
         </div>
@@ -1152,7 +1152,7 @@ export default function WorkTrackerPage({
                   onClick={() => setCurrentPage(pageNum)}
                   className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
                     isCurrent
-                      ? "bg-[#003F28] text-white font-bold shadow-2xs"
+                      ? "bg-[#003F28] text-white font-semibold shadow-2xs"
                       : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
                   }`}
                 >
@@ -1182,7 +1182,7 @@ export default function WorkTrackerPage({
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="appearance-none bg-white border border-slate-200 rounded-lg pl-2.5 pr-6 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
+                className="appearance-none bg-white border border-slate-200 rounded-lg pl-2.5 pr-6 py-1 text-xs font-medium text-slate-700 focus:outline-none focus:border-[#003F28] cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>

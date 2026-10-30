@@ -89,8 +89,7 @@ def _sync_cache_load() -> None:
                             # Security: never load legacy entries containing plaintext 'otp'
                             if "otp" in v:
                                 v.pop("otp", None)
-                            if k not in _MFA_TICKETS:
-                                _MFA_TICKETS[k] = v
+                            _MFA_TICKETS[k] = v
         except Exception as e:
             logger.debug("Failed loading MFA ticket cache: %s", e)
 
@@ -105,8 +104,10 @@ def _sync_cache_save() -> None:
             entry.pop("otp", None)
             sanitized[ticket] = entry
 
-        with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+        tmp_path = f"{_CACHE_PATH}.tmp.{os.getpid()}_{int(time.time()*1000)}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(sanitized, f)
+        os.replace(tmp_path, _CACHE_PATH)
     except Exception as e:
         logger.debug("Failed saving MFA ticket cache: %s", e)
 

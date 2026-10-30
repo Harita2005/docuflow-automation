@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         """
         def _is_host_live(h: str, p: int) -> bool:
             try:
-                with socket.create_connection((h, int(p)), timeout=0.8):
+                with socket.create_connection((h, int(p)), timeout=5.0):
                     return True
             except Exception:
                 return False
@@ -104,9 +104,8 @@ class Settings(BaseSettings):
                         return db_url
                 else:
                     return db_url
-        host = self.DB_HOST.strip() if self.DB_HOST else "192.168.179.22"
-        if host.lower() in ("localhost", "127.0.0.1", "db"):
-            host = "192.168.179.22"
+        host = (self.DB_HOST or "").strip() or "192.168.179.22"
+        # Preserve configured host (supports DNS resolution and custom hostnames)
         port = self.DB_PORT
         if not port or port == 1433:
             port = 1443
@@ -115,7 +114,7 @@ class Settings(BaseSettings):
 
         # If remote host is not reachable on the network, fallback to localhost trusted connection
         try:
-            with socket.create_connection((host, int(port)), timeout=0.8):
+            with socket.create_connection((host, int(port)), timeout=5.0):
                 is_remote_live = True
         except Exception:
             is_remote_live = False
@@ -176,7 +175,7 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_SENDER_EMAIL: str = ""
     SMTP_SENDER_NAME: str = "DocuFlow Security"
-    SHOW_OTP_IN_UI: bool = True
+    SHOW_OTP_IN_UI: bool = False
 
     # SMS Gateway Configuration
     SMS_PROVIDER: str = "generic"
@@ -379,6 +378,27 @@ def validate_production_file_url_signing_secret(
     return True
 
 
+KNOWN_DEFAULT_ENCRYPTION_KEYS = {
+    "docuflow-default-secure-fallback-encryption-key-32b",
+    "<GENERATE_RANDOM_32_BYTE_HEX_OR_BASE64_KEY>",
+    "changeme",
+    "secret",
+    "default",
+}
+
+
+def validate_production_encryption_key(key: Optional[str], environment: str) -> bool:
+    if environment.lower() not in ("production", "prod"):
+        return True
+    clean = (key or "").strip()
+    if not clean or clean in KNOWN_DEFAULT_ENCRYPTION_KEYS:
+        raise RuntimeError(
+            "FATAL: DOCUFLOW_ENCRYPTION_KEY is missing or using default fallback in production. "
+            "Please configure a unique random 32-byte key."
+        )
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Public exports
 # ---------------------------------------------------------------------------
@@ -390,6 +410,8 @@ __all__ = [
     "Settings",
     "validate_production_service_api_key",
     "validate_production_file_url_signing_secret",
+    "validate_production_encryption_key",
     "KNOWN_DEFAULT_SERVICE_KEYS",
     "KNOWN_DEFAULT_FILE_SIGNING_SECRETS",
+    "KNOWN_DEFAULT_ENCRYPTION_KEYS",
 ]

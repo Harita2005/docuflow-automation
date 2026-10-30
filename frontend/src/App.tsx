@@ -743,6 +743,7 @@ export default function App() {
 
     removeAuthTokens();
     localStorage.removeItem("authToken");
+    localStorage.removeItem("token");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("lastActivityTime");
     localStorage.removeItem("currentView");

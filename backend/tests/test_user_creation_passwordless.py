@@ -61,8 +61,11 @@ def test_create_user_master_generates_secure_unpredictable_hash():
     assert created_user.password_hash is not None
     assert created_user.password_hash.startswith(("$2b$", "$2a$"))
 
-    # Must NOT match common predictable passwords
-    for predictable in ["", "password", "password123", "EMP-9902", "admin", "123456", "nopass"]:
+    # Default password matches the employee's ID as requested for initial onboarding
+    assert verify_password("EMP-9902", created_user.password_hash) is True
+
+    # Must NOT match common passwords
+    for predictable in ["", "password", "password123", "admin", "123456", "nopass"]:
         assert verify_password(predictable, created_user.password_hash) is False
 
     # Stored password is NOT plaintext

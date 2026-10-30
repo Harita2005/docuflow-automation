@@ -8,6 +8,7 @@ from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.auth import get_current_active_user, get_password_hash
+from app.services.rbac_service import check_permission
 from app.database.connection import get_db
 from app.database.models import Department, Division, Role, User
 from app.schemas.schemas import (
@@ -119,8 +120,10 @@ def get_users(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db)
+
     query = db.query(User).filter(User.is_deleted == False)
-    if not include_inactive:
+    if not is_admin or not include_inactive:
         query = query.filter(User.is_active == True)
     if role:
         query = query.filter(User.role == role)
@@ -129,7 +132,15 @@ def get_users(
         query = query.filter(
             User.employee_name.ilike(s) | User.employee_id.ilike(s) | User.email.ilike(s) | User.username.ilike(s)
         )
-    return query.order_by(User.id.asc()).all()
+    users = query.order_by(User.id.asc()).all()
+
+    if not is_admin:
+        # Mask sensitive personal contact data for non-administrators
+        for u in users:
+            if u.id != current_user.id:
+                u.phone_number = None
+
+    return users
 
 @router.get('/{user_identifier}', response_model=UserResponse)
 def get_user_by_id(
@@ -146,6 +157,9 @@ def get_user_by_id(
         ).filter(User.is_deleted == False).first()
     if not user:
         raise HTTPException(status_code=404, detail='Employee not found in User Master')
+    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db)
+    if not is_admin and user.id != current_user.id:
+        user.phone_number = None
     return user
 
 @router.post('', response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -178,8 +192,9 @@ def create_user_master(
     if payload.password and payload.password.strip():
         hashed_pwd = get_password_hash(payload.password.strip())
     else:
-        # Cryptographically secure unguessable random token, hashed with bcrypt (never plaintext, never predictable)
-        hashed_pwd = get_password_hash(secrets.token_urlsafe(32))
+        # Default password is set to the employee's employee_id
+        default_pwd = str(payload.employee_id).strip()
+        hashed_pwd = get_password_hash(default_pwd)
 
     div_id, _dept_id, role_id = resolve_user_foreign_keys(db, payload.division_id or payload.division, payload.department, payload.role)
 

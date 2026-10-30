@@ -19,7 +19,7 @@ backend/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── rules_engine.py   # Multi-condition branch evaluator & workflow matching
-│   │   └── ocr_service.py    # PyMuPDF document extraction
+│   │   └── ocr_service.py    # pypdf + PaddleOCR document extraction
 │   └── routers/
 │       ├── __init__.py
 │       ├── auth.py           # /api/auth/login, /api/auth/me

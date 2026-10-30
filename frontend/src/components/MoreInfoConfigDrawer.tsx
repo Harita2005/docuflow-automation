@@ -72,21 +72,37 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
   // Initialize or reset drawer state from props ONLY when drawer transitions from closed to open
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      const keys = new Set(selectedFields.map((f) => f.field_key));
+      const keys = new Set<string>();
+      const ordered: string[] = [];
+      selectedFields.forEach((f) => {
+        if (!f.field_key) return;
+        const matching = selectableAvailableFields.find(
+          (af) => af.field_key.toLowerCase() === f.field_key.toLowerCase()
+        );
+        const effectiveKey = matching ? matching.field_key : f.field_key;
+        keys.add(effectiveKey);
+        keys.add(effectiveKey.toLowerCase());
+        if (!ordered.some((k) => k.toLowerCase() === effectiveKey.toLowerCase())) {
+          ordered.push(effectiveKey);
+        }
+      });
       setSelectedKeys(keys);
-      setOrderedFieldKeys(selectedFields.map((f) => f.field_key));
+      setOrderedFieldKeys(ordered);
       setSaveAsDefault(false);
       setSaveError(null);
       setSearchQuery("");
       setActiveTab("fields");
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, selectedFields]);
+  }, [isOpen, selectedFields, selectableAvailableFields]);
 
   // Lookup map for fast field detail retrieval
   const fieldCatalogMap = useMemo(() => {
     const map = new Map<string, ConfigFieldItem>();
-    selectableAvailableFields.forEach((f) => map.set(f.field_key, f));
+    selectableAvailableFields.forEach((f) => {
+      map.set(f.field_key, f);
+      map.set(f.field_key.toLowerCase(), f);
+    });
     return map;
   }, [selectableAvailableFields]);
 
@@ -116,19 +132,22 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
 
   // Handle single field toggle
   const handleToggleField = (key: string) => {
+    const keyLower = key.toLowerCase();
     setSelectedKeys((prevKeys) => {
       const nextSet = new Set(prevKeys);
-      if (nextSet.has(key)) {
+      if (nextSet.has(key) || nextSet.has(keyLower)) {
         nextSet.delete(key);
+        nextSet.delete(keyLower);
       } else {
         nextSet.add(key);
+        nextSet.add(keyLower);
       }
       return nextSet;
     });
 
     setOrderedFieldKeys((prevOrder) => {
-      if (prevOrder.includes(key)) {
-        return prevOrder.filter((k) => k !== key);
+      if (prevOrder.some((k) => k.toLowerCase() === keyLower)) {
+        return prevOrder.filter((k) => k.toLowerCase() !== keyLower);
       } else {
         return [...prevOrder, key];
       }
@@ -209,13 +228,23 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
     try {
       const finalItems: ConfigFieldItem[] = orderedFieldKeys
         .map((key, index) => {
-          const item = fieldCatalogMap.get(key);
-          if (!item) return null;
-          return {
-            ...item,
-            display_order: index + 1,
-            is_visible: true,
-          };
+          const item = fieldCatalogMap.get(key) || fieldCatalogMap.get(key.toLowerCase());
+          if (item) {
+            return {
+              ...item,
+              display_order: index + 1,
+              is_visible: true,
+            };
+          }
+          const orig = selectedFields.find((sf) => sf.field_key.toLowerCase() === key.toLowerCase());
+          if (orig) {
+            return {
+              ...orig,
+              display_order: index + 1,
+              is_visible: true,
+            };
+          }
+          return null;
         })
         .filter(Boolean) as ConfigFieldItem[];
 
@@ -405,14 +434,14 @@ export const MoreInfoConfigDrawer: React.FC<MoreInfoConfigDrawerProps> = ({
                         {categoryName}
                       </span>
                       <span className="text-[5.5px] font-bold text-slate-500 bg-slate-200/70 px-1 py-0.2 rounded flex items-center justify-center leading-none scale-[0.8] origin-right">
-                        {fields.filter((f) => selectedKeys.has(f.field_key)).length} /{" "}
+                        {fields.filter((f) => (selectedKeys.has(f.field_key) || selectedKeys.has(f.field_key.toLowerCase()))).length} /{" "}
                         {fields.length}
                       </span>
                     </div>
 
                     <div className="divide-y divide-slate-100">
                       {fields.map((field) => {
-                        const isSelected = selectedKeys.has(field.field_key);
+                        const isSelected = selectedKeys.has(field.field_key) || selectedKeys.has(field.field_key.toLowerCase());
                         return (
                           <div
                             key={field.field_key}

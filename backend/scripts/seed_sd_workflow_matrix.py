@@ -123,8 +123,8 @@ def seed_sd_workflow_matrix():
                 synced_p += 1
             db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == p_name).delete()
             for stage_num, st_name, pool in p_data['steps']:
-                target = 'YUVASREE' if stage_num == 1 else 'Nattudurai' if stage_num == 2 else 'VIGNESH' if stage_num == 3 else 'VARUNAN'
-                db.add(WorkflowStepDefinition(profile_name=p_name, stage_number=stage_num, step_name=st_name, approver_type='Specific Employee', approver_target=target, document_type=p_data['workflow_type'], action_required='Approve', permissions='Approve / Reject', sla_hours=48))
+                role_target = 'Department_Verifier' if stage_num == 1 else 'Accounts_Reviewer' if stage_num == 2 else 'Finance_Manager' if stage_num == 3 else 'General_Manager'
+                db.add(WorkflowStepDefinition(profile_name=p_name, stage_number=stage_num, step_name=st_name, approver_type='Role Pool', approver_target=role_target, document_type=p_data['workflow_type'], action_required='Approve', permissions='Approve / Reject', sla_hours=48))
                 synced_s += 1
         db.commit()
         print(f'  [OK] Synced {synced_p} new profiles and {synced_s} step definitions (actual stages from Excel).')

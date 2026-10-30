@@ -318,14 +318,67 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [showAllAddDivs, setShowAllAddDivs] = useState(false);
   const [showAllEditDivs, setShowAllEditDivs] = useState(false);
 
+  // Dynamic Module, Subpage, Action & Scope definitions
+  const MODULE_OPTIONS = [
+    { value: "doc", label: "doc — Operations & Documents" },
+    { value: "workflow", label: "workflow — Workflow & Rules" },
+    { value: "admin", label: "admin — Administration & System" },
+    { value: "integration", label: "integration — ERP & Webhooks" },
+    { value: "report", label: "report — Analytics & Audit Reports" }
+  ];
+
+  const SUBPAGE_OPTIONS = [
+    { value: "detail", label: "detail — Document Detail / Invoice View" },
+    { value: "upload", label: "upload — Document Ingestion & File Desk" },
+    { value: "verification", label: "verification — OCR Data Verification" },
+    { value: "work_tracker", label: "work_tracker — Live Work Queue Tracker" },
+    { value: "approved_docs", label: "approved_docs — Settled Document Vault" },
+    { value: "routing", label: "routing — Workflow Routing Schemes" },
+    { value: "rbac", label: "rbac — IAM Roles & Permissions Matrix" },
+    { value: "custom", label: "+ Custom Subpage / Desk..." }
+  ];
+
+  const ACTION_OPTIONS = [
+    { value: "VIEW", label: "VIEW — Read-only viewing clearance" },
+    { value: "CREATE", label: "CREATE — Ingest / File upload / Create" },
+    { value: "EDIT", label: "EDIT — Modify / Update metadata" },
+    { value: "DELETE", label: "DELETE — Discard / Delete record" },
+    { value: "APPROVE", label: "APPROVE — Advance workflow stage" },
+    { value: "REJECT", label: "REJECT — Decline & terminate document" },
+    { value: "HOLD", label: "HOLD — Place on temporary hold" },
+    { value: "SEND_BACK", label: "SEND_BACK — Return to preceding stage" },
+    { value: "DOWNLOAD", label: "DOWNLOAD — Download raw / stamped PDF" },
+    { value: "EXPORT", label: "EXPORT — Export CSV / Excel datasets" },
+    { value: "ASSIGN", label: "ASSIGN — Delegate / Reassign approver" }
+  ];
+
+  const SCOPE_OPTIONS = ["OWN", "ASSIGNED", "DEPARTMENT", "DIVISION", "ALL"];
+
   // States for adding dynamic permissions
   const [showAddPermissionModal, setShowAddPermissionModal] = useState(false);
   const [newPermId, setNewPermId] = useState("");
   const [newPermLabel, setNewPermLabel] = useState("");
   const [newPermDesc, setNewPermDesc] = useState("");
-  const [newPermCategory, setNewPermCategory] = useState("Documents & OCR Extraction");
+  const [newPermCategory, setNewPermCategory] = useState("OPERATIONS PAGES");
   const [_newPermIcon, setNewPermIcon] = useState("Shield");
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newPermModule, setNewPermModule] = useState("doc");
+  const [newPermSubpage, setNewPermSubpage] = useState("detail");
+  const [newCustomSubpage, setNewCustomSubpage] = useState("");
+  const [newPermAction, setNewPermAction] = useState("APPROVE");
+  const [newPermScopes, setNewPermScopes] = useState(["ASSIGNED", "ALL"]);
+
+  // States for editing permissions
+  const [showEditPermissionModal, setShowEditPermissionModal] = useState(false);
+  const [editingPermItem, setEditingPermItem] = useState(null);
+  const [editPermLabel, setEditPermLabel] = useState("");
+  const [editPermDesc, setEditPermDesc] = useState("");
+  const [editPermModule, setEditPermModule] = useState("doc");
+  const [editPermSubpage, setEditPermSubpage] = useState("detail");
+  const [editCustomSubpage, setEditCustomSubpage] = useState("");
+  const [editPermAction, setEditPermAction] = useState("APPROVE");
+  const [editPermCategory, setEditPermCategory] = useState("OPERATIONS PAGES");
+  const [editPermScopes, setEditPermScopes] = useState(["ALL"]);
 
   const [_selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [roleFilter, setRoleFilter] = useState("ALL");
@@ -1444,25 +1497,109 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
+  const handleOpenEditPermission = (item, catName) => {
+    setEditingPermItem(item);
+    setEditPermLabel(item.label || "");
+    setEditPermDesc(item.desc || "");
+    setEditPermCategory(catName || "OPERATIONS PAGES");
+
+    const parts = (item.code || "").split(":");
+    const m = item.module || (parts.length >= 3 ? parts[0] : "doc");
+    const s = item.subpage || (parts.length >= 3 ? parts[1] : "detail");
+    const a = item.action || (parts.length >= 3 ? parts[2].toUpperCase() : "VIEW");
+
+    setEditPermModule(m.toLowerCase());
+    if (SUBPAGE_OPTIONS.some(sp => sp.value === s)) {
+      setEditPermSubpage(s);
+      setEditCustomSubpage("");
+    } else {
+      setEditPermSubpage("custom");
+      setEditCustomSubpage(s);
+    }
+    setEditPermAction(a);
+    setEditPermScopes(Array.isArray(item.scopes) && item.scopes.length > 0 ? item.scopes : ["ALL"]);
+    setShowEditPermissionModal(true);
+  };
+
+  const handleSaveEditPermission = (e) => {
+    e.preventDefault();
+    if (!editingPermItem || !editPermLabel.trim()) return;
+
+    const effectiveSubpage = editPermSubpage === "custom" ? (editCustomSubpage.trim().toLowerCase() || "custom") : editPermSubpage;
+    const generatedCode = `${editPermModule.toLowerCase()}:${effectiveSubpage.toLowerCase()}:${editPermAction.toLowerCase()}`;
+
+    setPermissionsList(prev => {
+      return prev.map(cat => ({
+        ...cat,
+        items: cat.items.map(item => {
+          if (item.id === editingPermItem.id) {
+            return {
+              ...item,
+              label: editPermLabel.trim(),
+              desc: editPermDesc.trim() || `${editPermAction} action for ${editPermModule}:${effectiveSubpage}`,
+              module: editPermModule,
+              subpage: effectiveSubpage,
+              action: editPermAction,
+              scopes: editPermScopes,
+              code: generatedCode,
+              isCustom: true
+            };
+          }
+          return item;
+        })
+      }));
+    });
+
+    const token = localStorage.getItem("token");
+    const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    const permTargetId = editingPermItem.backendId || editingPermItem.id;
+    if (permTargetId && !isNaN(Number(permTargetId))) {
+      fetch(`/api/admin/permissions/${permTargetId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          name: editPermLabel.trim(),
+          description: editPermDesc.trim(),
+          module: editPermModule.toUpperCase(),
+          subpage: effectiveSubpage.toLowerCase(),
+          action: editPermAction.toUpperCase(),
+          supported_scopes: editPermScopes
+        })
+      }).catch(err => console.debug("Permission update backend:", err));
+    }
+
+    setShowEditPermissionModal(false);
+    setEditingPermItem(null);
+    setSuccessMsg(`Permission "${editPermLabel}" updated successfully! Click Save Changes to persist.`);
+    setTimeout(() => setSuccessMsg(""), 3500);
+  };
+
   const handleAddPermission = (e) => {
     e.preventDefault();
     const cleanLabel = newPermLabel.trim();
     if (!cleanLabel) return;
 
-    const rawKey = newPermId.trim() || cleanLabel;
+    const effectiveSubpage = newPermSubpage === "custom" ? (newCustomSubpage.trim().toLowerCase() || "custom") : newPermSubpage;
+    const generatedCode = `${newPermModule.toLowerCase()}:${effectiveSubpage.toLowerCase()}:${newPermAction.toLowerCase()}`;
+    const rawKey = newPermId.trim() || `${newPermModule}-${effectiveSubpage}-${newPermAction.toLowerCase()}`;
     const formattedId = rawKey.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     
     // Check if duplicate
     const allItems = permissionsList.flatMap(c => c.items);
-    if (allItems.some(item => item.id === formattedId)) {
-      alert("A permission with this name already exists.");
+    if (allItems.some(item => item.id === formattedId || item.code === generatedCode)) {
+      alert(`A permission with code "${generatedCode}" or ID "${formattedId}" already exists.`);
       return;
     }
 
     const newPermissionItem = {
       id: formattedId,
+      code: generatedCode,
       label: cleanLabel,
-      desc: newPermDesc.trim() || "Page access and action clearance",
+      desc: newPermDesc.trim() || `${newPermAction} action for ${newPermModule}:${effectiveSubpage}`,
+      module: newPermModule,
+      subpage: effectiveSubpage,
+      action: newPermAction,
+      scopes: newPermScopes.length > 0 ? newPermScopes : ["ALL"],
       iconName: "Shield",
       isCustom: true
     };
@@ -1515,16 +1652,44 @@ export default function AdminRBAC({ onRefreshSignal }) {
       return updated;
     });
 
+    // Persist via backend API
+    const token = localStorage.getItem("token");
+    const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    fetch("/api/admin/permissions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: cleanLabel,
+        description: newPermissionItem.desc,
+        module: newPermModule.toUpperCase(),
+        subpage: effectiveSubpage.toLowerCase(),
+        action: newPermAction.toUpperCase(),
+        supported_scopes: newPermissionItem.scopes
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.id) {
+        newPermissionItem.backendId = data.id;
+      }
+    })
+    .catch(err => console.debug("Persisted custom permission to backend:", err));
+
     // Reset fields
     setNewPermId("");
     setNewPermLabel("");
     setNewPermDesc("");
-    setNewPermCategory("Documents & OCR Extraction");
+    setNewPermModule("doc");
+    setNewPermSubpage("detail");
+    setNewCustomSubpage("");
+    setNewPermAction("APPROVE");
+    setNewPermScopes(["ASSIGNED", "ALL"]);
+    setNewPermCategory("OPERATIONS PAGES");
     setNewPermIcon("Shield");
     setNewCategoryName("");
     setShowAddPermissionModal(false);
 
-    setSuccessMsg(`Permission "${newPermLabel}" added! Click Save Changes to persist.`);
+    setSuccessMsg(`Permission "${cleanLabel}" (${generatedCode}) added! Click Save Changes to persist.`);
     setTimeout(() => setSuccessMsg(""), 3500);
   };
 
@@ -2213,6 +2378,9 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                         <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
                                           <span>{item.label}</span>
                                         </h4>
+                                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-emerald-800 border border-slate-200">
+                                          {item.code || `${item.id}`}
+                                        </span>
                                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase border ${
                                           isPageEnabled
                                             ? "bg-emerald-50 text-emerald-800 border-emerald-300"
@@ -2220,6 +2388,19 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                         }`}>
                                           {isPageEnabled ? "✓ Page Enabled" : "✕ Access Disabled"}
                                         </span>
+                                        {isAdmin && (
+                                          <button
+                                            type="button"
+                                            title="Edit Permission (Module, Subpage, Action, Scopes)"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenEditPermission(item, cat.category);
+                                            }}
+                                            className="h-5 w-5 flex items-center justify-center rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 transition cursor-pointer"
+                                          >
+                                            <Edit2 className="h-3 w-3" />
+                                          </button>
+                                        )}
                                       </div>
                                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-sm">{item.desc}</p>
                                     </div>
@@ -2662,14 +2843,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
       {/* MODAL: ADD CUSTOM PERMISSION */}
       {/* ========================================================= */}
       {/* ========================================================= */}
-      {/* MODAL: ADD CUSTOM PERMISSION (SIMPLIFIED & PROFESSIONAL) */}
+      {/* MODAL: CREATE SYSTEM PERMISSION (MODULE, SUBPAGE, ACTION, SCOPES) */}
       {/* ========================================================= */}
       {showAddPermissionModal && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5 text-[#003F28]" />
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Plus className="h-4 w-4 text-[#003F28]" />
                 <span>Create System Permission</span>
               </h3>
               <button onClick={() => setShowAddPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -2677,75 +2858,178 @@ export default function AdminRBAC({ onRefreshSignal }) {
               </button>
             </div>
 
-            <form onSubmit={handleAddPermission} className="space-y-3">
-              <div>
-                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
-                  Permission / Page Name <span className="text-rose-500">*</span>
-                </label>
-                <input 
-                  type="text"
-                  required
-                  autoFocus
-                  value={newPermLabel}
-                  onChange={e => {
-                    setNewPermLabel(e.target.value);
-                    if (!newPermId) {
-                      setNewPermId(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
-                    }
-                  }}
-                  placeholder="e.g. Customer Complaints Approval Portal"
-                  className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
-                />
+            <form onSubmit={handleAddPermission} className="space-y-3.5">
+              {/* Row 1: Module & Subpage */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Module <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newPermModule}
+                    onChange={e => setNewPermModule(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {MODULE_OPTIONS.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Subpage / Desk <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newPermSubpage}
+                    onChange={e => setNewPermSubpage(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {SUBPAGE_OPTIONS.map(sp => (
+                      <option key={sp.value} value={sp.value}>{sp.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
-                  Assign to Category Group
-                </label>
-                <select
-                  value={newPermCategory}
-                  onChange={e => setNewPermCategory(e.target.value)}
-                  className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                >
-                  <option value="OPERATIONS PAGES">OPERATIONS PAGES</option>
-                  <option value="FEEDBACK PAGE">FEEDBACK PAGE</option>
-                  <option value="ADMINISTRATION PAGES">ADMINISTRATION PAGES</option>
-                  <option value="NEW_CATEGORY">+ Create Custom Category...</option>
-                </select>
+              {/* Custom Subpage Key (if 'custom' selected) */}
+              {newPermSubpage === "custom" && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Custom Subpage Key <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCustomSubpage}
+                    onChange={e => setNewCustomSubpage(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="e.g. payments, audit_vault, vendor_portal"
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono text-slate-800 focus:border-[#003F28] focus:bg-white"
+                  />
+                </div>
+              )}
+
+              {/* Row 2: Action & Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Action <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newPermAction}
+                    onChange={e => setNewPermAction(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {ACTION_OPTIONS.map(act => (
+                      <option key={act.value} value={act.value}>{act.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Category Group
+                  </label>
+                  <select
+                    value={newPermCategory}
+                    onChange={e => setNewPermCategory(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    <option value="OPERATIONS PAGES">OPERATIONS PAGES</option>
+                    <option value="FEEDBACK PAGE">FEEDBACK PAGE</option>
+                    <option value="ADMINISTRATION PAGES">ADMINISTRATION PAGES</option>
+                    <option value="NEW_CATEGORY">+ Create Custom Category...</option>
+                  </select>
+                </div>
               </div>
 
+              {/* Custom Category Input if selected */}
               {newPermCategory === "NEW_CATEGORY" && (
                 <div>
-                  <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">New Category Title</label>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">New Category Title</label>
                   <input 
                     type="text"
                     required
                     value={newCategoryName}
                     onChange={e => setNewCategoryName(e.target.value)}
                     placeholder="e.g. Vendor Management & Approvals"
-                    className="w-full text-xs px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
                   />
                 </div>
               )}
 
+              {/* Live Permission Code Preview */}
+              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-900 uppercase">Generated Permission Code:</span>
+                <span className="font-mono text-xs font-black text-emerald-800 bg-white px-2.5 py-1 rounded border border-emerald-300">
+                  {newPermModule.toLowerCase()}:{(newPermSubpage === "custom" ? (newCustomSubpage.trim().toLowerCase() || "custom") : newPermSubpage).toLowerCase()}:{newPermAction.toLowerCase()}
+                </span>
+              </div>
+
+              {/* Permission Display Name */}
               <div>
-                <label className="block text-[9.5px] font-bold text-slate-700 uppercase mb-1">
-                  Description & Scope <span className="text-slate-400 font-normal">(Optional)</span>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                  Permission Name / Label <span className="text-rose-500">*</span>
+                </label>
+                <input 
+                  type="text"
+                  required
+                  value={newPermLabel}
+                  onChange={e => setNewPermLabel(e.target.value)}
+                  placeholder={`e.g. ${newPermAction} ${(newPermSubpage === 'custom' ? newCustomSubpage : newPermSubpage) || 'Document'} (${newPermModule.toUpperCase()})`}
+                  className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                  Description <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <textarea 
                   value={newPermDesc}
                   onChange={e => setNewPermDesc(e.target.value)}
-                  placeholder="Describe what action or page this permission clears..."
+                  placeholder={`Allows ${newPermAction} operations on ${newPermModule}:${newPermSubpage}...`}
                   rows={2}
                   className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {/* Supported Scopes */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1.5">
+                  Supported Authorization Scopes
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {SCOPE_OPTIONS.map(sc => {
+                    const isChecked = newPermScopes.includes(sc);
+                    return (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => {
+                          setNewPermScopes(prev => 
+                            isChecked ? prev.filter(s => s !== sc) : [...prev, sc]
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
+                          isChecked
+                            ? "bg-[#003F28] text-white border-[#003F28]"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {isChecked ? "✓ " : ""}{sc}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddPermissionModal(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
@@ -2755,6 +3039,190 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   Create Permission
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT SYSTEM PERMISSION (MODULE, SUBPAGE, ACTION, SCOPES) */}
+      {/* ========================================================= */}
+      {showEditPermissionModal && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Edit2 className="h-4 w-4 text-[#003F28]" />
+                <span>Edit Permission Definition</span>
+              </h3>
+              <button onClick={() => setShowEditPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPermission} className="space-y-3.5">
+              {/* Row 1: Module & Subpage */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Module
+                  </label>
+                  <select
+                    value={editPermModule}
+                    onChange={e => setEditPermModule(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {MODULE_OPTIONS.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Subpage / Desk
+                  </label>
+                  <select
+                    value={editPermSubpage}
+                    onChange={e => setEditPermSubpage(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {SUBPAGE_OPTIONS.map(sp => (
+                      <option key={sp.value} value={sp.value}>{sp.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom Subpage Key (if 'custom' selected) */}
+              {editPermSubpage === "custom" && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Custom Subpage Key
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCustomSubpage}
+                    onChange={e => setEditCustomSubpage(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="e.g. payments, audit_vault, vendor_portal"
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono text-slate-800 focus:border-[#003F28] focus:bg-white"
+                  />
+                </div>
+              )}
+
+              {/* Row 2: Action */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Action
+                  </label>
+                  <select
+                    value={editPermAction}
+                    onChange={e => setEditPermAction(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
+                  >
+                    {ACTION_OPTIONS.map(act => (
+                      <option key={act.value} value={act.value}>{act.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    Category Group
+                  </label>
+                  <input
+                    type="text"
+                    value={editPermCategory}
+                    onChange={e => setEditPermCategory(e.target.value)}
+                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Live Permission Code Preview */}
+              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-900 uppercase">Permission Code:</span>
+                <span className="font-mono text-xs font-black text-emerald-800 bg-white px-2.5 py-1 rounded border border-emerald-300">
+                  {editPermModule.toLowerCase()}:{(editPermSubpage === "custom" ? (editCustomSubpage.trim().toLowerCase() || "custom") : editPermSubpage).toLowerCase()}:{editPermAction.toLowerCase()}
+                </span>
+              </div>
+
+              {/* Permission Display Name */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                  Permission Name / Label <span className="text-rose-500">*</span>
+                </label>
+                <input 
+                  type="text"
+                  required
+                  value={editPermLabel}
+                  onChange={e => setEditPermLabel(e.target.value)}
+                  className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                  Description
+                </label>
+                <textarea 
+                  value={editPermDesc}
+                  onChange={e => setEditPermDesc(e.target.value)}
+                  rows={2}
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white resize-none"
+                />
+              </div>
+
+              {/* Supported Scopes */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1.5">
+                  Supported Authorization Scopes
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {SCOPE_OPTIONS.map(sc => {
+                    const isChecked = editPermScopes.includes(sc);
+                    return (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => {
+                          setEditPermScopes(prev => 
+                            isChecked ? prev.filter(s => s !== sc) : [...prev, sc]
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
+                          isChecked
+                            ? "bg-[#003F28] text-white border-[#003F28]"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {isChecked ? "✓ " : ""}{sc}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditPermissionModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editPermLabel.trim()}
+                  className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>
