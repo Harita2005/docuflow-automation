@@ -1916,6 +1916,11 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
     else:
+        if not remarks or not str(remarks).strip() or str(remarks).strip() == 'Record rejected / returned to previous approver.':
+            raise HTTPException(
+                status_code=400,
+                detail="A cancellation comment is mandatory to cancel the document in the Attachment Stage."
+            )
         inv.status = 'Cancelled'
         inv.assigned_approver = None
         rows_affected = db.query(Invoice).filter(
@@ -2931,7 +2936,13 @@ def workflow_reject_payload(req: Request, payload: dict, db: Session=Depends(get
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     approver_name = payload.get('user') or payload.get('username') or (user.employee_name or user.name if user else 'Approver')
-    remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Record rejected / returned to previous approver.'
+    raw_remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks')
+    if (inv.current_stage or 1) <= 1 and (not raw_remarks or not str(raw_remarks).strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="A cancellation comment is mandatory to cancel the document in the Attachment Stage."
+        )
+    remarks = str(raw_remarks).strip() if raw_remarks else 'Record rejected / returned to previous approver.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
@@ -2954,7 +2965,13 @@ def reject_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceAc
     if expected_ver != current_version:
         raise HTTPException(status_code=409, detail="This document version has been modified by another approver or process.")
     username = user.employee_name or user.name if user else 'Reviewer'
-    remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None) or 'Record rejected / returned to previous approver.'
+    raw_remarks = (action.remarks if action and action.remarks else None) or (payload.get('remarks') or payload.get('comments') if payload else None)
+    if (inv.current_stage or 1) <= 1 and (not raw_remarks or not str(raw_remarks).strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="A cancellation comment is mandatory to cancel the document in the Attachment Stage."
+        )
+    remarks = str(raw_remarks).strip() if raw_remarks else 'Record rejected / returned to previous approver.'
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)

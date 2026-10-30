@@ -534,6 +534,10 @@ export default function DocumentDetails({
   const isSubmittingRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelComment, setCancelComment] = useState("");
+  const [cancelCommentError, setCancelCommentError] = useState("");
+
   const [showNextActionModal, setShowNextActionModal] = useState(false);
   const [pendingNextId, setPendingNextId] = useState<string | null>(null);
   const [actionModalType, setActionModalType] = useState<'approve' | 'reject' | 'hold' | 'cancel'>('approve');
@@ -1855,6 +1859,81 @@ export default function DocumentDetails({
     }
   };
 
+  const confirmCancelProcess = async () => {
+    if (!document || isSubmittingRef.current || actionLoading) return;
+    const trimmedComment = cancelComment.trim();
+    if (!trimmedComment) {
+      setCancelCommentError("A cancellation comment / reason is required before cancelling.");
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setActionLoading(true);
+    setActionError(null);
+    setCancelCommentError("");
+    try {
+      const token = getAuthToken() || localStorage.getItem("authToken") || localStorage.getItem("token");
+      const targetDocId = activeDoc?.id;
+      const expectedVersion = activeDoc?.version ?? 1;
+
+      const response = await fetch('/api/workflows/cancel', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          invoiceId: targetDocId,
+          id: targetDocId,
+          expected_version: expectedVersion,
+          comments: trimmedComment,
+        }),
+      });
+
+      if (response.ok) {
+        clearDraft();
+        setApprovalComment("");
+        setShowCancelModal(false);
+        if (activeDoc) activeDoc.status = "Cancelled";
+        showToast("✓ Document Process Cancelled Successfully!", "amber");
+        await fetchWorkflowData();
+        onRefreshDocument();
+        const nextId = getNextPendingDocId();
+        setPendingNextId(nextId);
+        setActionModalType('cancel');
+        setShowNextActionModal(true);
+      } else {
+        if (response.status === 409) {
+          alert("Document was modified by someone else, please refresh");
+          onRefreshDocument();
+          setShowCancelModal(false);
+          return;
+        }
+        let errDetail = "Cancellation failed";
+        try {
+          const txt = await response.text();
+          try {
+            const err = JSON.parse(txt);
+            errDetail = err.detail || err.error || err.message || txt || errDetail;
+          } catch {
+            if (txt) errDetail = txt;
+          }
+        } catch {}
+        alert(errDetail);
+        setCancelCommentError(errDetail);
+        setActionError(errDetail);
+      }
+    } catch (err: any) {
+      const msg = err.message || "Cancellation action failed";
+      alert(msg);
+      setCancelCommentError(msg);
+      setActionError(msg);
+    } finally {
+      isSubmittingRef.current = false;
+      setActionLoading(false);
+    }
+  };
+
   const handleInlineReject = async () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
     const isStage1 = (document?.current_stage || 1) <= 1;
@@ -1862,24 +1941,22 @@ export default function DocumentDetails({
       alert("Access Denied: Only the assigned initiator can cancel this document during the Attachment Stage.");
       return;
     }
+
+    // Attachment Stage cancellation: open dedicated modal requiring comment/reason before cancel
+    if (isStage1) {
+      setCancelComment(approvalComment.trim());
+      setCancelCommentError("");
+      setShowCancelModal(true);
+      return;
+    }
+
     let comments = approvalComment.trim();
     if (!comments) {
-      if (isStage1) {
-        const enteredComment = window.prompt(
-          "A cancellation comment is required to cancel this document at the Attachment Stage. Please enter your reason:"
-        );
-        if (!enteredComment || !enteredComment.trim()) {
-          alert("Cancellation aborted: A cancellation comment is mandatory.");
-          return;
-        }
-        comments = enteredComment.trim();
-      } else {
-        const enteredReason = window.prompt(
-          `Please enter rejection reason notes to return to Stage ${(document.current_stage || 2) - 1} approver:`
-        );
-        if (!enteredReason || !enteredReason.trim()) return;
-        comments = enteredReason.trim();
-      }
+      const enteredReason = window.prompt(
+        `Please enter rejection reason notes to return to Stage ${(document.current_stage || 2) - 1} approver:`
+      );
+      if (!enteredReason || !enteredReason.trim()) return;
+      comments = enteredReason.trim();
     }
 
     isSubmittingRef.current = true;
@@ -1890,8 +1967,7 @@ export default function DocumentDetails({
       const targetDocId = activeDoc?.id;
       const expectedVersion = activeDoc?.version ?? 1;
 
-      const endpoint = isStage1 ? `/api/workflows/cancel` : `/api/workflows/reject`;
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/workflows/reject', {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1908,13 +1984,13 @@ export default function DocumentDetails({
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
-        if (activeDoc) activeDoc.status = isStage1 ? "Cancelled" : "Rejected";
-        showToast(isStage1 ? "✓ Document Process Cancelled Successfully!" : "✓ Document Rejection Recorded Successfully!", "amber");
+        if (activeDoc) activeDoc.status = "Rejected";
+        showToast("✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
         setPendingNextId(nextId);
-        setActionModalType(isStage1 ? 'cancel' : 'reject');
+        setActionModalType('reject');
         setShowNextActionModal(true);
       } else {
         if (response.status === 409) {
@@ -1922,7 +1998,7 @@ export default function DocumentDetails({
           onRefreshDocument();
           return;
         }
-        let errDetail = isStage1 ? "Cancellation failed" : "Rejection failed";
+        let errDetail = "Rejection failed";
         try {
           const txt = await response.text();
           try {
@@ -1936,7 +2012,7 @@ export default function DocumentDetails({
         setActionError(errDetail);
       }
     } catch (err: any) {
-      const msg = err.message || (isStage1 ? "Cancellation action failed" : "Rejection action failed");
+      const msg = err.message || "Rejection action failed";
       alert(msg);
       setActionError(msg);
     } finally {
@@ -3862,6 +3938,111 @@ export default function DocumentDetails({
                 className="w-full py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
                 <span>Back to Dashboard ➔</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MANDATORY CANCELLATION REASON MODAL */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-rose-200 p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-inner">
+                <AlertCircle className="h-6 w-6 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-extrabold text-slate-900 text-base tracking-tight leading-snug">
+                  Cancel Document Process
+                </h3>
+                <span className="text-[10px] text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                  Attachment Stage (Stage 1)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!actionLoading) {
+                    setShowCancelModal(false);
+                    setCancelCommentError("");
+                  }
+                }}
+                disabled={actionLoading}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-rose-50/80 border border-rose-200/80 rounded-xl text-rose-900 text-xs space-y-1">
+              <p className="font-bold">
+                Are you sure you want to cancel and void this document?
+              </p>
+              <p className="text-[11px] text-rose-800/90 leading-relaxed">
+                This document process will be permanently voided. A cancellation reason/comment is <strong>mandatory</strong> before proceeding.
+              </p>
+            </div>
+
+            <div className="space-y-1.5 text-left">
+              <label className="block text-xs font-bold text-slate-800">
+                Cancellation Reason / Comment <span className="text-rose-600 font-black">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={cancelComment}
+                onChange={(e) => {
+                  setCancelComment(e.target.value);
+                  if (cancelCommentError && e.target.value.trim()) {
+                    setCancelCommentError("");
+                  }
+                }}
+                disabled={actionLoading}
+                placeholder="Enter mandatory reason for cancelling (e.g. duplicate document, incorrect vendor, pricing error)..."
+                className={`w-full text-xs font-medium p-2.5 border rounded-xl outline-none transition resize-none ${
+                  cancelCommentError
+                    ? "border-rose-400 bg-rose-50/50 focus:border-rose-600 focus:ring-2 focus:ring-rose-500/20"
+                    : "border-slate-200 bg-slate-50/80 focus:border-rose-600 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
+                }`}
+              />
+              {cancelCommentError && (
+                <p className="text-[11px] font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
+                  <span>⚠️</span> {cancelCommentError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setCancelCommentError("");
+                }}
+                className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Keep Document
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading || !cancelComment.trim()}
+                onClick={confirmCancelProcess}
+                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer disabled:cursor-not-allowed"
+              >
+                {actionLoading ? (
+                  <>
+                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3.5 w-3.5 stroke-[3]" />
+                    <span>Confirm & Cancel</span>
+                  </>
+                )}
               </button>
             </div>
 
