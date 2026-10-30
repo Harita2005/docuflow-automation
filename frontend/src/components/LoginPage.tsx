@@ -53,6 +53,7 @@ export default function LoginPage({
   const [maskedEmail, setMaskedEmail] = useState("");
   const [maskedPhone, setMaskedPhone] = useState("");
   const [hasAuthenticatorSetup, setHasAuthenticatorSetup] = useState(false);
+  const [realEmployeeId, setRealEmployeeId] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<MFAMethod>("PASSWORD");
 
   // Password login state
@@ -264,6 +265,7 @@ export default function LoginPage({
         setMaskedEmail(data.masked_email || "");
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
+        setRealEmployeeId(data.employee_id || "");
 
         // Default selection to PASSWORD if available
         if (methods.includes("PASSWORD")) {
@@ -1252,7 +1254,7 @@ export default function LoginPage({
                       </button>
                     </div>
                     <p className="text-[11px] text-gray-500">
-                      Default initial password is your Employee ID (e.g. <span className="font-mono font-semibold">{employeeId}</span>).
+                      Default initial password is your Employee ID (e.g. <span className="font-mono font-semibold">{realEmployeeId || employeeId}</span>).
                     </p>
                   </div>
 
