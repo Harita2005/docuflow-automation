@@ -575,14 +575,6 @@ export default function LoginPage({
       return;
     }
 
-    if (!mfaTicket) {
-      setOtpError(
-        "Your authentication session has expired. Please request a new OTP."
-      );
-      setStep(1);
-      return;
-    }
-
     setLoading(true);
     setOtpError("");
 
