@@ -1,6 +1,7 @@
 import logging
 logger = logging.getLogger(__name__)
 import re
+import socket
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote_plus
@@ -75,26 +76,76 @@ class Settings(BaseSettings):
     def get_database_url(self) -> str:
         """Build the SQL Server connection URL.
 
-        Strictly connects to 192.168.179.22:1443 (DocuFlowDB) with NO fallback.
+        Connects to 192.168.179.22:1443 (DocuFlowDB) by default, with automatic
+        fallback to the local database in local/development environments if the
+        remote server is unreachable. In production, strict connection to the
+        production database is enforced without fallback.
         """
+        def _is_host_live(h: str, p: int, timeout: float = 1.2) -> bool:
+            try:
+                with socket.create_connection((h, int(p)), timeout=timeout):
+                    return True
+            except Exception:
+                return False
+
+        is_production = (self.ENVIRONMENT or "").strip().lower() in ("production", "prod")
+
         # Use explicit DATABASE_URL if provided
         if self.DATABASE_URL:
             db_url = self.DATABASE_URL.strip()
-            forbidden = ["@db:", "sqlite", "postgresql", "mysql", "localhost", "127.0.0.1"]
+            forbidden = ["@db:", "sqlite", "postgresql", "mysql"]
+            if is_production:
+                forbidden.extend(["localhost", "127.0.0.1"])
             if not any(f in db_url.lower() for f in forbidden):
-                trust_cert = "yes" if self.trust_server_certificate else "no"
-                if "TrustServerCertificate=" in db_url:
-                    return re.sub(
-                        r"TrustServerCertificate=[a-zA-Z0-9]+",
-                        f"TrustServerCertificate={trust_cert}",
-                        db_url,
-                    )
-                return db_url
+                host_port_match = re.search(r"@([^:/]+)(?::(\d+))?", db_url)
+                if host_port_match and not is_production:
+                    target_h = host_port_match.group(1)
+                    target_p = int(host_port_match.group(2) or 1433)
+                    if target_h.lower() not in ("localhost", "127.0.0.1") and not _is_host_live(target_h, target_p):
+                        # Remote host in explicit URL is unreachable locally, proceed to fallback logic below
+                        pass
+                    else:
+                        trust_cert = "yes" if self.trust_server_certificate else "no"
+                        if "TrustServerCertificate=" in db_url:
+                            return re.sub(
+                                r"TrustServerCertificate=[a-zA-Z0-9]+",
+                                f"TrustServerCertificate={trust_cert}",
+                                db_url,
+                            )
+                        return db_url
+                else:
+                    trust_cert = "yes" if self.trust_server_certificate else "no"
+                    if "TrustServerCertificate=" in db_url:
+                        return re.sub(
+                            r"TrustServerCertificate=[a-zA-Z0-9]+",
+                            f"TrustServerCertificate={trust_cert}",
+                            db_url,
+                        )
+                    return db_url
 
         host = (self.DB_HOST or "").strip() or "192.168.179.22"
         port = self.DB_PORT or 1443
         driver = quote_plus(self.DB_DRIVER)
         trust_cert = "yes" if self.trust_server_certificate else "no"
+
+        # Local fallback: only active in development/local environments when remote DB is offline
+        if not is_production:
+            if not _is_host_live(host, port, timeout=1.2):
+                logger.info(
+                    "Remote DB %s:%s is unreachable; checking local fallback...",
+                    host,
+                    port,
+                )
+                for local_h in ("localhost", "127.0.0.1"):
+                    if _is_host_live(local_h, 1433, timeout=0.8):
+                        logger.info("Connected to local SQL Server at %s:1433", local_h)
+                        return (
+                            f"mssql+pyodbc://@{local_h}:1433/{self.DB_NAME}?"
+                            f"driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
+                        )
+                # Fallback to local SQLite if no local SQL server instance is running
+                sqlite_path = self.DATA_DIR / "docuflow_local.db"
+                return f"sqlite:///{sqlite_path.as_posix()}"
 
         if self.DB_USER and self.DB_PASSWORD:
             user = quote_plus(self.DB_USER)
