@@ -211,7 +211,7 @@ export default function Sidebar({
       const val = (rolePermObj as Record<string, any>)[key];
       if (typeof val === "boolean") return val;
       if (typeof val === "object" && val !== null) {
-        return val.read === true || (val.read !== false && (val.write === true || val.admin === true));
+        return Boolean(val.read || val.write || val.admin);
       }
       return false;
     });
