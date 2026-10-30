@@ -230,3 +230,153 @@ def test_issue4_edit_after_approval_gets_409(db_session):
         db_session.query(Invoice).filter(Invoice.id == doc_id).delete(synchronize_session=False)
         db_session.query(User).filter(User.id == admin_user.id).delete(synchronize_session=False)
         db_session.commit()
+
+def test_issue4_cancel_at_stage_2_gets_400(db_session):
+    """Cancelling a document when current_stage > 1 must fail with 400 (only allowed in attachment stage)."""
+    doc_id = f"TEST_DOC_CANCEL_{uuid.uuid4().hex[:6]}"
+    owner_user = User(
+        user_uid=f"TEST_USR_{uuid.uuid4().hex[:6]}",
+        username=f"TEST_owner_{uuid.uuid4().hex[:4]}",
+        employee_id=f"TEST_EMP_{uuid.uuid4().hex[:4]}",
+        employee_name="Document Initiator",
+        name="Document Initiator",
+        email=f"initiator_{uuid.uuid4().hex[:4]}@test.com",
+        password_hash="test_hash",
+        role="employee",
+        division="VCC",
+        is_active=True
+    )
+    db_session.add(owner_user)
+    db_session.commit()
+
+    inv = Invoice(
+        id=doc_id,
+        invoice_number=f"TEST_INV_{uuid.uuid4().hex[:4]}",
+        vendor_name="Test Vendor",
+        amount=1000.0,
+        status="Pending Approval (Stage 2)",
+        current_stage=2,
+        employee_id=owner_user.employee_id,
+        division="VCC",
+        version=1
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            workflow_cancel_route(
+                invoice_id=doc_id,
+                payload={"expected_version": 1, "comments": "Attempt cancel at stage 2"},
+                db=db_session,
+                user=owner_user
+            )
+        assert exc_info.value.status_code == 400
+        assert "Attachment Stage" in exc_info.value.detail
+    finally:
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete(synchronize_session=False)
+        db_session.query(Invoice).filter(Invoice.id == doc_id).delete(synchronize_session=False)
+        db_session.query(User).filter(User.id == owner_user.id).delete(synchronize_session=False)
+        db_session.commit()
+
+
+def test_issue4_cancel_missing_comment_gets_400(db_session):
+    """Cancelling without a mandatory comment at Stage 1 must fail with 400."""
+    doc_id = f"TEST_DOC_CANCEL_{uuid.uuid4().hex[:6]}"
+    owner_user = User(
+        user_uid=f"TEST_USR_{uuid.uuid4().hex[:6]}",
+        username=f"TEST_owner_{uuid.uuid4().hex[:4]}",
+        employee_id=f"TEST_EMP_{uuid.uuid4().hex[:4]}",
+        employee_name="Document Initiator",
+        name="Document Initiator",
+        email=f"initiator_{uuid.uuid4().hex[:4]}@test.com",
+        password_hash="test_hash",
+        role="employee",
+        division="VCC",
+        is_active=True
+    )
+    db_session.add(owner_user)
+    db_session.commit()
+
+    inv = Invoice(
+        id=doc_id,
+        invoice_number=f"TEST_INV_{uuid.uuid4().hex[:4]}",
+        vendor_name="Test Vendor",
+        amount=1000.0,
+        status="Attachment Status",
+        current_stage=1,
+        employee_id=owner_user.employee_id,
+        division="VCC",
+        version=1
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            workflow_cancel_route(
+                invoice_id=doc_id,
+                payload={"expected_version": 1, "comments": "   "},
+                db=db_session,
+                user=owner_user
+            )
+        assert exc_info.value.status_code == 400
+        assert "comment is mandatory" in exc_info.value.detail.lower()
+    finally:
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete(synchronize_session=False)
+        db_session.query(Invoice).filter(Invoice.id == doc_id).delete(synchronize_session=False)
+        db_session.query(User).filter(User.id == owner_user.id).delete(synchronize_session=False)
+        db_session.commit()
+
+
+def test_issue4_assigned_initiator_cancel_with_comment_succeeds(db_session):
+    """Assigned initiator cancelling at Stage 1 with comment and valid version succeeds."""
+    doc_id = f"TEST_DOC_CANCEL_{uuid.uuid4().hex[:6]}"
+    owner_user = User(
+        user_uid=f"TEST_USR_{uuid.uuid4().hex[:6]}",
+        username=f"TEST_owner_{uuid.uuid4().hex[:4]}",
+        employee_id=f"TEST_EMP_{uuid.uuid4().hex[:4]}",
+        employee_name="Document Initiator",
+        name="Document Initiator",
+        email=f"initiator_{uuid.uuid4().hex[:4]}@test.com",
+        password_hash="test_hash",
+        role="employee",
+        division="VCC",
+        is_active=True
+    )
+    db_session.add(owner_user)
+    db_session.commit()
+
+    inv = Invoice(
+        id=doc_id,
+        invoice_number=f"TEST_INV_{uuid.uuid4().hex[:4]}",
+        vendor_name="Test Vendor",
+        amount=1000.0,
+        status="Attachment Status",
+        current_stage=1,
+        employee_id=owner_user.employee_id,
+        division="VCC",
+        version=1
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    try:
+        res = workflow_cancel_route(
+            invoice_id=doc_id,
+            payload={"expected_version": 1, "comments": "Invoice uploaded with incorrect pricing by vendor."},
+            db=db_session,
+            user=owner_user
+        )
+        assert res["success"] is True
+        assert res["status"] == "Cancelled"
+        assert res["version"] == 2
+        
+        updated_inv = db_session.query(Invoice).filter(Invoice.id == doc_id).first()
+        assert updated_inv.status == "Cancelled"
+        assert updated_inv.assigned_approver is None
+    finally:
+        db_session.query(AuditLog).filter(AuditLog.invoice_id == doc_id).delete(synchronize_session=False)
+        db_session.query(Invoice).filter(Invoice.id == doc_id).delete(synchronize_session=False)
+        db_session.query(User).filter(User.id == owner_user.id).delete(synchronize_session=False)
+        db_session.commit()

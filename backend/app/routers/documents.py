@@ -3159,14 +3159,23 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     if not user:
         raise HTTPException(status_code=401, detail='Authentication required to cancel workflow process.')
 
+    # Only documents in the Attachment Stage (Stage 1) can be cancelled
+    is_attachment_stage = ((inv.current_stage or 1) == 1) or ('attachment' in (inv.status or '').lower())
+    if not is_attachment_stage:
+        raise HTTPException(
+            status_code=400,
+            detail='Cancellation Restricted: Documents can only be cancelled during the Attachment Stage (Stage 1).'
+        )
+
     is_admin = bool((user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'])
 
-    # Check if user is the document uploader/creator
+    # Check if user is the assigned initiator / creator
     user_identifiers = {
         (user.username or '').strip().lower(),
         (user.employee_name or '').strip().lower(),
         (user.name or '').strip().lower(),
         (user.email or '').strip().lower(),
+        (user.employee_id or '').strip().lower(),
         str(user.id),
     }
     user_identifiers.discard('')
@@ -3174,21 +3183,29 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     doc_creator = (getattr(inv, 'created_by', None) or '').strip().lower()
     doc_creator_id = getattr(inv, 'created_by_id', None)
     doc_emp_id = (getattr(inv, 'employee_id', None) or '').strip().lower()
+    doc_emp_name = (getattr(inv, 'employee_name', None) or '').strip().lower()
 
-    is_uploader = bool(
+    is_initiator = bool(
         (doc_creator_id and user.id == doc_creator_id) or
         (doc_creator and doc_creator in user_identifiers) or
-        (doc_emp_id and doc_emp_id in user_identifiers)
+        (doc_emp_id and doc_emp_id in user_identifiers) or
+        (doc_emp_name and doc_emp_name in user_identifiers)
     )
 
     assigned_approver = (getattr(inv, 'assigned_approver', None) or '').strip().lower()
-    is_assigned = bool(assigned_approver and any(h in assigned_approver for h in user_identifiers))
+    is_assigned = bool(
+        is_initiator or
+        (assigned_approver and (
+            any(h in assigned_approver for h in user_identifiers) or
+            is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
+        ))
+    )
 
-    # Allow admins, the document uploader, or the assigned approver to cancel
-    if not (is_admin or is_uploader or is_assigned):
+    # Only the assigned initiator (or admin) can cancel in the Attachment Stage
+    if not (is_admin or is_assigned):
         raise HTTPException(
             status_code=403,
-            detail='Access Denied: Only administrators, the document uploader, or the assigned approver can cancel this workflow process.'
+            detail='Access Denied: Only the assigned initiator can cancel this document during the Attachment Stage.'
         )
 
     # Reject cancelling documents already Approved/Posted/Paid/Cancelled with 409
@@ -3213,9 +3230,17 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
             detail="This document version has been modified by another approver or process."
         )
 
+    # Require mandatory cancellation comment
+    raw_remarks = (payload.get('comments') or payload.get('remarks') or payload.get('comment') or payload.get('reason') if payload else None)
+    if not raw_remarks or not str(raw_remarks).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A cancellation comment is mandatory to cancel the document in the Attachment Stage."
+        )
+    remarks = str(raw_remarks).strip()
+
     inv.version = current_version + 1
     username = user.employee_name or user.name or user.username or 'User'
-    remarks = (payload.get('comments') or payload.get('remarks') if payload else None) or 'Process cancelled by user.'
     inv.status = 'Cancelled'
     inv.assigned_approver = None
     archive_rejected_pdf(inv)

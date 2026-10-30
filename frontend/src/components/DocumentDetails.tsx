@@ -1260,6 +1260,31 @@ export default function DocumentDetails({
   );
   const canReplacePdf = !isDocumentLocked && isAttachmentStatus;
 
+  const isAssignedInitiator = useMemo(() => {
+    if (!document) return false;
+    const roleLower = (currentUserRole || "").toLowerCase();
+    if (["admin", "administrator", "system_admin", "superadmin"].includes(roleLower)) {
+      return true;
+    }
+    const userHandles = [
+      (currentUserUsername || "").trim().toLowerCase(),
+      (currentUserEmail || "").trim().toLowerCase(),
+    ].filter(Boolean);
+
+    const docCreator = (document.created_by || "").trim().toLowerCase();
+    const docEmpId = (document.employee_id || "").trim().toLowerCase();
+    const docEmpName = (document.employee_name || "").trim().toLowerCase();
+    const assignedApprover = (document.assigned_approver || "").trim().toLowerCase();
+
+    if (docCreator && userHandles.includes(docCreator)) return true;
+    if (docEmpId && userHandles.includes(docEmpId)) return true;
+    if (docEmpName && userHandles.includes(docEmpName)) return true;
+    if (assignedApprover && userHandles.some(h => assignedApprover.includes(h))) return true;
+    if (document.is_current_approver) return true;
+
+    return false;
+  }, [document, currentUserRole, currentUserUsername, currentUserEmail]);
+
   // Periodic background stage poll: If another approver advances the stage, update immediately
   useEffect(() => {
     if (!document?.id || isTerminal) return;
@@ -1833,14 +1858,21 @@ export default function DocumentDetails({
   const handleInlineReject = async () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
     const isStage1 = (document?.current_stage || 1) <= 1;
+    if (isStage1 && !isAssignedInitiator) {
+      alert("Access Denied: Only the assigned initiator can cancel this document during the Attachment Stage.");
+      return;
+    }
     let comments = approvalComment.trim();
     if (!comments) {
       if (isStage1) {
-        const confirmCancel = window.confirm(
-          "Are you sure you want to cancel and void this document process at the Attachment Stage?"
+        const enteredComment = window.prompt(
+          "A cancellation comment is required to cancel this document at the Attachment Stage. Please enter your reason:"
         );
-        if (!confirmCancel) return;
-        comments = "Process cancelled and voided at Attachment Stage.";
+        if (!enteredComment || !enteredComment.trim()) {
+          alert("Cancellation aborted: A cancellation comment is mandatory.");
+          return;
+        }
+        comments = enteredComment.trim();
       } else {
         const enteredReason = window.prompt(
           `Please enter rejection reason notes to return to Stage ${(document.current_stage || 2) - 1} approver:`
@@ -2544,29 +2576,31 @@ export default function DocumentDetails({
                     <span>Hold</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleInlineReject}
-                    disabled={actionLoading}
-                    className="px-2.5 py-1.5 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
-                    title={
-                      (document?.current_stage || 1) > 1
-                        ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
-                        : "Cancel and void this process at Attachment stage"
-                    }
-                  >
-                    {(document?.current_stage || 1) > 1 ? (
-                      <>
-                        <RotateCcw className="h-3 w-3" />
-                        <span>Reject / Return</span>
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-3 w-3 stroke-[3]" />
-                        <span>Cancel Process</span>
-                      </>
-                    )}
-                  </button>
+                  {((document?.current_stage || 1) > 1 || isAssignedInitiator) && (
+                    <button
+                      type="button"
+                      onClick={handleInlineReject}
+                      disabled={actionLoading}
+                      className="px-2.5 py-1.5 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                      title={
+                        (document?.current_stage || 1) > 1
+                          ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
+                          : "Cancel and void this process at Attachment stage"
+                      }
+                    >
+                      {(document?.current_stage || 1) > 1 ? (
+                        <>
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Reject / Return</span>
+                        </>
+                      ) : (
+                        <>
+                          <X className="h-3 w-3 stroke-[3]" />
+                          <span>Cancel Process</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               );
             })()}
