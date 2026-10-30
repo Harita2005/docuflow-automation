@@ -1612,21 +1612,13 @@ export default function AdminRBAC({ onRefreshSignal }) {
     if (!categoryTarget) categoryTarget = "General Operational Permissions";
 
     setPermissionsList(prev => {
-      let categoryExists = false;
-      const updated = prev.map(cat => {
-        if (cat.category.toLowerCase() === categoryTarget.toLowerCase()) {
-          categoryExists = true;
-          return {
-            ...cat,
-            items: [...cat.items, newPermissionItem]
-          };
-        }
-        return cat;
-      });
+      const categoryIdx = prev.findIndex(
+        cat => cat.category.toLowerCase() === categoryTarget.toLowerCase()
+      );
 
-      if (!categoryExists) {
+      if (categoryIdx === -1) {
         return [
-          ...updated,
+          ...prev,
           {
             id: `cat_${categoryTarget.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
             category: categoryTarget,
@@ -1635,7 +1627,16 @@ export default function AdminRBAC({ onRefreshSignal }) {
           }
         ];
       }
-      return updated;
+
+      return prev.map((cat, idx) => {
+        if (idx === categoryIdx) {
+          return {
+            ...cat,
+            items: [...cat.items, newPermissionItem]
+          };
+        }
+        return cat;
+      });
     });
 
     // Add default clearances for this permission to roles:
