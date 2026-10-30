@@ -1,9 +1,11 @@
 import os
 import json
 import time
+import logging
 import threading
-from pathlib import Path
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 from app.config.settings import settings
 
 __all__ = ["DocumentLockManager", "lock_manager"]
@@ -29,8 +31,8 @@ class DocumentLockManager:
                     disk_data = json.load(f)
                     if isinstance(disk_data, dict):
                         self._locks.update(disk_data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Doc lock disk read failed: %s", exc)
 
     def _sync_to_disk(self) -> None:
         try:
@@ -38,8 +40,8 @@ class DocumentLockManager:
             with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(self._locks, f)
             os.replace(tmp_file, self._cache_file)
-        except Exception:
-            pass
+        except Exception as exc:
+                logger.debug("Doc lock disk write failed: %s", exc)
 
     def _cleanup_expired(self):
         now = time.time()

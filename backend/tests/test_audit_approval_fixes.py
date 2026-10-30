@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import json
 import urllib.error
 import pytest

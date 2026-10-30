@@ -48,8 +48,8 @@ def extract_client_request_ip(req: Optional[Request] = None) -> str:
     if req:
         try:
             return resolve_client_ip(req)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Client IP resolution error: %s", exc)
     return "127.0.0.1"
 
 def record_document_audit_event(
@@ -4981,7 +4981,6 @@ def get_admin_backup_history(db: Session=Depends(get_db), current_user: User=Dep
 @router.post('/api/admin/backup/trigger')
 def trigger_admin_backup(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     _require_docs_admin(current_user, db)
-    import shutil
     import zipfile
 
     now = datetime.datetime.utcnow()

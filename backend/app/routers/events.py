@@ -43,8 +43,8 @@ class StreamTicketManager:
                     data = json.load(f)
                     if isinstance(data, dict):
                         self._tickets.update(data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Events stream ticket read failed: %s", exc)
 
     def _sync_to_disk(self):
         try:
@@ -52,8 +52,8 @@ class StreamTicketManager:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._tickets, f)
             os.replace(tmp, self._cache_file)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Events stream ticket write failed: %s", exc)
 
     def _cleanup_expired(self):
         now = time.time()

@@ -897,9 +897,7 @@ export default function DocumentDetails({
     ];
   }, [moreInfoConfig, canonicalDocType]);
 
-  const adminTop3Keys = useMemo(() => {
-    return new Set(adminTop3Fields.map((f) => getCanonicalKey(f.field_key)));
-  }, [adminTop3Fields]);
+
 
   // Effective fields to display in More Info
   const effectiveMoreInfoFields = useMemo(() => {

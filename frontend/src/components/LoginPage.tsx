@@ -917,7 +917,7 @@ export default function LoginPage({
               ) : (
                 <div className="space-y-3 pt-2">
                   {/* 1. PASSWORD LOGIN */}
-                  {availableMethods.includes("PASSWORD") || true ? (
+                  {availableMethods.includes("PASSWORD") ? (
                     <button
                       type="button"
                       disabled={loading}

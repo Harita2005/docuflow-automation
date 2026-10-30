@@ -337,7 +337,6 @@ async def verify_service_api_key(
             payload = decode_token(credentials.credentials)
 
             subject = payload.get("sub")
-            role = payload.get("role")
             scope = payload.get("scope")
 
             # 1. Any token carrying scope 'data:sync' is directly authorized for records sync

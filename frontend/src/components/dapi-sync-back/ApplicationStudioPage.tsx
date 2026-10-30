@@ -105,7 +105,7 @@ export default function ApplicationStudioPage({
     activeRule?.approvedAction?.method || 'POST'
   );
   const [targetEndpoint, setTargetEndpoint] = useState<string>(
-    activeRule?.approvedAction?.url || activeRule?.approvedAction?.url || ''
+    activeRule?.approvedAction?.url || ''
   );
   const [decisionTrigger, setDecisionTrigger] = useState<'APPROVED' | 'REJECTED' | 'BOTH'>(
     activeRule?.decisionTrigger || 'APPROVED'
@@ -174,7 +174,7 @@ export default function ApplicationStudioPage({
       setPriority(activeRule.priority);
       setRuleStatus(activeRule.status);
       setHttpMethod(activeRule.approvedAction?.method || 'POST');
-      setTargetEndpoint(activeRule.approvedAction?.url || activeRule?.approvedAction?.url || '');
+      setTargetEndpoint(activeRule.approvedAction?.url || '');
       setDecisionTrigger(activeRule.decisionTrigger || 'APPROVED');
       if (activeRule.conditions && activeRule.conditions.length > 0) {
         setConditions(activeRule.conditions);

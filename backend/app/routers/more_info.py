@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.auth import get_current_active_user, get_current_user_optional
+from app.auth import get_current_active_user
 from app.database.connection import get_db
 from app.database.models import (
     AuditLog,
@@ -678,8 +678,8 @@ def discover_available_fields_for_doc(
                     logger.debug("Handled non-fatal exception batch reading dynamic columns: %s", exc)
                     try:
                         db.rollback()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("DB rollback error: %s", exc)
         except Exception as exc:
             logger.debug("Layer 3 dynamic column discovery error: %s", exc)
 

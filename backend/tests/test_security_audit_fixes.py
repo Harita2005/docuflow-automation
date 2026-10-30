@@ -1,8 +1,7 @@
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +16,7 @@ from app.database.connection import get_db
 from app.database.models import Invoice, User
 from app.main import app
 from app.schemas.schemas import DocumentSyncRequest
-from app.routers.sync import _sync_to_production_schema, _upsert_single_document
+from app.routers.sync import _sync_to_production_schema
 
 
 @pytest.fixture
