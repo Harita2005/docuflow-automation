@@ -759,8 +759,8 @@ def send_password_reset_email(
             addr_infos = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET, socket.SOCK_STREAM)
             if addr_infos:
                 connect_host = addr_infos[0][4][0]
-        except Exception:
-            pass
+        except Exception as addr_err:
+            logger.debug("Failed to resolve connect host for %s: %s", smtp_host, addr_err)
 
         ssl_context = ssl.create_default_context()
         if smtp_port == 465:
@@ -781,8 +781,8 @@ def send_password_reset_email(
         finally:
             try:
                 server.quit()
-            except Exception:
-                pass
+            except Exception as quit_err:
+                logger.debug("SMTP connection already closed on quit: %s", quit_err)
         return True, f"Reset token sent to {masked_email}"
     except Exception as exc:
         logger.error("Password reset email failed to %s: %s", masked_email, exc)
