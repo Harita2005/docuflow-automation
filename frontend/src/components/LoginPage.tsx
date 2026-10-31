@@ -14,6 +14,8 @@ import {
   Eye,
   EyeOff,
   Lock,
+  CheckCircle2,
+  KeyRound,
 } from "lucide-react";
 
 type MFAMethod = "PASSWORD" | "EMAIL" | "SMS" | "AUTHENTICATOR";
@@ -79,6 +81,26 @@ export default function LoginPage({
 
   const otpBoxesRef = useRef<(HTMLInputElement | null)[]>([]);
   const [focusedOtpIndex, setFocusedOtpIndex] = useState<number | null>(0);
+
+  // First-time password change intercept state
+  const [isFirstTimeChange, setIsFirstTimeChange] = useState(false);
+  const [pendingAuthData, setPendingAuthData] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Forgot password state
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [resetTokenInput, setResetTokenInput] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [forgotNotice, setForgotNotice] = useState("");
+  const [devResetToken, setDevResetToken] = useState("");
+  const [isMustChangeInitial, setIsMustChangeInitial] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Device information
@@ -198,6 +220,198 @@ export default function LoginPage({
     }
   };
 
+  const handleFinishAuthSuccess = (data: any) => {
+    if (data.must_change_password || data.user?.must_change_password) {
+      if (data.token) {
+        localStorage.setItem("authToken", data.token);
+      }
+      setPendingAuthData(data);
+      setIsFirstTimeChange(true);
+      setOtpError("");
+      return;
+    }
+
+    if (data.token && data.user) {
+      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("currentUserUsername", data.user.username);
+      localStorage.setItem("currentUserRole", data.user.role || "");
+      localStorage.setItem("currentUserEmail", data.user.email || "");
+
+      onLoginSuccess(
+        data.user.id,
+        data.user.role,
+        data.user.email,
+        data.user.username
+      );
+    }
+  };
+
+  const handleSubmitFirstTimeChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpError("");
+
+    const newPwd = newPassword.trim();
+    const confirmPwd = confirmPassword.trim();
+
+    if (!newPwd) {
+      setOtpError("Please enter a new password.");
+      return;
+    }
+
+    if (newPwd.length < 6) {
+      setOtpError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (newPwd !== confirmPwd) {
+      setOtpError("New password and confirmation do not match.");
+      return;
+    }
+
+    const currentEmpId = (pendingAuthData?.user?.employee_id || realEmployeeId || employeeId || "").trim();
+    if (newPwd.toUpperCase() === currentEmpId.toUpperCase()) {
+      setOtpError("Your new password cannot be your Employee ID. Please select a different secure password.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = pendingAuthData?.token || localStorage.getItem("authToken");
+      const currentPwdToSubmit = passwordInput.trim() || currentEmpId;
+
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: currentPwdToSubmit,
+          new_password: newPwd,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to update password.");
+      }
+
+      // Finalize login on success
+      const user = pendingAuthData?.user;
+      if (user) {
+        localStorage.setItem("currentUserUsername", user.username);
+        localStorage.setItem("currentUserRole", user.role || "");
+        localStorage.setItem("currentUserEmail", user.email || "");
+
+        setIsFirstTimeChange(false);
+        onLoginSuccess(user.id, user.role, user.email, user.username);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to change password.";
+      setOtpError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = (forgotIdentifier || employeeId).trim();
+    if (!id) {
+      setOtpError("Please enter your Employee ID or Username.");
+      return;
+    }
+
+    setLoading(true);
+    setOtpError("");
+    setForgotNotice("");
+
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: id }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to request password reset.");
+      }
+
+      setForgotNotice(data.message || "Reset instructions dispatched.");
+      if (data.reset_token) {
+        setDevResetToken(data.reset_token);
+        setResetTokenInput(data.reset_token);
+      }
+      setForgotStep(2);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to request password reset.";
+      setOtpError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompletePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = resetTokenInput.trim();
+    const newPwd = resetNewPassword.trim();
+
+    if (!token) {
+      setOtpError("Please enter the reset token.");
+      return;
+    }
+
+    if (!newPwd) {
+      setOtpError("Please enter a new password.");
+      return;
+    }
+
+    if (newPwd.length < 6) {
+      setOtpError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (newPwd !== resetConfirmPassword.trim()) {
+      setOtpError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    setOtpError("");
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: token,
+          new_password: newPwd,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to reset password.");
+      }
+
+      setIsForgotPassword(false);
+      setForgotStep(1);
+      setResetTokenInput("");
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+      setDevResetToken("");
+      setStep(1);
+      setOtpSentNotice("Your password has been successfully reset! You can now log in with your new password.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to reset password.";
+      setOtpError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Step 1: Identification (Employee ID or Username)
   // ---------------------------------------------------------------------------
@@ -266,6 +480,7 @@ export default function LoginPage({
         setMaskedPhone(data.masked_phone || "");
         setHasAuthenticatorSetup(Boolean(data.has_authenticator_setup));
         setRealEmployeeId(data.employee_id || "");
+        setIsMustChangeInitial(Boolean(data.must_change_password));
 
         // Default selection to PASSWORD if available
         if (methods.includes("PASSWORD")) {
@@ -281,17 +496,7 @@ export default function LoginPage({
 
       // Direct login if MFA not required
       if (data.token && data.user) {
-        localStorage.setItem("authToken", data.token);
-        localStorage.setItem("currentUserUsername", data.user.username);
-        localStorage.setItem("currentUserRole", data.user.role || "");
-        localStorage.setItem("currentUserEmail", data.user.email || "");
-
-        onLoginSuccess(
-          data.user.id,
-          data.user.role,
-          data.user.email,
-          data.user.username
-        );
+        handleFinishAuthSuccess(data);
         return;
       }
 
@@ -540,17 +745,7 @@ export default function LoginPage({
           );
         }
 
-        localStorage.setItem("authToken", data.token);
-        localStorage.setItem("currentUserUsername", data.user.username);
-        localStorage.setItem("currentUserRole", data.user.role || "");
-        localStorage.setItem("currentUserEmail", data.user.email || "");
-
-        onLoginSuccess(
-          data.user.id,
-          data.user.role,
-          data.user.email,
-          data.user.username
-        );
+        handleFinishAuthSuccess(data);
       } catch (err: unknown) {
         const message =
           err instanceof Error
@@ -624,18 +819,8 @@ export default function LoginPage({
         );
       }
 
-      // Store existing JWT
-      localStorage.setItem("authToken", data.token);
-      localStorage.setItem("currentUserUsername", data.user.username);
-      localStorage.setItem("currentUserRole", data.user.role || "");
-      localStorage.setItem("currentUserEmail", data.user.email || "");
-
-      onLoginSuccess(
-        data.user.id,
-        data.user.role,
-        data.user.email,
-        data.user.username
-      );
+      // Finish login / force password change if required
+      handleFinishAuthSuccess(data);
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -777,8 +962,298 @@ export default function LoginPage({
           )}
 
           {/* ============================================================= */}
-          {/* STEP 1: Employee ID / Username */}
+          {/* FIRST TIME PASSWORD SETUP (FORCED CHANGE) */}
           {/* ============================================================= */}
+          {isFirstTimeChange && (
+            <div className="space-y-6 animate-fadeIn text-left">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-900 leading-relaxed">
+                  <span className="font-bold">Initial Login Detected:</span> Your account is currently using your Employee ID as the temporary password. Please set a new personal password to secure your account before continuing.
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold text-[#003F29] tracking-tight">
+                  Set Your New Password
+                </h2>
+                <p className="text-gray-500 text-xs">
+                  Create a secure password for employee <span className="font-semibold text-gray-700">{pendingAuthData?.user?.employee_name || pendingAuthData?.user?.username}</span> ({pendingAuthData?.user?.employee_id}).
+                </p>
+              </div>
+
+              <form onSubmit={handleSubmitFirstTimeChange} className="space-y-4 pt-1">
+                {/* Current password (Employee ID) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-800">
+                    Current Password / Employee ID
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="text"
+                      disabled
+                      value={passwordInput || pendingAuthData?.user?.employee_id || employeeId}
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* New password */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-800">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      required
+                      autoFocus
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm password */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-800">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter your new password"
+                      required
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-[11px] text-gray-600 space-y-1">
+                  <div className="font-semibold text-gray-700">Security Requirements:</div>
+                  <div>&bull; Must be at least 6 characters long</div>
+                  <div>&bull; Cannot be the same as your Employee ID</div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !newPassword || !confirmPassword}
+                  className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer mt-4"
+                >
+                  {loading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Saving New Password...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Save Password & Access Workspace</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* FORGOT PASSWORD WORKFLOW */}
+          {/* ============================================================= */}
+          {isForgotPassword && !isFirstTimeChange && (
+            <div className="space-y-6 animate-fadeIn text-left">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsForgotPassword(false);
+                    setForgotStep(1);
+                    setOtpError("");
+                  }}
+                  className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-[#003F29] cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back to Sign In
+                </button>
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Step {forgotStep} of 2
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold text-[#003F29] tracking-tight">
+                  {forgotStep === 1 ? "Forgot Password" : "Reset Your Password"}
+                </h2>
+                <p className="text-gray-500 text-xs">
+                  {forgotStep === 1
+                    ? "Enter your Employee ID or Username to receive a password reset token."
+                    : "Enter the reset token sent to your email and choose a new password."}
+                </p>
+              </div>
+
+              {forgotNotice && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
+                  {forgotNotice}
+                </div>
+              )}
+
+              {devResetToken && forgotStep === 2 && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                    Reset Token (Dev / Display Mode)
+                  </div>
+                  <div className="font-mono text-xs font-bold text-amber-950 break-all select-all">
+                    {devResetToken}
+                  </div>
+                </div>
+              )}
+
+              {forgotStep === 1 ? (
+                <form onSubmit={handleRequestPasswordReset} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-800">
+                      Employee ID or Username
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={forgotIdentifier}
+                        onChange={(e) => setForgotIdentifier(e.target.value)}
+                        placeholder="e.g. 16220 or EMP_01"
+                        required
+                        autoFocus
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || !forgotIdentifier.trim()}
+                    className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer mt-4"
+                  >
+                    {loading ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Sending Request...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <span>Get Reset Code</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleCompletePasswordReset} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-800">
+                      Reset Token / Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      value={resetTokenInput}
+                      onChange={(e) => setResetTokenInput(e.target.value)}
+                      placeholder="Paste the reset code"
+                      required
+                      className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-800">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showResetPassword ? "text" : "password"}
+                        value={resetNewPassword}
+                        onChange={(e) => setResetNewPassword(e.target.value)}
+                        placeholder="Minimum 6 characters"
+                        required
+                        className="w-full pl-3.5 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPassword(!showResetPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-800">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={resetConfirmPassword}
+                      onChange={(e) => setResetConfirmPassword(e.target.value)}
+                      placeholder="Confirm your new password"
+                      required
+                      className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#003F29]/30 focus:border-[#003F29]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || !resetTokenInput.trim() || !resetNewPassword}
+                    className="w-full py-3.5 px-4 bg-[#003F29] hover:bg-[#002E1E] disabled:bg-gray-300 text-white font-medium text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center space-x-2 cursor-pointer mt-4"
+                  >
+                    {loading ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Updating Password...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Reset Password & Finish</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {!isFirstTimeChange && !isForgotPassword && (
+            <>
+              {/* ============================================================= */}
+              {/* STEP 1: Employee ID / Username */}
+              {/* ============================================================= */}
 
           {step === 1 && (
             <div className="space-y-6">
@@ -853,6 +1328,21 @@ export default function LoginPage({
                     </>
                   )}
                 </button>
+
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotIdentifier(employeeId);
+                      setOtpError("");
+                      setIsForgotPassword(true);
+                      setForgotStep(1);
+                    }}
+                    className="text-xs text-gray-500 hover:text-[#003F29] font-medium transition-colors cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -1245,9 +1735,15 @@ export default function LoginPage({
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                    <p className="text-[11px] text-gray-500">
-                      Default initial password is your Employee ID (e.g. <span className="font-mono font-semibold">{realEmployeeId || employeeId}</span>).
-                    </p>
+                    {isMustChangeInitial ? (
+                      <p className="text-[11px] text-gray-500">
+                        Default initial password is your Employee ID (e.g. <span className="font-mono font-semibold">{realEmployeeId || employeeId}</span>).
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-gray-500">
+                        Enter your personal password.
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -1264,6 +1760,26 @@ export default function LoginPage({
                       <span>Sign In to Workspace</span>
                     )}
                   </button>
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    {isMustChangeInitial ? (
+                      <span className="text-gray-400">First time? Use your Employee ID</span>
+                    ) : (
+                      <span className="text-gray-400">Account password</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotIdentifier(realEmployeeId || employeeId);
+                        setOtpError("");
+                        setIsForgotPassword(true);
+                        setForgotStep(1);
+                      }}
+                      className="text-emerald-700 hover:text-emerald-900 font-medium cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
 
                   <div className="pt-2 text-center border-t border-gray-100 mt-2">
                     <button
@@ -1384,6 +1900,8 @@ export default function LoginPage({
               </form>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
 

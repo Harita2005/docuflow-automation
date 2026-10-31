@@ -59,12 +59,6 @@ __all__ = [
     "DocumentTypeFieldConfiguration",
     "ArchiveSetting",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Organization
-# ---------------------------------------------------------------------------
-
 class Division(Base):
     __tablename__ = "divisions"
 
@@ -247,6 +241,10 @@ class User(Base):
     mfa_enabled = Column(Boolean, default=True)
     mfa_type = Column(String(50), default="EMAIL")
     mfa_secret = Column(String(500), nullable=True)
+
+    must_change_password = Column(Boolean, default=True, index=True, nullable=False)
+    reset_token_hash = Column(String(255), nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
 
     last_login = Column(DateTime, nullable=True)
 

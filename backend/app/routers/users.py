@@ -226,6 +226,7 @@ def create_user_master(
         is_active=payload.is_active,
         mfa_enabled=payload.mfa_enabled,
         mfa_type=payload.mfa_type,
+        must_change_password=True,
         created_by=current_user.employee_name or current_user.name or 'System Admin',
         created_at=datetime.datetime.utcnow()
     )

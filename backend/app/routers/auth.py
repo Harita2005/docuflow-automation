@@ -18,11 +18,14 @@ def extract_client_ip(req: Request) -> str:
     """Extracts client IP address securely, verifying proxy trustworthiness."""
     return resolve_client_ip(req)
 from app.schemas.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     MFASendOTPRequest,
     MFASetupTOTPRequest,
     MFASetupTOTPResponse,
     MFAVerifyRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.services.mfa_service import (
@@ -38,6 +41,7 @@ from app.services.mfa_service import (
     mask_email,
     mask_phone,
     send_email_otp,
+    send_password_reset_email,
     send_sms_otp,
     verify_totp,
 )
@@ -59,8 +63,9 @@ def should_show_dev_otp() -> bool:
     return bool(getattr(settings, "SHOW_OTP_IN_UI", False) or os.getenv("SHOW_OTP_IN_UI", "").lower() in ("true", "1", "yes"))
 
 def check_user_password(user: User, candidate_password: str, db: Session) -> bool:
-    """Validate password against bcrypt hash, employee_id, username, user_uid, or admin defaults.
-    On match with initial default, auto-upgrades user.password_hash to bcrypt."""
+    """Validate password against bcrypt hash.
+    Initial defaults (employee_id, etc.) are ONLY accepted if must_change_password is True.
+    Once changed (must_change_password=False), defaults are strictly rejected."""
     if not candidate_password:
         return False
     pwd_clean = candidate_password.strip()
@@ -68,6 +73,12 @@ def check_user_password(user: User, candidate_password: str, db: Session) -> boo
         return False
 
     is_valid = verify_password(pwd_clean, user.password_hash or '')
+    if is_valid:
+        return True
+
+    # Once a user has changed their password, initial default passwords are strictly rejected!
+    if not getattr(user, "must_change_password", False):
+        return False
 
     pwd_norm = re.sub(r'[\s_\-]+', '', pwd_clean.upper())
     emp_norm = re.sub(r'[\s_\-]+', '', (user.employee_id or '').upper())
@@ -75,7 +86,7 @@ def check_user_password(user: User, candidate_password: str, db: Session) -> boo
     uid_norm = re.sub(r'[\s_\-]+', '', (user.user_uid or '').upper())
 
     # 1. Match against user's employee_id (raw or normalized e.g. EMP_01 vs EMP01)
-    if not is_valid and user.employee_id:
+    if user.employee_id:
         if pwd_clean.upper() == user.employee_id.strip().upper() or (pwd_norm and pwd_norm == emp_norm):
             is_valid = True
 
@@ -89,13 +100,13 @@ def check_user_password(user: User, candidate_password: str, db: Session) -> boo
         if pwd_clean.upper() == user.user_uid.strip().upper() or (pwd_norm and pwd_norm == uid_norm):
             is_valid = True
 
-    # 4. For admin role / username admin: accept standard admin defaults (including EMP_01, ADMIN01, Admin@1234)
+    # 4. For admin role / username admin: accept standard admin defaults (including EMP_01, ADMIN01, Admin@1234) on first login only
     if not is_valid and ((user.username and user.username.lower() == 'admin') or (user.role and user.role.lower() == 'admin')):
         admin_defaults = {'ADMIN', 'ADMIN01', 'ADMIN_01', 'EMP_01', 'EMP01', 'ADMIN@123', 'ADMIN@1234', 'PASSWORD'}
         if pwd_clean.upper() in admin_defaults or pwd_norm in {'ADMIN', 'ADMIN01', 'EMP01', 'PASSWORD'}:
             is_valid = True
 
-    if is_valid:
+    if is_valid and getattr(user, "must_change_password", False):
         try:
             from app.auth import get_password_hash
             user.password_hash = get_password_hash(pwd_clean)
@@ -256,6 +267,7 @@ async def login(
                 User.mfa_enabled,
                 User.mfa_type,
                 User.mfa_secret,
+                User.must_change_password,
                 User.active_session_id,
                 User.active_device_info,
                 User.session_created_at,
@@ -453,6 +465,7 @@ async def login(
             'active_session_conflict': False,
             'employee_id': user.employee_id or '',
             'username': user.username or '',
+            'must_change_password': bool(getattr(user, "must_change_password", False)),
             'message': 'Password verified. Please complete secondary two-factor authentication.',
         }
 
@@ -498,6 +511,7 @@ async def login(
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
+    must_change = bool(getattr(user, "must_change_password", False))
     return {
         'token': access_token,
         'access_token': access_token,
@@ -509,8 +523,10 @@ async def login(
             'name': user.employee_name or user.name,
             'email': user.email,
             'role': user.role,
-            'employee_id': user.employee_id
+            'employee_id': user.employee_id,
+            'must_change_password': must_change,
         },
+        'must_change_password': must_change,
         'mfa_required': False,
         'active_session_conflict': False,
         'session_id': new_session_id
@@ -690,6 +706,7 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
                 User.mfa_secret,
                 User.mfa_enabled,
                 User.mfa_type,
+                User.must_change_password,
                 User.active_session_id,
                 User.active_device_info,
                 User.session_created_at,
@@ -727,8 +744,11 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
                 delete_mfa_ticket(request.ticket)
                 raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
             remaining = 5 - ticket_data['attempts']
-            hint_emp = user.employee_id or 'your Employee ID'
-            raise HTTPException(status_code=400, detail=f'Invalid password. {remaining} attempt(s) remaining. (Initial default is {hint_emp})')
+            if getattr(user, "must_change_password", False):
+                hint = f" (Initial default is {user.employee_id or 'your Employee ID'})"
+            else:
+                hint = ""
+            raise HTTPException(status_code=400, detail=f'Invalid password. {remaining} attempt(s) remaining.{hint}')
     elif method_upper in ['EMAIL', 'SMS']:
         otp_record = get_valid_otp(db, user.id)
         if not otp_record:
@@ -804,7 +824,8 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
     except Exception as e:
         logger.debug('Handled exception: %s', e)
     delete_mfa_ticket(request.ticket)
-    return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id}, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
+    must_change = bool(getattr(user, "must_change_password", False))
+    return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id, 'must_change_password': must_change}, 'must_change_password': must_change, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
 
 @router.post('/logout')
 def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
@@ -842,4 +863,202 @@ def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends
 def get_me(current_user: User=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail='Not authenticated')
-    return {'id': current_user.id, 'username': current_user.username, 'name': current_user.name, 'email': current_user.email, 'role': current_user.role, 'employee_id': current_user.employee_id}
+    return {'id': current_user.id, 'username': current_user.username, 'name': current_user.name, 'email': current_user.email, 'role': current_user.role, 'employee_id': current_user.employee_id, 'must_change_password': bool(getattr(current_user, "must_change_password", False))}
+
+
+@router.post('/change-password')
+def change_password(
+    payload: ChangePasswordRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    client_ip = extract_client_ip(req)
+    curr_pwd = (payload.current_password or "").strip()
+    new_pwd = (payload.new_password or "").strip()
+
+    if not new_pwd:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be empty.")
+    if len(new_pwd) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters long.")
+
+    # Validate current password
+    if not check_user_password(current_user, curr_pwd, db):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+    # Disallow setting new password equal to employee_id
+    norm_new = re.sub(r'[\s_\-]+', '', new_pwd.upper())
+    norm_emp = re.sub(r'[\s_\-]+', '', (current_user.employee_id or '').upper())
+    if norm_new == norm_emp or new_pwd.upper() == (current_user.employee_id or '').strip().upper():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be your Employee ID. Please choose a different, secure password."
+        )
+
+    if curr_pwd == new_pwd:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from your current password."
+        )
+
+    from app.auth import get_password_hash
+    current_user.password_hash = get_password_hash(new_pwd)
+    current_user.must_change_password = False
+    invalidate_user_cache(current_user.username)
+    db.add(current_user)
+    db.commit()
+
+    try:
+        db.add(AuditLog(
+            invoice_id=None,
+            user=current_user.employee_name or current_user.name or current_user.username,
+            action='Password Changed',
+            stage='Authentication',
+            notes=f"User '{current_user.username}' ({current_user.employee_id}) successfully changed password. IP: {client_ip}",
+            ip_address=client_ip
+        ))
+        db.commit()
+    except Exception as exc:
+        logger.debug("Failed to record audit log: %s", exc)
+
+    return {"success": True, "message": "Password changed successfully."}
+
+
+@router.post('/forgot-password')
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    req: Request,
+    db: Session = Depends(get_db)
+):
+    import secrets
+    import hashlib
+    client_ip = extract_client_ip(req)
+    ident = (payload.identifier or "").strip()
+    if not ident:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Employee ID or username is required.")
+
+    user = db.query(User).filter(
+        (User.username.ilike(ident) | User.employee_id.ilike(ident)) &
+        (or_(User.is_deleted == False, User.is_deleted.is_(None)))
+    ).first()
+
+    raw_token = None
+    email_dispatched = False
+
+    if user and user.is_active:
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+        user.reset_token_hash = token_hash
+        user.reset_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        db.add(user)
+        db.commit()
+
+        if user.email and '@' in user.email:
+            config = db.query(NotificationProviderConfig).first()
+            config_dict = None
+            if config and config.smtp_server:
+                config_dict = {
+                    'smtp_server': config.smtp_server,
+                    'port': config.port,
+                    'username': config.username,
+                    'encrypted_password': config.encrypted_password,
+                    'sender_email': config.sender_email,
+                    'sender_name': config.sender_name,
+                }
+            success, _ = send_password_reset_email(
+                user.email,
+                user.employee_name or user.name or user.username,
+                raw_token,
+                config_dict
+            )
+            email_dispatched = success
+
+        try:
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='Password Reset Requested',
+                stage='Authentication',
+                notes=f"Password reset requested for '{user.username}' ({user.employee_id}). IP: {client_ip}",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as exc:
+            logger.debug("Failed to record audit log: %s", exc)
+
+    show_dev = should_show_dev_otp() or (not email_dispatched)
+    response_payload = {
+        "success": True,
+        "message": "If an account exists with this identifier, password reset instructions have been sent."
+    }
+    if raw_token and show_dev:
+        response_payload["reset_token"] = raw_token
+
+    return response_payload
+
+
+@router.post('/reset-password')
+def reset_password(
+    payload: ResetPasswordRequest,
+    req: Request,
+    db: Session = Depends(get_db)
+):
+    import hashlib
+    client_ip = extract_client_ip(req)
+    token = (payload.token or "").strip()
+    new_pwd = (payload.new_password or "").strip()
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token is required.")
+    if not new_pwd:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be empty.")
+    if len(new_pwd) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters long.")
+
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    now = datetime.datetime.utcnow()
+
+    user = db.query(User).filter(
+        User.reset_token_hash == token_hash,
+        User.reset_token_expires_at >= now
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token. Please request a new reset code."
+        )
+
+    # Disallow setting new password equal to employee_id
+    norm_new = re.sub(r'[\s_\-]+', '', new_pwd.upper())
+    norm_emp = re.sub(r'[\s_\-]+', '', (user.employee_id or '').upper())
+    if norm_new == norm_emp or new_pwd.upper() == (user.employee_id or '').strip().upper():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be your Employee ID. Please choose a different, secure password."
+        )
+
+    from app.auth import get_password_hash
+    user.password_hash = get_password_hash(new_pwd)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    user.must_change_password = False
+    user.active_session_id = None
+    invalidate_user_cache(user.username)
+    db.add(user)
+    db.commit()
+
+    try:
+        db.add(AuditLog(
+            invoice_id=None,
+            user=user.employee_name or user.name or user.username,
+            action='Password Reset Completed',
+            stage='Authentication',
+            notes=f"Password successfully reset for '{user.username}' ({user.employee_id}). IP: {client_ip}",
+            ip_address=client_ip
+        ))
+        db.commit()
+    except Exception as exc:
+        logger.debug("Failed to record audit log: %s", exc)
+
+    return {"success": True, "message": "Password has been successfully reset. Please log in with your new password."}

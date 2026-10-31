@@ -58,6 +58,36 @@ async def lifespan(app: FastAPI):
             # Audit log retention pruning on startup disabled to prevent unintended data loss (Issue 7).
             # Retention pruning is now managed via explicit admin operations / scheduled jobs with archival.
 
+            # Ensure auth schema columns exist (must_change_password, reset_token_hash, reset_token_expires_at)
+            try:
+                from .database.connection import engine
+                raw_conn = engine.raw_connection()
+                try:
+                    cursor = raw_conn.cursor()
+                    cursor.execute("""
+                        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'must_change_password')
+                        BEGIN
+                            ALTER TABLE users ADD must_change_password BIT NOT NULL CONSTRAINT DF_users_must_change_password DEFAULT 1;
+                        END
+                    """)
+                    cursor.execute("""
+                        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'reset_token_hash')
+                        BEGIN
+                            ALTER TABLE users ADD reset_token_hash NVARCHAR(255) NULL;
+                        END
+                    """)
+                    cursor.execute("""
+                        IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'reset_token_expires_at')
+                        BEGIN
+                            ALTER TABLE users ADD reset_token_expires_at DATETIME NULL;
+                        END
+                    """)
+                    raw_conn.commit()
+                finally:
+                    raw_conn.close()
+            except Exception as schema_err:
+                logger.warning(f"Auth schema migration on startup deferred: {schema_err}")
+
             # Invalidate legacy MFA tickets from public uploads/ and clear ticket store
             try:
                 invalidate_legacy_and_all_tickets()

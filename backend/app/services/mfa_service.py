@@ -646,6 +646,149 @@ def send_email_otp(
         return False, "Failed to send verification email."
 
 
+def send_password_reset_email(
+    email: str,
+    employee_name: str,
+    reset_token: str,
+    smtp_config: Optional[dict] = None,
+) -> Tuple[bool, str]:
+    """Send a password reset token/link through the configured SMTP server."""
+    if not email or not reset_token:
+        return False, "Invalid reset email request."
+
+    config = smtp_config or {}
+
+    smtp_host = (
+        os.getenv("SMTP_HOST", "")
+        or os.getenv("SMTP_SERVER", "")
+        or getattr(settings, "SMTP_HOST", "")
+        or (config.get("smtp_server") or "")
+    ).strip()
+
+    port_val = (
+        os.getenv("SMTP_PORT")
+        or getattr(settings, "SMTP_PORT", None)
+        or config.get("port")
+        or 587
+    )
+    try:
+        smtp_port = int(port_val)
+    except (TypeError, ValueError):
+        smtp_port = 587
+
+    smtp_user = (
+        os.getenv("SMTP_USERNAME", "")
+        or os.getenv("SMTP_USER", "")
+        or getattr(settings, "SMTP_USERNAME", "")
+        or getattr(settings, "SMTP_USER", "")
+        or (config.get("username") or "")
+    ).strip()
+
+    smtp_password = (
+        os.getenv("SMTP_PASSWORD", "")
+        or os.getenv("SMTP_PASS", "")
+        or getattr(settings, "SMTP_PASSWORD", "")
+        or getattr(settings, "SMTP_PASS", "")
+        or (config.get("encrypted_password") or "")
+    ).strip()
+
+    sender_email = (
+        os.getenv("SMTP_FROM", "")
+        or os.getenv("SMTP_SENDER_EMAIL", "")
+        or os.getenv("SMTP_SENDER_MAIL", "")
+        or getattr(settings, "SMTP_FROM", "")
+        or getattr(settings, "SMTP_SENDER_EMAIL", "")
+        or (config.get("sender_email") or "")
+        or smtp_user
+    ).strip()
+
+    sender_name = (
+        os.getenv("SMTP_SENDER_NAME", "")
+        or getattr(settings, "SMTP_SENDER_NAME", "")
+        or (config.get("sender_name") or "")
+        or "DocuFlow Security"
+    ).strip()
+
+    if not smtp_host or not smtp_user or not smtp_password:
+        return False, "Email service is not configured properly on the server."
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "DocuFlow – Password Reset Code"
+    message["From"] = f"{sender_name} <{sender_email}>"
+    message["To"] = email
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid()
+    message["X-Mailer"] = "DocuFlow Auth (Python/SMTP)"
+
+    plain_body = (
+        f"Hello {employee_name},\n\n"
+        f"A password reset was requested for your account.\n"
+        f"Your reset token is:\n{reset_token}\n\n"
+        "This code will expire in 30 minutes.\n"
+        "If you did not request a password reset, please contact IT immediately."
+    )
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; background-color: #ffffff;">
+        <h2 style="color: #0f172a; margin: 0; font-size: 20px; text-align: center;">DocuFlow Password Reset</h2>
+        <p style="color: #64748b; font-size: 14px; margin-top: 16px;">
+            Hello <strong>{employee_name}</strong>,<br>
+            A request has been received to reset the password for your DocuFlow account.
+        </p>
+        <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
+            <p style="font-size: 12px; color: #64748b; margin: 0 0 8px 0; text-transform: uppercase;">Your Reset Token</p>
+            <div style="font-size: 18px; font-weight: bold; letter-spacing: 1px; color: #0284c7; word-break: break-all;">
+                {reset_token}
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 8px;">Valid for 30 minutes</p>
+        </div>
+        <p style="color: #64748b; font-size: 13px;">If you did not initiate this request, you can safely ignore this email.</p>
+    </div>
+    """
+
+    message.attach(MIMEText(plain_body, "plain"))
+    message.attach(MIMEText(html_body, "html"))
+    masked_email = mask_email(email)
+
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True, f"Reset token sent to {masked_email}"
+
+    try:
+        connect_host = smtp_host
+        try:
+            addr_infos = socket.getaddrinfo(smtp_host, smtp_port, socket.AF_INET, socket.SOCK_STREAM)
+            if addr_infos:
+                connect_host = addr_infos[0][4][0]
+        except Exception:
+            pass
+
+        ssl_context = ssl.create_default_context()
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(timeout=4.0, context=ssl_context)
+            server._host = smtp_host
+            server.connect(connect_host, smtp_port)
+        else:
+            server = smtplib.SMTP(timeout=4.0)
+            server._host = smtp_host
+            server.connect(connect_host, smtp_port)
+            server.ehlo()
+            server.starttls(context=ssl_context)
+            server.ehlo()
+
+        try:
+            server.login(smtp_user, smtp_password)
+            server.sendmail(sender_email, [email], message.as_string())
+        finally:
+            try:
+                server.quit()
+            except Exception:
+                pass
+        return True, f"Reset token sent to {masked_email}"
+    except Exception as exc:
+        logger.error("Password reset email failed to %s: %s", masked_email, exc)
+        return False, "Failed to send reset email."
+
+
 # ---------------------------------------------------------------------------
 # SMS OTP
 # ---------------------------------------------------------------------------
@@ -817,6 +960,7 @@ __all__ = [
     "generate_totp_qr_svg",
     "verify_totp",
     "send_email_otp",
+    "send_password_reset_email",
     "send_sms_otp",
     "mask_email",
     "mask_phone",

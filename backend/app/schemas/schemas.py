@@ -61,8 +61,20 @@ class TokenResponse(BaseModel):
     message: Optional[str] = None
     initial_otp_sent: bool = False
     selected_method: Optional[str] = None
+    must_change_password: bool = False
 
     model_config = pydantic.ConfigDict(extra="allow")
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class ForgotPasswordRequest(BaseModel):
+    identifier: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 class MFASendOTPRequest(BaseModel):
     ticket: str
