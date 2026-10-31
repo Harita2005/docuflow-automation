@@ -56,7 +56,7 @@
     "@rollup/rollup-win32-x64-msvc": "^4.62.4"
   },
   "overrides": {
-    "follow-redirects": "^1.16.1",
+    "follow-redirects": "^1.16.2",
     "launch-editor": "^2.14.2"
   }
 }
