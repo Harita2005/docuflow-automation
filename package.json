@@ -54,7 +54,7 @@
   },
   "overrides": {
     "shell-quote": "^1.10.1",
-    "follow-redirects": "^1.16.1",
+    "follow-redirects": "^1.16.2",
     "launch-editor": "^2.14.2"
   }
 }
