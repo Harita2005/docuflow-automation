@@ -65,7 +65,13 @@ Ensure you have the employee's correct corporate email, Employee ID, assigned de
 8. Click **Save User Account**.
 
 #### What Happens Next?
-The user account is created immediately. The employee can now sign in using their corporate email and access features according to their assigned role.
+The user account is created immediately. The employee can now sign in using any of the supported authentication identifiers.
+
+### 2.5 Multi-Option Authentication & Password Lifecycle
+DocuFlow supports enterprise identity and password governance:
+* **Multi-Identifier Login:** Employees can sign in using their **Corporate Username**, **Corporate Email Address**, or **Employee ID**. The system supports normalized ID password matching.
+* **Force Password Change on Initial Sign-In:** Accounts created with default or temporary credentials are automatically prompted to set a new secure password upon their first login. Operational features remain locked until updated.
+* **Self-Service Password Reset:** Users can click **Forgot Password?** on the login screen to request a secure, 15-minute time-bounded reset link sent via corporate SMTP.
 
 ### 2.5 Deactivating or Enabling a User Account
 1. Open **User Management**.
@@ -140,10 +146,17 @@ The Flow Builder allows administrators to design multi-stage approval paths defi
 4. Enter the **Profile Name** and select the target **Category**.
 5. Click **+ Add Stage**:
    - Enter **Stage Name** (e.g., `Stage 1 Review`).
-   - Select **Assigned Role** (e.g., `AP Executive`).
+   - Select **Assigned Role / User Target** (e.g., `AP Executive`, `YUVASREE`, or specific approver pools).
    - Enter **Target SLA Hours** (e.g., `24`).
 6. Click **+ Add Stage** to add additional sequential approval levels as needed.
 7. Review stage order and click **Save & Publish Profile**.
+
+### 4.4 Approver Assignment & Cancellation Governance
+To ensure compliance with corporate audit and separation of duties:
+* **Strict Assigned Approver Rule:** Only the designated **Assigned Approver** (`assigned_approver`) configured for the current stage has permission to approve or cancel the document. Unassigned users view the document in Read-Only locked mode with a notice indicating the assigned party.
+* **Stage 1 Cancellation Controls:** For cancellation also, strictly only the assigned approver can cancel or void a document during Stage 1. Creators or unassigned staff cannot void the document.
+* **Dedicated Cancellation Modal:** When cancelling at Stage 1, a dedicated modal prompts the approver for a mandatory cancellation comment before voiding the workflow.
+* **Maker-Checker Policy (Segregation of Duties):** Submitting employees cannot approve their own invoices. Administrators are granted an override for administrative testing workflows.
 
 ### 4.4 Button Reference Table
 | Button | What It Does |
@@ -194,6 +207,10 @@ The Checklist Builder allows administrators to configure mandatory verification 
 4. Type the **Checklist Item Title** (e.g., *"Verify GSTIN Tax Registration"*).
 5. Toggle the **Mandatory** switch to **ON**.
 6. Click **Save Checklist Item**.
+
+### 6.3 Stage 1 Physical Attachment & Synthetic View Auto-Provisioning
+* **Mandatory Physical Attachment:** Stage 1 (Attachment Status) enforces that a physical invoice PDF must be attached and present before the **Approve** button unlocks.
+* **Synthetic Fallback Auto-Provisioning:** For documents ingested via automated workflows where the physical upload file is missing on disk, DocuFlow's fallback PDF generator automatically synthesizes and provisions the PDF file (`backend/uploads/{id}.pdf`) during compliance verification, ensuring uninterrupted processing.
 
 ---
 
@@ -262,5 +279,8 @@ Administrators can check the system backup status directly from the interface:
 | **New user cannot log in** | Account status set to Inactive or password typed incorrectly | Check User Management to ensure account status is Active. |
 | **User cannot access page** | Role permissions do not include page access | Open Role Clearance Matrix and toggle View permission for the role. |
 | **Document routed to wrong workflow** | Routing rule threshold or division condition is misconfigured | Open Condition Builder and verify the rule field, operator, and threshold value. |
-| **Approver cannot click Approve button** | Mandatory checklist item added in Checklist Builder is unchecked | Instruct approver to check all mandatory verification boxes. |
+| **Approver cannot click Approve button** | Mandatory checklist item unchecked, or user is not the assigned approver | Ensure all checklist items are verified and that the logged-in user matches `assigned_approver`. |
+| **Maker-Checker Policy Violation Error** | Submitter/creator attempting to approve their own document | Segregation of duties prevents self-approval. Have another authorized approver review and approve. |
+| **Access Denied on Approve or Cancel** | User is not the assigned approver for the active stage | Only the assigned approver can approve or cancel. Reassign the stage approver or log in as the assigned user. |
 | **Overdue SLA alerts not firing** | Stage SLA hours set to 0 or notification rule disabled | Open Flow Builder to set target SLA hours and check RACI notification settings. |
+| **Database falling back to local SQLite/1433** | Server host `192.168.179.22:1443` unreachable over current network | Ensure machine is connected to office Ethernet or VPN routing to 192.168.179.x. |

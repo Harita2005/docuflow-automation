@@ -134,14 +134,16 @@ export default function UserManualModal({
         icon: UserCheck,
         badge: "Verification & Sign-Off",
         color: "bg-emerald-50 text-emerald-900 border-emerald-200",
-        summary: "Inspect original document PDFs, verify mandatory checklists, and sign off on approvals.",
+        summary: "Inspect original document PDFs, verify mandatory checklists, enforce segregation of duties, and execute authorized stage sign-offs.",
         steps: [
-          "Document Viewer: Review the original invoice PDF/image on screen with zoom, rotate, and full-page controls.",
-          "Mandatory Checklist: Check all required verification items (e.g., 'Tax ID Validated', 'PO Quantities Match') before approving.",
-          "APPROVE ACTION: Click 'Approve & Pass Stage', enter optional sign-off remarks, and confirm.",
-          "HOLD ACTION: Click 'Hold / Pause' if information is missing. Type MANDATORY clarification comments before submitting.",
-          "SEND BACK ACTION: Click 'Send Back' to return the invoice to a previous stage with mandatory return instructions.",
-          "REJECT ACTION: Click 'Reject Document' if invalid. Type MANDATORY rejection reason notes in the popup box."
+          "Document Inspection & Viewer: Review the invoice PDF/image in the split-pane viewer with zoom, rotate, download, and synthetic preview fallback.",
+          "Strict Assigned Approver Authorization: For both Approval and Cancellation, strictly ONLY the assigned approver for the active stage is authorized to take action. Other viewers see the document in Read-Only locked mode with an assignment indicator.",
+          "Maker-Checker (Segregation of Duties): The creator/submitter of an invoice cannot approve their own submission, ensuring financial audit compliance (system administrators have a test bypass).",
+          "Stage 1 Mandatory Attachment & Checklist: In Stage 1 (Attachment Status), a physical document file must be attached and all stage checklist items (e.g., Documents Attached, Bill Name, Bill Date) must be checked before the Approve button unlocks.",
+          "APPROVE ACTION: Click 'Approve ➔' once all stage criteria are satisfied to sign off and advance the invoice to the next workflow stage approver.",
+          "STAGE 1 CANCEL PROCESS: Dedicated Cancellation Modal prompts the assigned approver for a mandatory cancellation reason before voiding the process in Stage 1.",
+          "HOLD ACTION: Click 'Hold' if clarification or goods inspection is pending. Enter mandatory clarification notes before placing on hold.",
+          "REJECT / RETURN ACTION: For Stage 2+, click 'Reject / Return' and enter mandatory notes to return the invoice to the preceding stage approver for correction."
         ]
       },
       {
@@ -230,16 +232,18 @@ export default function UserManualModal({
     sections: [
       {
         id: "adm_users",
-        title: "1. User Account Management",
+        title: "1. User Account Management & Authentication",
         icon: Users,
         badge: "Employee Governance",
         color: "bg-blue-50 text-blue-900 border-blue-200",
-        summary: "Create new employee accounts, assign operating roles, map departments, and toggle active status.",
+        summary: "Create employee accounts, manage multi-option authentication, enforce password reset policies, and assign operational roles.",
         steps: [
           "Create User: Open Control Settings -> User Management and click 'Create User' (+ Add New Employee).",
           "Employee Fields: Enter Full Name, Employee ID, Corporate Email Address, Division, and Department.",
-          "Assign Role: Select the employee's operating role profile (e.g., Accounts Approver, Manager, Admin).",
-          "Account Toggle: Use the Status Toggle switch to instantly activate or deactivate user account access."
+          "Multi-Option Authentication: Employees can authenticate via Username, Corporate Email, or Employee ID with normalized password matching.",
+          "Force Password Change: First-time logins or accounts with default passwords must establish a new secure password before accessing workspace features.",
+          "Self-Service Password Reset: Users can request a secure reset link from the login page, receiving a time-limited email token.",
+          "Assign Role & Status: Select the employee's operating role profile (e.g., Accounts Approver, Manager, Admin) and toggle active status."
         ]
       },
       {

@@ -1,6 +1,7 @@
-import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, BookOpen } from "lucide-react";
-import { useState, useEffect } from "react";
-import UserManualModal from "./UserManualModal";
+import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, BookOpen, Clock, CheckCircle2, XCircle, CheckCheck } from "lucide-react";
+import { useState, useEffect, lazy, Suspense } from "react";
+
+const UserManualModal = lazy(() => import("./UserManualModal"));
 
 interface HeaderProps {
   currentView: string;
@@ -71,43 +72,103 @@ export default function Header({
         fetchNotifications();
       }
     };
+    const handleFocus = () => {
+      fetchNotifications();
+    };
     window.addEventListener("new_notification", handleNewNotification);
-    const interval = setInterval(fetchNotifications, 5000);
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(fetchNotifications, 25000);
     return () => {
       clearInterval(interval);
       window.removeEventListener("new_notification", handleNewNotification);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [currentUserEmail]);
 
   const handleMarkAsRead = async (id: string) => {
+    setNotifications(prev =>
+      prev.map(n => n.notification_id === id ? { ...n, is_read: true } : n)
+    );
     try {
       const token = localStorage.getItem("authToken");
       const response = await fetch(`/api/notifications/${id}/read`, {
         method: "PUT",
         headers: token ? { "Authorization": `Bearer ${token}` } : {}
       });
-      if (response.ok) {
-        setNotifications(prev =>
-          prev.map(n => n.notification_id === id ? { ...n, is_read: true } : n)
-        );
+      if (!response.ok) {
+        fetchNotifications();
       }
     } catch (e) {
       console.error(e);
+      fetchNotifications();
     }
   };
 
   const handleMarkAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     try {
       const token = localStorage.getItem("authToken");
       const response = await fetch(`/api/notifications/read-all`, {
         method: "PUT",
         headers: token ? { "Authorization": `Bearer ${token}` } : {}
       });
-      if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      if (!response.ok) {
+        fetchNotifications();
       }
     } catch (e) {
       console.error(e);
+      fetchNotifications();
+    }
+  };
+
+  const isActionRequiredNotification = (n: any) => {
+    const type = (n.notification_type || "").toUpperCase();
+    const title = (n.title || "").toLowerCase();
+    if (type === "PENDING_APPROVAL" || type === "SENT_BACK" || type === "ASSIGNED") {
+      if (title.startsWith("approval confirmed") || title.startsWith("returned to previous stage")) {
+        return false;
+      }
+      return true;
+    }
+    if (title.startsWith("action required")) {
+      return true;
+    }
+    return false;
+  };
+
+  const getNotificationCategory = (n: any) => {
+    if (isActionRequiredNotification(n)) return "ACTION_REQUIRED";
+    const type = (n.notification_type || "").toUpperCase();
+    const title = (n.title || "").toLowerCase();
+    if (type === "APPROVED" || title.includes("approved") || title.includes("approval confirmed")) {
+      return "APPROVED";
+    }
+    if (type === "REJECTED" || title.includes("rejected") || title.includes("cancelled") || title.includes("returned")) {
+      return "REJECTED";
+    }
+    if (type === "COMPLETED" || title.includes("settled") || title.includes("fully approved")) {
+      return "COMPLETED";
+    }
+    return "INFORMATIONAL";
+  };
+
+  const handleNotificationItemClick = (e: React.MouseEvent, n: any) => {
+    e.stopPropagation();
+    // 1. Mark as read immediately if unread
+    if (!n.is_read) {
+      handleMarkAsRead(n.notification_id);
+    }
+
+    // 2. Selective navigation logic
+    if (isActionRequiredNotification(n)) {
+      // Action Required: Redirect to corresponding invoice approval/details page and close dropdown
+      if (onViewDocument && n.document_id) {
+        onViewDocument(n.document_id);
+      }
+      setPopoverOpen(false);
+    } else {
+      // Informational (Approved, Rejected, Completed):
+      // Do NOT redirect, do NOT change page, keep notification in history, unread count decrements
     }
   };
 
@@ -233,6 +294,7 @@ export default function Header({
                   {unreadCount > 0 && (
                     <button
                       onClick={handleMarkAllAsRead}
+                      aria-label="Mark all notifications as read"
                       className="text-[9px] text-slate-700 hover:text-slate-900 font-bold bg-white px-2 py-0.5 rounded transition border border-slate-300 hover:border-slate-400 cursor-pointer"
                     >
                       Mark all read
@@ -243,26 +305,76 @@ export default function Header({
                 {/* Body List */}
                 <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-100">
                   {notifications.length === 0 ? (
-                    <div className="p-5 text-center text-slate-400">
-                      <ShieldAlert className="h-6 w-6 text-slate-350 mx-auto mb-1 opacity-50" />
-                      <p className="font-bold text-[9px] uppercase tracking-wider text-slate-500">No Notifications</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">You're all caught up! Document notifications assigned to you will appear here.</p>
+                    <div className="p-5 text-center text-slate-500">
+                      <ShieldAlert className="h-6 w-6 text-slate-400 mx-auto mb-1 opacity-50" />
+                      <p className="font-bold text-[9px] uppercase tracking-wider text-slate-600">No Notifications</p>
+                      <p className="text-[9px] text-slate-600 mt-0.5">You're all caught up! Document notifications assigned to you will appear here.</p>
                     </div>
                   ) : (
                     notifications.map((n) => {
+                      const category = getNotificationCategory(n);
+                      const isAction = isActionRequiredNotification(n);
+                      const isUnread = !n.is_read;
+
                       return (
                         <div
                           key={n.notification_id}
-                          onClick={() => {
-                            handleMarkAsRead(n.notification_id);
-                            if (onViewDocument) onViewDocument(n.document_id);
-                            setPopoverOpen(false);
-                          }}
-                          className="p-2.5 hover:bg-slate-50 transition cursor-pointer flex gap-2.5 relative"
+                          onClick={(e) => handleNotificationItemClick(e, n)}
+                          className={`p-2.5 transition cursor-pointer flex gap-2.5 relative items-start ${
+                            isUnread ? "bg-emerald-50/40 hover:bg-emerald-50/70" : "bg-white hover:bg-slate-50"
+                          }`}
                         >
-                          <div className="flex-1 space-y-0.5 text-left">
-                            <h4 className="text-[10.5px] font-bold text-slate-800 tracking-tight">{n.title}</h4>
-                            <p className="text-[9.5px] text-slate-500 leading-relaxed font-sans">{n.message}</p>
+                          {/* Left category icon */}
+                          <div className="mt-0.5 shrink-0">
+                            {category === "ACTION_REQUIRED" && (
+                              <span className="h-6 w-6 rounded-md bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-2xs" title="Action Required">
+                                <Clock className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {category === "APPROVED" && (
+                              <span className="h-6 w-6 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-2xs" title="Approved">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {category === "REJECTED" && (
+                              <span className="h-6 w-6 rounded-md bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-2xs" title="Rejected / Returned">
+                                <XCircle className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {category === "COMPLETED" && (
+                              <span className="h-6 w-6 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-2xs" title="Completed">
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {category === "INFORMATIONAL" && (
+                              <span className="h-6 w-6 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shadow-2xs" title="Notification">
+                                <Bell className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0 space-y-0.5 text-left">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <h4 className={`text-[10.5px] tracking-tight truncate ${
+                                isUnread ? "font-bold text-slate-900" : "font-medium text-slate-600"
+                              }`}>
+                                {n.title}
+                              </h4>
+                              {isUnread && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#003F28] shrink-0" title="Unread"></span>
+                              )}
+                            </div>
+                            <p className={`text-[9.5px] leading-relaxed font-sans line-clamp-2 ${
+                              isUnread ? "text-slate-700 font-normal" : "text-slate-600"
+                            }`}>
+                              {n.message}
+                            </p>
+                            {isAction && (
+                              <span className="inline-block text-[8px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200 px-1.5 py-0.2 rounded mt-1">
+                                Click to open & review ➔
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -279,9 +391,12 @@ export default function Header({
 
         {/* User Profile Dropdown Widget */}
         <div className="relative">
-          <div 
+          <button 
+            type="button"
+            aria-label="User Profile Menu"
+            aria-expanded={profileDropdownOpen}
             onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-            className="flex items-center gap-1.5 px-1.5 py-1 hover:bg-slate-100 rounded-md cursor-pointer transition-colors duration-200 select-none"
+            className="flex items-center gap-1.5 px-1.5 py-1 hover:bg-slate-100 rounded-md cursor-pointer transition-colors duration-200 select-none bg-transparent border-0 text-left"
           >
             {/* Avatar */}
             <div className="relative">
@@ -296,14 +411,14 @@ export default function Header({
               <span className="text-[10.5px] font-bold text-slate-900 leading-tight">
                 {displayUsername}
               </span>
-              <span className="text-[8.5px] font-medium text-slate-500 leading-none mt-0.5">
+              <span className="text-[8.5px] font-medium text-slate-600 leading-none mt-0.5">
                 {displayRole}
               </span>
             </div>
 
             {/* Chevron */}
-            <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${profileDropdownOpen ? 'transform rotate-180' : ''}`} />
-          </div>
+            <ChevronDown className={`h-3 w-3 text-slate-500 transition-transform duration-200 ${profileDropdownOpen ? 'transform rotate-180' : ''}`} />
+          </button>
 
           {/* Profile Dropdown Menu */}
           {profileDropdownOpen && (
@@ -316,7 +431,7 @@ export default function Header({
               
               <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-50 animate-fadeIn font-sans">
                 <div className="px-3 py-1 border-b border-slate-100 mb-0.5">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Signed in as</p>
+                  <p className="text-[8px] text-slate-600 font-bold uppercase tracking-wider">Signed in as</p>
                   <p className="text-[10px] text-slate-700 font-bold truncate mt-0.5">{currentUserEmail}</p>
                 </div>
 
@@ -336,13 +451,17 @@ export default function Header({
         </div>
       </div>
 
-      <UserManualModal 
-        isOpen={manualOpen} 
-        onClose={() => setManualOpen(false)} 
-        defaultSection={currentView === "customer-feedback" ? "feedback" : currentView === "admin" ? "admin" : "operations"}
-        currentUserRole={currentUserRole}
-        userPermissions={userPermissions}
-      />
+      {manualOpen && (
+        <Suspense fallback={null}>
+          <UserManualModal 
+            isOpen={manualOpen} 
+            onClose={() => setManualOpen(false)} 
+            defaultSection={currentView === "customer-feedback" ? "feedback" : currentView === "admin" ? "admin" : "operations"}
+            currentUserRole={currentUserRole}
+            userPermissions={userPermissions}
+          />
+        </Suspense>
+      )}
     </header>
   );
 }

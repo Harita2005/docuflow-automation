@@ -1,5 +1,7 @@
 import logging
-from typing import List
+import threading
+import time
+from typing import List, Optional, Set
 
 from fastapi import HTTPException, status, Depends
 from sqlalchemy.orm import Session
@@ -10,6 +12,43 @@ from app.database.models import Document, Permission, RolePermission, User
 
 logger = logging.getLogger(__name__)
 
+_ROLE_PERMS_CACHE: dict = {}
+_ROLE_PERMS_LOCK = threading.Lock()
+_ROLE_PERMS_TTL = 30.0
+
+def invalidate_role_permissions_cache(role_id: Optional[int] = None):
+    """Purge cached role permissions on role update or revocation."""
+    with _ROLE_PERMS_LOCK:
+        if role_id is not None:
+            _ROLE_PERMS_CACHE.pop(role_id, None)
+        else:
+            _ROLE_PERMS_CACHE.clear()
+
+def get_role_permissions_set(role_id: int, db: Session) -> Set[str]:
+    """Retrieve and cache all active permission codes for a role_id."""
+    now = time.monotonic()
+    with _ROLE_PERMS_LOCK:
+        entry = _ROLE_PERMS_CACHE.get(role_id)
+        if entry and (now - entry["timestamp"] < _ROLE_PERMS_TTL):
+            return entry["perms"]
+
+    rows = (
+        db.query(Permission.code, Permission.legacy_code)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .filter(RolePermission.role_id == role_id, Permission.is_active == True)
+        .all()
+    )
+    perms = set()
+    for code, legacy in rows:
+        if code:
+            perms.add(code.strip())
+        if legacy:
+            perms.add(legacy.strip())
+
+    with _ROLE_PERMS_LOCK:
+        _ROLE_PERMS_CACHE[role_id] = {"perms": perms, "timestamp": now}
+    return perms
+
 __all__ = [
     "check_permission",
     "user_has_permission",
@@ -18,6 +57,7 @@ __all__ = [
     "get_user_approval_divisions",
     "authorize_document_access",
     "check_document_owner_or_assigned",
+    "invalidate_role_permissions_cache",
 ]
 
 
@@ -70,21 +110,8 @@ def check_permission(user: User, permission_code: str, db: Session) -> bool:
         return False
 
     try:
-        has_permission = (
-            db.query(RolePermission)
-            .join(Permission)
-            .filter(
-                RolePermission.role_id == user.role_id,
-                Permission.is_active == True,
-                (
-                    (Permission.code == clean_code)
-                    | (Permission.legacy_code == clean_code)
-                ),
-            )
-            .first()
-        )
-
-        return has_permission is not None
+        perms = get_role_permissions_set(user.role_id, db)
+        return clean_code in perms
 
     except Exception:
         logger.exception(

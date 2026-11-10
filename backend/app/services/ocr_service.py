@@ -54,6 +54,22 @@ def set_ocr_semaphore(semaphore: threading.BoundedSemaphore):
     _ocr_semaphore = semaphore
 
 
+_OLLAMA_CLIENT = None
+_OLLAMA_CLIENT_LOCK = threading.Lock()
+
+def get_shared_ollama_client(timeout_sec: float = 30.0):
+    global _OLLAMA_CLIENT
+    if _OLLAMA_CLIENT is None:
+        with _OLLAMA_CLIENT_LOCK:
+            if _OLLAMA_CLIENT is None:
+                import httpx
+                _OLLAMA_CLIENT = httpx.Client(
+                    timeout=httpx.Timeout(timeout_sec, connect=5.0),
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=25),
+                )
+    return _OLLAMA_CLIENT
+
+
 _ocr_engine = None
 _ocr_lock = threading.Lock()
 
@@ -561,104 +577,103 @@ def extract_with_llm(text_content: str) -> Optional[Dict[str, Any]]:
         timeout_sec = 30.0
 
     try:
-        import httpx
         payload = {
             "model": ollama_model,
             "prompt": prompt,
             "format": "json",
             "stream": False
         }
-        with httpx.Client(timeout=timeout_sec) as client:
-            res = client.post(ollama_url, json=payload)
-            if res.status_code == 200:
-                raw_data = res.json()
-                raw_reply = raw_data.get("response", "")
-                
-                # Robust JSON regex match to handle any leading/trailing explanations or markdown
-                json_match = re.search(r'\{[\s\S]*\}', raw_reply)
-                if not json_match:
-                    logger.warning("[Ollama Extraction] No JSON object found in Ollama response: %s", raw_reply[:200])
-                    return None
+        client = get_shared_ollama_client(timeout_sec)
+        res = client.post(ollama_url, json=payload)
+        if res.status_code == 200:
+            raw_data = res.json()
+            raw_reply = raw_data.get("response", "")
+            
+            # Robust JSON regex match to handle any leading/trailing explanations or markdown
+            json_match = re.search(r'\{[\s\S]*\}', raw_reply)
+            if not json_match:
+                logger.warning("[Ollama Extraction] No JSON object found in Ollama response: %s", raw_reply[:200])
+                return None
 
-                parsed = json.loads(json_match.group(0))
+            parsed = json.loads(json_match.group(0))
 
-                # Normalize numeric fields
-                for num_key in ["amount", "base_amount", "tax_amount", "cgst", "sgst", "igst"]:
-                    parsed[num_key] = _clean_number(parsed.get(num_key))
+            # Normalize numeric fields
+            for num_key in ["amount", "base_amount", "tax_amount", "cgst", "sgst", "igst"]:
+                parsed[num_key] = _clean_number(parsed.get(num_key))
 
-                # Normalize confidence score
-                try:
-                    conf = float(parsed.get("confidence_score") or 0.95)
-                    parsed["confidence_score"] = min(max(conf, 0.0), 1.0)
-                except Exception:
-                    parsed["confidence_score"] = 0.95
+            # Normalize confidence score
+            try:
+                conf = float(parsed.get("confidence_score") or 0.95)
+                parsed["confidence_score"] = min(max(conf, 0.0), 1.0)
+            except Exception:
+                parsed["confidence_score"] = 0.95
 
-                # Clean strings
-                for str_key in ["vendor_name", "invoice_number", "gstin", "po_number"]:
-                    val = parsed.get(str_key)
-                    if val is None or str(val).strip().lower() in ["unknown", "null", "none", "n/a", "string", "undefined"]:
-                        parsed[str_key] = ""
-                    else:
-                        parsed[str_key] = str(val).strip()
-
-                # Clean invoice date
-                if parsed.get("invoice_date"):
-                    raw_date = str(parsed["invoice_date"]).strip()
-                    if raw_date.lower() in ["unknown", "null", "none", "n/a", "string", "undefined"]:
-                        parsed["invoice_date"] = ""
-                    else:
-                        parsed["invoice_date"] = parse_date_to_iso(raw_date)
-
-                # Normalize line items table
-                raw_items = parsed.get("line_items") or []
-                cleaned_items = []
-                if isinstance(raw_items, list):
-                    for idx, itm in enumerate(raw_items, start=1):
-                        if isinstance(itm, dict):
-                            desc = str(itm.get("description") or "").strip()
-                            if desc and desc.lower() not in ["unknown", "null", "none", "n/a", "string", "item"]:
-                                q_val = _clean_number(itm.get("quantity") or 1.0)
-                                r_val = _clean_number(itm.get("rate") or itm.get("unit_price") or 0.0)
-                                a_val = _clean_number(itm.get("amount") or 0.0)
-                                if a_val == 0.0 and q_val > 0 and r_val > 0:
-                                    a_val = round(q_val * r_val, 2)
-                                elif r_val == 0.0 and a_val > 0 and q_val > 0:
-                                    r_val = round(a_val / q_val, 2)
-                                s_no = itm.get("s_no")
-                                try:
-                                    s_no = int(s_no) if s_no is not None else idx
-                                except (ValueError, TypeError):
-                                    s_no = idx
-                                hsn_val = str(itm.get("hsn_sac") or itm.get("hsn") or "").strip()
-                                if hsn_val.lower() in ["unknown", "null", "none", "n/a", "string"]:
-                                    hsn_val = ""
-                                cleaned_items.append({
-                                    "s_no": s_no,
-                                    "description": desc,
-                                    "hsn_sac": hsn_val,
-                                    "quantity": q_val if q_val > 0 else 1.0,
-                                    "rate": r_val,
-                                    "amount": a_val
-                                })
-                parsed["line_items"] = cleaned_items
-
-                # Normalize dynamic fields dictionary
-                raw_dyn = parsed.get("dynamic_fields") or {}
-                if isinstance(raw_dyn, dict):
-                    parsed["dynamic_fields"] = {
-                        str(k).strip(): str(v).strip()
-                        for k, v in raw_dyn.items()
-                        if v is not None and str(v).strip() != "" and str(k).strip() not in ["vendor_name", "invoice_number", "amount"]
-                    }
+            # Clean strings
+            for str_key in ["vendor_name", "invoice_number", "gstin", "po_number"]:
+                val = parsed.get(str_key)
+                if val is None or str(val).strip().lower() in ["unknown", "null", "none", "n/a", "string", "undefined"]:
+                    parsed[str_key] = ""
                 else:
-                    parsed["dynamic_fields"] = {}
+                    parsed[str_key] = str(val).strip()
 
-                parsed["extraction_source"] = f"ollama_{ollama_model}"
-                logger.info("[Ollama Extraction] Successfully extracted fields using %s (Invoice: %s, Items: %d, Total: %s)",
-                            ollama_model, parsed.get("invoice_number"), len(cleaned_items), parsed.get("amount"))
-                return parsed
+            # Clean invoice date
+            if parsed.get("invoice_date"):
+                raw_date = str(parsed["invoice_date"]).strip()
+                if raw_date.lower() in ["unknown", "null", "none", "n/a", "string", "undefined"]:
+                    parsed["invoice_date"] = ""
+                else:
+                    parsed["invoice_date"] = parse_date_to_iso(raw_date)
+
+            # Normalize line items table
+            raw_items = parsed.get("line_items") or []
+            cleaned_items = []
+            if isinstance(raw_items, list):
+                for idx, itm in enumerate(raw_items, start=1):
+                    if isinstance(itm, dict):
+                        desc = str(itm.get("description") or "").strip()
+                        if desc and desc.lower() not in ["unknown", "null", "none", "n/a", "string", "item"]:
+                            q_val = _clean_number(itm.get("quantity") or 1.0)
+                            r_val = _clean_number(itm.get("rate") or itm.get("unit_price") or 0.0)
+                            a_val = _clean_number(itm.get("amount") or 0.0)
+                            if a_val == 0.0 and q_val > 0 and r_val > 0:
+                                a_val = round(q_val * r_val, 2)
+                            elif r_val == 0.0 and a_val > 0 and q_val > 0:
+                                r_val = round(a_val / q_val, 2)
+                            s_no = itm.get("s_no")
+                            try:
+                                s_no = int(s_no) if s_no is not None else idx
+                            except (ValueError, TypeError):
+                                s_no = idx
+                            hsn_val = str(itm.get("hsn_sac") or itm.get("hsn") or "").strip()
+                            if hsn_val.lower() in ["unknown", "null", "none", "n/a", "string"]:
+                                hsn_val = ""
+                            cleaned_items.append({
+                                "s_no": s_no,
+                                "description": desc,
+                                "hsn_sac": hsn_val,
+                                "quantity": q_val if q_val > 0 else 1.0,
+                                "rate": r_val,
+                                "amount": a_val
+                            })
+            parsed["line_items"] = cleaned_items
+
+            # Normalize dynamic fields dictionary
+            raw_dyn = parsed.get("dynamic_fields") or {}
+            if isinstance(raw_dyn, dict):
+                parsed["dynamic_fields"] = {
+                    str(k).strip(): str(v).strip()
+                    for k, v in raw_dyn.items()
+                    if v is not None and str(v).strip() != "" and str(k).strip() not in ["vendor_name", "invoice_number", "amount"]
+                }
             else:
-                logger.warning("[Ollama Extraction] Local Ollama returned status %s: %s", res.status_code, res.text[:200])
+                parsed["dynamic_fields"] = {}
+
+            parsed["extraction_source"] = f"ollama_{ollama_model}"
+            logger.info("[Ollama Extraction] Successfully extracted fields using %s (Invoice: %s, Items: %d, Total: %s)",
+                        ollama_model, parsed.get("invoice_number"), len(cleaned_items), parsed.get("amount"))
+            return parsed
+        else:
+            logger.warning("[Ollama Extraction] Local Ollama returned status %s: %s", res.status_code, res.text[:200])
     except Exception as exc:
         logger.warning("[Ollama Extraction] Local Ollama call skipped/failed (falling back to OCR rules): %s", exc)
 

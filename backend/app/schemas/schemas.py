@@ -2,7 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 from typing import List, Optional, Any, Union
 import pydantic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import datetime
 
 class LoginRequest(BaseModel):
@@ -166,8 +166,7 @@ class UserResponse(BaseModel):
     created_at: Optional[datetime.datetime] = None
     last_login: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class InvoiceBase(BaseModel):
     vendor_name: Optional[str] = None
@@ -232,9 +231,7 @@ class InvoiceBase(BaseModel):
     due_date: Optional[str] = None
     version: Optional[int] = 1
 
-    class Config:
-        from_attributes = True
-        extra = 'allow'
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class InvoiceCreate(InvoiceBase):
     id: Optional[str] = None
@@ -268,7 +265,8 @@ class InvoiceActionRequest(BaseModel):
     scheduled_time: Optional[str] = None
 
 class InvoiceResponse(InvoiceBase):
-    id: str
+    id: Union[int, str]
+    document_code: Optional[str] = None
     doc_key: Optional[Union[str, int]] = None
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
@@ -278,9 +276,7 @@ class InvoiceResponse(InvoiceBase):
     completed_by_peer: Optional[bool] = None
     current_stage_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-        extra = 'allow'
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class WorkflowStepSchema(BaseModel):
     stage_number: int
@@ -295,8 +291,7 @@ class WorkflowStepSchema(BaseModel):
     checklist_items: Optional[List[str]] = []
     checklist_json: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WorkflowProfileSchema(BaseModel):
     profile_name: str
@@ -318,8 +313,7 @@ class WorkflowProfileSchema(BaseModel):
     auto_cancel_condition: Optional[str] = None
     steps: List[WorkflowStepSchema] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ConditionItem(BaseModel):
     field: str
@@ -346,9 +340,7 @@ class BusinessRuleSchema(BaseModel):
     auto_cancel_condition: Optional[str] = None
     is_active: Optional[bool] = True
 
-    class Config:
-        from_attributes = True
-        extra = 'allow'
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class AuditLogResponse(BaseModel):
     id: int
@@ -369,9 +361,7 @@ class AuditLogResponse(BaseModel):
     outcome: Optional[str] = None
     category: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class PaginatedAuditLogsResponse(BaseModel):
     items: List[AuditLogResponse]
@@ -531,9 +521,7 @@ class DocumentSyncRequest(BaseModel):
 
         return data
 
-    class Config:
-        populate_by_name = True
-        extra = 'allow'
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 class DocumentSyncResponse(BaseModel):
     success: bool
@@ -579,8 +567,7 @@ class Base64AttachmentSyncRequest(BaseModel):
     attachment_type: str = Field('Original Invoice', description='Original Invoice, PO Copy, GRN Receipt, Delivery Challan')
     uploaded_by: Optional[str] = Field('ERP AutoSync', description='System user or sync service name')
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class AttachmentSyncResponse(BaseModel):
     success: bool
@@ -628,8 +615,7 @@ class ThirdPartyWebhookConfigResponse(ThirdPartyWebhookConfigCreate):
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ThirdPartyWebhookTestRequest(BaseModel):
     target_url: Optional[str] = None
@@ -686,8 +672,7 @@ class ThirdPartyApplicationResponse(BaseModel):
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CallbackRuleCreate(BaseModel):
     rule_name: str = Field(..., description='Rule Name')
@@ -779,8 +764,7 @@ class CallbackRuleResponse(BaseModel):
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TestCallbackRequest(BaseModel):
     application_id: Optional[int] = None
@@ -808,8 +792,7 @@ class MoreInfoFieldConfigItem(BaseModel):
     is_user_selected: bool = False
     sample_value: Optional[Any] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MoreInfoConfigResponse(BaseModel):

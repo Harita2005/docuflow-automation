@@ -4,6 +4,7 @@ import jwt
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Dict, Set
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -22,12 +23,33 @@ bearer_scheme = HTTPBearer()
 class LoginRequest(BaseModel):
     username: str
     password: str
+    scope: Optional[str] = "data:sync"
+
+ALLOWED_SERVICE_SCOPES = {
+    SERVICE_API_USER: {"data:sync", "integration:export", "workflow:read", "condition:read"},
+}
 
 def verify_m2m_token(credentials: HTTPAuthorizationCredentials=Depends(bearer_scheme)):
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        if payload.get('scope') != 'data:sync' and (not payload.get('sub')):
+        decode_kwargs = {
+            "key": JWT_SECRET_KEY,
+            "algorithms": [JWT_ALGORITHM],
+            "options": {
+                "require": ["exp", "sub", "iss", "aud"],
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_iss": True,
+                "verify_aud": True,
+            },
+        }
+        if getattr(settings, "JWT_ISSUER", None):
+            decode_kwargs["issuer"] = settings.JWT_ISSUER
+        if getattr(settings, "JWT_AUDIENCE", None):
+            decode_kwargs["audience"] = settings.JWT_AUDIENCE
+
+        payload = jwt.decode(token, **decode_kwargs)
+        if payload.get('scope') != 'data:sync' or (not payload.get('sub')):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
         return payload
     except jwt.ExpiredSignatureError as exc:
@@ -43,9 +65,28 @@ import hmac
 def m2m_login(body: LoginRequest):
     if not (hmac.compare_digest(body.username, SERVICE_API_USER) and hmac.compare_digest(body.password, SERVICE_API_PASS)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid credentials')
+    
+    req_scope = (body.scope or "data:sync").strip()
+    allowed_scopes = ALLOWED_SERVICE_SCOPES.get(body.username, set())
+    if req_scope not in allowed_scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Requested scope '{req_scope}' is not permitted for service account '{body.username}'. Allowed: {sorted(list(allowed_scopes))}"
+        )
+
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = jwt.encode({'sub': body.username, 'scope': 'data:sync', 'exp': expire}, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60}
+    token = jwt.encode(
+        {
+            'sub': body.username,
+            'scope': req_scope,
+            'exp': expire,
+            'iss': settings.JWT_ISSUER,
+            'aud': settings.JWT_AUDIENCE,
+        },
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+    return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
 
 from sqlalchemy.orm import Session
 from app.database.connection import get_db

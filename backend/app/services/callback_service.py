@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database.models import CallbackAttempt, CallbackEvent, CallbackRule, Document, ThirdPartyApplication
+from app.services.document_query_service import find_invoice_by_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +280,10 @@ def execute_sp_for_callback_payload(db: Optional[Session], sp_name: str, doc_key
     try:
         doc = None
         if db:
-            doc = db.query(Document).filter((Document.id == str(doc_key)) | (Document.doc_key == str(doc_key)) | (Document.invoice_number == str(doc_key))).first()
+            try:
+                doc = find_invoice_by_identifier(db, str(doc_key))
+            except Exception:
+                doc = None
         line_items = []
         if doc and doc.line_items:
             for item in (doc.line_items or []):
@@ -499,7 +503,10 @@ def dispatch_approval_callback_events(db: Session, document_id: str, decision: s
     Main hook called on FDO Final Decision (APPROVED / REJECTED).
     Evaluates all active CallbackRules, matches conditions, creates CallbackEvents, and dispatches callbacks.
     """
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
+    try:
+        doc = find_invoice_by_identifier(db, str(document_id))
+    except Exception:
+        doc = None
     if not doc:
         return []
     rules = db.query(CallbackRule).join(ThirdPartyApplication).filter(func.upper(CallbackRule.status) == 'ACTIVE', func.upper(ThirdPartyApplication.status) == 'ACTIVE', CallbackRule.trigger_event == 'FDO_FINAL_DECISION', CallbackRule.run_when.in_([decision.upper(), 'BOTH'])).order_by(CallbackRule.priority.asc()).all()

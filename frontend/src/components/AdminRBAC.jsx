@@ -26,8 +26,22 @@ import {
   Edit2,
   Eye,
   UserPlus,
-  Filter
+  Filter,
+  CheckSquare,
+  Check,
+  Sparkles,
+  FileText,
+  Sliders,
+  Layers,
+  BarChart3,
+  Globe,
+  Building2,
+  User,
+  ArrowRight
 } from "lucide-react";
+const AddRoleModal = React.lazy(() => import("./admin_rbac/AddRoleModal"));
+const AddUserModal = React.lazy(() => import("./admin_rbac/AddUserModal"));
+const EditUserModal = React.lazy(() => import("./admin_rbac/EditUserModal"));
 
 // Standard Baseline Roles
 export const INITIAL_ROLES = [
@@ -290,6 +304,26 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleCode, setNewRoleCode] = useState("");
+  const [newRoleDescription, setNewRoleDescription] = useState("");
+  const [newRolePreset, setNewRolePreset] = useState("operator"); // "viewer" | "operator" | "manager" | "admin" | "custom"
+  const [newRoleCapabilities, setNewRoleCapabilities] = useState({
+    view: true,
+    create: true,
+    edit: true,
+    approve: false,
+    delete: false,
+    export: true
+  });
+  const [newRolePages, setNewRolePages] = useState({
+    "dashboard": { enabled: true, write: true, admin: false },
+    "work-tracker": { enabled: true, write: true, admin: false },
+    "approved-documents": { enabled: true, write: false, admin: false },
+    "upload": { enabled: true, write: true, admin: false },
+    "customer-feedback": { enabled: true, write: true, admin: false },
+    "workflow-rules": { enabled: false, write: false, admin: false },
+    "admin": { enabled: false, write: false, admin: false }
+  });
+  const [showCustomRolePageBuilder, setShowCustomRolePageBuilder] = useState(false);
   const [savingRolePerms, setSavingRolePerms] = useState(false);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
 
@@ -366,6 +400,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
   const [newPermSubpage, setNewPermSubpage] = useState("detail");
   const [newCustomSubpage, setNewCustomSubpage] = useState("");
   const [newPermAction, setNewPermAction] = useState("APPROVE");
+  const [newPermActions, setNewPermActions] = useState(["APPROVE"]);
   const [newPermScopes, setNewPermScopes] = useState(["ASSIGNED", "ALL"]);
 
   // States for editing permissions
@@ -1132,6 +1167,110 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
   };
 
+  const handleSelectRolePreset = (presetKey) => {
+    setNewRolePreset(presetKey);
+    if (presetKey === "viewer") {
+      setNewRoleCapabilities({ view: true, create: false, edit: false, approve: false, delete: false, export: true });
+      setNewRolePages({
+        "dashboard": { enabled: true, write: false, admin: false },
+        "work-tracker": { enabled: true, write: false, admin: false },
+        "approved-documents": { enabled: true, write: false, admin: false },
+        "upload": { enabled: false, write: false, admin: false },
+        "customer-feedback": { enabled: true, write: false, admin: false },
+        "workflow-rules": { enabled: false, write: false, admin: false },
+        "admin": { enabled: false, write: false, admin: false }
+      });
+    } else if (presetKey === "operator") {
+      setNewRoleCapabilities({ view: true, create: true, edit: true, approve: false, delete: false, export: true });
+      setNewRolePages({
+        "dashboard": { enabled: true, write: true, admin: false },
+        "work-tracker": { enabled: true, write: true, admin: false },
+        "approved-documents": { enabled: true, write: false, admin: false },
+        "upload": { enabled: true, write: true, admin: false },
+        "customer-feedback": { enabled: true, write: true, admin: false },
+        "workflow-rules": { enabled: false, write: false, admin: false },
+        "admin": { enabled: false, write: false, admin: false }
+      });
+    } else if (presetKey === "manager") {
+      setNewRoleCapabilities({ view: true, create: true, edit: true, approve: true, delete: false, export: true });
+      setNewRolePages({
+        "dashboard": { enabled: true, write: true, admin: false },
+        "work-tracker": { enabled: true, write: true, admin: true },
+        "approved-documents": { enabled: true, write: true, admin: false },
+        "upload": { enabled: true, write: true, admin: false },
+        "customer-feedback": { enabled: true, write: true, admin: true },
+        "workflow-rules": { enabled: true, write: false, admin: false },
+        "admin": { enabled: false, write: false, admin: false }
+      });
+    } else if (presetKey === "admin") {
+      setNewRoleCapabilities({ view: true, create: true, edit: true, approve: true, delete: true, export: true });
+      setNewRolePages({
+        "dashboard": { enabled: true, write: true, admin: true },
+        "work-tracker": { enabled: true, write: true, admin: true },
+        "approved-documents": { enabled: true, write: true, admin: true },
+        "upload": { enabled: true, write: true, admin: true },
+        "customer-feedback": { enabled: true, write: true, admin: true },
+        "workflow-rules": { enabled: true, write: true, admin: true },
+        "admin": { enabled: true, write: true, admin: true }
+      });
+    }
+  };
+
+  const handleToggleRoleCapability = (capKey) => {
+    setNewRolePreset("custom");
+    setNewRoleCapabilities(prev => {
+      const nextVal = !prev[capKey];
+      const updated = { ...prev, [capKey]: nextVal };
+      setNewRolePages(prevPages => {
+        const nextPages = { ...prevPages };
+        Object.keys(nextPages).forEach(pageId => {
+          if (pageId === "admin" || pageId === "workflow-rules") {
+            if (capKey === "delete" && nextVal) {
+              nextPages[pageId] = { enabled: true, write: true, admin: true };
+            }
+          } else {
+            const hasWrite = updated.edit || updated.create || updated.approve;
+            const hasAdmin = updated.delete || (updated.approve && pageId === "work-tracker");
+            if (nextPages[pageId].enabled) {
+              nextPages[pageId] = {
+                ...nextPages[pageId],
+                write: hasWrite,
+                admin: hasAdmin
+              };
+            }
+          }
+        });
+        return nextPages;
+      });
+      return updated;
+    });
+  };
+
+  const handleToggleRolePage = (pageId, field = "enabled") => {
+    setNewRolePreset("custom");
+    setNewRolePages(prev => {
+      const current = prev[pageId] || { enabled: false, write: false, admin: false };
+      if (field === "enabled") {
+        const nextEnabled = !current.enabled;
+        return {
+          ...prev,
+          [pageId]: {
+            enabled: nextEnabled,
+            write: nextEnabled ? (newRoleCapabilities.edit || newRoleCapabilities.create) : false,
+            admin: nextEnabled ? newRoleCapabilities.delete : false
+          }
+        };
+      }
+      return {
+        ...prev,
+        [pageId]: {
+          ...current,
+          [field]: !current[field]
+        }
+      };
+    });
+  };
+
   const handleAddRole = async (e) => {
     e.preventDefault();
     if (!isAdmin || !newRoleName.trim()) return;
@@ -1156,6 +1295,23 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setErrorMsg("");
     setSuccessMsg("");
 
+    // Build the permission map for this role based on newRolePages
+    const compiledRolePerms = {};
+    const activePermCodes = [];
+    Object.keys(newRolePages).forEach(pageId => {
+      const p = newRolePages[pageId];
+      if (p.enabled) {
+        compiledRolePerms[pageId] = {
+          read: true,
+          write: !!p.write,
+          admin: !!p.admin
+        };
+        activePermCodes.push(pageId);
+      } else {
+        compiledRolePerms[pageId] = { read: false, write: false, admin: false };
+      }
+    });
+
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const headers = {
@@ -1169,17 +1325,51 @@ export default function AdminRBAC({ onRefreshSignal }) {
         body: JSON.stringify({
           code: finalCode,
           name: trimmedName,
-          description: "",
-          permissions: []
+          description: newRoleDescription.trim() || `${trimmedName} role`,
+          permissions: activePermCodes
         })
       });
 
       if (res.ok) {
         const createdRole = await res.json();
+        const roleKey = createdRole.code || finalCode;
+
+        // Immediately update rolePermissions state
+        const updatedMatrix = {
+          ...rolePermissions,
+          [roleKey]: compiledRolePerms,
+          [createdRole.id]: compiledRolePerms
+        };
+        setRolePermissions(updatedMatrix);
+
+        // Save matrix to backend config
+        await fetch("/api/admin/config", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            key: "RBAC_GRANULAR_MATRIX",
+            value: JSON.stringify(updatedMatrix),
+            description: "Role permissions matrix"
+          })
+        }).catch(() => {});
+
+        await fetch("/api/admin/config", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            key: "ROLE_PERMISSIONS",
+            value: JSON.stringify(updatedMatrix),
+            description: "Role permissions matrix"
+          })
+        }).catch(() => {});
+
         setNewRoleName("");
         setNewRoleCode("");
+        setNewRoleDescription("");
+        setNewRolePreset("operator");
         setShowAddRoleModal(false);
-        setSuccessMsg(`Role "${createdRole.name}" (${createdRole.code}) created successfully in database!`);
+        setSelectedRoleId(createdRole.id || roleKey);
+        setSuccessMsg(`✓ Role "${createdRole.name}" created with ${activePermCodes.length} permissions configured!`);
         await loadData();
         setTimeout(() => setSuccessMsg(""), 3500);
       } else {
@@ -1579,31 +1769,9 @@ export default function AdminRBAC({ onRefreshSignal }) {
     const cleanLabel = newPermLabel.trim();
     if (!cleanLabel) return;
 
+    const targetActions = (newPermActions && newPermActions.length > 0) ? newPermActions : [newPermAction || "APPROVE"];
     const effectiveSubpage = newPermSubpage === "custom" ? (newCustomSubpage.trim().toLowerCase() || "custom") : newPermSubpage;
-    const generatedCode = `${newPermModule.toLowerCase()}:${effectiveSubpage.toLowerCase()}:${newPermAction.toLowerCase()}`;
-    const rawKey = newPermId.trim() || `${newPermModule}-${effectiveSubpage}-${newPermAction.toLowerCase()}`;
-    const formattedId = rawKey.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     
-    // Check if duplicate
-    const allItems = permissionsList.flatMap(c => c.items);
-    if (allItems.some(item => item.id === formattedId || item.code === generatedCode)) {
-      alert(`A permission with code "${generatedCode}" or ID "${formattedId}" already exists.`);
-      return;
-    }
-
-    const newPermissionItem = {
-      id: formattedId,
-      code: generatedCode,
-      label: cleanLabel,
-      desc: newPermDesc.trim() || `${newPermAction} action for ${newPermModule}:${effectiveSubpage}`,
-      module: newPermModule,
-      subpage: effectiveSubpage,
-      action: newPermAction,
-      scopes: newPermScopes.length > 0 ? newPermScopes : ["ALL"],
-      iconName: "Shield",
-      isCustom: true
-    };
-
     // Find or create category
     let categoryTarget = newPermCategory.trim();
     if (categoryTarget === "NEW_CATEGORY") {
@@ -1611,6 +1779,74 @@ export default function AdminRBAC({ onRefreshSignal }) {
     }
     if (!categoryTarget) categoryTarget = "General Operational Permissions";
 
+    const allItems = permissionsList.flatMap(c => c.items);
+    const token = localStorage.getItem("token");
+    const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+
+    const newlyCreatedItems = [];
+
+    for (const act of targetActions) {
+      const actClean = act.toUpperCase();
+      const generatedCode = `${newPermModule.toLowerCase()}:${effectiveSubpage.toLowerCase()}:${actClean.toLowerCase()}`;
+      const rawKey = (targetActions.length === 1 && newPermId.trim()) 
+        ? newPermId.trim() 
+        : `${newPermModule}-${effectiveSubpage}-${actClean.toLowerCase()}`;
+      const formattedId = rawKey.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+      // Skip duplicate
+      if (allItems.some(item => item.id === formattedId || item.code === generatedCode)) {
+        continue;
+      }
+
+      const itemLabel = targetActions.length === 1 
+        ? cleanLabel 
+        : `${cleanLabel} (${actClean})`;
+
+      const itemDesc = newPermDesc.trim() || `${actClean} action for ${newPermModule}:${effectiveSubpage}`;
+
+      const newPermissionItem = {
+        id: formattedId,
+        code: generatedCode,
+        label: itemLabel,
+        desc: itemDesc,
+        module: newPermModule,
+        subpage: effectiveSubpage,
+        action: actClean,
+        scopes: newPermScopes.length > 0 ? newPermScopes : ["ALL"],
+        iconName: "Shield",
+        isCustom: true
+      };
+
+      newlyCreatedItems.push(newPermissionItem);
+
+      // Persist to backend
+      fetch("/api/admin/permissions", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: itemLabel,
+          description: itemDesc,
+          module: newPermModule.toUpperCase(),
+          subpage: effectiveSubpage.toLowerCase(),
+          action: actClean,
+          supported_scopes: newPermissionItem.scopes
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.id) {
+          newPermissionItem.backendId = data.id;
+        }
+      })
+      .catch(err => console.debug("Persisted custom permission to backend:", err));
+    }
+
+    if (newlyCreatedItems.length === 0) {
+      alert("Permission(s) for the selected action(s) already exist.");
+      return;
+    }
+
+    // Add to permissionsList
     setPermissionsList(prev => {
       const categoryIdx = prev.findIndex(
         cat => cat.category.toLowerCase() === categoryTarget.toLowerCase()
@@ -1623,7 +1859,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
             id: `cat_${categoryTarget.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
             category: categoryTarget,
             icon: "Folder",
-            items: [newPermissionItem]
+            items: newlyCreatedItems
           }
         ];
       }
@@ -1632,7 +1868,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
         if (idx === categoryIdx) {
           return {
             ...cat,
-            items: [...cat.items, newPermissionItem]
+            items: [...cat.items, ...newlyCreatedItems]
           };
         }
         return cat;
@@ -1643,38 +1879,16 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setRolePermissions(prev => {
       const updated = { ...prev };
       Object.keys(updated).forEach(roleId => {
-        updated[roleId] = {
-          ...updated[roleId],
-          [formattedId]: roleId === "admin" 
+        const rolePerms = { ...updated[roleId] };
+        newlyCreatedItems.forEach(item => {
+          rolePerms[item.id] = roleId === "admin" 
             ? { read: true, write: true, admin: true } 
-            : { read: false, write: false, admin: false }
-        };
+            : { read: false, write: false, admin: false };
+        });
+        updated[roleId] = rolePerms;
       });
       return updated;
     });
-
-    // Persist via backend API
-    const token = localStorage.getItem("token");
-    const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    fetch("/api/admin/permissions", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        name: cleanLabel,
-        description: newPermissionItem.desc,
-        module: newPermModule.toUpperCase(),
-        subpage: effectiveSubpage.toLowerCase(),
-        action: newPermAction.toUpperCase(),
-        supported_scopes: newPermissionItem.scopes
-      })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data && data.id) {
-        newPermissionItem.backendId = data.id;
-      }
-    })
-    .catch(err => console.debug("Persisted custom permission to backend:", err));
 
     // Reset fields
     setNewPermId("");
@@ -1684,13 +1898,14 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setNewPermSubpage("detail");
     setNewCustomSubpage("");
     setNewPermAction("APPROVE");
+    setNewPermActions(["APPROVE"]);
     setNewPermScopes(["ASSIGNED", "ALL"]);
     setNewPermCategory("OPERATIONS PAGES");
     setNewPermIcon("Shield");
     setNewCategoryName("");
     setShowAddPermissionModal(false);
 
-    setSuccessMsg(`Permission "${cleanLabel}" (${generatedCode}) added! Click Save Changes to persist.`);
+    setSuccessMsg(`✓ ${newlyCreatedItems.length} permission(s) added (${targetActions.join(", ")})! Click Save Changes to persist.`);
     setTimeout(() => setSuccessMsg(""), 3500);
   };
 
@@ -1817,6 +2032,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input 
               type="text"
+              id="rbacSearchInput"
+              aria-label="Search role name, code, or description"
               value={search}
               onChange={e => { setSearch(e.target.value); setRolePage(1); }}
               placeholder="Search role name, code, or description..."
@@ -1828,6 +2045,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
           <div className="relative">
             <button
               type="button"
+              aria-label="Filter records"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowFilterDropdown(prev => !prev);
@@ -1880,10 +2098,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <div className="space-y-3">
                     {/* Role Filter */}
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="roleFilterSelect" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         By Role
                       </label>
                       <select
+                        id="roleFilterSelect"
+                        aria-label="Filter by Role"
                         value={roleFilter}
                         onChange={e => setRoleFilter(e.target.value)}
                         className="w-full h-8 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
@@ -1903,10 +2123,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
                     {/* User Status Filter */}
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="userStatusFilterSelect" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         By Status
                       </label>
                       <select
+                        id="userStatusFilterSelect"
+                        aria-label="Filter by User Status"
                         value={userStatusFilter}
                         onChange={e => setUserStatusFilter(e.target.value)}
                         className="w-full h-8 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-[#003F28] cursor-pointer"
@@ -1923,10 +2145,12 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   <div className="space-y-3">
                     {/* Role Status Filter */}
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="roleStatusFilterSelect" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         By Status
                       </label>
                       <select
+                        id="roleStatusFilterSelect"
+                        aria-label="Filter by Role Status"
                         value={roleStatusFilter}
                         onChange={e => {
                           setRoleStatusFilter(e.target.value);
@@ -1961,22 +2185,18 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowAddRoleModal(true)}
-                    className="h-8 flex items-center gap-1 px-3 bg-emerald-50/50 hover:bg-emerald-50 text-[#003F28] border border-emerald-300 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                    onClick={() => {
+                      setNewRoleName("");
+                      setNewRoleCode("");
+                      setNewRoleDescription("");
+                      handleSelectRolePreset("operator");
+                      setShowAddRoleModal(true);
+                    }}
+                    className="h-8 flex items-center gap-1.5 px-3.5 bg-[#003F28] hover:bg-[#003320] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
+                    title="Create a new role and assign its action clearances"
                   >
                     <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
-                    <span>Role</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewPermCategory(permissionsList[0]?.category || "Documents & OCR Extraction");
-                      setShowAddPermissionModal(true);
-                    }}
-                    className="h-8 flex items-center gap-1.5 px-3 bg-emerald-50/50 hover:bg-emerald-50 text-[#003F28] border border-emerald-300 text-xs font-bold rounded-lg shadow-2xs cursor-pointer transition-colors"
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                    <span>Permission</span>
+                    <span>Create Role</span>
                   </button>
                 </>
               )}
@@ -2244,6 +2464,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                 <div className="flex items-center gap-1">
                   <button 
                     type="button" 
+                    aria-label="Previous Page"
                     onClick={() => setRolePage(p => Math.max(1, p - 1))} 
                     disabled={validRolePage <= 1} 
                     className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none text-slate-600 text-xs font-medium cursor-pointer transition"
@@ -2254,6 +2475,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                     <button 
                       key={page} 
                       type="button" 
+                      aria-label={`Go to page ${page}`}
                       onClick={() => setRolePage(page)} 
                       className={`h-7 min-w-[28px] px-2 flex items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
                         validRolePage === page 
@@ -2266,6 +2488,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   ))}
                   <button 
                     type="button" 
+                    aria-label="Next Page"
                     onClick={() => setRolePage(p => Math.min(totalRolePages, p + 1))} 
                     disabled={validRolePage >= totalRolePages} 
                     className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none text-slate-600 text-xs font-medium cursor-pointer transition"
@@ -2274,9 +2497,11 @@ export default function AdminRBAC({ onRefreshSignal }) {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span>Rows per page</span>
+                  <label htmlFor="rolePageSizeSelect" className="text-xs text-slate-600">Rows per page</label>
                   <div className="relative">
                     <select 
+                      id="rolePageSizeSelect"
+                      aria-label="Rows per page"
                       value={rolePageSize} 
                       onChange={e => { setRolePageSize(Number(e.target.value)); setRolePage(1); }} 
                       className="appearance-none h-7 pl-2.5 pr-6 border border-slate-200 rounded-lg bg-white text-xs font-medium text-slate-700 cursor-pointer focus:outline-none focus:border-[#003F28]"
@@ -2389,19 +2614,6 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                         }`}>
                                           {isPageEnabled ? "✓ Page Enabled" : "✕ Access Disabled"}
                                         </span>
-                                        {isAdmin && (
-                                          <button
-                                            type="button"
-                                            title="Edit Permission (Module, Subpage, Action, Scopes)"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleOpenEditPermission(item, cat.category);
-                                            }}
-                                            className="h-5 w-5 flex items-center justify-center rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 transition cursor-pointer"
-                                          >
-                                            <Edit2 className="h-3 w-3" />
-                                          </button>
-                                        )}
                                       </div>
                                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-sm">{item.desc}</p>
                                     </div>
@@ -2452,7 +2664,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                               ? "bg-[#003F28] text-white shadow-xs font-bold" 
                                               : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                                           } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                          title="View / Read Page Access"
+                                          title="VIEW includes: Read-only access to view pages, examine invoice details, inspect OCR data and audit history"
                                         >
                                           <Eye className="h-3 w-3 shrink-0" />
                                           <span>View</span>
@@ -2466,7 +2678,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                               ? "bg-[#003F28] text-white shadow-xs font-bold" 
                                               : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                                           } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                          title="Edit / Action Operations Access (Approve, Hold, Edit Fields)"
+                                          title="EDIT / ACTION includes: Modify OCR fields, upload files, update tax & amounts, Approve, Reject, Hold, and Send Back"
                                         >
                                           <Edit2 className="h-3 w-3 shrink-0" />
                                           <span>Edit / Action</span>
@@ -2477,10 +2689,10 @@ export default function AdminRBAC({ onRefreshSignal }) {
                                           disabled={!isAdmin}
                                           className={`px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
                                             cell.admin 
-                                              ? "bg-[#003F28] text-white shadow-xs font-bold" 
+                                              ? "bg-rose-700 text-white shadow-xs font-bold" 
                                               : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                                           } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                          title="Admin Full Control (Delete, Override & System Config)"
+                                          title="ADMIN CONTROL includes: Permanent Delete, override workflow rules, bypass verification gates, and system settings"
                                         >
                                           <Shield className="h-3 w-3 shrink-0" />
                                           <span>Admin Control</span>
@@ -2773,1245 +2985,109 @@ export default function AdminRBAC({ onRefreshSignal }) {
 
 
       {/* ========================================================= */}
-      {/* MODAL: ADD CUSTOM ROLE */}
+      {/* MODAL: ADD ROLE & ASSIGN PERMISSIONS (INTUITIVE FOR LAYMAN) */}
       {/* ========================================================= */}
-      {showAddRoleModal && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xs w-full p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[11px] font-black text-slate-900 uppercase">Add Role</h3>
-              <button onClick={() => setShowAddRoleModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddRole} className="space-y-2.5">
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Role Title / Display Name</label>
-                <input 
-                  type="text"
-                  required
-                  value={newRoleName}
-                  onChange={e => {
-                    setNewRoleName(e.target.value);
-                    if (!newRoleCode || newRoleCode === newRoleName.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '')) {
-                      setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''));
-                    }
-                  }}
-                  placeholder="e.g. Treasury Officer"
-                  className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/25"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
-                  System Role Code <span className="text-slate-400 font-normal">(Auto-generated ID)</span>
-                </label>
-                <input 
-                  type="text"
-                  value={newRoleCode}
-                  onChange={e => setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''))}
-                  placeholder="e.g. treasury_officer"
-                  className="w-full text-xs p-2 font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/25 text-slate-700"
-                />
-                <p className="text-[9px] text-slate-400 mt-1">Unique identifier used in backend DB. Duplicates auto-suffix (_2, _3).</p>
-              </div>
-
-              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddRoleModal(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newRoleName.trim() || isCreatingRole}
-                  className="px-3.5 py-1.5 bg-[#005A36] hover:bg-[#00482B] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                >
-                  {isCreatingRole ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  <span>{isCreatingRole ? "Creating..." : "Add Role"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
+      {showAddRoleModal && (
+        <React.Suspense fallback={null}>
+          <AddRoleModal
+            isOpen={showAddRoleModal}
+            onClose={() => setShowAddRoleModal(false)}
+            onSubmit={handleAddRole}
+            newRoleName={newRoleName}
+            setNewRoleName={setNewRoleName}
+            newRoleCode={newRoleCode}
+            setNewRoleCode={setNewRoleCode}
+            newRoleDescription={newRoleDescription}
+            setNewRoleDescription={setNewRoleDescription}
+            newRolePreset={newRolePreset}
+            handleSelectRolePreset={handleSelectRolePreset}
+            newRoleCapabilities={newRoleCapabilities}
+            handleToggleRoleCapability={handleToggleRoleCapability}
+            showCustomRolePageBuilder={showCustomRolePageBuilder}
+            setShowCustomRolePageBuilder={setShowCustomRolePageBuilder}
+            newRolePages={newRolePages}
+            handleToggleRolePage={handleToggleRolePage}
+            isCreatingRole={isCreatingRole}
+          />
+        </React.Suspense>
       )}
 
       {/* ========================================================= */}
-      {/* MODAL: ADD CUSTOM PERMISSION */}
-      {/* ========================================================= */}
-      {/* ========================================================= */}
-      {/* MODAL: CREATE SYSTEM PERMISSION (MODULE, SUBPAGE, ACTION, SCOPES) */}
-      {/* ========================================================= */}
-      {showAddPermissionModal && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Plus className="h-4 w-4 text-[#003F28]" />
-                <span>Create System Permission</span>
-              </h3>
-              <button onClick={() => setShowAddPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddPermission} className="space-y-3.5">
-              {/* Row 1: Module & Subpage */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Module <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={newPermModule}
-                    onChange={e => setNewPermModule(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {MODULE_OPTIONS.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Subpage / Desk <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={newPermSubpage}
-                    onChange={e => setNewPermSubpage(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {SUBPAGE_OPTIONS.map(sp => (
-                      <option key={sp.value} value={sp.value}>{sp.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Custom Subpage Key (if 'custom' selected) */}
-              {newPermSubpage === "custom" && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Custom Subpage Key <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newCustomSubpage}
-                    onChange={e => setNewCustomSubpage(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                    placeholder="e.g. payments, audit_vault, vendor_portal"
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono text-slate-800 focus:border-[#003F28] focus:bg-white"
-                  />
-                </div>
-              )}
-
-              {/* Row 2: Action & Category */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Action <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={newPermAction}
-                    onChange={e => setNewPermAction(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {ACTION_OPTIONS.map(act => (
-                      <option key={act.value} value={act.value}>{act.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Category Group
-                  </label>
-                  <select
-                    value={newPermCategory}
-                    onChange={e => setNewPermCategory(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    <option value="OPERATIONS PAGES">OPERATIONS PAGES</option>
-                    <option value="FEEDBACK PAGE">FEEDBACK PAGE</option>
-                    <option value="ADMINISTRATION PAGES">ADMINISTRATION PAGES</option>
-                    <option value="NEW_CATEGORY">+ Create Custom Category...</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Custom Category Input if selected */}
-              {newPermCategory === "NEW_CATEGORY" && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">New Category Title</label>
-                  <input 
-                    type="text"
-                    required
-                    value={newCategoryName}
-                    onChange={e => setNewCategoryName(e.target.value)}
-                    placeholder="e.g. Vendor Management & Approvals"
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
-                  />
-                </div>
-              )}
-
-              {/* Live Permission Code Preview */}
-              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-900 uppercase">Generated Permission Code:</span>
-                <span className="font-mono text-xs font-black text-emerald-800 bg-white px-2.5 py-1 rounded border border-emerald-300">
-                  {newPermModule.toLowerCase()}:{(newPermSubpage === "custom" ? (newCustomSubpage.trim().toLowerCase() || "custom") : newPermSubpage).toLowerCase()}:{newPermAction.toLowerCase()}
-                </span>
-              </div>
-
-              {/* Permission Display Name */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                  Permission Name / Label <span className="text-rose-500">*</span>
-                </label>
-                <input 
-                  type="text"
-                  required
-                  value={newPermLabel}
-                  onChange={e => setNewPermLabel(e.target.value)}
-                  placeholder={`e.g. ${newPermAction} ${(newPermSubpage === 'custom' ? newCustomSubpage : newPermSubpage) || 'Document'} (${newPermModule.toUpperCase()})`}
-                  className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                  Description <span className="text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <textarea 
-                  value={newPermDesc}
-                  onChange={e => setNewPermDesc(e.target.value)}
-                  placeholder={`Allows ${newPermAction} operations on ${newPermModule}:${newPermSubpage}...`}
-                  rows={2}
-                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white resize-none"
-                />
-              </div>
-
-              {/* Supported Scopes */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1.5">
-                  Supported Authorization Scopes
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {SCOPE_OPTIONS.map(sc => {
-                    const isChecked = newPermScopes.includes(sc);
-                    return (
-                      <button
-                        key={sc}
-                        type="button"
-                        onClick={() => {
-                          setNewPermScopes(prev => 
-                            isChecked ? prev.filter(s => s !== sc) : [...prev, sc]
-                          );
-                        }}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
-                          isChecked
-                            ? "bg-[#003F28] text-white border-[#003F28]"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        {isChecked ? "✓ " : ""}{sc}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddPermissionModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newPermLabel.trim()}
-                  className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
-                >
-                  Create Permission
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL: EDIT SYSTEM PERMISSION (MODULE, SUBPAGE, ACTION, SCOPES) */}
-      {/* ========================================================= */}
-      {showEditPermissionModal && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-[#003F28]" />
-                <span>Edit Permission Definition</span>
-              </h3>
-              <button onClick={() => setShowEditPermissionModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditPermission} className="space-y-3.5">
-              {/* Row 1: Module & Subpage */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Module
-                  </label>
-                  <select
-                    value={editPermModule}
-                    onChange={e => setEditPermModule(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {MODULE_OPTIONS.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Subpage / Desk
-                  </label>
-                  <select
-                    value={editPermSubpage}
-                    onChange={e => setEditPermSubpage(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {SUBPAGE_OPTIONS.map(sp => (
-                      <option key={sp.value} value={sp.value}>{sp.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Custom Subpage Key (if 'custom' selected) */}
-              {editPermSubpage === "custom" && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Custom Subpage Key
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editCustomSubpage}
-                    onChange={e => setEditCustomSubpage(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                    placeholder="e.g. payments, audit_vault, vendor_portal"
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono text-slate-800 focus:border-[#003F28] focus:bg-white"
-                  />
-                </div>
-              )}
-
-              {/* Row 2: Action */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Action
-                  </label>
-                  <select
-                    value={editPermAction}
-                    onChange={e => setEditPermAction(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white cursor-pointer"
-                  >
-                    {ACTION_OPTIONS.map(act => (
-                      <option key={act.value} value={act.value}>{act.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Category Group
-                  </label>
-                  <input
-                    type="text"
-                    value={editPermCategory}
-                    onChange={e => setEditPermCategory(e.target.value)}
-                    className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Live Permission Code Preview */}
-              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-900 uppercase">Permission Code:</span>
-                <span className="font-mono text-xs font-black text-emerald-800 bg-white px-2.5 py-1 rounded border border-emerald-300">
-                  {editPermModule.toLowerCase()}:{(editPermSubpage === "custom" ? (editCustomSubpage.trim().toLowerCase() || "custom") : editPermSubpage).toLowerCase()}:{editPermAction.toLowerCase()}
-                </span>
-              </div>
-
-              {/* Permission Display Name */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                  Permission Name / Label <span className="text-rose-500">*</span>
-                </label>
-                <input 
-                  type="text"
-                  required
-                  value={editPermLabel}
-                  onChange={e => setEditPermLabel(e.target.value)}
-                  className="w-full text-xs px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#003F28] focus:bg-white transition-colors"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                  Description
-                </label>
-                <textarea 
-                  value={editPermDesc}
-                  onChange={e => setEditPermDesc(e.target.value)}
-                  rows={2}
-                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium text-slate-700 focus:border-[#003F28] focus:bg-white resize-none"
-                />
-              </div>
-
-              {/* Supported Scopes */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1.5">
-                  Supported Authorization Scopes
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {SCOPE_OPTIONS.map(sc => {
-                    const isChecked = editPermScopes.includes(sc);
-                    return (
-                      <button
-                        key={sc}
-                        type="button"
-                        onClick={() => {
-                          setEditPermScopes(prev => 
-                            isChecked ? prev.filter(s => s !== sc) : [...prev, sc]
-                          );
-                        }}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
-                          isChecked
-                            ? "bg-[#003F28] text-white border-[#003F28]"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        {isChecked ? "✓ " : ""}{sc}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowEditPermissionModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!editPermLabel.trim()}
-                  className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-            {/* ========================================================= */}
       {/* MODAL: ADD NEW USER (Spacious 2-Column Horizontal Layout) */}
       {/* ========================================================= */}
-      {showAddUserModal && typeof document !== "undefined" && createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl lg:max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
-
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-lg bg-[#003F28] flex items-center justify-center shadow-xs">
-                    <UserPlus className="h-4 w-4 text-emerald-300" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900 leading-tight">Add New Employee / User</h3>
-                    <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">Fill in employee details and assign division approval access</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAddUserModal(false)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Body */}
-              <form onSubmit={handleAddUser} className="flex flex-col flex-1 overflow-hidden min-h-0">
-                <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                    {/* LEFT COLUMN: Employee Identity & Hierarchy (5 Cols) */}
-                    <div className="lg:col-span-5 space-y-3.5 border-b lg:border-b-0 lg:border-r border-slate-100 pb-5 lg:pb-0 lg:pr-6">
-                      <div className="flex items-center gap-1.5 pb-1 border-b border-slate-100">
-                        <Users className="h-3.5 w-3.5 text-[#003F28]" />
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">User Profile Details</span>
-                      </div>
-
-                      {/* Row 1: EMP ID + Full Name */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                            Employee ID <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={newUserEmpId}
-                            onChange={e => setNewUserEmpId(e.target.value)}
-                            placeholder="e.g. 16220"
-                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300 font-semibold"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                            Full Name <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={newUserName}
-                            onChange={e => setNewUserName(e.target.value)}
-                            placeholder="e.g. Ram Kumar"
-                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300 font-semibold"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Row 2: Official Email */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                          Official Email <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={newUserEmail}
-                          onChange={e => setNewUserEmail(e.target.value)}
-                          placeholder="e.g. ram.kumar@company.com"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                        <p className="text-[9.5px] text-slate-400 mt-1">Activation & login OTP will be sent to this email address.</p>
-                      </div>
-
-                      {/* Row 3: Role Group */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Role Group</label>
-                        {rolesLoading ? (
-                          <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
-                            <span>Loading roles...</span>
-                          </div>
-                        ) : rolesError ? (
-                          <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{rolesError}</div>
-                        ) : roles.length === 0 ? (
-                          <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No roles configured.</div>
-                        ) : (
-                          <select
-                            value={newUserRole || (roles[0].code || roles[0].id)}
-                            onChange={e => setNewUserRole(e.target.value)}
-                            className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-semibold text-slate-800 cursor-pointer transition-all"
-                          >
-                            {roles.map(r => (
-                              <option key={r.code || r.id} value={r.code || r.id}>{r.name}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-
-                      {/* Row 4: Main Division (Triggers Approval Divisions Filter) */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                            Main Division <span className="text-rose-500">*</span>
-                          </label>
-                          <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                            Filters Approvals
-                          </span>
-                        </div>
-                        {divisionsLoading ? (
-                          <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
-                            <span>Loading...</span>
-                          </div>
-                        ) : divisionsError ? (
-                          <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{divisionsError}</div>
-                        ) : availableDivisions.length === 0 ? (
-                          <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No divisions available.</div>
-                        ) : (
-                          <select
-                            value={newUserDivision || (availableDivisions[0]?.code || "")}
-                            onChange={e => {
-                              const newDiv = e.target.value;
-                              setNewUserDivision(newDiv);
-                              setShowAllAddDivs(false); // Reset to filtered view for selected Main Division
-                              const matchingDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, newDiv)).map(d => d.code);
-                              setNewUserApprovalDivisions(prev => {
-                                const retained = prev.filter(c => matchingDivs.includes(c));
-                                if (newDiv && !retained.includes(newDiv) && matchingDivs.includes(newDiv)) {
-                                  return [newDiv, ...retained];
-                                }
-                                return retained.length > 0 ? retained : (newDiv ? [newDiv] : []);
-                              });
-                            }}
-                            className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-bold text-slate-800 cursor-pointer transition-all"
-                          >
-                            {availableDivisions.map(d => (
-                              <option key={d.code} value={d.code}>
-                                {d.name ? `${d.name} (${d.code})` : d.code}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        <p className="text-[9px] text-slate-400 mt-1">Primary organizational unit assigned to this employee.</p>
-                      </div>
-
-                      {/* Row 5: Department + Plant */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Department</label>
-                          <input
-                            type="text"
-                            value={newUserDept}
-                            onChange={e => setNewUserDept(e.target.value)}
-                            placeholder="e.g. Finance"
-                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Plant / Branch</label>
-                          <input
-                            type="text"
-                            value={newUserPlant}
-                            onChange={e => setNewUserPlant(e.target.value)}
-                            placeholder="e.g. TN-SIVAKASI"
-                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* RIGHT COLUMN: Approval Divisions Matrix (7 Cols) */}
-                    <div className="lg:col-span-7 flex flex-col space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-[#003F28]" />
-                          <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">Approval Divisions</span>
-                          {newUserApprovalDivisions.length > 0 && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-[#003F28] border border-emerald-200">
-                              {newUserApprovalDivisions.length} selected
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {addGroupList.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (allAddGroupSelected) {
-                                  setNewUserApprovalDivisions(prev => prev.filter(c => !addGroupList.some(d => d.code === c)));
-                                } else {
-                                  setNewUserApprovalDivisions(prev => Array.from(new Set([...prev, ...addGroupList.map(d => d.code)])));
-                                }
-                              }}
-                              className="text-[10px] text-[#003F28] hover:underline font-bold transition-colors cursor-pointer"
-                            >
-                              {allAddGroupSelected ? "Deselect all" : "Select all in view"}
-                            </button>
-                          )}
-                          {newUserApprovalDivisions.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setNewUserApprovalDivisions([])}
-                              className="text-[10px] text-slate-400 hover:text-rose-500 font-semibold transition-colors cursor-pointer"
-                            >
-                              Clear all
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Filter Mode Tabs: [ Main Division Group ] / [ All Divisions ] */}
-                      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200/80">
-                        <button
-                          type="button"
-                          onClick={() => setShowAllAddDivs(false)}
-                          className={`flex-1 py-1.5 px-3 rounded-md text-[10.5px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                            !showAllAddDivs
-                              ? "bg-white text-[#003F28] shadow-xs border border-slate-200"
-                              : "text-slate-500 hover:text-slate-800"
-                          }`}
-                        >
-                          <Filter className="h-3 w-3 text-emerald-600" />
-                          <span>Filtered: {getDivisionPrefix(activeAddMainDiv) || "Main"} Group ({addGroupDivs.length})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowAllAddDivs(true)}
-                          className={`flex-1 py-1.5 px-3 rounded-md text-[10.5px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                            showAllAddDivs
-                              ? "bg-white text-[#003F28] shadow-xs border border-slate-200"
-                              : "text-slate-500 hover:text-slate-800"
-                          }`}
-                        >
-                          <span>Show All Divisions ({availableDivisions.length})</span>
-                        </button>
-                      </div>
-
-                      {/* Division Selector Box */}
-                      {divisionsLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-6 border border-slate-200 rounded-lg bg-slate-50 justify-center">
-                          <Loader2 className="h-4 w-4 animate-spin text-[#003F28]" />
-                          <span>Loading approval divisions...</span>
-                        </div>
-                      ) : divisionsError ? (
-                        <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-3">{divisionsError}</div>
-                      ) : addGroupList.length === 0 ? (
-                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-4 text-center">
-                          No divisions available in {getDivisionPrefix(activeAddMainDiv)} group. Click "Show All Divisions" to assign any division.
-                        </div>
-                      ) : (
-                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex flex-col bg-white">
-                          {/* Search bar */}
-                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/70">
-                            <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                            <input
-                              type="text"
-                              value={divSearch}
-                              onChange={e => setDivSearch(e.target.value)}
-                              placeholder={showAllAddDivs ? "Search all divisions..." : `Search within ${getDivisionPrefix(activeAddMainDiv)} divisions...`}
-                              className="flex-1 text-xs bg-transparent outline-none text-slate-700 placeholder:text-slate-400 font-medium"
-                            />
-                            {divSearch && (
-                              <button type="button" onClick={() => setDivSearch("")} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                                <X className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Grid of checkboxes (2 spacious columns) */}
-                          <div className="grid grid-cols-2 gap-2 p-2.5 max-h-[290px] overflow-y-auto custom-scrollbar">
-                            {filteredAddDivs.length === 0 ? (
-                              <div className="col-span-full text-[11px] text-slate-400 text-center py-6">
-                                No divisions found matching "{divSearch}".
-                              </div>
-                            ) : (
-                              filteredAddDivs.map(d => {
-                                const isChecked = newUserApprovalDivisions.includes(d.code);
-                                const isMain = d.code === activeAddMainDiv;
-                                return (
-                                  <label
-                                    key={d.code}
-                                    className={`flex items-start gap-2 p-2 rounded-lg border transition-all cursor-pointer select-none ${
-                                      isChecked
-                                        ? "bg-emerald-50/90 border-emerald-300 text-emerald-950 font-bold shadow-2xs"
-                                        : "bg-slate-50/60 border-slate-200 hover:bg-slate-100/70 text-slate-700"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={e => {
-                                        if (e.target.checked) {
-                                          setNewUserApprovalDivisions(prev => [...prev, d.code]);
-                                        } else {
-                                          setNewUserApprovalDivisions(prev => prev.filter(x => x !== d.code));
-                                        }
-                                      }}
-                                      className="rounded border-slate-300 text-[#003F28] focus:ring-[#003F28] h-3.5 w-3.5 mt-0.5 shrink-0 cursor-pointer"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-[11px] font-bold text-slate-900 truncate" title={d.name || d.code}>
-                                          {d.name || d.code}
-                                        </span>
-                                        {isMain && (
-                                          <span className="px-1 py-0.2 rounded text-[8px] font-extrabold uppercase bg-[#003F28] text-white">
-                                            Main
-                                          </span>
-                                        )}
-                                      </div>
-                                      <span className="text-[9.5px] text-slate-400 font-mono block">
-                                        {d.code}
-                                      </span>
-                                    </div>
-                                  </label>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <p className="text-[9.5px] text-slate-400 leading-relaxed">
-                        Filtered against Main Division (<strong>{activeAddMainDiv}</strong>). Select the business divisions this user is permitted to review and approve documents for.
-                      </p>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex-shrink-0">
-                  <p className="text-[10px] text-slate-400">Fields marked <span className="text-rose-500 font-bold">*</span> are required</p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddUserModal(false)}
-                      className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isCreatingUser}
-                      className="px-5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                    >
-                      {isCreatingUser && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      <span>{isCreatingUser ? "Creating..." : "Create User"}</span>
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-            </div>
-          </div>,
-          document.body
+      {showAddUserModal && (
+        <React.Suspense fallback={null}>
+          <AddUserModal
+            isOpen={showAddUserModal}
+            onClose={() => setShowAddUserModal(false)}
+            onSubmit={handleAddUser}
+            newUserEmpId={newUserEmpId}
+            setNewUserEmpId={setNewUserEmpId}
+            newUserName={newUserName}
+            setNewUserName={setNewUserName}
+            newUserEmail={newUserEmail}
+            setNewUserEmail={setNewUserEmail}
+            newUserRole={newUserRole}
+            setNewUserRole={setNewUserRole}
+            newUserDivision={newUserDivision}
+            setNewUserDivision={setNewUserDivision}
+            newUserDept={newUserDept}
+            setNewUserDept={setNewUserDept}
+            newUserPlant={newUserPlant}
+            setNewUserPlant={setNewUserPlant}
+            newUserApprovalDivisions={newUserApprovalDivisions}
+            setNewUserApprovalDivisions={setNewUserApprovalDivisions}
+            isCreatingUser={isCreatingUser}
+            roles={roles}
+            rolesLoading={rolesLoading}
+            rolesError={rolesError}
+            availableDivisions={availableDivisions}
+            divisionsLoading={divisionsLoading}
+            divisionsError={divisionsError}
+            isDivisionInGroup={isDivisionInGroup}
+            getDivisionPrefix={getDivisionPrefix}
+            showAllAddDivs={showAllAddDivs}
+            setShowAllAddDivs={setShowAllAddDivs}
+            activeAddMainDiv={activeAddMainDiv}
+            addGroupDivs={addGroupDivs}
+            addGroupList={addGroupList}
+            allAddGroupSelected={allAddGroupSelected}
+            divSearch={divSearch}
+            setDivSearch={setDivSearch}
+            filteredAddDivs={filteredAddDivs}
+          />
+        </React.Suspense>
       )}
-{/* ========================================================= */}
-      {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
-      {/* ========================================================= */}
+
       {/* ========================================================= */}
       {/* MODAL: EDIT USER PROFILE & EMPLOYEE ID */}
       {/* ========================================================= */}
-      {editingUserModal && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl lg:max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-lg bg-[#003F28] flex items-center justify-center shadow-xs">
-                  <Edit2 className="h-4 w-4 text-emerald-300" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 leading-tight">Edit Employee Profile & Details</h3>
-                  <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">Modify profile credentials, primary organizational division, and approval access permissions</p>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setEditingUserModal(null)} 
-                className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveUserEdit} className="flex flex-col flex-1 overflow-hidden min-h-0">
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                  {/* LEFT COLUMN: Employee Identity & Hierarchy (5 Cols) */}
-                  <div className="lg:col-span-5 space-y-3.5 border-b lg:border-b-0 lg:border-r border-slate-100 pb-5 lg:pb-0 lg:pr-6">
-                    <div className="flex items-center gap-1.5 pb-1 border-b border-slate-100">
-                      <Users className="h-3.5 w-3.5 text-[#003F28]" />
-                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">User Profile Details</span>
-                    </div>
-
-                    {/* Row 1: EMP ID + Full Name */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                          Emp ID (Editable) <span className="text-rose-500">*</span>
-                        </label>
-                        <input 
-                          type="text"
-                          required
-                          value={editingUserModal.employee_id || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, employee_id: e.target.value })}
-                          placeholder="e.g. 16220 or E22-02094"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                          Full Name (Editable) <span className="text-rose-500">*</span>
-                        </label>
-                        <input 
-                          type="text"
-                          required
-                          value={editingUserModal.employee_name || editingUserModal.name || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, employee_name: e.target.value, name: e.target.value })}
-                          placeholder="e.g. Ram Kumar"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Row 2: Email + Username */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                          Email Address <span className="text-rose-500">*</span>
-                        </label>
-                        <input 
-                          type="email"
-                          required
-                          value={editingUserModal.email || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, email: e.target.value })}
-                          placeholder="e.g. ram@company.com"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Username</label>
-                        <input 
-                          type="text"
-                          value={editingUserModal.username || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, username: e.target.value })}
-                          placeholder="e.g. ramk"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Row 3: Phone Number + Role Group */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Phone Number</label>
-                        <input 
-                          type="text"
-                          value={editingUserModal.phone_number || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, phone_number: e.target.value })}
-                          placeholder="e.g. +91 98765 43210"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Role Group</label>
-                        <select
-                          value={editingUserModal.role || 'employee'}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, role: e.target.value })}
-                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-semibold text-slate-800 cursor-pointer transition-all"
-                        >
-                          {roles.map(r => (
-                            <option key={r.code || r.id} value={r.code || r.id}>
-                              {r.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Row 4: Main Division (Triggers Approval Divisions Filter) */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                          Main Division <span className="text-rose-500">*</span>
-                        </label>
-                        <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                          Filters Approvals
-                        </span>
-                      </div>
-                      {divisionsLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#003F28]" />
-                          <span>Loading...</span>
-                        </div>
-                      ) : divisionsError ? (
-                        <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                          {divisionsError}
-                        </div>
-                      ) : availableDivisions.length === 0 ? (
-                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                          No active divisions.
-                        </div>
-                      ) : (
-                        <select
-                          value={editingUserModal.division || (availableDivisions[0]?.code || "")}
-                          onChange={e => {
-                            const newDiv = e.target.value;
-                            setShowAllEditDivs(false); // Reset to filtered view for selected Main Division
-                            const currApprovals = Array.isArray(editingUserModal.approval_divisions) 
-                              ? editingUserModal.approval_divisions 
-                              : (editingUserModal.approval_divisions ? String(editingUserModal.approval_divisions).split(',').map(x => x.trim()).filter(Boolean) : []);
-                            const matchingDivs = availableDivisions.filter(d => isDivisionInGroup(d.code, newDiv)).map(d => d.code);
-                            const retained = currApprovals.filter(code => matchingDivs.includes(code));
-                            const nextApprovals = (newDiv && !retained.includes(newDiv) && matchingDivs.includes(newDiv))
-                              ? [newDiv, ...retained]
-                              : (retained.length > 0 ? retained : (newDiv ? [newDiv] : []));
-                            setEditingUserModal({ 
-                              ...editingUserModal, 
-                              division: newDiv,
-                              approval_divisions: nextApprovals
-                            });
-                          }}
-                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 font-bold text-slate-800 cursor-pointer transition-all"
-                        >
-                          {availableDivisions.map(d => (
-                            <option key={d.code} value={d.code}>
-                              {d.name ? `${d.name} (${d.code})` : d.code}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <p className="text-[9px] text-slate-400 mt-1">Primary organizational unit assigned to this employee.</p>
-                    </div>
-
-                    {/* Row 5: Department + Plant */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Department</label>
-                        <input 
-                          type="text"
-                          value={editingUserModal.department || editingUserModal.dept || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, department: e.target.value })}
-                          placeholder="e.g. Finance"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Plant / Branch</label>
-                        <input 
-                          type="text"
-                          value={editingUserModal.plant || ''}
-                          onChange={e => setEditingUserModal({ ...editingUserModal, plant: e.target.value })}
-                          placeholder="e.g. TN-SIVAKASI"
-                          className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Row 6: Reset Password */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Reset Password (Optional)</label>
-                      <input 
-                        type="password"
-                        value={editingUserModal.password || ''}
-                        onChange={e => setEditingUserModal({ ...editingUserModal, password: e.target.value })}
-                        placeholder="Leave blank to keep current password"
-                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-[#003F28] focus:ring-2 focus:ring-[#003F28]/20 transition-all placeholder:text-slate-300"
-                      />
-                    </div>
-                  </div>
-
-                  {/* RIGHT COLUMN: Approval Divisions Matrix (7 Cols) */}
-                  <div className="lg:col-span-7 flex flex-col space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-[#003F28]" />
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">Approval Divisions</span>
-                        {currentEditApprovals.length > 0 && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-[#003F28] border border-emerald-200">
-                            {currentEditApprovals.length} selected
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {editGroupList.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (allEditGroupSelected) {
-                                const nextList = currentEditApprovals.filter(c => !editGroupList.some(d => d.code === c));
-                                setEditingUserModal({ ...editingUserModal, approval_divisions: nextList });
-                              } else {
-                                const nextList = Array.from(new Set([...currentEditApprovals, ...editGroupList.map(d => d.code)]));
-                                setEditingUserModal({ ...editingUserModal, approval_divisions: nextList });
-                              }
-                            }}
-                            className="text-[10px] text-[#003F28] hover:underline font-bold transition-colors cursor-pointer"
-                          >
-                            {allEditGroupSelected ? "Deselect group" : "Select all group"}
-                          </button>
-                        )}
-                        {currentEditApprovals.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingUserModal({ ...editingUserModal, approval_divisions: [] })}
-                            className="text-[10px] text-slate-400 hover:text-rose-500 font-medium transition-colors cursor-pointer"
-                          >
-                            Clear all
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Filter Mode Tabs: [ Main Division Group ] / [ All Divisions ] */}
-                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200/80">
-                      <button
-                        type="button"
-                        onClick={() => setShowAllEditDivs(false)}
-                        className={`flex-1 py-1.5 px-3 rounded-md text-[10.5px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          !showAllEditDivs
-                            ? "bg-white text-[#003F28] shadow-xs border border-slate-200"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        <Filter className="h-3 w-3 text-emerald-600" />
-                        <span>Filtered: {getDivisionPrefix(activeEditMainDiv) || "Main"} Group ({editGroupDivs.length})</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAllEditDivs(true)}
-                        className={`flex-1 py-1.5 px-3 rounded-md text-[10.5px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          showAllEditDivs
-                            ? "bg-white text-[#003F28] shadow-xs border border-slate-200"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        <span>Show All Divisions ({availableDivisions.length})</span>
-                      </button>
-                    </div>
-
-                    {/* Division Selector Box */}
-                    {divisionsLoading ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-6 border border-slate-200 rounded-lg bg-slate-50 justify-center">
-                        <Loader2 className="h-4 w-4 animate-spin text-[#003F28]" />
-                        <span>Loading approval divisions...</span>
-                      </div>
-                    ) : divisionsError ? (
-                      <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-3">
-                        {divisionsError}
-                      </div>
-                    ) : editGroupList.length === 0 ? (
-                      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-4 text-center">
-                        No divisions available in {getDivisionPrefix(activeEditMainDiv)} group. Click "Show All Divisions" to assign any division.
-                      </div>
-                    ) : (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex flex-col bg-white">
-                        {/* Search bar */}
-                        <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/70">
-                          <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                          <input
-                            type="text"
-                            value={editDivSearch}
-                            onChange={e => setEditDivSearch(e.target.value)}
-                            placeholder={showAllEditDivs ? "Search all divisions..." : `Search within ${getDivisionPrefix(activeEditMainDiv)} divisions...`}
-                            className="flex-1 text-xs bg-transparent outline-none text-slate-700 placeholder:text-slate-400 font-medium"
-                          />
-                          {editDivSearch && (
-                            <button type="button" onClick={() => setEditDivSearch("")} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Grid of checkboxes (2 spacious columns) */}
-                        <div className="grid grid-cols-2 gap-2 p-2.5 max-h-[290px] overflow-y-auto custom-scrollbar">
-                          {filteredEditDivs.length === 0 ? (
-                            <div className="col-span-full text-[11px] text-slate-400 text-center py-6">
-                              No divisions found matching "{editDivSearch}".
-                            </div>
-                          ) : (
-                            filteredEditDivs.map(d => {
-                              const isChecked = currentEditApprovals.includes(d.code);
-                              const isMain = d.code === activeEditMainDiv;
-                              return (
-                                <label
-                                  key={d.code}
-                                  className={`flex items-start gap-2 p-2 rounded-lg border transition-all cursor-pointer select-none ${
-                                    isChecked
-                                      ? "bg-emerald-50/90 border-emerald-300 text-emerald-950 font-bold shadow-2xs"
-                                      : "bg-slate-50/60 border-slate-200 hover:bg-slate-100/70 text-slate-700"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={e => {
-                                      let nextList;
-                                      if (e.target.checked) {
-                                        nextList = [...currentEditApprovals, d.code];
-                                      } else {
-                                        nextList = currentEditApprovals.filter(x => x !== d.code);
-                                      }
-                                      setEditingUserModal({
-                                        ...editingUserModal,
-                                        approval_divisions: nextList
-                                      });
-                                    }}
-                                    className="rounded border-slate-300 text-[#003F28] focus:ring-[#003F28] h-3.5 w-3.5 mt-0.5 shrink-0 cursor-pointer"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[11px] font-bold text-slate-900 truncate" title={d.name || d.code}>
-                                        {d.name || d.code}
-                                      </span>
-                                      {isMain && (
-                                        <span className="px-1 py-0.2 rounded text-[8px] font-extrabold uppercase bg-[#003F28] text-white">
-                                          Main
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-[9.5px] text-slate-400 font-mono block">
-                                      {d.code}
-                                    </span>
-                                  </div>
-                                </label>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <p className="text-[9.5px] text-slate-400 leading-relaxed">
-                      Filtered against Main Division (<strong>{activeEditMainDiv}</strong>). Select the business divisions this user is permitted to review and approve documents for.
-                    </p>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex-shrink-0">
-                <p className="text-[10px] text-slate-400">Fields marked <span className="text-rose-500 font-bold">*</span> are required</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingUserModal(null)}
-                    className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUpdatingUser}
-                    className="px-5 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                  >
-                    {isUpdatingUser && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    <span>{isUpdatingUser ? "Saving..." : "Save Profile"}</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
+      {Boolean(editingUserModal) && (
+        <React.Suspense fallback={null}>
+          <EditUserModal
+            user={editingUserModal}
+            onClose={() => setEditingUserModal(null)}
+            onSubmit={handleSaveUserEdit}
+            setEditingUserModal={setEditingUserModal}
+            isUpdatingUser={isUpdatingUser}
+            roles={roles}
+            availableDivisions={availableDivisions}
+            divisionsLoading={divisionsLoading}
+            divisionsError={divisionsError}
+            isDivisionInGroup={isDivisionInGroup}
+            getDivisionPrefix={getDivisionPrefix}
+            showAllEditDivs={showAllEditDivs}
+            setShowAllEditDivs={setShowAllEditDivs}
+            activeEditMainDiv={activeEditMainDiv}
+            editGroupDivs={editGroupDivs}
+            editGroupList={editGroupList}
+            allEditGroupSelected={allEditGroupSelected}
+            currentEditApprovals={currentEditApprovals}
+            editDivSearch={editDivSearch}
+            setEditDivSearch={setEditDivSearch}
+            filteredEditDivs={filteredEditDivs}
+          />
+        </React.Suspense>
       )}
 
     </div>

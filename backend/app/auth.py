@@ -3,7 +3,7 @@ import logging
 import secrets
 import threading
 import time
-from   typing import Optional, Any
+from   typing import Optional, Any, List, Dict, Union
 
 import bcrypt
 from fastapi import Depends, HTTPException, Header, status
@@ -60,7 +60,7 @@ def create_access_token(
     data: dict,
     expires_delta: Optional[datetime.timedelta] = None,
 ) -> str:
-    """Create a signed JWT access token."""
+    """Create a signed JWT access token with issuer and audience claims."""
     to_encode = data.copy()
 
     expire = datetime.datetime.now(datetime.timezone.utc) + (
@@ -71,6 +71,10 @@ def create_access_token(
     )
 
     to_encode["exp"] = expire
+    if "iss" not in to_encode and getattr(settings, "JWT_ISSUER", None):
+        to_encode["iss"] = settings.JWT_ISSUER
+    if "aud" not in to_encode and getattr(settings, "JWT_AUDIENCE", None):
+        to_encode["aud"] = settings.JWT_AUDIENCE
 
     return jwt.encode(
         to_encode,
@@ -80,13 +84,28 @@ def create_access_token(
 
 
 def decode_token(token: str) -> dict:
-    """Decode and validate a JWT access token."""
-    return jwt.decode(
-        token,
-        settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM],
-        options={"require": ["exp"], "verify_exp": True},
-    )
+    """
+    Decode and strictly validate a JWT access token.
+    Validates signature, expiration, issuer, and audience.
+    Rejects malformed, unsigned, or expired tokens.
+    """
+    decode_kwargs = {
+        "key": settings.SECRET_KEY,
+        "algorithms": [settings.ALGORITHM],
+        "options": {
+            "require": ["exp", "sub", "iss", "aud"],
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_iss": True,
+            "verify_aud": True,
+        },
+    }
+    if getattr(settings, "JWT_ISSUER", None):
+        decode_kwargs["issuer"] = settings.JWT_ISSUER
+    if getattr(settings, "JWT_AUDIENCE", None):
+        decode_kwargs["audience"] = settings.JWT_AUDIENCE
+
+    return jwt.decode(token, **decode_kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +126,7 @@ def invalidate_user_cache(username: Optional[str] = None):
             _USER_CACHE.clear()
 
 
-async def get_current_user(
+def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
@@ -195,8 +214,8 @@ async def get_current_user(
 
     # SEC-03: Compare token session_id with active_session_id in database
     token_session_id = payload.get("session_id")
-    if token_session_id is not None:
-        if not user.active_session_id or user.active_session_id != token_session_id:
+    if user.active_session_id:
+        if not token_session_id or user.active_session_id != token_session_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session has been invalidated or displaced by another login. Please sign in again.",
@@ -206,7 +225,7 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_optional(
+def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
@@ -272,14 +291,14 @@ async def get_current_user_optional(
 
     if user and user.is_active:
         token_session_id = payload.get("session_id")
-        if token_session_id is not None:
-            if not user.active_session_id or user.active_session_id != token_session_id:
+        if user.active_session_id:
+            if not token_session_id or user.active_session_id != token_session_id:
                 return None
         return user
     return None
 
 
-async def get_current_active_user(
+def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
     """Return the currently authenticated active user."""
@@ -498,19 +517,38 @@ async def get_current_user_or_service_key(
     )
 
 
-def require_permission_or_service(permission: str):
+DEFAULT_SERVICE_PERMISSION_SCOPES = {
+    "workflow:write": ["workflow:manage"],
+    "workflow:read": ["workflow:read", "workflow:manage", "data:sync"],
+    "condition:read": ["condition:read", "condition:manage", "data:sync"],
+    "condition:write": ["condition:manage"],
+    "integration:read": ["integration:read", "integration:export", "data:sync"],
+    "integration:write": ["integration:manage"],
+    "data:sync": ["data:sync"],
+}
+
+def require_permission_or_service(permission: str, allowed_service_scopes: Optional[List[str]] = None):
     """
     Factory creating a FastAPI dependency that verifies the caller is either:
-    1. A valid M2M service caller (X-API-Key or Service JWT), OR
+    1. A valid M2M service caller with authorized scopes (X-API-Key or Service JWT), OR
     2. An authenticated user possessing the specified RBAC permission (or admin).
 
-    Returns 401 if unauthenticated, 403 if user lacks required permission.
+    Returns 401 if unauthenticated, 403 if user or service lacks required permissions/scopes.
     """
     async def _perm_dependency(
         auth_entity: Any = Depends(get_current_user_or_service_key),
         db: Session = Depends(get_db),
     ) -> Any:
         if isinstance(auth_entity, dict) and auth_entity.get("is_service"):
+            if auth_entity.get("identity") in ("service_api_key", "service"):
+                return auth_entity
+            service_scope = auth_entity.get("scope")
+            allowed = allowed_service_scopes or DEFAULT_SERVICE_PERMISSION_SCOPES.get(permission, [permission])
+            if service_scope not in allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access Denied: Service account scope '{service_scope}' is insufficient for '{permission}'. Required scopes: {allowed}",
+                )
             return auth_entity
 
         from app.services.rbac_service import check_permission

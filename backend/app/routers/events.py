@@ -35,23 +35,34 @@ class StreamTicketManager:
         self._ttl = ttl_seconds
         from app.config.settings import settings
         self._cache_file = settings.DATA_DIR / ".stream_tickets.json"
+        self._is_multi_worker = int(os.getenv("WEB_CONCURRENCY", "1") or os.getenv("UVICORN_WORKERS", "1")) > 1
+        self._last_disk_mtime: float = 0.0
 
     def _sync_from_disk(self):
+        if not self._is_multi_worker:
+            return
         if self._cache_file.exists():
             try:
+                mtime = self._cache_file.stat().st_mtime
+                if mtime == self._last_disk_mtime:
+                    return
                 with open(self._cache_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
                         self._tickets.update(data)
+                self._last_disk_mtime = mtime
             except Exception as exc:
                 logger.debug("Events stream ticket read failed: %s", exc)
 
     def _sync_to_disk(self):
+        if not self._is_multi_worker:
+            return
         try:
             tmp = f"{self._cache_file}.tmp.{os.getpid()}_{int(time.time()*1000)}"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._tickets, f)
             os.replace(tmp, self._cache_file)
+            self._last_disk_mtime = self._cache_file.stat().st_mtime if self._cache_file.exists() else 0.0
         except Exception as exc:
             logger.debug("Events stream ticket write failed: %s", exc)
 
@@ -192,7 +203,10 @@ def broadcast_event(event_type: str, payload: dict, db: Optional[Session] = None
                 doc = find_invoice_by_identifier(session, str(doc_id))
             except Exception:
                 from app.database.models import Document
-                doc = session.query(Document).filter(Document.id == str(doc_id)).first()
+                if str(doc_id).isdigit():
+                    doc = session.query(Document).filter(Document.id == int(doc_id)).first()
+                else:
+                    doc = session.query(Document).filter(Document.document_code == str(doc_id)).first()
 
             for listener in active_list:
                 # Administrators receive all document events

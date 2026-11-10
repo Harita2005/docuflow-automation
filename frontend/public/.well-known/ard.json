@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agenticresourcediscovery.org/schema/v1/manifest.json",
+  "name": "DAAS",
+  "description": "Enterprise Document Approval & Automation System",
+  "version": "2.0.0",
+  "entries": [
+    {
+      "identifier": "urn:air:daas:api:documents",
+      "displayName": "DAAS OpenAPI Endpoints",
+      "description": "Interactive document approval and verification API specification and endpoints",
+      "type": "application/json",
+      "url": "http://localhost:4173/api/openapi.json",
+      "representativeQueries": [
+        "approve document",
+        "submit document",
+        "check approval workflow status",
+        "list pending documents"
+      ]
+    }
+  ]
+}

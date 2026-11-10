@@ -1255,7 +1255,24 @@ export default function DocumentDetails({
   };
 
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
-  const isCurrentApprover = currentUserRole === 'admin' || Boolean(document?.is_current_approver);
+
+  // For approval and cancellation, strictly only the assigned approver for this stage is authorized
+  const isAssignedApprover = useMemo(() => {
+    if (!document) return false;
+    if (document.is_current_approver) return true;
+    const userHandles = [
+      (currentUserUsername || "").trim().toLowerCase(),
+      (currentUserEmail || "").trim().toLowerCase(),
+    ].filter(Boolean);
+    const assignedApprover = (document.assigned_approver || "").trim().toLowerCase();
+    if (assignedApprover) {
+      const approverList = assignedApprover.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (userHandles.some(h => approverList.includes(h))) return true;
+    }
+    return false;
+  }, [document, currentUserUsername, currentUserEmail]);
+
+  const isCurrentApprover = isAssignedApprover;
   const isDocumentLocked = isTerminal || !isCurrentApprover || Boolean(document?.completed_by_peer);
   const isAttachmentStatus = !isTerminal && (
     (document?.current_stage || 1) === 1 ||
@@ -1263,31 +1280,7 @@ export default function DocumentDetails({
     (document?.status || "").toLowerCase().includes("initiated")
   );
   const canReplacePdf = !isDocumentLocked && isAttachmentStatus;
-
-  const isAssignedInitiator = useMemo(() => {
-    if (!document) return false;
-    const roleLower = (currentUserRole || "").toLowerCase();
-    if (["admin", "administrator", "system_admin", "superadmin"].includes(roleLower)) {
-      return true;
-    }
-    const userHandles = [
-      (currentUserUsername || "").trim().toLowerCase(),
-      (currentUserEmail || "").trim().toLowerCase(),
-    ].filter(Boolean);
-
-    const docCreator = (document.created_by || "").trim().toLowerCase();
-    const docEmpId = (document.employee_id || "").trim().toLowerCase();
-    const docEmpName = (document.employee_name || "").trim().toLowerCase();
-    const assignedApprover = (document.assigned_approver || "").trim().toLowerCase();
-
-    if (docCreator && userHandles.includes(docCreator)) return true;
-    if (docEmpId && userHandles.includes(docEmpId)) return true;
-    if (docEmpName && userHandles.includes(docEmpName)) return true;
-    if (assignedApprover && userHandles.some(h => assignedApprover.includes(h))) return true;
-    if (document.is_current_approver) return true;
-
-    return false;
-  }, [document, currentUserRole, currentUserUsername, currentUserEmail]);
+  const isAssignedInitiator = isAssignedApprover;
 
   // Periodic background stage poll: If another approver advances the stage, update immediately
   useEffect(() => {
@@ -1937,8 +1930,8 @@ export default function DocumentDetails({
   const handleInlineReject = async () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
     const isStage1 = (document?.current_stage || 1) <= 1;
-    if (isStage1 && !isAssignedInitiator) {
-      alert("Access Denied: Only the assigned initiator can cancel this document during the Attachment Stage.");
+    if (isStage1 && !isAssignedApprover) {
+      alert(`Access Denied: Only the assigned approver (${document?.assigned_approver || 'assigned approver'}) can cancel this document during the Attachment Stage.`);
       return;
     }
 

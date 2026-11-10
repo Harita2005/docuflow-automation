@@ -1,16 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Plus, Trash2, Edit2, Loader2, Save, X, ShieldCheck, AlertTriangle, Send, ArrowRight, Activity, Settings2 } from 'lucide-react';
-import AdminSystem from '../components/AdminSystem.jsx';
-import AdminRACI from '../components/AdminRACI.jsx';
-import AdminInApp from '../components/AdminInApp.jsx';
-import ConditionBuilder from '../components/ConditionBuilder.jsx';
-import FlowBuilder from '../components/FlowBuilder.jsx';
-import AdminRBAC from '../components/AdminRBAC.jsx';
-import AdminBackups from '../components/AdminBackups.jsx';
-import ChecklistConditionBuilder from '../components/ChecklistConditionBuilder.jsx';
-import DapiSyncBackHub from '../components/dapi-sync-back/DapiSyncBackHub.tsx';
 
-import AuditLogsPage from '../components/AuditLogsPage.tsx';
+import AdminRBAC from '../components/AdminRBAC.jsx';
+const AdminSystem = lazy(() => import('../components/AdminSystem.jsx'));
+const AdminRACI = lazy(() => import('../components/AdminRACI.jsx'));
+const AdminInApp = lazy(() => import('../components/AdminInApp.jsx'));
+const ConditionBuilder = lazy(() => import('../components/ConditionBuilder.jsx'));
+const FlowBuilder = lazy(() => import('../components/FlowBuilder.jsx'));
+const AdminBackups = lazy(() => import('../components/AdminBackups.jsx'));
+const ChecklistConditionBuilder = lazy(() => import('../components/ChecklistConditionBuilder.jsx'));
+const DapiSyncBackHub = lazy(() => import('../components/dapi-sync-back/DapiSyncBackHub.tsx'));
+const AuditLogsPage = lazy(() => import('../components/AuditLogsPage.tsx'));
+
+const TabLoadingFallback = () => (
+  <div className="flex items-center justify-center p-12 text-slate-400 text-xs gap-2">
+    <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+    <span>Loading tab...</span>
+  </div>
+);
 const formatAuditTimestamp = (ts) => {
   if (!ts) return "—";
   if (ts instanceof Date) return isNaN(ts.getTime()) ? "—" : ts.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
@@ -96,10 +103,6 @@ export default function Admin() {
   const [_retentionNotice, setRetentionNotice] = useState(null);
 
   useEffect(() => {
-    fetchData();
-    fetchAuditLogs();
-    fetchRetentionInfo();
-
     const handleUpdateAddAction = (e) => {
       setIsRootView(e.detail);
     };
@@ -108,11 +111,12 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRootView(true);
     if (activeTab === "audit") {
       fetchAuditLogs();
       fetchRetentionInfo();
+    } else if (activeTab === "templates" || activeTab === "routing" || activeTab === "matrix") {
+      fetchData();
     }
   }, [activeTab]);
 
@@ -580,6 +584,7 @@ export default function Admin() {
           </div>
         )}
 
+        <Suspense fallback={<TabLoadingFallback />}>
         {/* --- ROUTING TAB CONTENT --- */}
         {activeTab === "routing" && (
           <FlowBuilder users={allUsers} />
@@ -982,6 +987,7 @@ export default function Admin() {
         <AdminSystem />
       </div>
     )}
+    </Suspense>
 
     {/* Publish Confirm Modal */}
     {publishConfirm && (

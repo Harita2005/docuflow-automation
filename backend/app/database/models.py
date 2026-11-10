@@ -177,7 +177,7 @@ class DocumentLock(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     document_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
@@ -277,7 +277,8 @@ class User(Base):
 class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(String(100), primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_code = Column(String(100), unique=True, index=True, nullable=True)
     doc_key = Column(String(100), index=True, nullable=True)
     doc_num = Column(String(100), index=True, nullable=True)
     doc_date = Column(String(50), nullable=True)
@@ -466,9 +467,9 @@ class Document(Base):
                 data = json.loads(self.custom_data) if isinstance(self.custom_data, str) else self.custom_data
                 if isinstance(data, dict) and "storage_status" in data:
                     return data.get("storage_status")
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
             # Fall back to default storage status if custom_data parsing fails
-            logger.debug("Handled non-fatal exception")
+            logger.debug("Handled non-fatal storage_status deserialize exception: %s", exc)
         return getattr(self, "_storage_status", "PENDING")
 
     @storage_status.setter
@@ -482,9 +483,9 @@ class Document(Base):
                     data = {}
             data["storage_status"] = val
             self.custom_data = json.dumps(data)
-        except Exception:
-            # Silently ignore serialization error on custom_data
-            logger.debug("Handled non-fatal exception")
+        except (TypeError, ValueError) as exc:
+            # Non-fatal serialization error on custom_data
+            logger.debug("Handled non-fatal storage_status serialize exception: %s", exc)
 
     __table_args__ = (
         Index(
@@ -502,6 +503,18 @@ class Document(Base):
             "created_at",
             "status",
         ),
+        Index(
+            "ix_documents_active_status_created",
+            "is_deleted",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_documents_deleted_doctype_status",
+            "is_deleted",
+            "document_type",
+            "status",
+        ),
     )
 
 
@@ -517,7 +530,7 @@ class DocumentLineItem(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     invoice_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -726,7 +739,7 @@ class DocumentChecklistState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     invoice_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -777,7 +790,7 @@ class DocumentApprovalLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     invoice_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
@@ -806,6 +819,11 @@ class DocumentApprovalLog(Base):
         back_populates="approval_logs",
     )
 
+    __table_args__ = (
+        Index("ix_approval_logs_approver_action", "approver_user_id", "action"),
+        Index("ix_approval_logs_user_action", "user", "action"),
+    )
+
 
 AuditLog = DocumentApprovalLog
 
@@ -819,7 +837,7 @@ class ApprovalAssignment(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     document_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -861,7 +879,7 @@ class SystemEngineLog(Base):
         index=True,
     )
     invoice_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
@@ -1020,7 +1038,7 @@ class IntegrationSyncLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     document_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -1208,7 +1226,7 @@ class CallbackEvent(Base):
         nullable=False,
     )
     document_id = Column(
-        String(100),
+        Integer,
         ForeignKey("documents.id"),
         nullable=False,
         index=True,

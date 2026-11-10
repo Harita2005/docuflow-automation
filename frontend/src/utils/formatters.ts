@@ -464,9 +464,10 @@ export function setGlobalUserMasterCache(users: any[]) {
 
 export function loadUserMasterCacheAsync() {
   try {
-    const token = localStorage.getItem("authToken");
+    const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
+    if (!token) return;
     fetch("/api/users", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
@@ -478,8 +479,8 @@ export function loadUserMasterCacheAsync() {
   } catch (_e) {}
 }
 
-// Auto-trigger cache load once when formatters module is imported
-loadUserMasterCacheAsync();
+// Cache load is triggered lazily when needed
+// loadUserMasterCacheAsync();
 
 export interface ResolvedRolePersons {
   displayName: string;
@@ -504,6 +505,9 @@ export function resolvePersonsInRoleForDivision(
     Array.isArray(usersList) && usersList.length > 0
       ? usersList
       : globalUserMasterCache;
+  if (activeUsersList.length === 0 && globalUserMasterCache.length === 0) {
+    loadUserMasterCacheAsync();
+  }
 
   let rawTargetStr = "";
   if (typeof approverTarget === "string") {

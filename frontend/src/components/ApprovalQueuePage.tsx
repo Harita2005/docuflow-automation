@@ -31,21 +31,7 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
         const data = await response.json();
         setInvoices(data);
 
-        // Fetch workflow instances to accurately map stages to roles
-        const docsWithWorkflows = await Promise.all(data.map(async (inv: any) => {
-          if (inv.activeApprovalLog?.status === 'Pending' || inv.status.includes('Approval')) {
-            try {
-              const res = await fetch(`/api/documents/${inv.id}`);
-              const fullData = await res.json();
-              return { ...inv, current_stage: fullData.workflow_instance?.current_stage };
-            } catch {
-              return inv;
-            }
-          }
-          return inv;
-        }));
-
-        const matched = docsWithWorkflows.filter((inv: any) => {
+        const matched = data.filter((inv: any) => {
           // Hide already approved and terminal states from the pending queue
           const terminalStates = ["Approved", "Fully Approved", "Settled", "Completed", "Paid", "Ready for Payment", "Rejected", "Failed", "Cancelled", "Auto-Approved"];
           if (terminalStates.includes(inv.status)) return false;

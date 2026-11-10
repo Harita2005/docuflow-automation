@@ -93,7 +93,7 @@ class Settings(BaseSettings):
         # Use explicit DATABASE_URL if provided
         if self.DATABASE_URL:
             db_url = self.DATABASE_URL.strip()
-            forbidden = ["@db:", "sqlite", "postgresql", "mysql"]
+            forbidden = ["sqlite", "postgresql", "mysql"]
             if is_production:
                 forbidden.extend(["localhost", "127.0.0.1"])
             if not any(f in db_url.lower() for f in forbidden):
@@ -168,6 +168,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     SERVICE_API_KEY: str = "DocuFlow-M2M-Integration-Secret-2026"
     ALGORITHM: str = "HS256"
+    JWT_ISSUER: str = "docuflow-auth"
+    JWT_AUDIENCE: str = "docuflow-api"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     FILE_URL_SIGNING_SECRET: Optional[str] = None
     FILE_URL_TTL_SECONDS: int = 90

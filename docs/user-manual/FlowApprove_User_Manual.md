@@ -97,6 +97,29 @@ DocuFlow Automation (FlowApprove) is an enterprise document approval, OCR extrac
 5. If MFA is active on your account, an OTP challenge modal appears. Enter the 6-digit code received via your registered email or authenticator app, then click 'Verify OTP'.
 6. Upon successful authentication, the system stores your signed JWT bearer token and redirects you to the Executive Dashboard.
 
+## Flexible Authentication & Multi-Identifier Login
+
+DocuFlow supports seamless enterprise authentication across four login formats:
+* **Username:** Standard corporate username handle (e.g. `john.doe`).
+* **Email Address:** Full corporate email address (e.g. `johndoe@ramrajcotton.net`).
+* **Employee ID:** Official payroll employee identification code (e.g. `EMP_01` or `ADMIN01`).
+* **Normalized ID Passwords:** Supports initial login using employee ID credentials with automatic bcrypt password hashing and security upgrade.
+
+## First-Time Login & Mandatory Password Change
+
+To comply with corporate security standards:
+1. Newly provisioned accounts or accounts using temporary default credentials are required to change their password upon initial login.
+2. The user is redirected to a dedicated **Set New Password** screen requiring verification of minimum complexity (8+ characters, mixed case, numbers, and symbols).
+3. Access to operational features (Dashboard, Work Tracker, Approvals) remains locked until the password update is confirmed.
+
+## Self-Service Password Reset Flow
+
+If a user forgets their password:
+1. Click **Forgot Password?** on the login portal.
+2. Enter the registered corporate email address or username.
+3. DocuFlow generates a time-limited (15-minute), cryptographically signed password reset link delivered to the user's email inbox via SMTP.
+4. Clicking the link opens the password reset page, allowing the user to establish a new password securely without requiring manual IT helpdesk intervention.
+
 ## Multi-Tab Synchronization & Concurrency Enforcement
 
 DocuFlow integrates an HTML5 BroadcastChannel ('docuflow_auth_channel'). Logging in or out on any single browser tab instantaneously synchronizes session state across all other open tabs without requiring manual page refreshes. Furthermore, single-session concurrency enforcement terminates obsolete sessions if your account is accessed from a separate device.
@@ -186,15 +209,42 @@ Field Configuration Options:
 • Scoped Personal Overrides: Standard users can customize their own view without impacting global organization settings.
 • Admin Default Promotion: Administrators can set organizational defaults across entire document types.
 
+## Role-Based Authorization & Strict Assigned Approver Policy
+
+DocuFlow enforces strict segregation of responsibilities and step-wise access controls:
+
+### 1. Strict Assigned Approver Rule (Approval & Cancellation)
+* **Approval Authority:** Strictly **only the assigned approver** (`assigned_approver`) for the active workflow stage is authorized to approve the document.
+* **Cancellation Authority:** For cancellation also, strictly **only the assigned approver** is authorized to cancel or void the document process.
+* **Read-Only Lock for Non-Assignees:** If a user is not the designated approver for the active stage, the document is displayed in read-only locked mode with an informative badge (e.g. `Document Locked: Assigned to YUVASREE`), and all operational action buttons are locked.
+
+### 2. Segregation of Duties (Maker-Checker Policy)
+* The creator, uploader, or submitter of a document (**Maker**) is strictly prohibited from approving their own document (**Checker**), satisfying corporate accounting and SOX/audit compliance standards.
+* For system administration testing, administrators possess an override for designated administrative test workflows.
+
+### 3. Stage 1 Mandatory Attachment & Compliance Checklist
+* In **Stage 1 (Attachment Status)**, approval is gated by two strict prerequisites:
+  1. **Physical PDF File:** A valid document file must be uploaded on disk (or auto-provisioned via the synthetic fallback engine if created through automated workflows).
+  2. **Mandatory Checklist Items:** All stage-wise compliance items (e.g. *Documents Attached*, *Bill Name Verified*, *Bill Date Verified*) must be inspected and checked.
+* The **Approve ➔** button remains locked until 100% of the checklist items are satisfied.
+
+### 4. Stage 1 Cancellation Process & Dedicated Reason Modal
+* If a document in Stage 1 must be voided (e.g. incorrect vendor, duplicate entry), the assigned approver clicks **Cancel Process**.
+* A dedicated **Cancellation Reason Modal** opens, requiring the approver to enter mandatory remarks explaining the cancellation before voiding the workflow.
+
+### 5. Optimistic Concurrency Control (Version Safety)
+* Every workflow action transmits the `expected_version` and `expected_stage`.
+* If a concurrent modification occurs (e.g. another reviewer signs off simultaneously), the system returns an HTTP 409 Conflict, safeguarding audit trail integrity and preventing duplicate approvals.
+
 ## Available Actions & State Transitions
 
 | Button / Action | Target Endpoint | Prerequisites | Database Impact |
 | :--- | :--- | :--- | :--- |
-| Approve Stage | POST /api/workflows/approve | Checklist passed & user in approver pool | Advances current_stage +1; if final stage, marks 'Approved' and triggers ERP sync. |
-| Reject Document | POST /api/documents/{id}/reject | Mandatory rejection justification entered | Sets status to 'Rejected', creates audit log, prevents further approvals. |
-| Put On Hold | POST /api/workflows/hold | Mandatory hold justification entered | Sets status to 'On Hold', stops SLA timers, preserves record in Work Tracker. |
-| Send Back / Revert | POST /api/workflows/{id}/send-back | Select target prior stage and comment | Decrements current_stage to designated milestone, alerts previous reviewer. |
-| Reassign Approver | POST /api/workflows/{id}/escalate | Select replacement user/role | Updates assigned_approver in Invoice and approval_assignments tables. |
+| Approve Stage | POST /api/workflows/approve | Checklist 100% verified & user is assigned approver | Advances current_stage +1; if final stage, marks 'Approved' and triggers ERP sync. |
+| Cancel Process (Stage 1) | POST /api/workflows/cancel | User is assigned approver & mandatory reason entered in modal | Sets status to 'Cancelled', voids workflow, increments version, and archives record. |
+| Put On Hold | POST /api/workflows/hold | User is assigned approver & mandatory clarification notes | Sets status to 'On Hold', pauses SLA timers, preserves record in Work Tracker. |
+| Reject / Return (Stage 2+) | POST /api/workflows/{id}/send-back | User is assigned approver & return reason entered | Decrements current_stage to designated milestone, alerts preceding reviewer. |
+| Reassign Approver | POST /api/workflows/{id}/escalate | Administrator / Manager permission | Updates assigned_approver in Invoice and approval_assignments tables. |
 
 
 # Chapter 6: Approved Documents & Historical Records Archive

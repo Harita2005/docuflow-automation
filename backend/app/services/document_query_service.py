@@ -63,25 +63,33 @@ def attach_dynamic_columns_to_document(db: Session, inv: Any):
 
 def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
     """
-    Flexible document lookup prioritizing clustered index seeks before fallback scans.
+    Flexible document lookup prioritizing integer clustered index seeks before fallback scans.
+    Supports both integer IDs (e.g. 23) and formatted business codes (e.g. INV-00000023).
     """
     raw_str = str(invoice_id).strip()
-    # 1. High-speed primary key index seek
-    inv = db.query(Invoice).filter(Invoice.id == raw_str, Invoice.is_deleted == False).first()
+    # 1. High-speed integer primary key clustered index seek
+    if raw_str.isdigit():
+        inv = db.query(Invoice).filter(Invoice.id == int(raw_str), Invoice.is_deleted == False).first()
+        if inv:
+            attach_dynamic_columns_to_document(db, inv)
+            return inv
+
+    # 2. Exact match by document_code
+    inv = db.query(Invoice).filter(Invoice.document_code == raw_str, Invoice.is_deleted == False).first()
     if inv:
         attach_dynamic_columns_to_document(db, inv)
         return inv
 
     id_clean = re.sub('^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH|CMP|CF)[-_#]?', '', raw_str, flags=re.IGNORECASE).strip()
     
-    # 2. Exact prefix lookups (uses clustered index)
-    candidate_ids = [id_clean, f"DOC-{id_clean}", f"INV-{id_clean}", f"GRN-{id_clean}", f"CV-{id_clean}"]
-    inv = db.query(Invoice).filter(Invoice.id.in_(candidate_ids), Invoice.is_deleted == False).first()
-    if inv:
-        attach_dynamic_columns_to_document(db, inv)
-        return inv
+    # 3. Clean numeric sequence lookup
+    if id_clean.isdigit():
+        inv = db.query(Invoice).filter(Invoice.id == int(id_clean), Invoice.is_deleted == False).first()
+        if inv:
+            attach_dynamic_columns_to_document(db, inv)
+            return inv
 
-    # 3. Exact invoice_number / doc_key index lookups
+    # 4. Exact invoice_number / doc_key index lookups
     inv = db.query(Invoice).filter(
         (Invoice.invoice_number == raw_str) | (Invoice.doc_key == raw_str) | (Invoice.doc_num == raw_str),
         Invoice.is_deleted == False
@@ -90,9 +98,9 @@ def find_invoice_by_identifier(db: Session, invoice_id: str) -> Invoice:
         attach_dynamic_columns_to_document(db, inv)
         return inv
 
-    # 4. Fallback wildcard query if exact indexed lookups failed
+    # 5. Fallback wildcard query if exact indexed lookups failed
     inv = db.query(Invoice).filter(
-        (Invoice.id.ilike(f'%{id_clean}%'))
+        (Invoice.document_code.ilike(f'%{id_clean}%'))
         | (Invoice.invoice_number.ilike(f'%{id_clean}%'))
         | (Invoice.doc_key.ilike(f'%{id_clean}%')),
         Invoice.is_deleted == False

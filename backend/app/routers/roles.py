@@ -2,7 +2,7 @@ import datetime
 import logging
 import re
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -65,8 +65,7 @@ class PermissionResponse(BaseModel):
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomPermissionCreate(BaseModel):
@@ -100,8 +99,7 @@ class RoleResponse(BaseModel):
     is_active: bool = True
     permissions: List[str] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RoleCreate(BaseModel):
@@ -472,6 +470,11 @@ def invalidate_roles_cache():
     global _ROLES_CACHE, _ROLES_CACHE_TIME
     _ROLES_CACHE = None
     _ROLES_CACHE_TIME = 0.0
+    try:
+        from app.services.rbac_service import invalidate_role_permissions_cache
+        invalidate_role_permissions_cache()
+    except Exception as exc:
+        logger.debug("Failed to invalidate role permissions cache: %s", exc)
 
 
 # ---------------------------------------------------------------------------

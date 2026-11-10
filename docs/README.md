@@ -6,7 +6,19 @@ This documentation suite is organized into 19 dedicated parts designed to onboar
 
 ---
 
-## Master Table of Contents
+## Master Handover & Operational Suites (November 2026 Release)
+
+| Document | Primary Audience | Key Contents |
+| :--- | :--- | :--- |
+| [**HANDOVER_CLOSURE_REPORT.md**](./HANDOVER_CLOSURE_REPORT.md) | Management, Tech Leads | Executive deliverables checklist, tech stack, security review, licensing compliance, credential locations, and formal sign-off. |
+| [**GPU_SETUP_AND_HANDOVER_RUNBOOK.md**](./GPU_SETUP_AND_HANDOVER_RUNBOOK.md) | DevOps, SysAdmins | NVIDIA driver installation, CUDA toolkit, Docker GPU runtime, Ollama setup, VRAM concurrency management, and verification smoke tests. |
+| [**VISUAL_USER_MANUAL_WITH_BUTTON_INDICATORS.md**](./VISUAL_USER_MANUAL_WITH_BUTTON_INDICATORS.md) | End-Users, Approvers | Visual screen layout wireframes with numbered callout badges (`[1]`, `[2]`, `[3]`) and detailed button index tables. |
+| [**SCREEN_BY_SCREEN_BUTTON_MANUAL.md**](./SCREEN_BY_SCREEN_BUTTON_MANUAL.md) | End-Users, Clerks, Approvers | Comprehensive visual walkthrough of all 17 screens with explicit **button-by-button, control-by-control tables** and expected behaviors. |
+| [**DocuFlow_Technical_Documentation.md**](./DocuFlow_Technical_Documentation.md) | Senior Architects | Complete unified single-file technical architecture specification. |
+
+---
+
+## Master Table of Contents (Engineering Deep Dive)
 
 | Part | Title | Core Topics Covered |
 | :---: | :--- | :--- |

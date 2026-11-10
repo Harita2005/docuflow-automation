@@ -659,17 +659,42 @@ Maintains lease-based editing locks to prevent concurrent edits.
 
 ## 11. Authentication, Authorization, and Security Hardening
 
-### 11.1 Authentication & Passwordless Flow
-- **Restricted Identifier Input:** The login form explicitly restricts login identifiers to **Employee ID** and **Username** only (`868032f`), rejecting raw email addresses and phone numbers to mitigate user enumeration.
-- **Auto-Dispatched Email OTP:** Upon identifier submission, the backend automatically generates a cryptographically random 6-digit OTP, dispatches it to the user's registered corporate email, and directly renders the verification code entry screen (`c7b35eb`).
+### 11.1 Authentication & Multi-Identifier Login
+- **Multi-Identifier Credentials:** Users can authenticate via Corporate Username (e.g., `john.doe`), Registered Corporate Email (e.g., `johndoe@ramrajcotton.net`), or Employee ID (`EMP_01`, `ADMIN01`).
+- **Auto-Dispatched Email OTP:** Upon identifier verification, the backend automatically generates a cryptographically random 6-digit OTP, dispatches it to the user's registered corporate email via SMTP, and displays the verification challenge (`c7b35eb`).
 - **Two-Stage Multi-Factor Authentication (MFA):** Supports Time-based One-Time Passwords (TOTP) using standard RFC 6238 authenticators (Google Authenticator, Microsoft Authenticator) alongside SMS/Email OTP fallbacks.
 - **Brute Force Protection:** Tracks failed verification attempts; 5 consecutive failures trigger an automated 30-minute account lockout (`SEC-10`).
 
-### 11.2 Granular Role-Based Access Control (RBAC)
+### 11.2 First-Time Login & Mandatory Password Change
+To adhere to enterprise security policies, accounts provisioned with temporary default credentials cannot access operational pages without establishing a personal credential:
+- **Flag Enforcement:** The database tracks `user.is_temporary_password`. If `True`, authentication succeeds with a restricted token and returns `force_password_change: True`.
+- **Navigation Lockout:** The frontend routes the user directly to the **Force Password Change** modal, intercepting all other view navigation until resolved.
+- **Endpoint:** `POST /api/auth/force-password-change` verifies the current temporary password, validates new password complexity (minimum 8 characters, numbers, and symbols), hashes it with bcrypt, updates the database, sets `is_temporary_password = False`, and issues a fully privileged JWT session.
+
+### 11.3 Self-Service Forgot & Reset Password Flow
+DocuFlow provides an automated, cryptographic password recovery flow to prevent IT helpdesk bottlenecks:
+- **Request Endpoint:** `POST /api/auth/forgot-password` accepts a username or email. If the account exists, it generates a cryptographically secure, random 32-byte hexadecimal token with a 15-minute expiration (`password_reset_token` and `password_reset_expires_at`).
+- **Email Delivery:** An email containing a secure reset link (e.g., `http://<HOST>:8085/login?reset_token=<TOKEN>`) is dispatched via Office 365 SMTP (`mfa_service.py:send_password_reset_email`).
+- **Reset Endpoint:** `POST /api/auth/reset-password` validates token existence, checks that current time $< \text{expires\_at}$, hashes the new password with bcrypt, clears the token, and writes an audit event.
+
+### 11.4 Maker-Checker Segregation of Duties (`SEC-09`)
+To comply with financial accounting governance:
+- The user who originally created, uploaded, or initiated a document is permanently tracked in `documents.created_by` / `uploader_id`.
+- The workflow execution engine enforces that **no user may approve their own submission**:
+```python
+if inv.uploader_id == current_user.id:
+    raise HTTPException(
+        status_code=403,
+        detail="Maker-Checker Violation: Initiators cannot approve their own submissions."
+    )
+```
+- In addition, **Strict Assigned Approver Enforcement** ensures that only the specific user or role pool assigned to the active stage can perform approval, hold, or rejection actions. Unassigned users view the document in read-only mode with active action buttons disabled.
+
+### 11.5 Granular Role-Based Access Control (RBAC)
 DocuFlow enforces 32 granular permissions mapped across 5 primary roles:
 
 | Permission Name | Super Admin | Admin | Approver | Submitter | Auditor |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| :--- | :--- | :--- | :--- | :--- | :--- |
 | `document:create` | Yes | Yes | No | Yes | No |
 | `document:read` | Yes | Yes | Yes | Yes | Yes |
 | `document:edit` | Yes | Yes | Stage Only | Draft Only| No |
@@ -682,7 +707,7 @@ DocuFlow enforces 32 granular permissions mapped across 5 primary roles:
 | `audit:read` | Yes | Yes | No | No | Yes |
 | `system:config` | Yes | No | No | No | No |
 
-### 11.3 Cryptography & Injection Guards
+### 11.6 Cryptography & Injection Guards
 - **HMAC Expiring Signed URLs:** Document retrieval URLs are signed with HMAC-SHA256 tokens (`/api/files/signed/{id}?token=...&expires=...`). Tokens expire in 300 seconds and are bound to specific file paths.
 - **Path Traversal Sanitization:** All file storage operations pass through `validate_uploaded_file` and `get_safe_file_path`, resolving symlinks and verifying that canonical paths reside strictly within allowed storage directories.
 - **CSV Injection Prevention:** The audit export engine passes all text cells through `sanitize_csv_cell`, prefixing cells beginning with `=`, `+`, `-`, or `@` with a single quote (`'`) to disable formula execution in Microsoft Excel.
@@ -719,9 +744,16 @@ The final approval transition follows an atomic, strictly ordered lifecycle:
 4. **Database Commit:** The transaction commits to SQL Server.
 5. **Post-Commit ERP Push:** Asynchronous webhook synchronization triggers only after the commit completes successfully.
 
+### 12.4 Dedicated Cancellation Flow & Mandatory Reason
+To prevent accidental or unauthorized workflow voids:
+- **Authorization Barrier:** Only the user assigned to the document in Stage 1 (Attachment Status) is authorized to cancel the process. Unassigned users cannot cancel the document.
+- **Terminal Status Guard:** Documents already in `Approved`, `Posted`, `Paid`, or `Cancelled` states cannot be cancelled (HTTP 409 Conflict).
+- **Mandatory Reason Enforcement:** A dedicated cancellation modal requires a non-empty text explanation (`cancellation_reason` / `remarks`). Requests with whitespace-only or missing reasons are rejected with HTTP 400 Bad Request.
+- **Atomic Transition:** Upon verification, the engine increments `inv.version = current_version + 1`, transitions status to `Cancelled`, clears `assigned_approver = None`, archives the document to `stored_pdfs/rejected/`, writes a dedicated `AuditLog` entry, and dispatches in-app cancellation notices to stakeholders.
+
 ---
 
-## 13. External Integrations, ERP Synchronization, and Webhooks
+## 13. External Integrations, ERP Synchronization, and Notifications
 
 ### 13.1 Inbound M2M Batch Synchronization
 External ERP systems (SAP, custom databases, n8n automations) push document batches via:
@@ -736,6 +768,12 @@ When documents complete final approval, outbound webhooks are queued in `callbac
 - **Exponential Backoff:** Failed dispatches automatically retry according to exponential intervals:
   $$\text{Intervals} = [1\text{m}, 5\text{m}, 15\text{m}, 1\text{h}, 6\text{h}]$$
   Maximum retry attempts are capped at 5 before flagging the event `FAILED`.
+
+### 13.3 Real-Time Notification Center & Alert Dispatcher
+- **In-App Notification Drawer:** Embedded into the global header (`HeaderNotifications.tsx`), tracking unread counts via `GET /api/notifications/my-notifications`.
+- **Event Broadcaster:** Real-time Server-Sent Events (SSE) broadcast stage assignments, SLA breach warnings, and revision requests.
+- **State Persistence:** Users can dismiss individual notifications (`POST /api/notifications/{id}/mark-read`) or batch-clear the drawer (`POST /api/notifications/mark-all-read`), persisting changes to `in_app_notifications`.
+- **RACI Escalation Matrices:** Configured in `notification_raci_matrices` to automate multi-tier email alerts via Office 365 SMTP.
 
 ---
 
@@ -878,6 +916,18 @@ The test suites documented in `test_execution_report.md` and `dissertation_test_
 | **Audit Log UI** | [`frontend/src/components/AuditLogsPage.tsx`](file:///frontend/src/components/AuditLogsPage.tsx)| 1,500+ line audit explorer, filter controls, sanitized export modal |
 | **DAPI Sync Studio** | [`frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx`](file:///frontend/src/components/dapi-sync-back/ApplicationStudioPage.tsx)| Visual field mapping, webhook rule builder, live callback trigger |
 | **Document Details** | [`frontend/src/components/DocumentDetails.tsx`](file:///frontend/src/components/DocumentDetails.tsx)| PDF viewer, heartbeat lease sender, stage progression buttons |
+
+---
+
+## 18. Formal Handover Sign-Off & Custody Transfer Register
+
+By executing below, all designated authorities affirm that the **DocuFlow Automation (FlowApprove DAAS v2.1.0)** codebase, microservices, container topology, database assets, test suites, and operational runbooks have been formally audited, transferred, and accepted for production enterprise operation.
+
+| Signatory Role | Full Legal Name | Corporate Title & Organization | Signature / Digital Stamp | Date |
+| :--- | :--- | :--- | :--- | :--- |
+| **Outgoing Lead Developer / Intern** | ___________________________ | Software Engineering Intern, Project Lead | ___________________________ | ___ / ___ / 2026 |
+| **Enterprise Tech Lead** | ___________________________ | Lead Software Architect, Ramraj Cotton | ___________________________ | ___ / ___ / 2026 |
+| **Department Head / Sponsor** | ___________________________ | Head of IT & Digital Transformation, Strivh | ___________________________ | ___ / ___ / 2026 |
 
 ---
 

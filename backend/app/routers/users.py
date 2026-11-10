@@ -6,10 +6,10 @@ import datetime
 from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from app.auth import get_current_active_user, get_password_hash
+from app.auth import get_current_active_user, get_password_hash, invalidate_user_cache
 from app.services.rbac_service import check_permission
 from app.database.connection import get_db
-from app.database.models import Department, Division, Role, User
+from app.database.models import Department, Division, Role, User, AuditLog
 from app.schemas.schemas import (
     UserMasterCreate,
     UserMasterUpdate,
@@ -172,6 +172,17 @@ def create_user_master(
     if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to create users.')
 
+    # Prevent unauthorized assignment of privileged executive roles (Admin, GM, JMD, MD)
+    target_role = (payload.role or '').strip().lower()
+    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'gm', 'jmd', 'md'}
+    if target_role in PRIVILEGED_ROLES:
+        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False)
+        if not has_privilege_auth and (current_user.role or '').lower() not in ['admin', 'superadmin']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access Denied: Creating a user with privileged executive role '{target_role.upper()}' requires explicit 'admin:rbac' authorization."
+            )
+
     existing_emp = db.query(User).filter(User.employee_id == payload.employee_id).first()
     if existing_emp:
         raise HTTPException(status_code=400, detail=f"Employee ID '{payload.employee_id}' already exists in User Master")
@@ -180,6 +191,14 @@ def create_user_master(
         raise HTTPException(status_code=400, detail=f"Email '{payload.email}' is already registered to another user")
 
     effective_username = payload.username or payload.employee_id
+    # Disallow reserved service account identifiers
+    RESERVED_USERNAMES = {'backend_sync_client', 'sync_service', 'service_api_key', 'system', 'root'}
+    if effective_username.lower() in RESERVED_USERNAMES or (payload.employee_id and payload.employee_id.lower() in RESERVED_USERNAMES):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Username or Employee ID '{effective_username}' is reserved for internal service accounts."
+        )
+
     existing_username = db.query(User).filter(User.username == effective_username).first()
     if existing_username:
         effective_username = f'{payload.employee_id}_{random.randint(100, 999)}'
@@ -233,6 +252,20 @@ def create_user_master(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    try:
+        db.add(AuditLog(
+            invoice_id=None,
+            user=current_user.employee_name or current_user.name or current_user.username,
+            action='USER_CREATED',
+            stage='User Administration',
+            notes=f"Created user '{new_user.username}' ({new_user.employee_id}) with role '{new_user.role}' and division '{new_user.division}'",
+            ip_address=None
+        ))
+        db.commit()
+    except Exception as exc:
+        logger.debug("Failed to record user creation audit log: %s", exc)
+
     return new_user
 
 @router.get('/divisions/list')
@@ -273,10 +306,43 @@ def update_user_master(
 
     update_data = payload.model_dump(exclude_unset=True)
 
-    # Prevent non-admin privilege escalation & mass assignment
+    # Strictly reject any self-privilege escalation attempt with 403 Forbidden
     if not is_admin:
-        for sensitive_f in ['role', 'role_id', 'is_active', 'is_deleted', 'division', 'mfa_enabled', 'mfa_secret', 'active_session_id', 'created_by', 'user_uid']:
-            update_data.pop(sensitive_f, None)
+        sensitive_fields = {'role', 'role_id', 'is_active', 'is_deleted', 'division', 'division_id', 'approval_divisions', 'mfa_enabled', 'mfa_secret', 'active_session_id', 'created_by', 'user_uid'}
+        attempted_escalations = sensitive_fields.intersection(update_data.keys())
+        if attempted_escalations:
+            try:
+                db.add(AuditLog(
+                    invoice_id=None,
+                    user=current_user.employee_name or current_user.name or current_user.username,
+                    action='PRIVILEGE_ESCALATION_BLOCKED',
+                    stage='User Administration',
+                    notes=f"Unauthorized self-privilege escalation blocked for '{current_user.username}'. Attempted fields: {sorted(list(attempted_escalations))}",
+                    ip_address=None
+                ))
+                db.commit()
+            except Exception as exc:
+                logger.debug("Failed to record escalation audit: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access Denied: Self-privilege escalation is forbidden. You cannot modify your own privileges or security attributes ({', '.join(sorted(attempted_escalations))})."
+            )
+
+    # For admin callers: restrict assignment of executive privileged roles (Admin, GM, JMD, MD)
+    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'gm', 'jmd', 'md'}
+    target_role = (update_data.get('role') or '').strip().lower()
+    if target_role and target_role in PRIVILEGED_ROLES and target_role != (user.role or '').strip().lower():
+        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False)
+        if not has_privilege_auth and (current_user.role or '').lower() not in ['admin', 'superadmin']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access Denied: Promoting a user to privileged executive role '{target_role.upper()}' requires explicit 'admin:rbac' authorization."
+            )
+
+    old_role = user.role
+    old_approval_divs = user.approval_divisions
+    old_active = user.is_active
+    old_div = user.division
 
     if 'employee_id' in update_data and update_data['employee_id'] and (update_data['employee_id'] != user.employee_id):
         existing_emp = db.query(User).filter(User.employee_id == update_data['employee_id'], User.id != user_id).first()
@@ -327,6 +393,31 @@ def update_user_master(
     user.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(user)
+
+    privileges_changed = (
+        ('role' in update_data and update_data['role'] != old_role)
+        or ('approval_divisions' in update_data and update_data['approval_divisions'] != old_approval_divs)
+        or ('is_active' in update_data and update_data['is_active'] != old_active)
+        or ('division' in update_data and update_data['division'] != old_div)
+    )
+
+    if privileges_changed:
+        try:
+            db.add(AuditLog(
+                invoice_id=None,
+                user=current_user.employee_name or current_user.name or current_user.username,
+                action='PRIVILEGE_CHANGE',
+                stage='User Administration',
+                notes=f"Privileges modified for user '{user.username}' ({user.employee_id}): role '{old_role}' -> '{user.role}', approval_divisions '{old_approval_divs}' -> '{user.approval_divisions}', active '{old_active}' -> '{user.is_active}'",
+                ip_address=None
+            ))
+            db.commit()
+        except Exception as exc:
+            logger.debug("Failed to record privilege change audit log: %s", exc)
+        user.active_session_id = None
+        db.commit()
+        invalidate_user_cache(user.username)
+
     return user
 
 @router.patch('/{user_id}/status', response_model=UserResponse)

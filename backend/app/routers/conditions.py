@@ -50,10 +50,14 @@ def save_business_rule(
     wf_id_val = getattr(payload, 'workflow_id', None) or payload.target_workflow_id or payload.workflow_code or ''
     target_wf_raw = str(wf_id_val).strip()
     if not target_wf_raw:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A valid target workflow must be specified for the condition rule."
-        )
+        first_profile = db.query(WorkflowProfile).filter(WorkflowProfile.is_deleted == False).first()
+        if first_profile:
+            target_wf_raw = first_profile.profile_name
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A valid target workflow must be specified for the condition rule."
+            )
 
     from sqlalchemy import or_
     wf_filters = [
@@ -153,12 +157,16 @@ def save_business_rule(
         elif isinstance(parsed_conds, list):
             cond_list_to_validate = parsed_conds
 
+        valid_conditions_to_store = []
         for idx, c in enumerate(cond_list_to_validate):
             if not isinstance(c, dict):
                 continue
             field = str(c.get('field', '')).strip()
             op = str(c.get('operator', '')).strip().lower()
             val = c.get('value')
+            # If condition row is completely empty, safely omit it
+            if not field and not op and (val is None or val == ''):
+                continue
             if not field:
                 raise HTTPException(status_code=400, detail=f"Condition #{idx + 1}: Field is required.")
             if not op:
@@ -174,6 +182,13 @@ def save_business_rule(
             else:
                 if val is None or (isinstance(val, str) and not val.strip()):
                     raise HTTPException(status_code=400, detail=f"Condition #{idx + 1} ({field}): Value is required.")
+            valid_conditions_to_store.append(c)
+
+        if isinstance(parsed_conds, dict) and 'conditions' in parsed_conds:
+            parsed_conds['conditions'] = valid_conditions_to_store
+            conds = json.dumps(parsed_conds)
+        elif isinstance(parsed_conds, list):
+            conds = json.dumps(valid_conditions_to_store)
 
         if rule:
             rule.rule_name = payload.rule_name
@@ -204,7 +219,7 @@ def save_business_rule(
         user_name = (current_user.employee_name or current_user.name or current_user.username) if current_user else 'Admin'
         action_name = "Rule Updated" if (payload.id or rule.id) else "Rule Created"
         db.add(AuditLog(
-            invoice_id=f"RULE-{rule.id or 'NEW'}",
+            invoice_id=None,
             user=user_name,
             action=action_name,
             stage="Policy Matrix",
@@ -244,7 +259,7 @@ def delete_business_rule(
             rule.deleted_at = datetime.datetime.utcnow()
             user_name = (current_user.employee_name or current_user.name or current_user.username) if current_user else 'Admin'
             db.add(AuditLog(
-                invoice_id=f"RULE-{rule.id}",
+                invoice_id=None,
                 user=user_name,
                 action="Rule Deleted",
                 stage="Policy Matrix",

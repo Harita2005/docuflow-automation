@@ -66,14 +66,23 @@ flowchart TD
 ```
 
 #### Step-by-Step Login:
-1. **Enter Your Username:** Type your registered company email address or username into the **Username / Email** box.
+1. **Flexible Login Identifiers:** In the login box, you can enter any of the following:
+   - **Corporate Username** (e.g. `john.doe`)
+   - **Registered Email** (e.g. `johndoe@ramrajcotton.net`)
+   - **Employee ID** (e.g. `EMP_01` or `ADMIN01`)
 2. **Enter Your Password:** Type your password into the **Password** box. Click the eye icon if you wish to show the characters to check for typos.
 3. **Click the Sign In Button:** Click the blue **Sign In** button.
-4. **Complete Two-Factor Verification (If Prompted):**
+4. **First-Time Login (Password Change Required):**
+   - If this is your first time logging in or your account was created with a temporary default password, a **Force Password Change** screen will appear.
+   - You must type your new secure password (minimum 8 characters with numbers and symbols) and confirm it before you can enter the application.
+5. **Forgot Password / Self-Service Reset:**
+   - If you cannot remember your password, click **Forgot Password?** below the login button.
+   - Enter your email address or username. A secure, time-limited reset link will be sent to your email. Click the link in your email to choose a new password.
+6. **Complete Two-Factor Verification (If Prompted):**
    - If your account has two-factor authentication enabled, a prompt will ask for a **6-Digit Security Code**.
    - Open your mobile phone's authenticator app (such as Google Authenticator or Microsoft Authenticator) or check your SMS/email.
    - Type the 6 numbers into the boxes and click **Verify Code**.
-5. **Dashboard Loads:** Once verified, you will be taken directly to the main application dashboard.
+7. **Dashboard Loads:** Once verified, you will be taken directly to the main application dashboard.
 
 > [!TIP]
 > If you enter an incorrect password 5 times in a row, the system locks your account for 30 minutes to protect against hackers. If this happens, contact your system administrator to unlock your profile.
@@ -234,10 +243,20 @@ Electronically records your signature and advances the document to the next appr
 To authorize payment for goods and services received by your department.
 
 #### 3. Where to find it
-Inside the **Document Details** inspection view, located at the top-right corner or bottom action panel.
+Inside the **Document Details** inspection view, located at the top-left action panel.
 
-#### 4. Which button to select
-Click the green **Approve** button.
+#### 4. Authorization Rules Before You Can Approve
+> [!IMPORTANT]
+> **Strict Assigned Approver Rule:** Only the user currently assigned to the active stage (the **Assigned Approver**) is permitted to approve the document. If you are not the assigned approver, the document is in **Read-Only Locked Mode** with a notice: `Document Locked: Assigned to [Name]`. Action buttons are locked.
+>
+> **Maker-Checker Segregation of Duties:** The user who created, uploaded, or submitted the document cannot approve their own submission. Another authorized manager must review and sign off.
+>
+> **Stage 1 Attachment & Checklist Requirements:** In Stage 1 (Attachment Status), the Approve button remains disabled until:
+> 1. A physical invoice PDF is attached (or synthetic fallback preview loaded).
+> 2. All compliance checklist items (e.g. *Documents Attached*, *Bill Name Verified*, *Bill Date Verified*) are verified and checked.
+
+#### 5. Which button to select
+Once all criteria are met and you are the assigned approver, click the green **Approve ➔** button.
 
 #### 5. What information to enter
 An approval confirmation dialog will pop up:
@@ -266,6 +285,23 @@ A green alert appears: **"Document approved successfully"**. The document disapp
 
 #### 8. What to do if something goes wrong
 - **Error: "Conflict / Version Mismatch (409)":** Another manager or administrator modified or approved this document a few seconds before you clicked the button. Simply refresh your page to see the latest status.
+
+---
+
+### Feature 4B: Cancelling a Process in Stage 1
+
+#### 1. What the feature does
+Allows the assigned approver at Stage 1 (Attachment Status) to permanently void and cancel a workflow process if an invoice is invalid, a duplicate, or incorrectly initiated.
+
+#### 2. Authorization Rule
+> [!IMPORTANT]
+> **Strict Assigned Approver Only:** Just like approval, **strictly only the assigned approver** is permitted to cancel the process in Stage 1. Creators, uploaders, and other unassigned staff cannot void the document.
+
+#### 3. Dedicated Cancellation Modal & Mandatory Reason
+1. Click the red **Cancel Process** button.
+2. A dedicated **Cancel Process Modal** will appear on screen.
+3. You **must type a mandatory cancellation comment** explaining why the process is being voided (e.g., *"Duplicate bill submitted; original was already cleared under INV-9812"*).
+4. Click **Confirm Cancellation**. The document status updates to **Cancelled**, SLA timers are terminated, and the cancellation reason is permanently logged in the audit trail.
 
 ---
 

@@ -1,0 +1,10 @@
+# DAAS - Document Approval & Automation System
+
+> DAAS is an enterprise document processing, workflow approval management, and audit verification platform.
+
+## Documentation and Resources
+
+- [DAAS Application Overview](/) : Main application dashboard and document processing interface
+- [API Documentation](/api/docs) : OpenAPI interactive documentation for backend endpoints
+- [Workflows & Approval Routing](/workflows) : Business rules, multistage approvals, and SLA tracking
+- [Audit & Compliance](/audit) : Comprehensive tamper-evident activity logs and verification history

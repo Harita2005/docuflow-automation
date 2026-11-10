@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.database.models import Document, IntegrationSyncLog, ThirdPartyWebhookConfig
+from app.services.document_query_service import find_invoice_by_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,10 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
     """
     db: Session = SessionLocal()
     try:
-        inv: Optional[Document] = db.query(Document).filter(Document.id == document_id).first()
+        try:
+            inv: Optional[Document] = find_invoice_by_identifier(db, str(document_id))
+        except Exception:
+            inv = None
         if not inv:
             return {'success': False, 'error': f"Document '{document_id}' not found"}
         config: Optional[ThirdPartyWebhookConfig] = db.query(ThirdPartyWebhookConfig).filter(ThirdPartyWebhookConfig.is_active == True).first()

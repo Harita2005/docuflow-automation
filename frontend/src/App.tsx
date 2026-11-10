@@ -1,21 +1,32 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import Header from "./components/Header.tsx";
 import Sidebar from "./components/Sidebar.tsx";
-import LoginPage from "./components/LoginPage";
-import Dashboard from "./components/Dashboard.tsx";
-import DocumentUpload from "./components/DocumentUpload.tsx";
-import DocumentDetails from "./components/DocumentDetails.tsx";
-import DataVerificationPage from "./components/DataVerificationPage.tsx";
-import ApprovalQueuePage from "./components/ApprovalQueuePage.tsx";
-import PaymentReadinessPage from "./components/PaymentReadinessPage.tsx";
-import WorkTrackerPage from "./components/WorkTrackerPage.tsx";
-import ApprovedDocumentsPage from "./components/ApprovedDocumentsPage.tsx";
-import GettingStartedPage from "./components/GettingStartedPage.tsx";
-import AdminPage from "./pages/Admin.jsx";
-import WorkflowRulesPage from "./pages/WorkflowRulesPage.jsx";
+const LoginPage = lazy(() => import("./components/LoginPage"));
+const Dashboard = lazy(() => import("./components/Dashboard.tsx"));
 
-import CustomerFeedbackPage from "./components/CustomerFeedbackPage.tsx";
-import DapiSyncBackHub from "./components/dapi-sync-back/DapiSyncBackHub.tsx";
+const DocumentUpload = lazy(() => import("./components/DocumentUpload.tsx"));
+const DocumentDetails = lazy(() => import("./components/DocumentDetails.tsx"));
+const DataVerificationPage = lazy(() => import("./components/DataVerificationPage.tsx"));
+const ApprovalQueuePage = lazy(() => import("./components/ApprovalQueuePage.tsx"));
+const PaymentReadinessPage = lazy(() => import("./components/PaymentReadinessPage.tsx"));
+const WorkTrackerPage = lazy(() => import("./components/WorkTrackerPage.tsx"));
+const ApprovedDocumentsPage = lazy(() => import("./components/ApprovedDocumentsPage.tsx"));
+const GettingStartedPage = lazy(() => import("./components/GettingStartedPage.tsx"));
+const AdminPage = lazy(() => import("./pages/Admin.jsx"));
+const WorkflowRulesPage = lazy(() => import("./pages/WorkflowRulesPage.jsx"));
+const CustomerFeedbackPage = lazy(() => import("./components/CustomerFeedbackPage.tsx"));
+const DapiSyncBackHub = lazy(() => import("./components/dapi-sync-back/DapiSyncBackHub.tsx"));
+
+function RouteLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px] w-full">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-medium text-slate-500">Loading module...</span>
+      </div>
+    </div>
+  );
+}
 import { DbInvoice } from "./types";
 import { Clock } from "lucide-react";
 
@@ -826,20 +837,22 @@ export default function App() {
   // Unauthenticated viewport
   if (!isLoggedIn) {
     return (
-      <LoginPage
-        kickedReason={kickedReason}
-        onClearKickedReason={() => {
-          setKickedReason(null);
-          sessionStorage.removeItem("sessionKickedReason");
-        }}
-        onLoginSuccess={(userId, role, email, username) => {
-          handleLoginSuccess(userId, role, email, username);
-          sessionStorage.setItem("hasShownWelcomeQueue", "false");
-          // Always start completely fresh in Dashboard, never retain previous document state
-          setSelectedDocId(null);
-          setCurrentView("dashboard");
-        }}
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <LoginPage
+          kickedReason={kickedReason}
+          onClearKickedReason={() => {
+            setKickedReason(null);
+            sessionStorage.removeItem("sessionKickedReason");
+          }}
+          onLoginSuccess={(userId, role, email, username) => {
+            handleLoginSuccess(userId, role, email, username);
+            sessionStorage.setItem("hasShownWelcomeQueue", "false");
+            // Always start completely fresh in Dashboard, never retain previous document state
+            setSelectedDocId(null);
+            setCurrentView("dashboard");
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -887,6 +900,7 @@ export default function App() {
         {/* Content Viewport */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 pt-1 pb-2">
           <div className="w-full max-w-[1920px] mx-auto space-y-2 animate-fadeIn">
+            <Suspense fallback={<RouteLoadingFallback />}>
             {currentView === "getting-started" && (
               <GettingStartedPage
                 setCurrentView={setCurrentView}
@@ -1027,6 +1041,7 @@ export default function App() {
                 />
               )
             )}
+            </Suspense>
           </div>
         </main>
 

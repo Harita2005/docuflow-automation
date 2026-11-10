@@ -15,6 +15,7 @@ from app.services.integration_service import build_universal_export_payload, dis
 from app.auth import get_current_active_user, verify_service_api_key
 from app.services.rbac_service import check_permission
 from app.services.crypto_service import encrypt_secret, decrypt_secret, mask_secret
+from app.services.document_query_service import find_invoice_by_identifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/integrations/v1', tags=['Third-Party & SAP Integrations'])
@@ -55,7 +56,7 @@ def get_single_document_export(document_id: str, request: Request=None, db: Sess
     """
     [PULL API] Fetches full serialized export details for a single document.
     """
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
+    doc = find_invoice_by_identifier(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
     base_url = str(request.base_url).rstrip('/') if request else ''
@@ -67,7 +68,7 @@ def acknowledge_document_sync(document_id: str, body: IntegrationAcknowledgmentR
     [PULL API] Called by 3rd-party ERP after successfully ingesting the document.
     Saves external reference number (e.g. SAP Doc #), updates sync timestamp, and adds an audit log entry.
     """
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
+    doc = find_invoice_by_identifier(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
     now = datetime.datetime.utcnow()
@@ -85,9 +86,11 @@ def download_approved_document_pdf(document_id: str, db: Session=Depends(get_db)
     """
     [PULL API] Streams the physical or stamped PDF of the approved document directly to 3rd-party systems.
     """
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
+    doc = find_invoice_by_identifier(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
+    if (doc.status or '').capitalize() not in ('Settled', 'Approved'):
+        raise HTTPException(status_code=400, detail=f"Document '{document_id}' is not in Settled or Approved status (current status: {doc.status})")
     file_url = doc.file_url or ''
     from app.routers.documents import get_archived_pdf_path
     structured_path = get_archived_pdf_path(doc)
@@ -242,7 +245,7 @@ def retry_document_push(document_id: str, background_tasks: BackgroundTasks, req
     Manually re-triggers outgoing webhook push for a specific document.
     """
     _require_integration_admin(current_user, db)
-    doc = db.query(Document).filter(Document.id == document_id, Document.is_deleted == False).first()
+    doc = find_invoice_by_identifier(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
     doc.external_sync_status = 'PENDING'

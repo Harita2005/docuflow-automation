@@ -90,6 +90,21 @@ export default function FlowBuilder({ users = [] }) {
     updateStep(configuringStepIndex, 'checklist_items', currentList.filter((_, idx) => idx !== indexToRemove));
   };
 
+  const closeStepDrawer = () => {
+    if (newStageChecklistText && newStageChecklistText.trim() && configuringStepIndex !== null && editingWorkflow) {
+      const clean = newStageChecklistText.trim();
+      const currentStep = editingWorkflow.steps[configuringStepIndex];
+      if (currentStep) {
+        const currentList = Array.isArray(currentStep.checklist_items) ? currentStep.checklist_items : [];
+        if (!currentList.includes(clean)) {
+          updateStep(configuringStepIndex, 'checklist_items', [...currentList, clean]);
+        }
+      }
+      setNewStageChecklistText("");
+    }
+    setConfiguringStepIndex(null);
+  };
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -360,18 +375,27 @@ export default function FlowBuilder({ users = [] }) {
       const docType = editingWorkflow.workflow_type || selectedSubCategory || 'General Records';
 
       // Clean and ensure steps schema compliance
-      const cleanedSteps = (editingWorkflow.steps || []).map((step, idx) => ({
-        stage_number: idx + 1,
-        step_name: step.step_name || `Stage ${idx + 1}`,
-        approver_type: step.approver_type || 'Role Based',
-        approver_target: step.approver_target || '',
-        delegate_approver: step.delegate_approver || '',
-        document_type: step.document_type || docType || 'RECORD',
-        action_required: step.action_required || 'Approve',
-        permissions: step.permissions || 'Approve / Reject',
-        sla_hours: parseInt(step.sla_hours || 48, 10),
-        checklist_items: Array.isArray(step.checklist_items) ? step.checklist_items : []
-      }));
+      const cleanedSteps = (editingWorkflow.steps || []).map((step, idx) => {
+        let items = Array.isArray(step.checklist_items) ? [...step.checklist_items] : [];
+        if (idx === configuringStepIndex && newStageChecklistText && newStageChecklistText.trim()) {
+          const pending = newStageChecklistText.trim();
+          if (!items.includes(pending)) {
+            items.push(pending);
+          }
+        }
+        return {
+          stage_number: idx + 1,
+          step_name: step.step_name || `Stage ${idx + 1}`,
+          approver_type: step.approver_type || 'Role Based',
+          approver_target: step.approver_target || '',
+          delegate_approver: step.delegate_approver || '',
+          document_type: step.document_type || docType || 'RECORD',
+          action_required: step.action_required || 'Approve',
+          permissions: step.permissions || 'Approve / Reject',
+          sla_hours: parseInt(step.sla_hours || 48, 10),
+          checklist_items: items
+        };
+      });
 
       const payload = {
         profile_name: (editingWorkflow.profile_name || '').trim(),
@@ -1430,7 +1454,7 @@ export default function FlowBuilder({ users = [] }) {
     
     {configuringStepIndex !== null && editingWorkflow.steps[configuringStepIndex] && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setConfiguringStepIndex(null)} />
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={closeStepDrawer} />
         <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl flex flex-col border border-slate-200 overflow-hidden max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <div>
@@ -1442,7 +1466,7 @@ export default function FlowBuilder({ users = [] }) {
               </h3>
               <p className="text-[10px] font-medium text-slate-500 mt-0.5">Set stage approver pool, backup delegates, SLA, and verification checklist.</p>
             </div>
-            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shadow-2xs">
+            <button type="button" onClick={closeStepDrawer} className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shadow-2xs">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1877,7 +1901,7 @@ export default function FlowBuilder({ users = [] }) {
             </div>
           </div>
           <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex justify-end">
-            <button type="button" onClick={() => setConfiguringStepIndex(null)} className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-xs rounded-md shadow-xs transition-colors">
+            <button type="button" onClick={closeStepDrawer} className="px-4 py-1.5 bg-[#003F28] hover:bg-[#002f1e] text-white font-bold text-xs rounded-md shadow-xs transition-colors">
               Done
             </button>
           </div>

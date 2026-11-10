@@ -39,3 +39,4 @@ results_*.json
 
 summary-*.json
 load-test-*.js
+database_backup_*/

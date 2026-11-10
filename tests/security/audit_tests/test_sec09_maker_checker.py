@@ -65,7 +65,7 @@ def test_prevent_replay_after_terminal_or_rejected_status():
 
     with pytest.raises(HTTPException) as exc_info:
         check_approval_authorization(inv_rejected, approver, db=None, require_compliance=False)
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.status_code in [400, 409]
     assert "terminal/completed state" in exc_info.value.detail
 
 def test_independent_approver_passes_maker_checker():

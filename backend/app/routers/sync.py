@@ -341,7 +341,14 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         existing = db.query(Invoice).filter(Invoice.doc_key == str(req.doc_key)).first()
         if not existing:
             prefix = get_doc_type_prefix(req.document_type or '', req.category or '')
-            existing = db.query(Invoice).filter(or_(Invoice.id == str(req.doc_key), Invoice.id == f'{prefix}-{req.doc_key}', Invoice.id == f'DOC-{req.doc_key}')).first()
+            doc_key_filters = [
+                Invoice.document_code == str(req.doc_key),
+                Invoice.document_code == f'{prefix}-{req.doc_key}',
+                Invoice.document_code == f'DOC-{req.doc_key}'
+            ]
+            if str(req.doc_key).isdigit():
+                doc_key_filters.append(Invoice.id == int(req.doc_key))
+            existing = db.query(Invoice).filter(or_(*doc_key_filters)).first()
     req_doc_type = normalize_document_type(req.document_type) if req.document_type else None
     if not existing and req.invoice_number:
         req_is_feedback = (
@@ -442,7 +449,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
             if is_mid_approval and financial_changes:
                 logger.warning(f"[Sync Alert] Financial field modified mid-approval for document {existing.id}: {financial_changes}")
                 db.add(AuditLog(
-                    invoice_id=str(existing.id),
+                    invoice_id=existing.id,
                     user='ERP Sync Engine',
                     action='Mid-Approval Financial Field Modified',
                     stage=f'Stage {existing.current_stage or 1}',
@@ -458,7 +465,7 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
         timestamp = int(datetime.datetime.utcnow().timestamp())
         effective_doc_type = req_doc_type or DocumentType.AP_INVOICE.value
         new_inv = Invoice(
-            id=doc_id,
+            document_code=doc_id,
             doc_key=str(req.doc_key) if req.doc_key is not None else None,
             doc_num=str(req.doc_num) if req.doc_num is not None else (req.invoice_number or None),
             doc_date=req.invoice_date or datetime.date.today().strftime('%Y-%m-%d'),
@@ -731,9 +738,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                         resolved_cand = Path(cand_path)
                         if resolved_cand.is_file():
                             attached_path = str(resolved_cand)
-                    except Exception:
+                    except Exception as exc:
                         # Silently ignore candidate path resolution errors
-                        logger.debug("Handled non-fatal exception")
+                        logger.debug("Handled non-fatal candidate path resolution exception: %s", exc)
                     if not attached_path:
                         attached_path = cand_path
                 attached_filename = approved_candidate.file_name or (Path(cand_path).name if cand_path else f"{lookup_invoice_num}.pdf")
@@ -771,9 +778,9 @@ def _upsert_single_document(req: DocumentSyncRequest, db: Session) -> Invoice:
                         target_inv.file_size = os.path.getsize(attached_path)
                     elif approved_candidate and approved_candidate.file_size:
                         target_inv.file_size = approved_candidate.file_size
-                except Exception:
+                except Exception as exc:
                     # Ignore error determining attached file size
-                    logger.debug("Handled non-fatal exception")
+                    logger.debug("Handled non-fatal auto-attached file size exception: %s", exc)
                 db.add(AuditLog(
                     invoice_id=target_inv.id,
                     user='Sync Engine (Auto-Attach)',
@@ -959,7 +966,7 @@ def cancel_synced_document(
     inv.updated_at = datetime.datetime.utcnow()
 
     db.add(AuditLog(
-        invoice_id=str(inv.id),
+        invoice_id=inv.id,
         user=f"External ({source_app})",
         action="Cancelled by External Source",
         stage=f"Stage {inv.current_stage or 1}",

@@ -1,4 +1,24 @@
 services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: docuflow-db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Admin@1234
+      - MSSQL_PID=Developer
+    volumes:
+      - docuflow_db_data:/var/opt/mssql
+      - ./scripts/sql/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Admin@1234' -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Admin@1234' -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - docuflow-network
+
   backend:
     build:
       context: ./backend
@@ -6,48 +26,38 @@ services:
     container_name: docuflow-backend
     ports:
       - "3000:3000"
-    env_file:
-      - .env
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - FRONTEND_URL=${FRONTEND_URL:-http://192.168.179.22:8085}
-      - DB_HOST=${DB_HOST:-192.168.179.22}
-      - DB_PORT=${DB_PORT:-1443}
-      - DB_NAME=${DB_NAME:-DocuFlowDB}
-      - DB_USER=${DB_USER:-sa}
-      - DB_PASSWORD=${DB_PASSWORD:-Admin@1234}
-      - DATABASE_URL=${DATABASE_URL:-mssql+pyodbc://sa:Admin%401234@192.168.179.22:1443/DocuFlowDB?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes}
+      - ENVIRONMENT=production
+      - FRONTEND_URL=http://localhost:8085
+      - DB_HOST=db
+      - DB_PORT=1433
+      - DB_NAME=DocuFlowDB
+      - DB_USER=sa
+      - DB_PASSWORD=Admin@1234
+      - DB_DRIVER=ODBC Driver 18 for SQL Server
+      - DB_TRUST_SERVER_CERTIFICATE=true
+      - DATABASE_URL=mssql+pyodbc://sa:Admin%401234@db:1433/DocuFlowDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
       - PDF_STORAGE_PATH=/app/stored_pdfs
       - APPROVED_PDF_PATH=/app/stored_pdfs/approved
-      - SMTP_HOST=${SMTP_HOST:-smtp.office365.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-${SMTP_USERNAME:-communication@ramrajcotton.net}}
-      - SMTP_USERNAME=${SMTP_USERNAME:-${SMTP_USER:-communication@ramrajcotton.net}}
-      - SMTP_PASS=${SMTP_PASS:-${SMTP_PASSWORD:-QDjuS8BvQWq6bY}}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-${SMTP_PASS:-QDjuS8BvQWq6bY}}
-      - SMTP_FROM=${SMTP_FROM:-${SMTP_SENDER_EMAIL:-communication@ramrajcotton.net}}
-      - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL:-${SMTP_FROM:-communication@ramrajcotton.net}}
-      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME:-Ramraj Cotton}
-      - SMS_PROVIDER=${SMS_PROVIDER:-generic}
-      - SMS_API_URL=${SMS_API_URL:-}
-      - SMS_API_KEY=${SMS_API_KEY:-}
-      - SMS_SENDER_ID=${SMS_SENDER_ID:-DOCUFLOW}
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
-      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
-      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
-      - FAST2SMS_API_KEY=${FAST2SMS_API_KEY:-}
+      - SECRET_KEY=strivh-daas-production-ultra-secure-jwt-key-2026-docuflow-core-token
+      - FILE_URL_SIGNING_SECRET=strivh-daas-production-file-signing-secret-key-2026-hex-sha256
+      - SERVICE_API_KEY=daas-prod-service-api-key-9f8e7d6c5b4a3210
+      - ALLOWED_ORIGINS=http://localhost:8085,http://localhost:5174,http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/uploads
       - ./stored_pdfs:/app/stored_pdfs
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - docuflow-network
 
   frontend:
     build:
@@ -59,4 +69,20 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - docuflow-network
+
+networks:
+  docuflow-network:
+    driver: bridge
+
+volumes:
+  docuflow_db_data:
+    driver: local

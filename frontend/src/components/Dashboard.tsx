@@ -85,38 +85,38 @@ export default function Dashboard({
   };
 
   // Merge real documents with reference documents if real documents list is empty
-  const rawDisplayDocs = documents && documents.length > 0
-    ? documents.map(d => ({
-        id: d.id,
-        vendor_name: d.vendor_name || d.account_name || d.dealer_name || "Enterprise Vendor",
-        document_type: (d.document_type || d.category || "GENERAL RECORDS").toUpperCase().trim(),
-        invoice_number: d.invoice_number || d.document_number || `INV-${d.id.slice(0, 5)}`,
-        invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
-        status: d.status || "UNROUTED (NO RULE MATCHED)",
-        status_badge_type: (() => {
-          const s = (d.status || "").toLowerCase();
-          if (!s || s.includes("unrouted") || s.includes("no rule")) return "unrouted";
-          if (s.includes("attachment")) return "initiated_attachment";
-          if (s.includes("initiated") || s.includes("first")) return "initiated_first";
-          if (s.includes("approved") || s.includes("settled") || s.includes("paid")) return "approved";
-          if (s.includes("progress") || s.includes("stage")) return "in_progress";
-          if (s.includes("escalat")) return "escalated";
-          if (s.includes("reject") || s.includes("cancel") || s.includes("fail")) return "rejected";
-          return "in_progress";
-        })() as any,
-        amount: d.amount || 45000,
-        assigned_approver: d.assigned_approver,
-        is_current_approver: d.is_current_approver,
-        has_approved: d.has_approved,
-        has_rejected: d.has_rejected,
-        current_stage_name: d.current_stage_name,
-        type_of_complaint: d.type_of_complaint,
-        subtype_of_complaint: d.subtype_of_complaint
-      }))
-    : [];
-
-  // Exclude Customer Feedback records from AP Invoice Dashboard (they live exclusively in Customer Feedback Hub)
-  const displayDocs = rawDisplayDocs.filter(d => !isCustomerFeedbackDoc(d));
+  const displayDocs = useMemo(() => {
+    const rawDisplayDocs = documents && documents.length > 0
+      ? documents.map(d => ({
+          id: d.id,
+          vendor_name: d.vendor_name || d.account_name || d.dealer_name || "Enterprise Vendor",
+          document_type: (d.document_type || d.category || "GENERAL RECORDS").toUpperCase().trim(),
+          invoice_number: d.invoice_number || d.document_number || `INV-${d.id.slice(0, 5)}`,
+          invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
+          status: d.status || "UNROUTED (NO RULE MATCHED)",
+          status_badge_type: (() => {
+            const s = (d.status || "").toLowerCase();
+            if (!s || s.includes("unrouted") || s.includes("no rule")) return "unrouted";
+            if (s.includes("attachment")) return "initiated_attachment";
+            if (s.includes("initiated") || s.includes("first")) return "initiated_first";
+            if (s.includes("approved") || s.includes("settled") || s.includes("paid")) return "approved";
+            if (s.includes("progress") || s.includes("stage")) return "in_progress";
+            if (s.includes("escalat")) return "escalated";
+            if (s.includes("reject") || s.includes("cancel") || s.includes("fail")) return "rejected";
+            return "in_progress";
+          })() as any,
+          amount: d.amount || 45000,
+          assigned_approver: d.assigned_approver,
+          is_current_approver: d.is_current_approver,
+          has_approved: d.has_approved,
+          has_rejected: d.has_rejected,
+          current_stage_name: d.current_stage_name,
+          type_of_complaint: d.type_of_complaint,
+          subtype_of_complaint: d.subtype_of_complaint
+        }))
+      : [];
+    return rawDisplayDocs.filter(d => !isCustomerFeedbackDoc(d));
+  }, [documents]);
 
   // Filter documents strictly by assigned user without universal admin bypass
   const isAssignedToUser = (doc: any) => {
@@ -220,7 +220,7 @@ export default function Dashboard({
   };
 
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
-  const baseDocs = displayDocs.filter(d => !isApprovedStatus(d.status));
+  const baseDocs = useMemo(() => displayDocs.filter(d => !isApprovedStatus(d.status)), [displayDocs]);
 
   // Pending documents: My Pending (Action Required by current user) vs All Company Pending
   const myPendingDocs = useMemo(() => {
@@ -421,25 +421,19 @@ export default function Dashboard({
     );
   };
 
-  if (loading && !loadingTimedOut) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 min-h-[300px]">
-        <Loader2 className="h-8 w-8 text-[#003F28] animate-spin mb-2" />
-        <p className="text-slate-500 font-bold text-[9.5px] uppercase tracking-widest font-display">
-          Loading DAAS Dashboard...
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-[#FAF8F3] p-2 sm:p-2.5 space-y-2.5 animate-fadeIn font-sans text-slate-800 max-w-[1720px] mx-auto">
+      <h1 className="sr-only">Document Approval & Automation Dashboard</h1>
       
       {/* 1. FIVE CURVED STATISTIC CARDS ROW (STRICTLY WORKFLOW QUEUES & DESTINATIONS) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2">
         
         {/* Card 1: PENDING (Filter in Dashboard) */}
         <div 
+          role="button"
+          tabIndex={0}
+          aria-label="Filter Pending Documents"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setKpiFilter('pending'); setPendingScope('my'); setActiveDocType('ALL'); } }}
           onClick={() => { setKpiFilter('pending'); setPendingScope('my'); setActiveDocType('ALL'); }}
           title="Click to show your Pending documents in Dashboard"
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
@@ -462,16 +456,20 @@ export default function Dashboard({
                 ACTIVE
               </span>
             ) : (
-              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#D97706] transition-colors">
+              <span className="text-[7.5px] font-bold text-slate-600 group-hover:text-[#D97706] transition-colors">
                 FILTER ↓
               </span>
             )}
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-              {pendingCount}
-            </span>
+            {loading && !loadingTimedOut ? (
+              <div className="h-6 w-10 bg-amber-100 animate-pulse rounded my-0.5" />
+            ) : (
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+                {pendingCount}
+              </span>
+            )}
             <span className="text-[8px] font-extrabold text-[#D97706] bg-[#FFF7E2] px-1.5 py-0.5 rounded border border-[#FDE68A]/60">
               {effectivePendingScope === 'all' ? 'COMPANY QUEUE' : 'ACTION REQUIRED'}
             </span>
@@ -485,7 +483,7 @@ export default function Dashboard({
                 style={{ width: `${Math.min(100, Math.max(pendingCount > 0 ? 5 : 0, pendingPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>{effectivePendingScope === 'all' ? 'COMPANY PENDING' : 'MY PENDING'}</span>
               <span>{pendingCount} OF {activeTotal}</span>
             </div>
@@ -497,6 +495,10 @@ export default function Dashboard({
 
         {/* Card 2: HOLD (Filter in Dashboard) */}
         <div 
+          role="button"
+          tabIndex={0}
+          aria-label="Filter Hold Documents"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setKpiFilter('hold'); setActiveDocType('ALL'); } }}
           onClick={() => { setKpiFilter('hold'); setActiveDocType('ALL'); }}
           title="Click to show Hold documents in Dashboard"
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
@@ -519,16 +521,20 @@ export default function Dashboard({
                 ACTIVE
               </span>
             ) : (
-              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#9333EA] transition-colors">
+              <span className="text-[7.5px] font-bold text-slate-600 group-hover:text-[#9333EA] transition-colors">
                 FILTER ↓
               </span>
             )}
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-              {holdCount}
-            </span>
+            {loading && !loadingTimedOut ? (
+              <div className="h-6 w-10 bg-purple-100 animate-pulse rounded my-0.5" />
+            ) : (
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+                {holdCount}
+              </span>
+            )}
             <span className="text-[8px] font-extrabold text-[#9333EA] bg-[#F7E8FF] px-1.5 py-0.5 rounded border border-[#F0ABFC]/60">
               {holdPercent}% OF ACTIVE
             </span>
@@ -542,7 +548,7 @@ export default function Dashboard({
                 style={{ width: `${Math.min(100, Math.max(holdCount > 0 ? 5 : 0, holdPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>IN DASHBOARD</span>
               <span>{holdCount} OF {activeTotal}</span>
             </div>
@@ -554,6 +560,10 @@ export default function Dashboard({
 
         {/* Card 3: REJECTED (Filter in Dashboard) */}
         <div 
+          role="button"
+          tabIndex={0}
+          aria-label="Filter Rejected Documents"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setKpiFilter('rejected'); setActiveDocType('ALL'); } }}
           onClick={() => { setKpiFilter('rejected'); setActiveDocType('ALL'); }}
           title="Click to show Rejected documents in Dashboard"
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
@@ -576,16 +586,20 @@ export default function Dashboard({
                 ACTIVE
               </span>
             ) : (
-              <span className="text-[7.5px] font-bold text-slate-400 group-hover:text-[#DC2626] transition-colors">
+              <span className="text-[7.5px] font-bold text-slate-600 group-hover:text-[#DC2626] transition-colors">
                 FILTER ↓
               </span>
             )}
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-              {rejectedCount}
-            </span>
+            {loading && !loadingTimedOut ? (
+              <div className="h-6 w-10 bg-rose-100 animate-pulse rounded my-0.5" />
+            ) : (
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+                {rejectedCount}
+              </span>
+            )}
             <span className="text-[8px] font-extrabold text-[#DC2626] bg-[#FFECEF] px-1.5 py-0.5 rounded border border-[#FECDD3]/60">
               {rejectedPercent}% OF ACTIVE
             </span>
@@ -599,7 +613,7 @@ export default function Dashboard({
                 style={{ width: `${Math.min(100, Math.max(rejectedCount > 0 ? 5 : 0, rejectedPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>IN DASHBOARD</span>
               <span>{rejectedCount} OF {activeTotal}</span>
             </div>
@@ -611,6 +625,19 @@ export default function Dashboard({
 
         {/* Card 4: PROGRESS (Navigates to Work Tracker) */}
         <div 
+          role="button"
+          tabIndex={0}
+          aria-label="Navigate to Work Tracker"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              if (onNavigateToWorkTracker) {
+                onNavigateToWorkTracker("all");
+              } else if (setCurrentView) {
+                localStorage.setItem("workTrackerStatusFilter", "all");
+                setCurrentView("work-tracker");
+              }
+            }
+          }}
           onClick={() => {
             if (onNavigateToWorkTracker) {
               onNavigateToWorkTracker("all");
@@ -638,9 +665,13 @@ export default function Dashboard({
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-              {progressCount}
-            </span>
+            {loading && !loadingTimedOut ? (
+              <div className="h-6 w-10 bg-blue-100 animate-pulse rounded my-0.5" />
+            ) : (
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+                {progressCount}
+              </span>
+            )}
             <span className="text-[8px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1.5 py-0.5 rounded border border-[#BFDBFE]/60">
               {progressPercent}% OF ACTIVE
             </span>
@@ -654,7 +685,7 @@ export default function Dashboard({
                 style={{ width: `${Math.min(100, Math.max(progressCount > 0 ? 5 : 0, progressPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>WORK TRACKER</span>
               <span>{progressCount} OF {activeTotal}</span>
             </div>
@@ -666,6 +697,18 @@ export default function Dashboard({
 
         {/* Card 5: APPROVED (Navigates to Approved Documents page) */}
         <div 
+          role="button"
+          tabIndex={0}
+          aria-label="Navigate to Approved Documents"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              if (onNavigateToApproved) {
+                onNavigateToApproved();
+              } else if (setCurrentView) {
+                setCurrentView("approved-documents");
+              }
+            }
+          }}
           onClick={() => {
             if (onNavigateToApproved) {
               onNavigateToApproved();
@@ -692,9 +735,13 @@ export default function Dashboard({
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-              {approvedCount}
-            </span>
+            {loading && !loadingTimedOut ? (
+              <div className="h-6 w-10 bg-emerald-100 animate-pulse rounded my-0.5" />
+            ) : (
+              <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
+                {approvedCount}
+              </span>
+            )}
             <span className="text-[8px] font-extrabold text-[#059669] bg-[#E7F9F1] px-1.5 py-0.5 rounded border border-[#A7F3D0]/60">
               {approvedPercent}% SETTLED
             </span>
@@ -708,7 +755,7 @@ export default function Dashboard({
                 style={{ width: `${Math.min(100, Math.max(approvedCount > 0 ? 5 : 0, approvedPercent))}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[7px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>APPROVED REPOSITORY</span>
               <span>{approvedCount} SETTLED</span>
             </div>
@@ -854,7 +901,7 @@ export default function Dashboard({
         {/* Filter By Doc Type Pills */}
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-            <span className="text-[8.5px] font-extrabold text-slate-400 uppercase tracking-wider mr-0.5 font-display">
+            <span className="text-[8.5px] font-extrabold text-slate-600 uppercase tracking-wider mr-0.5 font-display">
               FILTER BY DOC TYPE:
             </span>
             
@@ -884,7 +931,25 @@ export default function Dashboard({
 
         {/* Document List Rows */}
         <div className="space-y-1.5 pt-0.5">
-          {filteredDocs.length > 0 ? (
+          {loading && !loadingTimedOut ? (
+            <div className="space-y-1.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="bg-white border border-[#EAE6DD] rounded-[7px] px-3 py-2 flex items-center justify-between gap-2.5 animate-pulse">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="h-6 w-6 rounded bg-slate-100 shrink-0" />
+                    <div className="space-y-1 flex-1">
+                      <div className="h-3 w-36 bg-slate-200 rounded" />
+                      <div className="h-2.5 w-60 bg-slate-100 rounded" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-16 bg-slate-200 rounded" />
+                    <div className="h-6 w-6 rounded-full bg-slate-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredDocs.length > 0 ? (
             filteredDocs.map((doc) => (
               <div
                 key={doc.id}
@@ -932,7 +997,7 @@ export default function Dashboard({
                         {doc.invoice_date}
                       </span>
 
-                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-500">•</span>
 
                       {/* Status Badge */}
                       {renderStatusBadge(
@@ -952,7 +1017,7 @@ export default function Dashboard({
                 {/* Right Side: Amount & Circular Arrow Button */}
                 <div className="flex items-center gap-2.5 shrink-0">
                   <div className="flex flex-col items-end">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                    <span className="text-[9px] font-medium text-slate-600 uppercase tracking-widest leading-none mb-0.5">
                       AMOUNT
                     </span>
                     <span className="text-[12px] font-semibold text-slate-900 tracking-tight font-display leading-none">
@@ -968,7 +1033,7 @@ export default function Dashboard({
               </div>
             ))
           ) : (
-            <div className="py-8 text-center text-slate-400 bg-[#FAF8F3]/60 rounded-md border border-dashed border-[#E8E4DA] px-4">
+            <div className="py-8 text-center text-slate-600 bg-[#FAF8F3]/60 rounded-md border border-dashed border-[#E8E4DA] px-4">
               <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                 {kpiFilter === 'pending' && pendingScope === 'my'
                   ? "No Pending Approvals Assigned to You"

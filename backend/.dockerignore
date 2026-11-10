@@ -1,0 +1,13 @@
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.log
+*.db
+uploads
+stored_pdfs
+.env*
+data/.*.json

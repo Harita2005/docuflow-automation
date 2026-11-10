@@ -47,17 +47,17 @@ def get_archive_engine():
 def get_archive_settings(db: Session) -> Dict[str, Any]:
     setting = db.query(ArchiveSetting).first()
     if not setting:
-        setting = ArchiveSetting(
-            enabled=False,
-            retention_value=90,
-            retention_unit="Days",
-            frequency="Daily",
-            scheduled_time="02:00",
-            last_run_status="Not run yet",
-        )
-        db.add(setting)
-        db.commit()
-        db.refresh(setting)
+        return {
+            "id": None,
+            "enabled": False,
+            "retention_value": 90,
+            "retention_unit": "Days",
+            "frequency": "Daily",
+            "scheduled_time": "02:00",
+            "last_run_status": "Not run yet",
+            "last_run_at": None,
+            "last_run_details": None,
+        }
 
     return {
         "id": setting.id,

@@ -924,7 +924,7 @@ export default function LoginPage({
       </div>
 
       {/* RIGHT PANEL */}
-      <div className="flex-1 flex flex-col justify-between px-8 sm:px-16 lg:px-24 py-8 bg-[#FAF8F3] relative min-h-screen">
+      <main className="flex-1 flex flex-col justify-between px-8 sm:px-16 lg:px-24 py-8 bg-[#FAF8F3] relative min-h-screen">
         <div className="hidden lg:block h-2" />
         <div className="w-full max-w-md mx-auto my-auto py-4">
           {/* Session kicked alert */}
@@ -944,6 +944,7 @@ export default function LoginPage({
                   type="button"
                   onClick={onClearKickedReason}
                   className="text-amber-500 hover:text-amber-800"
+                  aria-label="Dismiss session alert"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -985,7 +986,7 @@ export default function LoginPage({
               <form onSubmit={handleSubmitFirstTimeChange} className="space-y-4 pt-1">
                 {/* Current password (Employee ID) */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-800">
+                  <label htmlFor="firsttime-current-password" className="text-xs font-semibold text-gray-800">
                     Current Password / Employee ID
                   </label>
                   <div className="relative">
@@ -993,6 +994,8 @@ export default function LoginPage({
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
+                      id="firsttime-current-password"
+                      name="current_password"
                       type="text"
                       disabled
                       value={passwordInput || pendingAuthData?.user?.employee_id || employeeId}
@@ -1003,7 +1006,7 @@ export default function LoginPage({
 
                 {/* New password */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-800">
+                  <label htmlFor="firsttime-new-password" className="text-xs font-semibold text-gray-800">
                     New Password
                   </label>
                   <div className="relative">
@@ -1011,6 +1014,8 @@ export default function LoginPage({
                       <KeyRound className="h-4 w-4" />
                     </div>
                     <input
+                      id="firsttime-new-password"
+                      name="new_password"
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -1022,6 +1027,7 @@ export default function LoginPage({
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
+                      aria-label="Toggle new password visibility"
                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1031,7 +1037,7 @@ export default function LoginPage({
 
                 {/* Confirm password */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-800">
+                  <label htmlFor="firsttime-confirm-password" className="text-xs font-semibold text-gray-800">
                     Confirm New Password
                   </label>
                   <div className="relative">
@@ -1039,6 +1045,8 @@ export default function LoginPage({
                       <KeyRound className="h-4 w-4" />
                     </div>
                     <input
+                      id="firsttime-confirm-password"
+                      name="confirm_password"
                       type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -1049,6 +1057,7 @@ export default function LoginPage({
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label="Toggle confirm password visibility"
                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1137,7 +1146,7 @@ export default function LoginPage({
               {forgotStep === 1 ? (
                 <form onSubmit={handleRequestPasswordReset} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-800">
+                    <label htmlFor="forgot-identifier" className="text-xs font-semibold text-gray-800">
                       Employee ID or Username
                     </label>
                     <div className="relative">
@@ -1145,6 +1154,8 @@ export default function LoginPage({
                         <User className="h-4 w-4" />
                       </div>
                       <input
+                        id="forgot-identifier"
+                        name="identifier"
                         type="text"
                         value={forgotIdentifier}
                         onChange={(e) => setForgotIdentifier(e.target.value)}
@@ -1177,10 +1188,12 @@ export default function LoginPage({
               ) : (
                 <form onSubmit={handleCompletePasswordReset} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-800">
+                    <label htmlFor="reset-token-input" className="text-xs font-semibold text-gray-800">
                       Reset Token / Verification Code
                     </label>
                     <input
+                      id="reset-token-input"
+                      name="reset_token"
                       type="text"
                       value={resetTokenInput}
                       onChange={(e) => setResetTokenInput(e.target.value)}
@@ -1191,11 +1204,13 @@ export default function LoginPage({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-800">
+                    <label htmlFor="reset-new-password" className="text-xs font-semibold text-gray-800">
                       New Password
                     </label>
                     <div className="relative">
                       <input
+                        id="reset-new-password"
+                        name="new_password"
                         type={showResetPassword ? "text" : "password"}
                         value={resetNewPassword}
                         onChange={(e) => setResetNewPassword(e.target.value)}
@@ -1206,6 +1221,7 @@ export default function LoginPage({
                       <button
                         type="button"
                         onClick={() => setShowResetPassword(!showResetPassword)}
+                        aria-label="Toggle new password visibility"
                         className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
                       >
                         {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1214,10 +1230,12 @@ export default function LoginPage({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-800">
+                    <label htmlFor="reset-confirm-password" className="text-xs font-semibold text-gray-800">
                       Confirm New Password
                     </label>
                     <input
+                      id="reset-confirm-password"
+                      name="confirm_password"
                       type="password"
                       value={resetConfirmPassword}
                       onChange={(e) => setResetConfirmPassword(e.target.value)}
@@ -1276,7 +1294,7 @@ export default function LoginPage({
               >
                 {/* Employee ID / Username */}
                 <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-gray-800">
+                  <label htmlFor="login-employee-id" className="text-xs font-semibold text-gray-800">
                     Employee ID or Username
                   </label>
 
@@ -1286,6 +1304,8 @@ export default function LoginPage({
                     </div>
 
                     <input
+                      id="login-employee-id"
+                      name="username"
                       type="text"
                       value={employeeId}
                       onChange={(e) =>
@@ -1685,6 +1705,8 @@ export default function LoginPage({
                     <img
                       src={totpQrSvg}
                       alt="Authenticator QR Code"
+                      width="176"
+                      height="176"
                       className="w-44 h-44 object-contain"
                     />
                   </div>
@@ -1712,7 +1734,7 @@ export default function LoginPage({
               {selectedMethod === "PASSWORD" ? (
                 <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-5">
                   <div className="space-y-2 text-left">
-                    <label className="text-xs font-semibold text-gray-800">
+                    <label htmlFor="login-password" className="text-xs font-semibold text-gray-800">
                       Account Password / Employee ID
                     </label>
                     <div className="relative">
@@ -1720,6 +1742,8 @@ export default function LoginPage({
                         <Lock className="h-4 w-4" />
                       </div>
                       <input
+                        id="login-password"
+                        name="password"
                         type={showPassword ? "text" : "password"}
                         value={passwordInput}
                         onChange={(e) => setPasswordInput(e.target.value)}
@@ -1730,6 +1754,7 @@ export default function LoginPage({
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label="Toggle password visibility"
                         className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1812,6 +1837,9 @@ export default function LoginPage({
                         >
                           <input
                             ref={(el) => { otpBoxesRef.current[i] = el; }}
+                            id={`otp-box-${i}`}
+                            name={`otp-${i}`}
+                            aria-label={`Verification code digit ${i + 1}`}
                             type="text"
                             inputMode="numeric"
                             autoComplete={i === 0 ? "one-time-code" : "off"}
@@ -1906,11 +1934,11 @@ export default function LoginPage({
         </div>
 
         {/* LOGIN FOOTER */}
-        <footer className="w-full max-w-lg mx-auto pt-4 pb-1 text-center text-[10.5px] text-slate-500 select-none space-y-1">
-          <p className="font-medium text-slate-600 tracking-tight">
+        <footer className="w-full max-w-lg mx-auto pt-4 pb-1 text-center text-[10.5px] text-slate-600 select-none space-y-1">
+          <p className="font-semibold text-slate-700 tracking-tight">
             &copy; 2026 DAAS. All rights reserved. | Document Approval &amp; Automation System
           </p>
-          <div className="flex items-center justify-center gap-2 text-slate-400 text-[10px]">
+          <div className="flex items-center justify-center gap-2 text-slate-600 text-[10px] font-medium">
             <span className="hover:text-[#003F29] transition-colors cursor-pointer">
               Privacy Policy
             </span>
@@ -1920,7 +1948,7 @@ export default function LoginPage({
             </span>
           </div>
         </footer>
-      </div>
+      </main>
 
       {/* =============================================================== */}
       {/* ACTIVE SESSION CONFLICT MODAL */}

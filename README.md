@@ -17,6 +17,19 @@ The platform combines a modern React interface with a high-performance Python Fa
 
 ---
 
+## Handover Documentation & Operational Manuals (November 2026 Release)
+
+The complete enterprise handover documentation suite has been compiled in the [`docs/`](./docs/) directory:
+
+* 📋 [**Internship Handover & Project Closure Report**](./docs/HANDOVER_CLOSURE_REPORT.md): Executive summary, deliverables sign-off, tech stack, credential and asset inventory, and 30-60-90 day roadmap.
+* 🖼️ [**Visual User Manual with Button Indicators**](./docs/VISUAL_USER_MANUAL_WITH_BUTTON_INDICATORS.md): Visual layout wireframes with numbered callout badges (`[1]`, `[2]`, `[3]`) and explicit indicator tables for all screens and buttons.
+* 🖥️ [**Screen-by-Screen & Button-by-Button Operational Manual**](./docs/SCREEN_BY_SCREEN_BUTTON_MANUAL.md): Exhaustive visual reference detailing **all 17 screens** with explicit tables for every button, modal, form input, and expected system behavior.
+* ⚡ [**Dedicated GPU Setup & Production Runbook**](./docs/GPU_SETUP_AND_HANDOVER_RUNBOOK.md): Step-by-step guide for configuring the incoming GPU host (NVIDIA drivers, CUDA, Docker container toolkit, Ollama local LLM, VRAM concurrency management, and verification smoke tests).
+* 🏛️ [**Complete Technical Architecture Documentation**](./docs/DocuFlow_Technical_Documentation.md): Comprehensive 800+ line technical specification covering system architecture, security hardening, database schema, and testing suites.
+* ⚖️ [**License & Third-Party Legal Compliance**](./THIRD_PARTY_LICENSES.md): Full attribution of all open-source libraries (`pypdf`, `PaddleOCR`, `Ollama/llama3.2`, `FastAPI`, `React`).
+
+---
+
 ## Technical Stack Architecture
 
 ### Backend Services

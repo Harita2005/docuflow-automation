@@ -41,27 +41,11 @@ def find_invoice_by_num_or_id(db: Session, identifier: str) -> Optional[Invoice]
     raw_str = str(identifier).strip()
     if not raw_str:
         return None
-    id_clean = re.sub(
-        r'^(DOC|INV|CV|EV|JV|ADV|CAPEX|GRN|SRV|FRT|UTL|EXP|DN|CN|PRJ|NR|VOUCH)[-_#]?',
-        '',
-        raw_str,
-        flags=re.IGNORECASE,
-    ).strip()
-
-    return (
-        db.query(Invoice)
-        .filter(
-            (Invoice.id == raw_str)
-            | (Invoice.invoice_number == raw_str)
-            | (Invoice.id == f'DOC-{id_clean}')
-            | (Invoice.id == f'INV-{id_clean}')
-            | (Invoice.invoice_number == id_clean)
-            | (Invoice.doc_key == raw_str)
-            | (Invoice.doc_key == id_clean)
-        )
-        .filter(Invoice.is_deleted == False)
-        .first()
-    )
+    try:
+        from app.services.document_query_service import find_invoice_by_identifier
+        return find_invoice_by_identifier(db, raw_str)
+    except Exception:
+        return None
 
 
 def parse_excel_rows(file_bytes: bytes) -> List[Dict[str, Any]]:

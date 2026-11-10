@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agenticresourcediscovery.org/schema/v1/manifest.json",
+  "name": "DAAS",
+  "description": "Enterprise Document Approval & Automation System",
+  "version": "2.0.0",
+  "capabilities": [
+    {
+      "name": "document-approval",
+      "description": "Manage document verification, workflow approvals, and audit trails",
+      "type": "api",
+      "url": "/api/openapi.json"
+    }
+  ]
+}

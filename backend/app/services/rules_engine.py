@@ -13,6 +13,9 @@ from app.database.models import BusinessRule, Invoice, WorkflowProfile, Workflow
 
 logger = logging.getLogger(__name__)
 
+WORD_TOKEN_PATTERN = re.compile(r'[a-zA-Z0-9]+')
+STOP_WORDS_SET = frozenset({'and', 'or', 'the', 'of', 'in', 'to', 'a', 'an', '&'})
+
 def parse_date_str(val: Any) -> Optional[datetime.date]:
     if isinstance(val, (datetime.date, datetime.datetime)):
         return val.date() if isinstance(val, datetime.datetime) else val
@@ -290,11 +293,10 @@ def match_field_value(rule_val: Any, doc_val: Any, operator: str='equals') -> bo
 
     def _token_words_match(r_items: list, d_val: Any) -> bool:
         doc_components = [c.strip() for c in str(d_val or '').replace(';', ',').split(',') if c.strip()]
-        stop_words = {'and', 'or', 'the', 'of', 'in', 'to', 'a', 'an', '&'}
         for r_item in r_items:
-            r_words = set(re.findall(r'[a-zA-Z0-9]+', str(r_item).lower())) - stop_words
+            r_words = set(WORD_TOKEN_PATTERN.findall(str(r_item).lower())) - STOP_WORDS_SET
             for d_item in doc_components:
-                d_words = set(re.findall(r'[a-zA-Z0-9]+', str(d_item).lower())) - stop_words
+                d_words = set(WORD_TOKEN_PATTERN.findall(str(d_item).lower())) - STOP_WORDS_SET
                 if r_words and d_words:
                     if d_words.issubset(r_words) or r_words.issubset(d_words) or len(r_words & d_words) >= 2:
                         return True

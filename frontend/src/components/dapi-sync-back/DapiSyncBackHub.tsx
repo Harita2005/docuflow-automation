@@ -31,6 +31,20 @@ const getAuthHeaders = (): Record<string, string> => {
   };
 };
 
+export const formatSyncTimestamp = (ts: any): string => {
+  if (!ts) return "—";
+  if (ts instanceof Date) {
+    return isNaN(ts.getTime()) ? "—" : ts.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+  }
+  let s = String(ts).trim();
+  if (!s.endsWith("Z") && !s.includes("+") && !s.slice(10).includes("-")) {
+    s = s.replace(" ", "T") + "Z";
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? String(ts) : d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+};
+
+
 export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyncBackHubProps) {
   const [activeTab, setActiveTab] = useState<SyncBackTab>(initialTab);
 
@@ -69,7 +83,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
             approvalEndpoint: a.base_url || '',
             rejectionEndpoint: a.base_url || '',
             authType: a.auth_type || 'None',
-            lastSync: a.last_callback || 'Never',
+            lastSync: a.last_callback ? formatSyncTimestamp(a.last_callback) : 'Never',
             rulesCount: a.rules_count || 0,
             environment: a.environment || 'Production'
           }));
@@ -162,7 +176,7 @@ export default function DapiSyncBackHub({ initialTab = 'applications' }: DapiSyn
         if (body.success && Array.isArray(body.data)) {
           const mappedLogs: SyncLog[] = body.data.map((l: any) => ({
             id: String(l.id),
-            timestamp: l.created_at ? new Date(l.created_at).toLocaleString() : new Date().toLocaleString(),
+            timestamp: l.created_at ? formatSyncTimestamp(l.created_at) : formatSyncTimestamp(new Date()),
             applicationId: String(l.application_id),
             applicationName: l.application_name || 'Target Application',
             documentNumber: l.document_number || l.document_id || 'DOC-001',

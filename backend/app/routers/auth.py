@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 import time
+import threading
 import datetime
 from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy import or_
@@ -54,14 +55,11 @@ from app.services.otp_service import (
     increment_otp_attempts,
     verify_hashed_otp,
 )
-
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/auth', tags=['Authentication'])
-
 def should_show_dev_otp() -> bool:
     """Return True if running in development/testing mode where OTP should be shown in UI."""
     return bool(getattr(settings, "SHOW_OTP_IN_UI", False) or os.getenv("SHOW_OTP_IN_UI", "").lower() in ("true", "1", "yes"))
-
 def check_user_password(user: User, candidate_password: str, db: Session) -> bool:
     """Validate password against bcrypt hash.
     Initial defaults (employee_id, etc.) are ONLY accepted if must_change_password is True.
@@ -71,41 +69,33 @@ def check_user_password(user: User, candidate_password: str, db: Session) -> boo
     pwd_clean = candidate_password.strip()
     if not pwd_clean:
         return False
-
     is_valid = verify_password(pwd_clean, user.password_hash or '')
     if is_valid:
         return True
-
     # Once a user has changed their password, initial default passwords are strictly rejected!
     if not getattr(user, "must_change_password", False):
         return False
-
     pwd_norm = re.sub(r'[\s_\-]+', '', pwd_clean.upper())
     emp_norm = re.sub(r'[\s_\-]+', '', (user.employee_id or '').upper())
     user_norm = re.sub(r'[\s_\-]+', '', (user.username or '').upper())
     uid_norm = re.sub(r'[\s_\-]+', '', (user.user_uid or '').upper())
-
     # 1. Match against user's employee_id (raw or normalized e.g. EMP_01 vs EMP01)
     if user.employee_id:
         if pwd_clean.upper() == user.employee_id.strip().upper() or (pwd_norm and pwd_norm == emp_norm):
             is_valid = True
-
     # 2. Match against username (e.g. admin logging in with password 'admin')
     if not is_valid and user.username:
         if pwd_clean.lower() == user.username.strip().lower() or (pwd_norm and pwd_norm == user_norm):
             is_valid = True
-
     # 3. Match against user_uid
     if not is_valid and user.user_uid:
         if pwd_clean.upper() == user.user_uid.strip().upper() or (pwd_norm and pwd_norm == uid_norm):
             is_valid = True
-
     # 4. For admin role / username admin: accept standard admin defaults (including EMP_01, ADMIN01, Admin@1234) on first login only
     if not is_valid and ((user.username and user.username.lower() == 'admin') or (user.role and user.role.lower() == 'admin')):
         admin_defaults = {'ADMIN', 'ADMIN01', 'ADMIN_01', 'EMP_01', 'EMP01', 'ADMIN@123', 'ADMIN@1234', 'PASSWORD'}
         if pwd_clean.upper() in admin_defaults or pwd_norm in {'ADMIN', 'ADMIN01', 'EMP01', 'PASSWORD'}:
             is_valid = True
-
     if is_valid and getattr(user, "must_change_password", False):
         try:
             from app.auth import get_password_hash
@@ -113,14 +103,11 @@ def check_user_password(user: User, candidate_password: str, db: Session) -> boo
             db.commit()
         except Exception as exc:
             logger.debug("Failed to auto-upgrade password hash: %s", exc)
-
     return is_valid
-
 @router.get('/login')
 @router.get('/token')
 def login_get_info():
     return {'status': 'online', 'endpoint': '/api/auth/login', 'supported_method': 'POST', 'instructions': "Send an HTTP POST request with Content-Type: application/json and body {'username': '<username>', 'password': '<password>', 'force_login': true} to generate your JWT Bearer token."}
-
 @router.post('/login', response_model=TokenResponse, response_model_exclude_none=True)
 @router.post('/token', response_model=TokenResponse, response_model_exclude_none=True)
 async def login(
@@ -135,7 +122,6 @@ async def login(
     expires_in_minutes = None
     force_login = False
     device_info = None
-
     if isinstance(request, str):
         from urllib.parse import parse_qsl
         try:
@@ -143,7 +129,6 @@ async def login(
         except Exception:
             req_dict = {}
         request = req_dict
-
     if isinstance(request, dict):
         ident_str = str(request.get("username") or request.get("Username") or request.get("identifier") or request.get("email") or request.get("employee_id") or request.get("user") or "").strip()
         password = str(request.get("password") or request.get("Password") or request.get("pass") or request.get("pwd") or "")
@@ -158,7 +143,6 @@ async def login(
         expires_in_minutes = request.expires_in_minutes
         force_login = bool(request.force_login)
         device_info = request.device_info
-
     # Flexible extraction from JSON, form-data, or url-encoded body if fields missing
     if not ident_str or not password:
         content_type = req.headers.get("content-type", "").lower()
@@ -176,7 +160,6 @@ async def login(
                 logger.debug("Handled non-fatal exception: %s", exc)
         if not body_dict:
             body_dict = dict(req.query_params)
-
         if body_dict:
             if not ident_str:
                 for k in ["employee_id", "employeeId", "username", "Username", "userName", "identifier", "Identifier", "user", "login"]:
@@ -197,7 +180,6 @@ async def login(
                 force_login = str(body_dict["force_login"]).lower() in ("true", "1")
             if not device_info and body_dict.get("device_info"):
                 device_info = str(body_dict["device_info"])
-
     if not ident_str:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
     # Strict restriction: Only Employee ID or Username allowed. Email and Phone numbers are strictly forbidden.
@@ -206,7 +188,6 @@ async def login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Login with email address is not permitted. Please sign in using your Employee ID or Username."
         )
-
     clean_digits = re.sub(r"[\s\-\(\)\+]", "", ident_str)
     is_phone_candidate = ident_str.startswith("+") or (
         clean_digits.isdigit()
@@ -222,32 +203,7 @@ async def login(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Login with phone number is not permitted. Please sign in using your Employee ID or Username."
             )
-
-
-    # Option 1 / M2M Service Client Direct Token Fast-Path:
-    from app.routers.sync_router import SERVICE_API_USER, SERVICE_API_PASS
-    import hmac
-    if hmac.compare_digest(ident_str, SERVICE_API_USER) and hmac.compare_digest(password, SERVICE_API_PASS):
-        import jwt
-        expires_minutes = expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=expires_minutes)
-        service_token = jwt.encode({'sub': SERVICE_API_USER, 'scope': 'data:sync', 'exp': expire}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-        return {
-            'token': service_token,
-            'access_token': service_token,
-            'token_type': 'bearer',
-            'expires_in': expires_minutes * 60,
-            'user': {
-                'id': 0,
-                'username': SERVICE_API_USER,
-                'name': 'M2M Service Client',
-                'role': 'service_client',
-                'employee_id': 'SERVICE_M2M'
-            },
-            'mfa_required': False,
-            'active_session_conflict': False,
-        }
-
+    # User authentication lookup
     user = (
         db.query(User)
         .options(
@@ -348,94 +304,17 @@ async def login(
             logger.debug("Error logging failed login: %s", e)
         logger.warning(f"Login failed: Deactivated account for user '{user.username}' from IP: {client_ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
-
-    # If password is provided, verify it; if passwordless (user has MFA/OTP), issue ticket directly
-    if password and password.strip():
-        # SEC-10: Account lockout check for password attempts
-        lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
-        recent_failures = (
-            db.query(UserAccessLog)
-            .filter(
-                UserAccessLog.username == user.username,
-                UserAccessLog.event_type == "LOGIN_FAILED",
-                UserAccessLog.timestamp >= lockout_window,
-            )
-            .count()
-        )
-
-        if recent_failures >= 5:
-            try:
-                db.add(UserAccessLog(
-                    username=user.username,
-                    event_type="ACCOUNT_LOCKED",
-                    status="LOCKED",
-                    ip_address=client_ip,
-                    user_agent=req.headers.get("user-agent", "")[:255],
-                    failure_reason="Account temporarily locked due to 5 consecutive failed login attempts",
-                    timestamp=datetime.datetime.utcnow()
-                ))
-                db.add(AuditLog(
-                    invoice_id=None,
-                    user=user.employee_name or user.name or user.username,
-                    action='Account Locked',
-                    stage='Authentication',
-                    notes=f"User '{user.username}' locked out for 15 minutes after {recent_failures} failed attempts. IP: {client_ip}",
-                    ip_address=client_ip
-                ))
-                db.commit()
-            except Exception as e:
-                logger.debug("Error logging lockout: %s", e)
-            logger.warning(f"Login rejected: Account for user '{user.username}' is locked due to repeated failed logins. IP: {client_ip}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
-            )
-
-        is_valid = check_user_password(user, password, db)
-        if not is_valid:
-            new_failure_count = recent_failures + 1
-            try:
-                db.add(UserAccessLog(
-                    username=user.username,
-                    event_type="LOGIN_FAILED",
-                    status="FAILED",
-                    ip_address=client_ip,
-                    user_agent=req.headers.get("user-agent", "")[:255],
-                    failure_reason="Invalid credentials",
-                    timestamp=datetime.datetime.utcnow()
-                ))
-                db.add(AuditLog(
-                    invoice_id=None,
-                    user=user.employee_name or user.name or user.username,
-                    action='Login Failed',
-                    stage='Authentication',
-                    notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials (attempt {new_failure_count}/5).",
-                    ip_address=client_ip
-                ))
-                db.commit()
-            except Exception as e:
-                logger.debug("Error logging failed login: %s", e)
-            logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip} (attempt {new_failure_count}/5)")
-            if new_failure_count >= 5:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
-                )
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
-
-    # Check if MFA / OTP is required for this user:
-    # In passwordless login (no password submitted) or if user has mfa_enabled=True,
-    # require OTP verification challenge unless explicitly bypassed by internal force_login.
-    bypass_mfa = bool(force_login)
-
-    if not bypass_mfa and (not password or user.mfa_enabled):
-        # Issue OTP ticket for verification (OTP/Authenticator challenge)
+    # 1. Step 1 of Login Flow:
+    # If no password is provided (Passwordless / MFA initiation from frontend Step 1),
+    # issue an MFA challenge ticket.
+    # CRITICAL INVARIANT: When password is not provided, an access token is NEVER issued,
+    # regardless of whether force_login is True or False.
+    if not password or not password.strip():
         ticket = create_mfa_ticket(user.id, user.username)
         ticket_data = get_mfa_ticket(ticket)
         if ticket_data:
-            ticket_data['password_verified'] = True
+            ticket_data['password_verified'] = False
             save_mfa_ticket()
-
         show_dev_otp = should_show_dev_otp()
         email_available = is_email_otp_available(db=db)
         available_methods = ['PASSWORD']
@@ -444,9 +323,122 @@ async def login(
         if user.phone_number and user.phone_number.strip():
             available_methods.append('SMS')
         available_methods.append('AUTHENTICATOR')
-
         has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
+        return {
+            'token': None,
+            'access_token': None,
+            'token_type': 'bearer',
+            'expires_in': 3600,
+            'user': None,
+            'mfa_required': True,
+            'mfa_ticket': ticket,
+            'available_methods': available_methods,
+            'email_otp_available': email_available or show_dev_otp,
+            'selected_method': None,
+            'initial_otp_sent': False,
+            'masked_email': mask_email(user.email) if user.email else '',
+            'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
+            'has_authenticator_setup': has_auth_setup,
+            'active_session_conflict': False,
+            'employee_id': user.employee_id or '',
+            'username': user.username or '',
+            'must_change_password': bool(getattr(user, "must_change_password", False)),
+            'message': 'Please choose a verification method to complete sign-in.',
+        }
 
+    # 2. Password is provided: verify password
+    # SEC-10: Account lockout check for password attempts
+    lockout_window = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+    recent_failures = (
+        db.query(UserAccessLog)
+        .filter(
+            UserAccessLog.username == user.username,
+            UserAccessLog.event_type == "LOGIN_FAILED",
+            UserAccessLog.timestamp >= lockout_window,
+        )
+        .count()
+    )
+    if recent_failures >= 5:
+        try:
+            db.add(UserAccessLog(
+                username=user.username,
+                event_type="ACCOUNT_LOCKED",
+                status="LOCKED",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason="Account temporarily locked due to 5 consecutive failed login attempts",
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='Account Locked',
+                stage='Authentication',
+                notes=f"User '{user.username}' locked out for 15 minutes after {recent_failures} failed attempts. IP: {client_ip}",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging lockout: %s", e)
+        logger.warning(f"Login rejected: Account for user '{user.username}' is locked due to repeated failed logins. IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+        )
+    is_valid = check_user_password(user, password, db)
+    if not is_valid:
+        new_failure_count = recent_failures + 1
+        try:
+            db.add(UserAccessLog(
+                username=user.username,
+                event_type="LOGIN_FAILED",
+                status="FAILED",
+                ip_address=client_ip,
+                user_agent=req.headers.get("user-agent", "")[:255],
+                failure_reason="Invalid credentials",
+                timestamp=datetime.datetime.utcnow()
+            ))
+            db.add(AuditLog(
+                invoice_id=None,
+                user=user.employee_name or user.name or user.username,
+                action='Login Failed',
+                stage='Authentication',
+                notes=f"Failed login attempt for '{user.username}' from {client_ip}. Invalid credentials (attempt {new_failure_count}/5).",
+                ip_address=client_ip
+            ))
+            db.commit()
+        except Exception as e:
+            logger.debug("Error logging failed login: %s", e)
+        logger.warning(f"Login failed: Invalid credentials for user '{user.username}' from IP: {client_ip} (attempt {new_failure_count}/5)")
+        if new_failure_count >= 5:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes or contact your administrator.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Invalid username or password',
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check if MFA / OTP is required for this user:
+    # MFA cannot be bypassed by force_login or any client flag.
+    if user.mfa_enabled:
+        # Issue OTP ticket for verification (OTP/Authenticator challenge)
+        ticket = create_mfa_ticket(user.id, user.username)
+        ticket_data = get_mfa_ticket(ticket)
+        if ticket_data:
+            ticket_data['password_verified'] = True
+            save_mfa_ticket()
+        show_dev_otp = should_show_dev_otp()
+        email_available = is_email_otp_available(db=db)
+        available_methods = ['PASSWORD']
+        if (email_available or show_dev_otp) and user.email and '@' in user.email:
+            available_methods.append('EMAIL')
+        if user.phone_number and user.phone_number.strip():
+            available_methods.append('SMS')
+        available_methods.append('AUTHENTICATOR')
+        has_auth_setup = bool(user.mfa_secret and user.mfa_enabled)
         return {
             'token': None,
             'access_token': None,
@@ -469,15 +461,39 @@ async def login(
             'message': 'Password verified. Please complete secondary two-factor authentication.',
         }
 
-    # If MFA is disabled (or bypassed), return access_token directly
+    # For non-MFA users: check active session concurrency conflict
+    if user.active_session_id and not force_login:
+        return {
+            'token': None,
+            'access_token': None,
+            'token_type': 'bearer',
+            'expires_in': 0,
+            'user': None,
+            'mfa_required': False,
+            'active_session_conflict': True,
+            'active_device_info': user.active_device_info or 'Another Browser / Device',
+            'session_created_at': user.session_created_at.isoformat() + 'Z' if user.session_created_at else None,
+            'message': f"User '{user.employee_name or user.username}' is currently logged in on another device/browser.",
+        }
+
+    # If MFA is disabled and session conflict is either resolved or force_login=True:
     new_session_id = str(uuid.uuid4())
     device_label = device_info or 'Direct API Client'
+    had_prior_session = bool(user.active_session_id)
     user.active_session_id = new_session_id
     user.active_device_info = device_label
     user.session_created_at = datetime.datetime.utcnow()
     user.last_activity_at = datetime.datetime.utcnow()
     user.last_login = datetime.datetime.utcnow()
     invalidate_user_cache(user.username)
+    if had_prior_session and force_login:
+        try:
+            from app.routers.events import broadcast_event
+            broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
+            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was displaced by [{device_label}] via force_login. Prior session terminated.', ip_address=client_ip))
+        except Exception as e:
+            logger.debug('Handled exception: %s', e)
+
     expires_minutes = expires_in_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
     access_token = create_access_token(
         data={
@@ -486,7 +502,6 @@ async def login(
             'role': user.role,
             'division': user.division,
             'session_id': new_session_id,
-            'scope': 'data:sync',
         },
         expires_delta=datetime.timedelta(minutes=expires_minutes)
     )
@@ -510,7 +525,6 @@ async def login(
         db.commit()
     except Exception as e:
         logger.debug('Handled exception: %s', e)
-
     must_change = bool(getattr(user, "must_change_password", False))
     return {
         'token': access_token,
@@ -682,7 +696,6 @@ def setup_totp(request: MFASetupTOTPRequest, db: Session=Depends(get_db)):
     except Exception as exc:
         logger.exception('Error in MFA setup TOTP: %s', exc)
         raise HTTPException(status_code=500, detail='Internal server error during MFA setup')
-
 @router.post('/mfa/verify', response_model=TokenResponse)
 def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_db)):
     ticket_data = get_mfa_ticket(request.ticket)
@@ -826,7 +839,6 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
     delete_mfa_ticket(request.ticket)
     must_change = bool(getattr(user, "must_change_password", False))
     return {'token': access_token, 'access_token': access_token, 'token_type': 'bearer', 'expires_in': expires_minutes * 60, 'user': {'id': user.id, 'username': user.username, 'name': user.employee_name or user.name, 'email': user.email, 'role': user.role, 'employee_id': user.employee_id, 'must_change_password': must_change}, 'must_change_password': must_change, 'mfa_required': False, 'active_session_conflict': False, 'session_id': new_session_id}
-
 @router.post('/logout')
 def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
     if current_user:
@@ -842,7 +854,6 @@ def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends
             db.rollback()
             logger.error("Failed to commit user session invalidation on logout: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to log out")
-
         try:
             db.add(UserAccessLog(
                 username=current_user.username,
@@ -858,14 +869,11 @@ def logout(req: Request, db: Session=Depends(get_db), current_user: User=Depends
         except Exception as exc:
             logger.debug('Handled exception: %s', exc)
     return {'success': True, 'message': 'Logged out successfully'}
-
 @router.get('/me')
 def get_me(current_user: User=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail='Not authenticated')
     return {'id': current_user.id, 'username': current_user.username, 'name': current_user.name, 'email': current_user.email, 'role': current_user.role, 'employee_id': current_user.employee_id, 'must_change_password': bool(getattr(current_user, "must_change_password", False))}
-
-
 @router.post('/change-password')
 def change_password(
     payload: ChangePasswordRequest,
@@ -876,16 +884,13 @@ def change_password(
     client_ip = extract_client_ip(req)
     curr_pwd = (payload.current_password or "").strip()
     new_pwd = (payload.new_password or "").strip()
-
     if not new_pwd:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be empty.")
     if len(new_pwd) < 6:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters long.")
-
     # Validate current password
     if not check_user_password(current_user, curr_pwd, db):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
-
     # Disallow setting new password equal to employee_id
     norm_new = re.sub(r'[\s_\-]+', '', new_pwd.upper())
     norm_emp = re.sub(r'[\s_\-]+', '', (current_user.employee_id or '').upper())
@@ -894,20 +899,17 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password cannot be your Employee ID. Please choose a different, secure password."
         )
-
     if curr_pwd == new_pwd:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from your current password."
         )
-
     from app.auth import get_password_hash
     current_user.password_hash = get_password_hash(new_pwd)
     current_user.must_change_password = False
     invalidate_user_cache(current_user.username)
     db.add(current_user)
     db.commit()
-
     try:
         db.add(AuditLog(
             invoice_id=None,
@@ -920,9 +922,25 @@ def change_password(
         db.commit()
     except Exception as exc:
         logger.debug("Failed to record audit log: %s", exc)
-
     return {"success": True, "message": "Password changed successfully."}
 
+_RESET_RATE_LOCK = threading.Lock()
+_RESET_RATE_TRACKER: Dict[str, list] = {}
+_RESET_RATE_LIMIT_WINDOW = 900.0  # 15 minutes
+_RESET_RATE_LIMIT_MAX = 5         # Max 5 requests per 15 mins per IP or identifier
+
+def check_reset_rate_limit(key: str) -> bool:
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING") == "true":
+        return True
+    now = time.time()
+    with _RESET_RATE_LOCK:
+        history = [t for t in _RESET_RATE_TRACKER.get(key, []) if now - t < _RESET_RATE_LIMIT_WINDOW]
+        if len(history) >= _RESET_RATE_LIMIT_MAX:
+            _RESET_RATE_TRACKER[key] = history
+            return False
+        history.append(now)
+        _RESET_RATE_TRACKER[key] = history
+        return True
 
 @router.post('/forgot-password')
 def forgot_password(
@@ -937,22 +955,26 @@ def forgot_password(
     if not ident:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Employee ID or username is required.")
 
+    # Rate limiting to prevent account enumeration and reset request abuse
+    if not check_reset_rate_limit(f"ip:{client_ip}") or not check_reset_rate_limit(f"ident:{ident.lower()}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many password reset requests. Please wait 15 minutes before trying again."
+        )
+
     user = db.query(User).filter(
         (User.username.ilike(ident) | User.employee_id.ilike(ident)) &
         (or_(User.is_deleted == False, User.is_deleted.is_(None)))
     ).first()
-
     raw_token = None
     email_dispatched = False
-
     if user and user.is_active:
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
         user.reset_token_hash = token_hash
-        user.reset_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        user.reset_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
         db.add(user)
         db.commit()
-
         if user.email and '@' in user.email:
             config = db.query(NotificationProviderConfig).first()
             config_dict = None
@@ -972,7 +994,6 @@ def forgot_password(
                 config_dict
             )
             email_dispatched = success
-
         try:
             db.add(AuditLog(
                 invoice_id=None,
@@ -986,17 +1007,15 @@ def forgot_password(
         except Exception as exc:
             logger.debug("Failed to record audit log: %s", exc)
 
-    show_dev = should_show_dev_otp() or (not email_dispatched)
-    response_payload = {
+    # Strictly uniform message to prevent user enumeration; reset token is NEVER exposed in production
+    show_dev = should_show_dev_otp() and (getattr(settings, "ENVIRONMENT", "").lower() not in ("production", "prod"))
+    resp = {
         "success": True,
         "message": "If an account exists with this identifier, password reset instructions have been sent."
     }
     if raw_token and show_dev:
-        response_payload["reset_token"] = raw_token
-
-    return response_payload
-
-
+        resp["reset_token"] = raw_token
+    return resp
 @router.post('/reset-password')
 def reset_password(
     payload: ResetPasswordRequest,
@@ -1007,28 +1026,23 @@ def reset_password(
     client_ip = extract_client_ip(req)
     token = (payload.token or "").strip()
     new_pwd = (payload.new_password or "").strip()
-
     if not token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token is required.")
     if not new_pwd:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be empty.")
     if len(new_pwd) < 6:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters long.")
-
     token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
     now = datetime.datetime.utcnow()
-
     user = db.query(User).filter(
         User.reset_token_hash == token_hash,
         User.reset_token_expires_at >= now
     ).first()
-
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired password reset token. Please request a new reset code."
         )
-
     # Disallow setting new password equal to employee_id
     norm_new = re.sub(r'[\s_\-]+', '', new_pwd.upper())
     norm_emp = re.sub(r'[\s_\-]+', '', (user.employee_id or '').upper())
@@ -1037,7 +1051,6 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password cannot be your Employee ID. Please choose a different, secure password."
         )
-
     from app.auth import get_password_hash
     user.password_hash = get_password_hash(new_pwd)
     user.reset_token_hash = None
@@ -1047,7 +1060,6 @@ def reset_password(
     invalidate_user_cache(user.username)
     db.add(user)
     db.commit()
-
     try:
         db.add(AuditLog(
             invoice_id=None,
@@ -1060,5 +1072,4 @@ def reset_password(
         db.commit()
     except Exception as exc:
         logger.debug("Failed to record audit log: %s", exc)
-
     return {"success": True, "message": "Password has been successfully reset. Please log in with your new password."}

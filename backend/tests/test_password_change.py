@@ -76,20 +76,26 @@ def test_initial_password_and_force_change_flow():
         data2 = login_again.json()
         assert data2.get("must_change_password") is False
 
-        # 5. Forgot password request
-        forgot_res = client.post("/api/auth/forgot-password", json={
-            "identifier": test_emp_id
-        })
-        assert forgot_res.status_code == 200
-        reset_token = forgot_res.json().get("reset_token")
-        assert reset_token is not None
+        # 5. Forgot password request (with SHOW_OTP_IN_UI enabled for testing harness)
+        from app.config.settings import settings
+        orig_show_otp = settings.SHOW_OTP_IN_UI
+        settings.SHOW_OTP_IN_UI = True
+        try:
+            forgot_res = client.post("/api/auth/forgot-password", json={
+                "identifier": test_emp_id
+            })
+            assert forgot_res.status_code == 200
+            reset_token = forgot_res.json().get("reset_token")
+            assert reset_token is not None
 
-        # 6. Reset password using token
-        reset_res = client.post("/api/auth/reset-password", json={
-            "token": reset_token,
-            "new_password": "BrandNewResetPassword!123"
-        })
-        assert reset_res.status_code == 200
+            # 6. Reset password using token
+            reset_res = client.post("/api/auth/reset-password", json={
+                "token": reset_token,
+                "new_password": "BrandNewResetPassword!123"
+            })
+            assert reset_res.status_code == 200
+        finally:
+            settings.SHOW_OTP_IN_UI = orig_show_otp
 
         # 7. Login with reset password
         login_post_reset = client.post("/api/auth/login", json={

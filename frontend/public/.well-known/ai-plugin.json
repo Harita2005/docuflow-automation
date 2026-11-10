@@ -1,0 +1,14 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "daas_document_approval",
+  "name_for_human": "DAAS Document Approval & Automation System",
+  "description_for_model": "API for document approval, OCR extraction, workflow tracking, and audit verification.",
+  "description_for_human": "Enterprise Document Approval & Automation System.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "/api/openapi.json"
+  }
+}
