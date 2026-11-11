@@ -458,6 +458,33 @@ def authorize_document_access(
                 return True
 
     # -----------------------------------------------------------------------
+    # Document Creator / Submitter / Owner
+    # -----------------------------------------------------------------------
+    if getattr(doc, "user_id", None) is not None and doc.user_id == user.id:
+        return True
+    if user.employee_id and doc.employee_id and doc.employee_id.strip().lower() == user.employee_id.strip().lower():
+        return True
+    if getattr(doc, "uploaded_by", None) and str(doc.uploaded_by).strip().lower() in user_handles:
+        return True
+    if doc.contact_person and doc.contact_person.strip().lower() in user_handles:
+        return True
+
+    # -----------------------------------------------------------------------
+    # Uploader / Accounts Roles Access
+    # -----------------------------------------------------------------------
+    if u_role in UPLOADER_ROLES:
+        is_unrouted = (
+            not doc.workflow_profile_id
+            or str(doc.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']
+            or 'unrouted' in (doc.status or '').lower()
+            or 'no rule matched' in (doc.status or '').lower()
+            or 'unassigned' in (doc.assigned_approver or '').lower()
+        )
+        curr_stg = getattr(doc, 'current_stage', 1) or 1
+        if is_unrouted or curr_stg == 1:
+            return True
+
+    # -----------------------------------------------------------------------
     # Contact Person / Submitter
     # -----------------------------------------------------------------------
     if doc.contact_person:

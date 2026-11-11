@@ -149,7 +149,11 @@ def _verify_document_access(user: User, doc_id: str, db: Session):
     if user_div and doc_div and user_div not in {"HQ", "GLOBAL", "ALL"} and doc_div != user_div:
         raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
     if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
-        raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
+        u_role = (getattr(user, 'role', '') or "").strip().lower()
+        is_uploader = any(x in u_role for x in ['uplod', 'upload', 'account', 'approver', 'manager'])
+        is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.workflow_profile_id
+        if not (is_uploader and is_unrouted):
+            raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
     return inv
 
 def _get_active_db_session(passed_db: Optional[Session] = None):

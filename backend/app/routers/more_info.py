@@ -879,7 +879,7 @@ def user_has_doc_config_access(user: User, db: Session) -> bool:
         if check_permission(user, perm, db):
             return True
     u_role = (user.role or "").lower().strip()
-    if u_role in ["employee", "approver", "manager", "accounts", "finance", "reviewer", "user", "viewer"]:
+    if any(x in u_role for x in ["employee", "approver", "manager", "accounts", "account", "uplod", "upload", "finance", "reviewer", "user", "viewer", "admin"]):
         return True
     return False
 
@@ -1118,9 +1118,10 @@ def get_document_more_info_config(
     raw_str = str(document_id).strip()
     doc = None
     try:
+        id_cond = Invoice.id == int(raw_str) if raw_str.isdigit() else False
         doc = (
             db.query(Invoice)
-            .filter(or_(Invoice.id == raw_str, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
+            .filter(or_(id_cond, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
             .filter(Invoice.is_deleted == False)
             .first()
         )
@@ -1134,9 +1135,10 @@ def get_document_more_info_config(
 
     if not doc:
         try:
+            id_cond = Invoice.id == int(raw_str) if raw_str.isdigit() else False
             doc = (
                 db.query(Invoice)
-                .filter(or_(Invoice.id == raw_str, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
+                .filter(or_(id_cond, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
                 .first()
             )
         except Exception:
@@ -1426,9 +1428,10 @@ def save_document_more_info_config(
     - Admins can set save_as_default=True to update the organization default (user_id = NULL).
     """
     raw_str = str(document_id).strip()
+    id_cond = Invoice.id == int(raw_str) if raw_str.isdigit() else False
     doc = (
         db.query(Invoice)
-        .filter(or_(Invoice.id == raw_str, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
+        .filter(or_(id_cond, Invoice.doc_key == raw_str, Invoice.invoice_number == raw_str))
         .filter(Invoice.is_deleted == False)
         .first()
     )

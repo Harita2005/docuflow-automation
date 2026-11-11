@@ -6,7 +6,7 @@ import math
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, or_, and_, desc, asc
+from sqlalchemy import func, or_, and_, desc, asc, cast, String
 from sqlalchemy.orm import Session
 
 from app.config.settings import settings
@@ -342,7 +342,7 @@ def apply_audit_filters(
             AuditLog.notes.ilike(term),
             AuditLog.ip_address.ilike(term),
             AuditLog.remarks.ilike(term),
-            AuditLog.invoice_id.ilike(term),
+            cast(AuditLog.invoice_id, String).ilike(term),
         ]
         if id_filter is not None:
             search_conds.append(id_filter)
