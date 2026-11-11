@@ -3,12 +3,13 @@
 DocuFlow M2M Service Sync Client
 Demonstrates Option 1: Direct Service Token generation & document ingestion.
 """
+import os
 import sys
 import requests
 
-BASE_URL = "http://192.168.179.22:3000"
-SERVICE_USER = "backend_sync_client"
-SERVICE_PASS = "SecretPassword987654321!"
+BASE_URL = os.getenv("DOCUFLOW_BASE_URL", "http://192.168.0.11:3000")
+SERVICE_USER = os.getenv("DOCUFLOW_SYNC_USER", "Admin")
+SERVICE_PASS = os.getenv("DOCUFLOW_SYNC_PASS", "password123")
 
 
 def get_service_token(base_url: str = BASE_URL) -> str:

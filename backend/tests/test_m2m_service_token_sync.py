@@ -110,6 +110,23 @@ def test_sync_direct_login_endpoints_and_records_sync(client):
     assert sync_login_resp.status_code == 200
     assert "access_token" in sync_login_resp.json()
 
+    # 3b. Authenticate with Admin / password123 credentials
+    admin_login_resp = client.post("/login", json={
+        "username": "Admin",
+        "password": "password123"
+    })
+    assert admin_login_resp.status_code == 200, f"/login with Admin failed: {admin_login_resp.text}"
+    admin_token_data = admin_login_resp.json()
+    assert "access_token" in admin_token_data
+    assert admin_token_data.get("token_type") == "Bearer"
+
+    admin_m2m_resp = client.post("/m2m/auth/login", json={
+        "username": "Admin",
+        "password": "password123"
+    })
+    assert admin_m2m_resp.status_code == 200, f"/m2m/auth/login with Admin failed: {admin_m2m_resp.text}"
+    assert "access_token" in admin_m2m_resp.json()
+
     # 4. Ingest record via POST /records using token from /login
     uid_suffix = uuid.uuid4().hex[:6]
     test_doc_key = f"TEST_SYNC_KEY_{uid_suffix}"

