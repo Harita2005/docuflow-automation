@@ -658,12 +658,15 @@ export default function App() {
       rolePermissions[currentUserRole] || 
       rolePermissions[rawRole] || 
       rolePermissions[roleKey] ||
-      (rawRole.includes("approver") || rawRole.includes("manager") || rawRole.includes("accounts") ? (rolePermissions["manager"] || rolePermissions["accounts_approver"] || rolePermissions["accounts.approver"]) : undefined) ||
+      (rawRole.includes("uplod") || rawRole.includes("upload") ? (rolePermissions["account_uploder"] || rolePermissions["accounts_uploder"] || rolePermissions["doc_uploder"]) : undefined) ||
+      (rawRole.includes("approver") || rawRole.includes("manager") || rawRole.includes("account") ? (rolePermissions["manager"] || rolePermissions["accounts_approver"] || rolePermissions["accounts.approver"]) : undefined) ||
       (rawRole.includes("feedback") ? (rolePermissions["customer_feedback_agent"] || rolePermissions["employee"]) : undefined);
 
-    if (Array.isArray(rolePermObj)) return rolePermObj;
-    if (rolePermObj && typeof rolePermObj === "object") {
-      return Object.keys(rolePermObj).filter(key => {
+    let basePerms: string[] = [];
+    if (Array.isArray(rolePermObj)) {
+      basePerms = [...rolePermObj];
+    } else if (rolePermObj && typeof rolePermObj === "object") {
+      basePerms = Object.keys(rolePermObj).filter(key => {
         const val = (rolePermObj as Record<string, any>)[key];
         if (typeof val === "boolean") return val;
         if (typeof val === "object" && val !== null) {
@@ -671,8 +674,32 @@ export default function App() {
         }
         return false;
       });
+    } else {
+      basePerms = ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
     }
-    return ["dashboard", "work-tracker", "approved-documents", "customer-feedback"];
+
+    // Canonical code expansion to top-level view navigation IDs
+    const activeCodes = new Set(basePerms);
+    if (activeCodes.has("doc:upload") || activeCodes.has("doc:create") || activeCodes.has("upload:create") || activeCodes.has("upload:write") || activeCodes.has("doc:upload:create") || rawRole.includes("uplod") || rawRole.includes("upload")) {
+      activeCodes.add("upload");
+    }
+    if (activeCodes.has("doc:read") || activeCodes.has("doc:view") || activeCodes.has("doc:work_tracker") || activeCodes.has("doc:work_tracker:view") || activeCodes.has("wf:view") || rawRole.includes("uplod") || rawRole.includes("upload") || rawRole.includes("account")) {
+      activeCodes.add("work-tracker");
+      activeCodes.add("dashboard");
+    }
+    if (activeCodes.has("doc:approved_view") || activeCodes.has("doc:approved_docs:view") || rawRole.includes("uplod") || rawRole.includes("upload") || rawRole.includes("account")) {
+      activeCodes.add("approved-documents");
+    }
+    if (activeCodes.has("wf:customer_feedback") || activeCodes.has("customer_feedback") || activeCodes.has("customer-feedback")) {
+      activeCodes.add("customer-feedback");
+    }
+    if (activeCodes.has("workflow:routing:view") || activeCodes.has("workflow:read") || activeCodes.has("workflow-rules")) {
+      activeCodes.add("workflow-rules");
+    }
+    if (activeCodes.has("admin:users:view") || activeCodes.has("admin:rbac:view") || activeCodes.has("user:manage") || activeCodes.has("admin")) {
+      activeCodes.add("admin");
+    }
+    return Array.from(activeCodes);
   };
 
   // Access Control Enforcement
