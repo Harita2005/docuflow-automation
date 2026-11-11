@@ -8,7 +8,8 @@ coverage/
 !.env.example
 venv/
 backend/venv/
-backend/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
 backend/backend/
 backend/flowapprove.db
 backend/docuflow.db
@@ -26,7 +27,9 @@ __pycache__/
 .pytest_cache/
 *.db
 frontend/tsconfig.tsbuildinfo
-stored_pdfs/
+stored_pdfs/*
+!stored_pdfs/.gitkeep
+!stored_pdfs/approved/.gitkeep
 uploads/
 scratch/
 *.mfa_tickets.json
