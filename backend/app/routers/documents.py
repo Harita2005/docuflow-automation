@@ -100,7 +100,7 @@ def trigger_async_integration_push(document_id: str, decision: str='APPROVED'):
 
     def _runner():
         try:
-            dispatch_outgoing_webhook(document_id)
+            dispatch_outgoing_webhook(document_id, decision=decision)
         except Exception as e:
             logger.debug('Handled exception: %s', e)
         try:
@@ -1775,6 +1775,7 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
 
         inv.version = cur_ver + 1
         archive_rejected_pdf(inv)
+        trigger_async_integration_push(str(inv.id), decision='REJECTED')
         dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=approver_name, from_stage=1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
         record_approval_assignment_transition(
             db=db,
@@ -3125,6 +3126,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
     inv.status = 'Cancelled'
     inv.assigned_approver = None
     archive_rejected_pdf(inv)
+    trigger_async_integration_push(str(inv.id), decision='REJECTED')
     dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=username, from_stage=inv.current_stage or 1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
     db.add(AuditLog(invoice_id=inv.id, user=username, action='Process Cancelled', stage=f'Stage {inv.current_stage or 1}', notes=f'Process cancelled/voided: {remarks}'))
     db.commit()

@@ -60,33 +60,73 @@ def verify_m2m_token(credentials: HTTPAuthorizationCredentials=Depends(bearer_sc
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
 
 import hmac
+from sqlalchemy.orm import Session
+from app.database.connection import get_db
 
 @router.post('/auth/login')
-def m2m_login(body: LoginRequest):
-    if not (hmac.compare_digest(body.username, SERVICE_API_USER) and hmac.compare_digest(body.password, SERVICE_API_PASS)):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid credentials')
-    
+@router.post('/login')
+def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
     req_scope = (body.scope or "data:sync").strip()
-    allowed_scopes = ALLOWED_SERVICE_SCOPES.get(body.username, set())
-    if req_scope not in allowed_scopes:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Requested scope '{req_scope}' is not permitted for service account '{body.username}'. Allowed: {sorted(list(allowed_scopes))}"
-        )
-
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = jwt.encode(
-        {
-            'sub': body.username,
-            'scope': req_scope,
-            'exp': expire,
-            'iss': settings.JWT_ISSUER,
-            'aud': settings.JWT_AUDIENCE,
-        },
-        JWT_SECRET_KEY,
-        algorithm=JWT_ALGORITHM,
+    is_service = (
+        hmac.compare_digest(body.username.strip(), SERVICE_API_USER) and
+        hmac.compare_digest(body.password, SERVICE_API_PASS)
     )
-    return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
+    if is_service:
+        allowed_scopes = ALLOWED_SERVICE_SCOPES.get(body.username, set())
+        if req_scope not in allowed_scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requested scope '{req_scope}' is not permitted for service account '{body.username}'. Allowed: {sorted(list(allowed_scopes))}"
+            )
+
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        token = jwt.encode(
+            {
+                'sub': body.username,
+                'scope': req_scope,
+                'exp': expire,
+                'iss': settings.JWT_ISSUER,
+                'aud': settings.JWT_AUDIENCE,
+            },
+            JWT_SECRET_KEY,
+            algorithm=JWT_ALGORITHM,
+        )
+        return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
+
+    # Fallback to database user authentication
+    from app.database.models import User
+    from app.routers.auth import check_user_password
+    from sqlalchemy import or_
+
+    user = (
+        db.query(User)
+        .filter(
+            (User.username.ilike(body.username))
+            | (User.employee_id.ilike(body.username))
+            | (User.email.ilike(body.username))
+        )
+        .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
+        .first()
+    )
+
+    if user and getattr(user, 'is_active', True):
+        if check_user_password(user, body.password, db):
+            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            token = jwt.encode(
+                {
+                    'sub': user.username or body.username,
+                    'scope': req_scope,
+                    'role': user.role or "user",
+                    'exp': expire,
+                    'iss': settings.JWT_ISSUER,
+                    'aud': settings.JWT_AUDIENCE,
+                },
+                JWT_SECRET_KEY,
+                algorithm=JWT_ALGORITHM,
+            )
+            return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid credentials')
 
 from sqlalchemy.orm import Session
 from app.database.connection import get_db

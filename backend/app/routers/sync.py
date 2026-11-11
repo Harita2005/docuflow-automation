@@ -1,10 +1,10 @@
 import logging
 logger = logging.getLogger(__name__)
-import os, re, threading, json, base64, datetime
+import os, re, threading, json, base64, datetime, secrets
 from pathlib import Path
 from typing import List, Optional, Any, Union
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.config.settings import settings
@@ -16,6 +16,7 @@ from app.database.models import (
     InvoiceChecklistState,
     InvoiceLineItem,
     SystemLog,
+    User,
     WorkflowProfile,
     WorkflowStepDefinition,
 )
@@ -23,7 +24,7 @@ from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequ
 from app.services.rules_engine import get_doc_type_prefix, generate_document_id
 from app.constants.document_types import DocumentType, normalize_document_type, is_feedback_or_complaint
 from app.services.ocr_service import extract_text_from_pdf
-from app.auth import verify_service_api_key
+from app.auth import verify_service_api_key, create_access_token
 from app.routers.documents import resolve_checklist_items
 
 logger = logging.getLogger(__name__)
@@ -846,7 +847,7 @@ def sync_single_document(
             return DocumentSyncResponse(
                 success=True,
                 message=f'Record already exists in terminal status ({existing.status}). Idempotent response returned.',
-                document_id=existing.id,
+                document_id=str(existing.id),
                 doc_key=existing.doc_key,
                 invoice_number=existing.invoice_number,
                 document_number=existing.invoice_number,
@@ -874,7 +875,7 @@ def sync_single_document(
         return DocumentSyncResponse(
             success=True,
             message='Record synchronized and auto-routed successfully',
-            document_id=inv.id,
+            document_id=str(inv.id),
             doc_key=inv.doc_key,
             invoice_number=inv.invoice_number,
             document_number=inv.invoice_number,
@@ -1205,8 +1206,180 @@ def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
     db.commit()
     return {'success': True, 'seeded_count': seeded_count, 'total_invoices': db.query(Invoice).count()}
 
+# ---------------------------------------------------------------------------
+# M2M & Service Login Authentication (Direct Bearer Token)
+# ---------------------------------------------------------------------------
+
+class SyncLoginRequest(BaseModel):
+    username: Optional[str] = None
+    Username: Optional[str] = None
+    identifier: Optional[str] = None
+    employee_id: Optional[str] = None
+    password: Optional[str] = None
+    Password: Optional[str] = None
+    scope: Optional[str] = "data:sync"
+    expires_in_minutes: Optional[int] = None
+
+class SyncLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    scope: Optional[str] = "data:sync"
+
+async def process_sync_login(
+    req: Request,
+    payload: Optional[SyncLoginRequest] = None,
+    db: Session = Depends(get_db)
+) -> SyncLoginResponse:
+    ident_str = ""
+    password_str = ""
+    req_scope = "data:sync"
+    expires_in_mins = None
+
+    if payload:
+        ident_str = str(payload.username or payload.Username or payload.identifier or payload.employee_id or "").strip()
+        password_str = str(payload.password or payload.Password or "")
+        if payload.scope:
+            req_scope = str(payload.scope).strip()
+        if payload.expires_in_minutes:
+            expires_in_mins = payload.expires_in_minutes
+
+    if not ident_str or not password_str:
+        content_type = req.headers.get("content-type", "").lower()
+        body_dict = {}
+        if "json" in content_type:
+            try:
+                body_dict = await req.json()
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
+        elif "form" in content_type:
+            try:
+                form = await req.form()
+                body_dict = dict(form)
+            except Exception as exc:
+                logger.debug("Handled non-fatal exception: %s", exc)
+        if not body_dict:
+            body_dict = dict(req.query_params)
+
+        if body_dict:
+            if not ident_str:
+                for k in ["username", "Username", "identifier", "Identifier", "employee_id", "employeeId", "user", "login"]:
+                    if body_dict.get(k):
+                        ident_str = str(body_dict[k]).strip()
+                        break
+            if not password_str:
+                for k in ["password", "Password", "pass", "pwd", "secret"]:
+                    if body_dict.get(k) is not None:
+                        password_str = str(body_dict[k])
+                        break
+            if not expires_in_mins and body_dict.get("expires_in_minutes"):
+                try:
+                    expires_in_mins = int(body_dict["expires_in_minutes"])
+                except Exception:
+                    pass
+            if body_dict.get("scope"):
+                req_scope = str(body_dict["scope"]).strip()
+
+    if not ident_str or not password_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required for authentication."
+        )
+
+    # 1. Check Service Account M2M Credentials
+    service_user = getattr(settings, 'SERVICE_API_USER', None) or os.getenv('SERVICE_API_USER', 'backend_sync_client')
+    service_pass = getattr(settings, 'SERVICE_API_PASS', None) or os.getenv('SERVICE_API_PASS', 'SecretPassword987654321!')
+
+    if (
+        secrets.compare_digest(ident_str.strip().encode("utf-8"), service_user.strip().encode("utf-8")) and
+        secrets.compare_digest(password_str.encode("utf-8"), service_pass.encode("utf-8"))
+    ):
+        expire_mins = expires_in_mins or int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '43200'))
+        delta = datetime.timedelta(minutes=expire_mins)
+        token = create_access_token(
+            data={
+                "sub": service_user,
+                "scope": req_scope or "data:sync",
+                "role": "service",
+            },
+            expires_delta=delta
+        )
+        return SyncLoginResponse(
+            access_token=token,
+            token_type="Bearer",
+            expires_in=int(delta.total_seconds()),
+            scope=req_scope or "data:sync"
+        )
+
+    # 2. Check Database User Accounts
+    from app.routers.auth import check_user_password
+    user = (
+        db.query(User)
+        .filter(
+            (User.username.ilike(ident_str))
+            | (User.employee_id.ilike(ident_str))
+            | (User.email.ilike(ident_str))
+            | (User.user_uid.ilike(ident_str))
+        )
+        .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
+        .first()
+    )
+
+    if user and getattr(user, 'is_active', True):
+        if check_user_password(user, password_str, db):
+            expire_mins = expires_in_mins or getattr(settings, 'ACCESS_TOKEN_EXPIRE_MINUTES', 43200)
+            delta = datetime.timedelta(minutes=expire_mins)
+            token = create_access_token(
+                data={
+                    "sub": user.username or user.employee_id or ident_str,
+                    "scope": req_scope or "data:sync",
+                    "role": user.role or "user",
+                },
+                expires_delta=delta
+            )
+            return SyncLoginResponse(
+                access_token=token,
+                token_type="Bearer",
+                expires_in=int(delta.total_seconds()),
+                scope=req_scope or "data:sync"
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials. Please provide valid service or user credentials.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+@router.post('/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+@router.post('/auth/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+async def sync_login_endpoint(
+    req: Request,
+    payload: Optional[SyncLoginRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Direct M2M login endpoint to generate a Bearer access token for data and attachment sync.
+    Accepts service credentials (e.g. backend_sync_client) or active system user credentials.
+    """
+    return await process_sync_login(req=req, payload=payload, db=db)
+
 # Direct root and /api/ aliases for single record sync
 alias_router = APIRouter(tags=['Enterprise Data & Attachment Sync Aliases'])
+
+@alias_router.post('/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/sync/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/records/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/api/records/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+@alias_router.post('/api/login', response_model=SyncLoginResponse, status_code=status.HTTP_200_OK)
+async def sync_login_alias(
+    req: Request,
+    payload: Optional[SyncLoginRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Root and alias login endpoints to acquire a Bearer access token for records ingestion.
+    """
+    return await process_sync_login(req=req, payload=payload, db=db)
 
 @alias_router.post('/records', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)
 @alias_router.post('/record', response_model=DocumentSyncResponse, status_code=status.HTTP_200_OK)

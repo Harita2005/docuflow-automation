@@ -91,7 +91,7 @@ def compute_hmac_signature(payload_str: str, secret: str) -> str:
         return ''
     return hmac.new(secret.encode('utf-8'), payload_str.encode('utf-8'), hashlib.sha256).hexdigest()
 
-def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, Any]:
+def dispatch_outgoing_webhook(document_id: str, base_url: str='', decision: Optional[str] = None) -> Dict[str, Any]:
     """
     Dispatches real-time outbound webhook to configured 3rd-party endpoint.
     Performs retries with exponential backoff, records logs in IntegrationSyncLog,
@@ -120,11 +120,20 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
         meta = get_sync_retry_meta(inv)
         attempt_count = meta.get('attempt_count', 0) + 1
 
+        effective_decision = (
+            decision
+            or ('APPROVED' if (inv.status or '').lower() == 'approved'
+                else 'REJECTED' if (inv.status or '').lower() in ['rejected', 'cancelled']
+                else inv.status or 'APPROVED')
+        ).upper()
+
         payload_dict = build_universal_export_payload(inv, base_url=base_url)
         if 'document' in payload_dict:
             payload_dict['document']['idempotency_key'] = idempotency_key
+            payload_dict['document']['decision'] = effective_decision
             if 'sync_status' in payload_dict['document']:
                 payload_dict['document']['sync_status']['external_ref'] = idempotency_key
+        payload_dict['decision'] = effective_decision
         payload_json = json.dumps(payload_dict, default=str)
         payload_bytes = payload_json.encode('utf-8')
 
@@ -132,6 +141,7 @@ def dispatch_outgoing_webhook(document_id: str, base_url: str='') -> Dict[str, A
             'Content-Type': 'application/json',
             'User-Agent': 'DocuFlow-Automation-Webhook/2.0',
             'X-DocuFlow-Event': 'document.settled',
+            'X-DocuFlow-Decision': effective_decision,
             'X-DocuFlow-Document-ID': str(inv.id),
             'Idempotency-Key': idempotency_key,
             'X-DocuFlow-Idempotency-Key': idempotency_key,

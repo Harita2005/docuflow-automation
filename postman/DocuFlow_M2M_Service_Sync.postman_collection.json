@@ -7,7 +7,7 @@
   },
   "item": [
     {
-      "name": "1. Get Direct Service Token (M2M Login)",
+      "name": "1. Get Direct Service Token (/login or /api/sync/login)",
       "event": [
         {
           "listen": "test",
@@ -36,17 +36,15 @@
           "raw": "{\n  \"username\": \"backend_sync_client\",\n  \"password\": \"SecretPassword987654321!\"\n}"
         },
         "url": {
-          "raw": "{{base_url}}/m2m/auth/login",
+          "raw": "{{base_url}}/login",
           "host": [
             "{{base_url}}"
           ],
           "path": [
-            "m2m",
-            "auth",
             "login"
           ]
         },
-        "description": "Generates a direct M2M Service Bearer token without 2FA/MFA challenge."
+        "description": "Generates a direct M2M / Integration Service Bearer token without 2FA/MFA challenge via /login (also available at /api/sync/login, /records/login, and /m2m/auth/login)."
       },
       "response": []
     },

@@ -12,17 +12,29 @@ SERVICE_PASS = "SecretPassword987654321!"
 
 
 def get_service_token(base_url: str = BASE_URL) -> str:
-    login_url = f"{base_url}/m2m/auth/login"
-    resp = requests.post(
-        login_url,
-        json={"username": SERVICE_USER, "password": SERVICE_PASS},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    token = data["access_token"]
-    print(f"[*] Successfully obtained Bearer token (expires in {data.get('expires_in')}s)")
-    return token
+    endpoints = [
+        f"{base_url}/login",
+        f"{base_url}/api/sync/login",
+        f"{base_url}/m2m/auth/login",
+    ]
+    last_err = None
+    for url in endpoints:
+        try:
+            resp = requests.post(
+                url,
+                json={"username": SERVICE_USER, "password": SERVICE_PASS},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    print(f"[*] Successfully obtained Bearer token from {url} (expires in {data.get('expires_in')}s)")
+                    return token
+        except requests.exceptions.RequestException as err:
+            last_err = err
+            continue
+    raise RuntimeError(f"Failed to obtain token from endpoints {endpoints}: {last_err}")
 
 
 def post_document(token: str, payload: dict, base_url: str = BASE_URL) -> dict:

@@ -78,3 +78,80 @@ def test_m2m_service_token_and_document_sync(client):
             db.query(Invoice).filter(Invoice.id == str(created_id)).delete(synchronize_session=False)
             db.commit()
         db.close()
+
+
+def test_sync_direct_login_endpoints_and_records_sync(client):
+    """
+    Verifies the newly added direct /login and /api/sync/login endpoints:
+    1. Authenticate via POST /login and POST /api/sync/login.
+    2. Verify invalid credentials return 401.
+    3. Post record to POST /records and verify successful ingestion.
+    """
+    # 1. Reject invalid credentials
+    bad_resp = client.post("/login", json={"username": "backend_sync_client", "password": "WrongPassword!"})
+    assert bad_resp.status_code == 401
+
+    # 2. Authenticate at POST /login
+    login_resp = client.post("/login", json={
+        "username": "backend_sync_client",
+        "password": "SecretPassword987654321!"
+    })
+    assert login_resp.status_code == 200, f"/login failed: {login_resp.text}"
+    token_data = login_resp.json()
+    assert "access_token" in token_data
+    token = token_data["access_token"]
+    assert token_data.get("token_type") == "Bearer"
+
+    # 3. Authenticate at POST /api/sync/login
+    sync_login_resp = client.post("/api/sync/login", json={
+        "username": "backend_sync_client",
+        "password": "SecretPassword987654321!"
+    })
+    assert sync_login_resp.status_code == 200
+    assert "access_token" in sync_login_resp.json()
+
+    # 4. Ingest record via POST /records using token from /login
+    uid_suffix = uuid.uuid4().hex[:6]
+    test_doc_key = f"TEST_SYNC_KEY_{uid_suffix}"
+    test_inv_num = f"TEST_INV_{uid_suffix}"
+    payload = {
+        "doc_key": test_doc_key,
+        "doc_num": test_inv_num,
+        "invoice_number": test_inv_num,
+        "invoice_date": "2026-10-21",
+        "due_date": "2026-11-21",
+        "po_number": f"TEST_PO_{uid_suffix}",
+        "amount": 28000.0,
+        "currency": "INR",
+        "vendor_name": "Precision Automation Systems",
+        "vendor_code": "VEND_PAS_002",
+        "division": "VCC",
+        "plant": "Chennai",
+        "document_type": "AP INVOICE"
+    }
+
+    db = SessionLocal()
+    created_id = None
+    try:
+        sync_resp = client.post(
+            "/records",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload
+        )
+        assert sync_resp.status_code == 200, f"Sync record to /records failed: {sync_resp.text}"
+        res_json = sync_resp.json()
+        assert res_json.get("success") is True
+        created_id = res_json.get("document_id")
+        assert created_id is not None
+
+        db_doc = db.query(Invoice).filter(Invoice.id == created_id).first()
+        assert db_doc is not None
+        assert db_doc.doc_key == test_doc_key
+        assert float(db_doc.amount) == 28000.0
+    finally:
+        if created_id:
+            db.rollback()
+            db.query(AuditLog).filter(AuditLog.invoice_id == str(created_id)).delete(synchronize_session=False)
+            db.query(Invoice).filter(Invoice.id == str(created_id)).delete(synchronize_session=False)
+            db.commit()
+        db.close()

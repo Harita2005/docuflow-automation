@@ -526,7 +526,7 @@ class DocumentSyncRequest(BaseModel):
 class DocumentSyncResponse(BaseModel):
     success: bool
     message: str
-    document_id: str
+    document_id: Union[str, int]
     doc_key: Optional[Union[str, int]] = None
     invoice_number: Optional[str] = None
     document_number: Optional[str] = None
