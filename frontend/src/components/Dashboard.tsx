@@ -152,8 +152,12 @@ export default function Dashboard({
     if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
     if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p.includes(a) || a.includes(p))))) return true;
 
-    if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
-    if (doc.status === "Unrouted (No Rule Matched)" && (rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin")) return true;
+    const sLow = (doc.status || "").toLowerCase();
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+
+    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
+    if (isUnrouted && isUploader) return true;
     return false;
   };
 
@@ -208,6 +212,12 @@ export default function Dashboard({
       }
     }
 
+    const sLow = (doc.status || "").toLowerCase();
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
+    if (isUnrouted && isUploader) return true;
+
     return false;
   };
 
@@ -236,7 +246,7 @@ export default function Dashboard({
   const isProgressStatus = (st: string) => {
     const s = (st || "").toLowerCase();
     if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
-    return s.includes("progress") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("stage") || s.includes("approv");
+    return s.includes("progress") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("stage") || s.includes("approv") || s.includes("unrouted") || s.includes("no rule") || s.includes("pending") || s.includes("initiated");
   };
 
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
@@ -266,7 +276,7 @@ export default function Dashboard({
   const calculatedRejected = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isRejectedStatus(d.status)).length;
   const rejectedCount = calculatedRejected;
 
-  const calculatedProgress = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_approved) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
+  const calculatedProgress = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_approved || isActionRequiredForUser(d)) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
   const progressCount = calculatedProgress;
 
   const calculatedApproved = displayDocs.filter(d => isApprovedStatus(d.status)).length;

@@ -335,8 +335,11 @@ export default function App() {
       if (rHandle && approvers.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
     }
 
-    if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
-    if (doc.status === "Unrouted (No Rule Matched)" && (rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin")) return true;
+    const sLow = (doc.status || "").toLowerCase();
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
+    if (isUnrouted && isUploader) return true;
 
     return false;
   };

@@ -295,7 +295,10 @@ export default function WorkTrackerPage({
     if (empHandle && pool.some(p => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some(p => p && p.includes(eHandle))) return true;
     if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
-    if (doc.status === "Unrouted (No Rule Matched)" && (rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin")) return true;
+    const sLow = (doc.status || "").toLowerCase();
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+    if (isUnrouted && isUploader) return true;
     return false;
   };
 

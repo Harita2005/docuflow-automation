@@ -784,7 +784,7 @@ def get_all_invoices(
                     return entry["data"]
 
         query = db.query(Invoice).filter(Invoice.is_deleted == False)
-        if status and str(status).strip():
+        if status and str(status).strip() and str(status).strip().lower() not in ['pending', 'in_progress', 'tracking', 'workflow', 'active', 'all']:
             query = query.filter(Invoice.status == str(status).strip())
         
         total_count = query.count()
@@ -811,7 +811,7 @@ def get_all_invoices(
     has_hq_division = any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs)
 
     query = db.query(Invoice).filter(Invoice.is_deleted == False)
-    if status and str(status).strip():
+    if status and str(status).strip() and str(status).strip().lower() not in ['pending', 'in_progress', 'tracking', 'workflow', 'active', 'all']:
         query = query.filter(Invoice.status == str(status).strip())
     if user_approval_divs and not has_hq_division:
         query = query.filter(
@@ -933,9 +933,12 @@ def get_all_invoices(
         is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
         
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
+        is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
         is_curr = False
         if is_active_flow and inv.assigned_approver and not has_appr:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
+        if is_active_flow and is_unrouted and (is_uploader_role or is_creator):
+            is_curr = True
 
         # Status filter query parameter enforcement
         if status and isinstance(status, str):
@@ -944,7 +947,7 @@ def get_all_invoices(
                 if not (is_curr and is_active_flow):
                     continue
             elif s_req in ['in_progress', 'tracking']:
-                if not ((has_appr or user_is_admin or is_member_of_flow) and is_active_flow):
+                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or (is_unrouted and is_uploader_role)) and is_active_flow):
                     continue
             elif s_req == 'approved':
                 if not (inv.status in ['Approved', 'Settled', 'Paid'] and (user_is_admin or has_appr)):
@@ -1071,9 +1074,15 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
         )
         has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
 
+        u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
+        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
+        is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
+
         is_curr = False
         if inv.assigned_approver and not has_approved_curr_stage:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
+        if is_unrouted and is_uploader_role:
+            is_curr = True
 
         # Division check
         if not is_curr and not has_approved_any_stage:
@@ -1085,7 +1094,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         if not user_is_admin:
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow):
+            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow or (is_unrouted and is_uploader_role)):
                 continue
 
         # Status filter query parameter enforcement
