@@ -123,13 +123,40 @@ def trigger_async_integration_push(document_id: str, decision: str='APPROVED'):
     except Exception as e:
         logger.debug('Handled exception: %s', e)
 
-def safe_broadcast_event(event_type: str, payload: dict):
-    """Safely broadcasts a real-time event via SSE to connected clients."""
+def safe_serialize_invoice(inv: Any) -> Any:
+    """Safely converts an invoice/document ORM instance to a plain serializable dict without circular references."""
+    if inv is None:
+        return None
     try:
-        from app.routers.events import broadcast_event
-        broadcast_event(event_type, payload)
+        return InvoiceResponse.model_validate(inv).model_dump()
+    except Exception:
+        try:
+            return {
+                'id': getattr(inv, 'id', None),
+                'status': getattr(inv, 'status', None),
+                'current_stage': getattr(inv, 'current_stage', None),
+                'version': getattr(inv, 'version', None),
+                'assigned_approver': getattr(inv, 'assigned_approver', None),
+                'invoice_number': getattr(inv, 'invoice_number', None),
+                'total_amount': getattr(inv, 'total_amount', None),
+                'document_type': getattr(inv, 'document_type', None),
+            }
+        except Exception:
+            return str(inv)
+
+def safe_broadcast_event(event_type: str, payload: dict):
+    """Safely broadcasts a real-time event via SSE to connected clients asynchronously in background thread."""
+    def _run():
+        try:
+            from app.routers.events import broadcast_event
+            broadcast_event(event_type, payload)
+        except Exception as e:
+            logger.debug('Handled broadcast exception: %s', e)
+    try:
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
     except Exception as e:
-        logger.debug('Handled exception: %s', e)
+        logger.debug('Handled thread launch exception: %s', e)
 router = APIRouter(tags=['Invoices & Documents'])
 
 def is_user_admin(user: Optional[User], db: Optional[Session] = None) -> bool:
@@ -1813,8 +1840,11 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             new_status=inv.status,
             notes_extra=f'Returned to Stage {prev_stage} ({prev_step_name}, Assigned: {inv.assigned_approver})'
         )
+        db.commit()
+        db.refresh(inv)
         trigger_async_integration_push(str(inv.id), decision='REJECTED')
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': f'Document returned to Stage {prev_stage} ({prev_step_name}) for previous approver review.'}
     elif 'hold' in (action_type or '').lower() or 'send back' in (action_type or '').lower() or 'return' in (action_type or '').lower():
         inv.status = 'On Hold'
@@ -1843,6 +1873,8 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             previous_status=f'In Progress (Stage {current_stage})',
             new_status='On Hold'
         )
+        db.commit()
+        db.refresh(inv)
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
         invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver, 'message': 'Record placed on temporary hold.'}
@@ -1870,7 +1902,6 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
 
         inv.version = cur_ver + 1
         archive_rejected_pdf(inv)
-        trigger_async_integration_push(str(inv.id), decision='REJECTED')
         dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=approver_name, from_stage=1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
         record_approval_assignment_transition(
             db=db,
@@ -1891,6 +1922,9 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             previous_status=f'In Progress (Stage {current_stage})',
             new_status='Cancelled'
         )
+        db.commit()
+        db.refresh(inv)
+        trigger_async_integration_push(str(inv.id), decision='REJECTED')
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
         invalidate_invoices_cache(str(inv.id))
         return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'message': 'Workflow process cancelled and voided at Attachment Stage.'}
@@ -2538,7 +2572,7 @@ def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(ge
             'success': True,
             'status': inv.status,
             'current_stage': inv.current_stage,
-            'invoice': inv,
+            'invoice': safe_serialize_invoice(inv),
             'approved_by': approver_name,
             'next_approver': next_assigned_val if inv.status != 'Approved' else None,
             'next_stage_name': next_step_title if inv.status != 'Approved' else None,
@@ -2713,7 +2747,7 @@ def approve_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceA
         'success': True,
         'status': inv.status,
         'current_stage': inv.current_stage,
-        'invoice': inv,
+        'invoice': safe_serialize_invoice(inv),
         'approved_by': username,
         'next_approver': next_assigned_val if inv.status != 'Approved' else None,
         'next_stage_name': next_step_title if inv.status != 'Approved' else None,
@@ -2863,7 +2897,7 @@ def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Sessio
             'success': True,
             'status': inv.status,
             'current_stage': inv.current_stage,
-            'invoice': inv,
+            'invoice': safe_serialize_invoice(inv),
             'approved_by': approver_name,
             'next_approver': next_assigned_val if inv.status != 'Approved' else None,
             'next_stage_name': next_step_title if inv.status != 'Approved' else None,
@@ -2873,7 +2907,7 @@ def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Sessio
         result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=comments, action_type=action_type, expected_version=current_version, approver_user=user, client_ip=client_ip)
         db.commit()
         db.refresh(inv)
-        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
+        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': safe_serialize_invoice(inv), **result}
     else:
         inv.status = 'On Hold'
         rows_affected = db.query(Invoice).filter(
@@ -2904,7 +2938,7 @@ def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Sessio
         db.commit()
         db.refresh(inv)
         safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
-        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv}
+        return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': safe_serialize_invoice(inv)}
 
 @router.post('/api/workflows/reject')
 @router.post('/api/workflow/reject')
@@ -2935,7 +2969,7 @@ def workflow_reject_payload(req: Request, payload: dict, db: Session=Depends(get
     result = process_rejection_logic(db=db, inv=inv, approver_name=approver_name, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
+    return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': safe_serialize_invoice(inv), **result}
 
 @router.post('/api/records/{invoice_id}/reject')
 @router.post('/api/documents/{invoice_id}/reject')
@@ -2965,7 +2999,7 @@ def reject_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceAc
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Reject', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'invoice': inv, **result}
+    return {'success': True, 'status': inv.status, 'invoice': safe_serialize_invoice(inv), **result}
 
 def parse_and_validate_scheduled_clock_time(val: Any) -> Optional[str]:
     """
@@ -3149,14 +3183,15 @@ def workflow_sendback_payload(req: Request, payload: dict, db: Session=Depends(g
     result = process_rejection_logic(db=db, inv=inv, approver_name=username, remarks=remarks, action_type='Send Back', expected_version=current_version, approver_user=user, client_ip=client_ip)
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': inv, **result}
+    return {'success': True, 'status': inv.status, 'current_stage': inv.current_stage, 'invoice': safe_serialize_invoice(inv), **result}
 
 @router.post('/api/workflows/cancel')
 @router.post('/api/documents/{invoice_id}/cancel')
 @router.post('/api/records/{invoice_id}/cancel')
 @router.post('/api/invoices/{invoice_id}/cancel')
-def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
-    doc_id = invoice_id or (payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id') if payload else None)
+def workflow_cancel_route(req: Request, invoice_id: Optional[str]=None, payload: Optional[dict]=None, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+    data = extract_action_body(req, None, payload)
+    doc_id = invoice_id or data.get('invoiceId') or data.get('invoice_id') or data.get('document_id') or data.get('id')
     if not doc_id:
         raise HTTPException(status_code=400, detail='Missing invoiceId')
     inv = find_invoice_by_identifier(db, doc_id)
@@ -3174,7 +3209,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
             detail='Cancellation Restricted: Documents can only be cancelled during the Attachment Stage (Stage 1).'
         )
 
-    is_admin = bool((user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'])
+    is_admin = is_user_admin(user, db)
 
     # Check if user is the assigned initiator / creator
     user_identifiers = {
@@ -3207,11 +3242,15 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
         )
     )
 
-    # For cancellation at Stage 1, the assigned approver, document initiator, or administrator can cancel
-    if not is_assigned and not is_initiator and not is_admin:
+    u_role = (getattr(user, 'role', '') or '').strip().lower()
+    uploader_aliases = {'account_uploader', 'account_uploder', 'accounts_uploder', 'doc_uploder', 'doc_uploader', 'uploader', 'accounts', 'account', 'accounts_approver', 'accounts.approver'}
+    is_stage_1_uploader = ((inv.current_stage or 1) == 1) and (u_role in uploader_aliases or any(x in u_role for x in ['uplod', 'upload', 'account']))
+
+    # For cancellation at Stage 1, the assigned approver, document initiator, authorized uploader, or administrator can cancel
+    if not is_assigned and not is_initiator and not is_admin and not is_stage_1_uploader:
         raise HTTPException(
             status_code=403,
-            detail=f'Access Denied: Only the assigned approver ({inv.assigned_approver}) or initiator for Stage {inv.current_stage or 1} is authorized to cancel this document.'
+            detail=f'Access Denied: Only the assigned approver ({inv.assigned_approver}), initiator, or authorized uploader for Stage {inv.current_stage or 1} is authorized to cancel this document.'
         )
 
     # Reject cancelling documents already Approved/Posted/Paid/Cancelled with 409
@@ -3223,7 +3262,7 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
         )
 
     # Require expected_version and increment version
-    expected_ver = (payload.get('expected_version') if payload and 'expected_version' in payload else (payload.get('expectedVersion') if payload else None))
+    expected_ver = (data.get('expected_version') if 'expected_version' in data else data.get('expectedVersion'))
     if expected_ver is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -3236,26 +3275,23 @@ def workflow_cancel_route(invoice_id: Optional[str]=None, payload: Optional[dict
             detail="This document version has been modified by another approver or process."
         )
 
-    # Require mandatory cancellation comment
-    raw_remarks = (payload.get('comments') or payload.get('remarks') or payload.get('comment') or payload.get('reason') if payload else None)
-    if not raw_remarks or not str(raw_remarks).strip():
-        raise HTTPException(
-            status_code=400,
-            detail="A cancellation comment is mandatory to cancel the document in the Attachment Stage."
-        )
-    remarks = str(raw_remarks).strip()
+    # Require mandatory cancellation comment or use default
+    raw_remarks = (data.get('comments') or data.get('remarks') or data.get('comment') or data.get('reason'))
+    remarks = str(raw_remarks).strip() if raw_remarks and str(raw_remarks).strip() else 'Document process cancelled and voided at Attachment Stage.'
 
     inv.version = current_version + 1
     username = user.employee_name or user.name or user.username or 'User'
     inv.status = 'Cancelled'
     inv.assigned_approver = None
     archive_rejected_pdf(inv)
-    trigger_async_integration_push(str(inv.id), decision='REJECTED')
     dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=username, from_stage=inv.current_stage or 1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
     db.add(AuditLog(invoice_id=inv.id, user=username, action='Process Cancelled', stage=f'Stage {inv.current_stage or 1}', notes=f'Process cancelled/voided: {remarks}'))
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'version': inv.version, 'message': 'Workflow process cancelled.'}
+    trigger_async_integration_push(str(inv.id), decision='REJECTED')
+    safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': None})
+    invalidate_invoices_cache(str(inv.id))
+    return {'success': True, 'status': inv.status, 'version': inv.version, 'invoice': safe_serialize_invoice(inv), 'message': 'Workflow process cancelled.'}
 
 @router.post('/api/records/{invoice_id}/hold')
 @router.post('/api/documents/{invoice_id}/hold')
@@ -3325,7 +3361,7 @@ def hold_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceActi
     )
     db.commit()
     db.refresh(inv)
-    return {'success': True, 'status': inv.status, 'invoice': inv}
+    return {'success': True, 'status': inv.status, 'invoice': safe_serialize_invoice(inv)}
 
 TEN_MB = 10 * 1024 * 1024
 
