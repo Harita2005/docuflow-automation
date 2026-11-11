@@ -2130,9 +2130,11 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                     detail=f"Access Denied: You are not authorized to approve documents for division '{inv.division}'."
                 )
 
-    # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document
+    # Maker-Checker (Segregation of Duties): Creator/submitter can never approve their own document on subsequent approval stages (Stage > 1)
     # Admin users bypass this restriction to permit administrative oversight and workflow testing
-    if user and not is_admin and not is_feedback_doc and not is_rejection_or_cancellation:
+    # Note: Stage 1 is the physical attachment/initial submission stage where the uploader/submitter signs off
+    curr_stage_num = inv.current_stage or 1
+    if user and not is_admin and not is_feedback_doc and not is_rejection_or_cancellation and curr_stage_num > 1:
         user_identifiers = {
             (user.username or '').strip().lower(),
             (user.employee_id or '').strip().lower(),
@@ -2196,10 +2198,15 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
 
     approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
-    user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), (user.role or '').lower()]
+    u_role = (user.role or '').strip().lower()
+    uploader_aliases = {'account_uploader', 'account_uploder', 'accounts_uploder', 'doc_uploder', 'doc_uploader', 'uploader', 'accounts', 'account', 'accounts_approver', 'accounts.approver'}
+    user_handles = [(user.username or '').lower(), (user.employee_id or '').lower(), (user.employee_name or '').lower(), (user.name or '').lower(), (user.email or '').lower(), u_role]
+    if u_role in uploader_aliases or any(x in u_role for x in ['uplod', 'upload', 'account']):
+        user_handles.extend(list(uploader_aliases))
     user_handles = [h for h in user_handles if h]
     
-    if is_admin or (is_feedback_doc and not inv.assigned_approver) or (is_rejection_or_cancellation and is_admin):
+    is_stage_1_uploader = curr_stage_num == 1 and (u_role in uploader_aliases or any(x in u_role for x in ['uplod', 'upload', 'account']))
+    if is_admin or (is_feedback_doc and not inv.assigned_approver) or (is_rejection_or_cancellation and is_admin) or is_stage_1_uploader:
         is_authorized = True
     else:
         is_authorized = is_explicitly_assigned or is_user_in_approver_pool(user, inv.assigned_approver, db=db, ignore_admin_bypass=True)
@@ -2329,167 +2336,178 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
 @router.post('/api/workflows/approve')
 @router.post('/api/workflow/approve')
 def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
-    client_ip = extract_client_request_ip(req)
-    doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
-    if not doc_id:
-        raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
-    inv = find_invoice_by_identifier(db, doc_id)
-    expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
-    if expected_ver is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing mandatory 'expected_version' for concurrency control."
-        )
-    expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
-    clean_stage_num = None
-    if expected_stage is not None:
-        try:
-            stage_match = re.search(r'\d+', str(expected_stage))
-            clean_stage_num = int(stage_match.group()) if stage_match else None
-        except Exception:
-            clean_stage_num = None
-    verified_items = payload.get('verifiedItems') or payload.get('checked_items') or payload.get('verified_items')
-    check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=clean_stage_num, verified_items=verified_items)
-    
-    approver_name = payload.get('approver') or payload.get('user') or payload.get('username')
-    if not approver_name or approver_name.lower() in ['approver', 'reviewer', 'admin']:
-        if user:
-            approver_name = f'{user.employee_name or user.name} ({user.role.upper()})'
-        elif payload.get('username'):
-            approver_name = payload.get('username')
-        else:
-            approver_name = 'System Administrator (ADMIN)'
-    remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Compliance items verified and signed off.'
-    stage_name = f'Stage {inv.current_stage or 1}'
-    prev_stage_num = inv.current_stage or 1
-    current_version = inv.version or 1
-    if expected_ver != current_version:
-        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
-
-    next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
-    next_assigned_val = inv.assigned_approver
-    next_checklist_val = inv.checklist_state
-
-    next_step = None
-    if inv.workflow_profile_id:
-        next_step = db.query(WorkflowStepDefinition).filter(
-            (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
-            (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
-            WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
-        ).first()
-
-    if next_step:
-        if not next_step.approver_target or not str(next_step.approver_target).strip():
+    try:
+        client_ip = extract_client_request_ip(req)
+        doc_id = payload.get('invoiceId') or payload.get('invoice_id') or payload.get('document_id') or payload.get('id')
+        if not doc_id:
+            raise HTTPException(status_code=400, detail='Missing invoiceId in approval payload')
+        inv = find_invoice_by_identifier(db, doc_id)
+        if not inv:
+            raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+        expected_ver = payload.get('expected_version') if 'expected_version' in payload else payload.get('expectedVersion')
+        if expected_ver is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Workflow configuration error: Step {next_step.stage_number} ('{next_step.step_name}') has no valid approver target."
+                detail="Missing mandatory 'expected_version' for concurrency control."
             )
-        next_stage_val = prev_stage_num + 1
-        targets = [next_step.approver_target.strip()]
-        if next_step.delegate_approver and next_step.delegate_approver.strip():
-            targets.append(next_step.delegate_approver.strip())
-        next_assigned_val = ', '.join(targets)
-        next_step_name = next_step.step_name
-        next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
-        existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
-        if not existing_next_items:
-            checklist_items = resolve_checklist_items(db, inv, next_step_name)
-            for item_text in checklist_items:
-                db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False, is_mandatory=True))
-            next_checklist_val = json.dumps({item_text: False for item_text in checklist_items})
+        expected_stage = payload.get('expected_stage') or payload.get('expectedStage') or payload.get('stage')
+        clean_stage_num = None
+        if expected_stage is not None:
+            try:
+                stage_match = re.search(r'\d+', str(expected_stage))
+                clean_stage_num = int(stage_match.group()) if stage_match else None
+            except Exception:
+                clean_stage_num = None
+        verified_items = payload.get('verifiedItems') or payload.get('checked_items') or payload.get('verified_items')
+        check_approval_authorization(inv, user, db=db, require_compliance=True, expected_stage=clean_stage_num, verified_items=verified_items)
+        
+        approver_name = payload.get('approver') or payload.get('user') or payload.get('username')
+        if not approver_name or approver_name.lower() in ['approver', 'reviewer', 'admin']:
+            if user:
+                approver_name = f'{user.employee_name or user.name} ({user.role.upper()})'
+            elif payload.get('username'):
+                approver_name = payload.get('username')
+            else:
+                approver_name = 'System Administrator (ADMIN)'
+        remarks = payload.get('comments') or payload.get('comment') or payload.get('remarks') or 'Compliance items verified and signed off.'
+        stage_name = f'Stage {inv.current_stage or 1}'
+        prev_stage_num = inv.current_stage or 1
+        current_version = inv.version or 1
+        if expected_ver != current_version:
+            raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+
+        next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
+        next_assigned_val = inv.assigned_approver
+        next_checklist_val = inv.checklist_state
+
+        next_step = None
+        if inv.workflow_profile_id:
+            next_step = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
+            ).first()
+
+        if next_step:
+            if not next_step.approver_target or not str(next_step.approver_target).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Workflow configuration error: Step {next_step.stage_number} ('{next_step.step_name}') has no valid approver target."
+                )
+            next_stage_val = prev_stage_num + 1
+            targets = [next_step.approver_target.strip()]
+            if next_step.delegate_approver and next_step.delegate_approver.strip():
+                targets.append(next_step.delegate_approver.strip())
+            next_assigned_val = ', '.join(targets)
+            next_step_name = next_step.step_name
+            next_assigned_info = f'Advanced to Stage {next_stage_val} ({next_step.step_name}). Next Approver Assigned: {next_assigned_val}.'
+            existing_next_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == next_step_name).all()
+            if not existing_next_items:
+                checklist_items = resolve_checklist_items(db, inv, next_step_name)
+                for item_text in checklist_items:
+                    db.add(InvoiceChecklistState(invoice_id=inv.id, stage_name=next_step_name, item_text=item_text, is_checked=False, is_mandatory=True))
+                next_checklist_val = json.dumps({item_text: False for item_text in checklist_items})
+            else:
+                for item in existing_next_items:
+                    item.is_checked = False
+                    item.checked_by = None
+                    item.checked_at = None
+                next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
+            next_status_val = f'In Progress (Stage {next_stage_val})'
         else:
-            for item in existing_next_items:
-                item.is_checked = False
-                item.checked_by = None
-                item.checked_at = None
-            next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
-        next_status_val = f'In Progress (Stage {next_stage_val})'
-    else:
-        next_status_val = 'Approved'
-        next_stage_val = prev_stage_num
+            next_status_val = 'Approved'
+            next_stage_val = prev_stage_num
 
-    rows_affected = db.query(Invoice).filter(
-        Invoice.id == inv.id,
-        Invoice.version == current_version,
-        Invoice.current_stage == prev_stage_num
-    ).update({
-        Invoice.current_stage: next_stage_val,
-        Invoice.status: next_status_val,
-        Invoice.assigned_approver: next_assigned_val,
-        Invoice.version: current_version + 1,
-        Invoice.checklist_state: next_checklist_val,
-        Invoice.updated_at: datetime.datetime.utcnow()
-    }, synchronize_session=False)
+        rows_affected = db.query(Invoice).filter(
+            Invoice.id == inv.id,
+            Invoice.version == current_version,
+            or_(Invoice.current_stage == prev_stage_num, Invoice.current_stage.is_(None))
+        ).update({
+            Invoice.current_stage: next_stage_val,
+            Invoice.status: next_status_val,
+            Invoice.assigned_approver: next_assigned_val,
+            Invoice.version: current_version + 1,
+            Invoice.checklist_state: next_checklist_val,
+            Invoice.updated_at: datetime.datetime.utcnow()
+        }, synchronize_session=False)
 
-    if rows_affected == 0:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
+        if rows_affected == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
 
-    inv.current_stage = next_stage_val
-    inv.status = next_status_val
-    inv.assigned_approver = next_assigned_val
-    inv.version = current_version + 1
-    inv.checklist_state = next_checklist_val
+        inv.current_stage = next_stage_val
+        inv.status = next_status_val
+        inv.assigned_approver = next_assigned_val
+        inv.version = current_version + 1
+        inv.checklist_state = next_checklist_val
 
-    # Release review lock
-    try:
-        from app.services.lock_service import lock_manager
-        lock_manager.release_lock(doc_id=str(inv.id))
+        # Release review lock
+        try:
+            from app.services.lock_service import lock_manager
+            lock_manager.release_lock(doc_id=str(inv.id))
+        except Exception as exc:
+            logger.debug('Lock release on approval failed: %s', exc)
+
+        next_step_title = next_step.step_name if next_step else f'Stage {next_stage_val}'
+        if inv.status == 'Approved':
+            complete_document_lifecycle(
+                db=db,
+                inv=inv,
+                approver_name=approver_name,
+                remarks=remarks,
+                prev_stage_num=prev_stage_num,
+                stage_name=stage_name,
+                next_assigned_info=next_assigned_info,
+                approver_user=user,
+                client_ip=client_ip
+            )
+        else:
+            dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
+            record_approval_assignment_transition(
+                db=db,
+                inv=inv,
+                completed_stage_num=prev_stage_num,
+                action="APPROVED",
+                approver_handle=approver_name,
+                remarks=remarks,
+                next_stage_num=next_stage_val,
+                next_stage_name=next_step.step_name if next_step else None,
+                next_approver_handle=next_assigned_val
+            )
+            record_document_audit_event(
+                db=db,
+                inv=inv,
+                action=f'Approved ({stage_name})',
+                stage=stage_name,
+                remarks=remarks,
+                user=user,
+                client_ip=client_ip,
+                previous_status=inv.status,
+                new_status=next_status_val,
+                notes_extra=next_assigned_info
+            )
+            db.commit()
+            db.refresh(inv)
+            safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
+            safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        return {
+            'success': True,
+            'status': inv.status,
+            'current_stage': inv.current_stage,
+            'invoice': inv,
+            'approved_by': approver_name,
+            'next_approver': next_assigned_val if inv.status != 'Approved' else None,
+            'next_stage_name': next_step_title if inv.status != 'Approved' else None,
+            'is_final_approval': inv.status == 'Approved'
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.debug('Lock release on approval failed: %s', exc)
-
-    next_step_title = next_step.step_name if next_step else f'Stage {next_stage_val}'
-    if inv.status == 'Approved':
-        complete_document_lifecycle(
-            db=db,
-            inv=inv,
-            approver_name=approver_name,
-            remarks=remarks,
-            prev_stage_num=prev_stage_num,
-            stage_name=stage_name,
-            next_assigned_info=next_assigned_info,
-            approver_user=user,
-            client_ip=client_ip
+        logger.exception("Workflow approval payload execution failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Approval execution error: {str(exc)}"
         )
-    else:
-        dispatch_approval_inapp_notifications(db=db, inv=inv, approver_name=approver_name, prev_stage=prev_stage_num, new_stage=inv.current_stage, next_approver_target=inv.assigned_approver, is_completed=False)
-        record_approval_assignment_transition(
-            db=db,
-            inv=inv,
-            completed_stage_num=prev_stage_num,
-            action="APPROVED",
-            approver_handle=approver_name,
-            remarks=remarks,
-            next_stage_num=next_stage_val,
-            next_stage_name=next_step.step_name if next_step else None,
-            next_approver_handle=next_assigned_val
-        )
-        record_document_audit_event(
-            db=db,
-            inv=inv,
-            action=f'Approved ({stage_name})',
-            stage=stage_name,
-            remarks=remarks,
-            user=user,
-            client_ip=client_ip,
-            previous_status=inv.status,
-            new_status=next_status_val,
-            notes_extra=next_assigned_info
-        )
-        db.commit()
-        db.refresh(inv)
-        safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
-        safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
-    return {
-        'success': True,
-        'status': inv.status,
-        'current_stage': inv.current_stage,
-        'invoice': inv,
-        'approved_by': approver_name,
-        'next_approver': next_assigned_val if inv.status != 'Approved' else None,
-        'next_stage_name': next_step_title if inv.status != 'Approved' else None,
-        'is_final_approval': inv.status == 'Approved'
-    }
 
 def extract_action_body(req: Request, action: Optional[Any] = None, payload: Optional[dict] = None) -> dict:
     data = {}
@@ -5252,59 +5270,87 @@ def get_erp_po_details(
     Enforces required active user authentication and division/role-based RBAC authorization.
     Prevents unauthorized disclosure of vendor details, PO numbers, and financial amounts.
     """
-    clean_po = (po_number or "").strip()
-    if not clean_po:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Purchase order number is required"
+    try:
+        clean_po = (po_number or "").strip()
+        if not clean_po:
+            return {
+                'po_number': '',
+                'vendor_name': 'N/A',
+                'amount': 0.0,
+                'status': 'N/A',
+                'items': []
+            }
+
+        inv = db.query(Invoice).filter(Invoice.po_number == clean_po, Invoice.is_deleted == False).first()
+        if not inv:
+            inv = db.query(Invoice).filter(Invoice.po_number == clean_po).first()
+
+        if not inv:
+            return {
+                'po_number': clean_po,
+                'vendor_name': 'N/A',
+                'amount': 0.0,
+                'status': 'N/A',
+                'items': []
+            }
+
+        # Authorization Check
+        u_role = (getattr(current_user, 'role', '') or "").strip().lower()
+        is_admin = (
+            u_role in {"admin", "administrator", "system_admin", "superadmin"}
+            or check_permission(current_user, "role:manage", db)
+            or check_permission(current_user, "admin:rbac", db)
+        )
+        uploader_roles = {
+            "account_uploader", "account_uploder", "accounts_uploder",
+            "doc_uploder", "doc_uploader", "uploader", "accounts", "account"
+        }
+        is_uploader = bool(
+            u_role in uploader_roles
+            or any(x in u_role for x in ['uplod', 'upload', 'account', 'approver', 'manager'])
+            or (getattr(inv, 'user_id', None) is not None and inv.user_id == current_user.id)
+            or (current_user.employee_id and inv.employee_id and inv.employee_id.strip().lower() == current_user.employee_id.strip().lower())
         )
 
-    inv = db.query(Invoice).filter(Invoice.po_number == clean_po, Invoice.is_deleted == False).first()
-    if not inv:
-        inv = db.query(Invoice).filter(Invoice.po_number == clean_po).first()
-
-    if not inv:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Purchase order '{clean_po}' not found"
-        )
-
-    # Authorization Check
-    u_role = (current_user.role or "").strip().lower()
-    is_admin = (
-        u_role in {"admin", "administrator", "system_admin", "superadmin"}
-        or check_permission(current_user, "role:manage", db)
-        or check_permission(current_user, "admin:rbac", db)
-    )
-
-    if not is_admin and not is_uploader:
-        # Check document-level access (division boundaries, approver pool, department)
-        has_access = (
-            authorize_document_access(current_user, inv)
-            or check_permission(current_user, "document:read", db)
-            or check_permission(current_user, "doc:work_tracker:view", db)
-        )
-        
-        # In addition, check division boundary if user has division restrictions
-        user_divs = get_user_approval_divisions(current_user)
-        doc_div = (inv.division or "").strip().upper()
-        if doc_div and user_divs and not any(d in {"HQ", "GLOBAL", "ALL"} for d in user_divs):
-            if doc_div not in user_divs:
-                has_access = False
-
-        if not has_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access Denied: You do not have permission to view this purchase order."
+        if not is_admin and not is_uploader:
+            # Check document-level access (division boundaries, approver pool, department)
+            has_access = (
+                authorize_document_access(current_user, inv)
+                or check_permission(current_user, "document:read", db)
+                or check_permission(current_user, "doc:work_tracker:view", db)
             )
+            
+            # In addition, check division boundary if user has division restrictions
+            user_divs = get_user_approval_divisions(current_user)
+            doc_div = (inv.division or "").strip().upper()
+            if doc_div and doc_div not in {"HQ", "GLOBAL", "ALL"} and user_divs and not any(d in {"HQ", "GLOBAL", "ALL"} for d in user_divs):
+                if doc_div not in user_divs:
+                    has_access = False
 
-    return {
-        'po_number': clean_po,
-        'vendor_name': inv.vendor_name,
-        'amount': float(inv.amount) if inv.amount is not None else 0.0,
-        'status': inv.status or 'Approved',
-        'items': []
-    }
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access Denied: You do not have permission to view this purchase order."
+                )
+
+        return {
+            'po_number': clean_po,
+            'vendor_name': inv.vendor_name or 'N/A',
+            'amount': float(inv.amount) if inv.amount is not None else 0.0,
+            'status': inv.status or 'Approved',
+            'items': []
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Error fetching ERP PO details for %s: %s", po_number, exc)
+        return {
+            'po_number': po_number,
+            'vendor_name': 'N/A',
+            'amount': 0.0,
+            'status': 'N/A',
+            'items': []
+        }
 
 def split_checklist_items(text: str) -> List[str]:
     """Splits multi-line or delimiter-separated rule text into individual checklist items."""

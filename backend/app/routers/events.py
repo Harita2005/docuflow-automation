@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db, SessionLocal
 from app.database.models import User
 from app.auth import get_current_active_user, decode_token
-from app.services.rbac_service import authorize_document_access
+from app.services.rbac_service import authorize_document_access, get_user_approval_divisions
 from app.routers.documents import find_invoice_by_identifier, is_user_in_approver_pool
 from app.services.lock_service import lock_manager
 from jwt.exceptions import PyJWTError as JWTError
@@ -144,15 +144,36 @@ def _verify_document_access(user: User, doc_id: str, db: Session):
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
     if _is_admin_user(user):
         return inv
-    user_div = (getattr(user, 'division', '') or '').strip().upper()
+    user_approval_divs = get_user_approval_divisions(user)
     doc_div = (getattr(inv, 'division', '') or '').strip().upper()
-    if user_div and doc_div and user_div not in {"HQ", "GLOBAL", "ALL"} and doc_div != user_div:
+    if (
+        doc_div
+        and doc_div not in {"HQ", "GLOBAL", "ALL"}
+        and user_approval_divs
+        and not any(d in {"HQ", "GLOBAL", "ALL"} for d in user_approval_divs)
+        and doc_div not in user_approval_divs
+    ):
         raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
-    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
+    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver, db=db):
         u_role = (getattr(user, 'role', '') or "").strip().lower()
         is_uploader = any(x in u_role for x in ['uplod', 'upload', 'account', 'approver', 'manager'])
         is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.workflow_profile_id
-        if not (is_uploader and is_unrouted):
+        curr_stage = 1
+        try:
+            curr_stage = int(getattr(inv, 'current_stage', 1) or 1)
+        except (ValueError, TypeError):
+            curr_stage = 1
+        is_attachment_stage = curr_stage == 1 or any(x in (inv.status or '').lower() for x in ['attachment', 'initiated', 'unrouted', 'verification', 'pending'])
+        is_creator = False
+        try:
+            if getattr(inv, 'user_id', None) is not None and inv.user_id == user.id:
+                is_creator = True
+            if user.employee_id and inv.employee_id and inv.employee_id.strip().lower() == user.employee_id.strip().lower():
+                is_creator = True
+        except Exception:
+            is_creator = False
+
+        if not (is_creator or (is_uploader and (is_unrouted or is_attachment_stage))):
             raise HTTPException(status_code=403, detail="Access Denied: You are not authorized to access this document")
     return inv
 

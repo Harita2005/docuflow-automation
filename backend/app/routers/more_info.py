@@ -1152,11 +1152,19 @@ def get_document_more_info_config(
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
 
     is_admin = is_user_admin_or_privileged(current_user, db)
-    if not is_admin and not authorize_document_access(current_user, doc):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access Denied: You do not have permission to view this document configuration."
+    u_role = (getattr(current_user, 'role', '') or '').strip().lower()
+    is_uploader = any(x in u_role for x in ['uplod', 'upload', 'account', 'approver', 'manager'])
+    if not is_admin and not is_uploader and not authorize_document_access(current_user, doc):
+        has_perm = (
+            check_permission(current_user, "document:read", db)
+            or check_permission(current_user, "doc:work_tracker:view", db)
+            or check_permission(current_user, "doc:detail:view", db)
         )
+        if not has_perm:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: You do not have permission to view this document configuration."
+            )
 
     try:
         doc_type = normalize_doc_type(doc.document_type)

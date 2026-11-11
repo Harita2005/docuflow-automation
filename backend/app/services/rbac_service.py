@@ -391,6 +391,7 @@ def authorize_document_access(
 
     if (
         doc_div
+        and doc_div not in {"HQ", "GLOBAL", "ALL"}
         and user_approval_divs
         and not any(d in {"HQ", "GLOBAL", "ALL"} for d in user_approval_divs)
         and doc_div not in user_approval_divs
@@ -472,7 +473,11 @@ def authorize_document_access(
     # -----------------------------------------------------------------------
     # Uploader / Accounts Roles Access
     # -----------------------------------------------------------------------
-    if u_role in UPLOADER_ROLES:
+    is_uploader = (
+        u_role in UPLOADER_ROLES
+        or any(x in u_role for x in ['uplod', 'upload', 'account', 'approver', 'manager'])
+    )
+    if is_uploader:
         is_unrouted = (
             not doc.workflow_profile_id
             or str(doc.workflow_profile_id).strip() in ['', 'UNROUTED', 'NONE', 'None']
@@ -480,8 +485,13 @@ def authorize_document_access(
             or 'no rule matched' in (doc.status or '').lower()
             or 'unassigned' in (doc.assigned_approver or '').lower()
         )
-        curr_stg = getattr(doc, 'current_stage', 1) or 1
-        if is_unrouted or curr_stg == 1:
+        curr_stg = 1
+        try:
+            curr_stg = int(getattr(doc, 'current_stage', 1) or 1)
+        except (ValueError, TypeError):
+            curr_stg = 1
+        is_attachment_stage = curr_stg == 1 or any(x in (doc.status or '').lower() for x in ['attachment', 'initiated', 'verification', 'pending'])
+        if is_unrouted or is_attachment_stage or curr_stg == 1:
             return True
 
     # -----------------------------------------------------------------------
