@@ -13,7 +13,7 @@ import socket
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Tuple
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, Request, status, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, and_, func, extract
@@ -183,6 +183,86 @@ def is_user_admin(user: Optional[User], db: Optional[Session] = None) -> bool:
         except Exception:
             pass
     return False
+
+def is_doc_feedback_or_complaint(inv: Any) -> bool:
+    """Accurately detects whether a document is a Customer Feedback or Complaint document across all attributes."""
+    if not inv:
+        return False
+    dt = (getattr(inv, 'document_type', None) or '').upper()
+    cat = (getattr(inv, 'category', None) or '').upper()
+    wf = (getattr(inv, 'workflow_profile_id', None) or '').upper()
+    doc_id = str(getattr(inv, 'id', '') or '').upper()
+    doc_num = str(getattr(inv, 'document_number', '') or getattr(inv, 'invoice_number', '') or '').upper()
+    return (
+        is_feedback_or_complaint(dt) or
+        is_feedback_or_complaint(cat) or
+        'FEEDBACK' in dt or 'COMPLAINT' in dt or
+        'FEEDBACK' in cat or 'COMPLAINT' in cat or
+        'FEEDBACK' in wf or 'COMPLAINT' in wf or
+        doc_id.startswith('CMP') or doc_id.startswith('CF') or
+        doc_num.startswith('CMP') or doc_num.startswith('CF') or
+        bool(getattr(inv, 'type_of_complaint', None)) or
+        bool(getattr(inv, 'subtype_of_complaint', None))
+    )
+
+def resolve_workflow_steps_for_document(db: Session, inv: Invoice) -> Tuple[Optional[str], List[WorkflowStepDefinition]]:
+    """
+    Resolves the canonical workflow profile name and ordered step definitions for a document.
+    Handles exact match, case-insensitive match, and customer feedback alias resolution ('Customer_feedback' -> 'Feedback').
+    """
+    wf_name = (getattr(inv, 'workflow_profile_id', None) or '').strip()
+    is_feedback = is_doc_feedback_or_complaint(inv)
+
+    steps: List[WorkflowStepDefinition] = []
+    if wf_name and wf_name.lower() not in ['', 'none', 'unrouted']:
+        steps = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == wf_name) |
+            (WorkflowStepDefinition.profile_name.ilike(wf_name))
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+
+    if not steps and is_feedback:
+        # Match feedback workflow profile (e.g. 'Feedback')
+        steps = db.query(WorkflowStepDefinition).filter(
+            (WorkflowStepDefinition.profile_name == 'Feedback') |
+            (WorkflowStepDefinition.profile_name.ilike('Feedback')) |
+            (WorkflowStepDefinition.profile_name.ilike('%feedback%'))
+        ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+        if steps:
+            wf_name = steps[0].profile_name
+
+    if not steps and wf_name:
+        prof = db.query(WorkflowProfile).filter(
+            (WorkflowProfile.profile_name == wf_name) |
+            (WorkflowProfile.profile_name.ilike(wf_name)) |
+            (WorkflowProfile.workflow_code.ilike(wf_name))
+        ).first()
+        if prof:
+            steps = db.query(WorkflowStepDefinition).filter(
+                (WorkflowStepDefinition.profile_name == prof.profile_name) |
+                (WorkflowStepDefinition.profile_name.ilike(prof.profile_name))
+            ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+            if steps:
+                wf_name = prof.profile_name
+
+    if not steps and not is_feedback:
+        try:
+            matched_wf = evaluate_business_rules(db, {
+                'division': getattr(inv, 'division', None),
+                'category': getattr(inv, 'category', None),
+                'amount': getattr(inv, 'amount', None),
+                'document_type': getattr(inv, 'document_type', None)
+            })
+            if matched_wf:
+                steps = db.query(WorkflowStepDefinition).filter(
+                    (WorkflowStepDefinition.profile_name == matched_wf) |
+                    (WorkflowStepDefinition.profile_name.ilike(matched_wf))
+                ).order_by(WorkflowStepDefinition.stage_number.asc()).all()
+                if steps:
+                    wf_name = matched_wf
+        except Exception:
+            pass
+
+    return (wf_name if steps else (inv.workflow_profile_id or None), steps)
 
 
 from app.services.document_query_service import (
@@ -973,6 +1053,12 @@ def get_all_invoices(
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
+            is_cancelled = inv.status in ['Cancelled', 'Failed'] or 'cancel' in (inv.status or '').lower() or 'void' in (inv.status or '').lower()
+            if is_cancelled:
+                # Cancelled documents must only be visible to the user who cancelled/created it and the admin alone!
+                if user_is_admin or has_rejected_this_doc or is_creator:
+                    filtered_invoices.append(inv)
+                continue
             if has_approved_this_doc or has_rejected_this_doc or is_creator:
                 filtered_invoices.append(inv)
                 continue
@@ -1390,11 +1476,16 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
+            is_cancelled = inv.status in ['Cancelled', 'Failed'] or 'cancel' in (inv.status or '').lower() or 'void' in (inv.status or '').lower()
+            if is_cancelled:
+                # Cancelled document is only visible to the user who cancelled/created it and the admin alone!
+                if not (is_admin or has_rej or is_creator):
+                    raise HTTPException(status_code=403, detail=f"Access Denied: Document '{invoice_id}' was cancelled and is only accessible by the initiator and administrator.")
             is_approved = inv.status in ['Approved', 'Settled', 'Paid']
             if is_approved:
                 if not has_appr and not is_creator and not is_feedback_doc:
                     raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view approved document '{invoice_id}'. Only users who personally approved this document and administrators may view it.")
-            elif not has_appr and not has_rej and not is_creator and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
+            elif not is_cancelled and not has_appr and not has_rej and not is_creator and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
                 raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
         else:
             # Active document: allowed if current approver, creator/uploader, prior approver who approved, peer from completed prior stage, or uploader role
@@ -2455,12 +2546,23 @@ def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(ge
         next_checklist_val = inv.checklist_state
 
         next_step = None
-        if inv.workflow_profile_id:
+        wf_name, steps = resolve_workflow_steps_for_document(db, inv)
+        if wf_name and wf_name != inv.workflow_profile_id:
+            inv.workflow_profile_id = wf_name
+
+        total_stages = len(steps) if steps else (inv.total_stages or 1)
+        inv.total_stages = total_stages
+
+        if steps:
+            next_step = next((s for s in steps if s.stage_number == (prev_stage_num + 1)), None)
+        elif inv.workflow_profile_id:
             next_step = db.query(WorkflowStepDefinition).filter(
                 (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
                 (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
                 WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
             ).first()
+
+        is_last_step = (next_step is None) and (prev_stage_num >= total_stages)
 
         if next_step:
             if not next_step.approver_target or not str(next_step.approver_target).strip():
@@ -2488,9 +2590,12 @@ def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(ge
                     item.checked_at = None
                 next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
             next_status_val = f'In Progress (Stage {next_stage_val})'
-        else:
+        elif is_last_step:
             next_status_val = 'Approved'
             next_stage_val = prev_stage_num
+        else:
+            next_stage_val = prev_stage_num + 1
+            next_status_val = f'In Progress (Stage {next_stage_val})'
 
         rows_affected = db.query(Invoice).filter(
             Invoice.id == inv.id,
@@ -2634,12 +2739,23 @@ def approve_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceA
     next_checklist_val = inv.checklist_state
 
     next_step = None
-    if inv.workflow_profile_id:
+    wf_name, steps = resolve_workflow_steps_for_document(db, inv)
+    if wf_name and wf_name != inv.workflow_profile_id:
+        inv.workflow_profile_id = wf_name
+
+    total_stages = len(steps) if steps else (inv.total_stages or 1)
+    inv.total_stages = total_stages
+
+    if steps:
+        next_step = next((s for s in steps if s.stage_number == (prev_stage_num + 1)), None)
+    elif inv.workflow_profile_id:
         next_step = db.query(WorkflowStepDefinition).filter(
             (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
             (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
             WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
         ).first()
+
+    is_last_step = (next_step is None) and (prev_stage_num >= total_stages)
 
     if next_step:
         if not next_step.approver_target or not str(next_step.approver_target).strip():
@@ -2667,9 +2783,12 @@ def approve_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceA
                 item.checked_at = None
             next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
         next_status_val = f'In Progress (Stage {next_stage_val})'
-    else:
+    elif is_last_step:
         next_status_val = 'Approved'
         next_stage_val = prev_stage_num
+    else:
+        next_stage_val = prev_stage_num + 1
+        next_status_val = f'In Progress (Stage {next_stage_val})'
 
     rows_affected = db.query(Invoice).filter(
         Invoice.id == inv.id,
@@ -2785,12 +2904,23 @@ def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Sessio
         next_assigned_val = inv.assigned_approver
         next_checklist_val = inv.checklist_state
         next_step = None
-        if inv.workflow_profile_id:
+        wf_name, steps = resolve_workflow_steps_for_document(db, inv)
+        if wf_name and wf_name != inv.workflow_profile_id:
+            inv.workflow_profile_id = wf_name
+
+        total_stages = len(steps) if steps else (inv.total_stages or 1)
+        inv.total_stages = total_stages
+
+        if steps:
+            next_step = next((s for s in steps if s.stage_number == (prev_stage_num + 1)), None)
+        elif inv.workflow_profile_id:
             next_step = db.query(WorkflowStepDefinition).filter(
                 (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
                 (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
                 WorkflowStepDefinition.stage_number == (prev_stage_num + 1)
             ).first()
+
+        is_last_step = (next_step is None) and (prev_stage_num >= total_stages)
 
         if next_step:
             if not next_step.approver_target or not str(next_step.approver_target).strip():
@@ -2818,9 +2948,12 @@ def invoice_step_action(req: Request, invoice_id: str, payload: dict, db: Sessio
                     item.checked_at = None
                 next_checklist_val = json.dumps({item.item_text: False for item in existing_next_items})
             next_status_val = f'In Progress (Stage {next_stage_val})'
-        else:
+        elif is_last_step:
             next_status_val = 'Approved'
             next_stage_val = prev_stage_num
+        else:
+            next_stage_val = prev_stage_num + 1
+            next_status_val = f'In Progress (Stage {next_stage_val})'
 
         rows_affected = db.query(Invoice).filter(
             Invoice.id == inv.id,
@@ -4724,6 +4857,7 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
 
     invoices = [i for i in all_invoices if not is_fb_doc(i)]
     approved_invoice_ids = set()
+    rejected_invoice_ids = set()
     if current_user:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
         user_names = [name for name in user_names if name]
@@ -4731,6 +4865,11 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         if or_filters:
             audit_query = db.query(AuditLog.invoice_id).filter(AuditLog.action.ilike('%approve%'), or_(*or_filters))
             approved_invoice_ids = {row[0] for row in audit_query.all()}
+            audit_rej_query = db.query(AuditLog.invoice_id).filter(
+                or_(AuditLog.action.ilike('%reject%'), AuditLog.action.ilike('%cancel%'), AuditLog.action.ilike('%return%')),
+                or_(*or_filters)
+            )
+            rejected_invoice_ids = {row[0] for row in audit_rej_query.all()}
     user_is_admin = is_user_admin(current_user, db)
     if current_user and not user_is_admin:
         u_role_clean = (current_user.role or '').strip().lower()
@@ -4740,11 +4879,15 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         scoped_invoices = []
         approved_count = 0
         pending_count = 0
+        progress_count = 0
         hold_count = 0
         rejected_count = 0
         total_spend = 0.0
         for inv in invoices:
             has_approved = inv.id in approved_invoice_ids
+            has_rejected = (inv.id in rejected_invoice_ids) or (str(inv.id) in rejected_invoice_ids)
+            inv_creator = (getattr(inv, 'contact_person', None) or getattr(inv, 'employee_id', None) or getattr(inv, 'employee_name', None) or '').strip().lower()
+            is_creator = bool(inv_creator and inv_creator in user_handles)
             is_assigned = False
             if inv.assigned_approver:
                 approvers = [s.strip().lower() for s in inv.assigned_approver.split(',') if s.strip()]
@@ -4753,19 +4896,26 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
                         is_assigned = True
                         break
             st_lower = (inv.status or '').lower()
+            is_cancelled = any(k in st_lower for k in ['cancel', 'void', 'fail'])
+            # Cancelled documents must only be visible to the user who cancelled/created it and the admin alone!
+            if is_cancelled and not (has_rejected or is_creator):
+                continue
+
             is_stage1_or_unrouted = ('attachment' in st_lower or 'unrouted' in st_lower or 'unassigned' in (inv.assigned_approver or '').lower() or 'initiated' in st_lower)
             if is_uploader_role and is_stage1_or_unrouted:
                 is_assigned = True
-            if has_approved or is_assigned:
+            if has_approved or is_assigned or has_rejected or is_creator:
                 scoped_invoices.append(inv)
                 total_spend += float(inv.amount or 0.0)
-                st_lower = (inv.status or '').lower()
-                if has_approved and any(k in st_lower for k in ['settled', 'approved', 'paid', 'ready for payment']):
+                if has_approved and any(k in st_lower for k in ['settled', 'approved', 'paid', 'ready for payment']) and not ('stage' in st_lower or 'progress' in st_lower):
                     approved_count += 1
                 elif any(k in st_lower for k in ['hold', 'pause', 'wait', 'clarif']):
                     hold_count += 1
                 elif any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned']):
-                    rejected_count += 1
+                    if has_rejected or is_creator:
+                        rejected_count += 1
+                elif any(k in st_lower for k in ['progress', 'stage', 'review', 'verification']) and not ('attachment' in st_lower or 'initiated' in st_lower):
+                    progress_count += 1
                 else:
                     is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled', 'Cancelled']
                     if is_active_flow:
@@ -4775,16 +4925,18 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         total_docs = len(invoices)
         hold_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['hold', 'pause', 'wait', 'clarif']))
         rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['reject', 'cancel', 'void', 'fail', 'returned']))
-        approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']))
-        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['pending', 'initiated', 'progress', 'unrouted', 'verification', 'review']))
-        if pending_count == 0 and total_docs > (approved_count + hold_count + rejected_count):
-            pending_count = total_docs - (approved_count + hold_count + rejected_count)
+        approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']) and not any(k in (i.status or '').lower() for k in ['stage', 'progress']))
+        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
+        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
+        if pending_count == 0 and total_docs > (approved_count + progress_count + hold_count + rejected_count):
+            pending_count = total_docs - (approved_count + progress_count + hold_count + rejected_count)
         total_spend = sum((float(i.amount or 0.0) for i in invoices))
 
     result = {
         'totalDocuments': total_docs,
         'pendingApprovals': pending_count,
         'pendingDocuments': pending_count,
+        'progressDocuments': progress_count,
         'holdDocuments': hold_count,
         'rejectedDocuments': rejected_count,
         'approvedDocuments': approved_count,

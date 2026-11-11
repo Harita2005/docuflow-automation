@@ -120,6 +120,29 @@ export default function CustomerFeedbackPage({
     }
   };
 
+  const roleLower = (currentUserRole || "").toLowerCase().trim();
+  const isAdmin = roleLower === "admin" || roleLower === "administrator" || roleLower === "system_admin" || roleLower === "superadmin" || roleLower.includes("admin");
+
+  const canUserSeeCancelledDoc = (doc: DbInvoice): boolean => {
+    if (isAdmin) return true;
+    if (doc.has_rejected) return true;
+    const uHandle = (currentUserUsername || "").toLowerCase().trim();
+    const eHandle = (currentUserEmail || "").toLowerCase().trim();
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+    const userHandles = [uHandle, eHandle, nHandle, empHandle].filter(Boolean);
+
+    const docCreatorTokens = [
+      String(doc.employee_id || "").toLowerCase().trim(),
+      String(doc.employee_name || "").toLowerCase().trim(),
+      String(doc.contact_person || "").toLowerCase().trim(),
+      String((doc as any).created_by || "").toLowerCase().trim(),
+      String((doc as any).uploaded_by || "").toLowerCase().trim(),
+    ].filter(Boolean);
+
+    return docCreatorTokens.some(tok => userHandles.some(h => h && (tok === h || tok.includes(h) || h.includes(tok))));
+  };
+
   // Filter only Customer Feedback documents
   const feedbackDocs = useMemo(() => {
     return documents.filter((doc) => {
@@ -135,7 +158,7 @@ export default function CustomerFeedbackPage({
       const docNumUpper = String(doc.document_number || doc.invoice_number || "").toUpperCase();
       const wfProf = String(doc.workflow_profile_id || doc.workflow_profile || "").toUpperCase();
 
-      return (
+      const isFb = (
         canonicalType === "CUSTOMER FEEDBACK" ||
         rawType.includes("FEEDBACK") ||
         rawType.includes("COMPLAINT") ||
@@ -146,8 +169,17 @@ export default function CustomerFeedbackPage({
         Boolean(doc.type_of_complaint) ||
         wfProf.includes("FEEDBACK")
       );
+      if (!isFb) return false;
+
+      // Cancelled documents must only be visible to the user who cancelled/created it and the admin alone!
+      const st = (doc.status || "").toLowerCase().trim();
+      const isCancelled = st.includes("cancel") || st.includes("void") || st.includes("fail");
+      if (isCancelled && !canUserSeeCancelledDoc(doc)) {
+        return false;
+      }
+      return true;
     });
-  }, [documents]);
+  }, [documents, isAdmin, currentUserUsername, currentUserEmail]);
 
   // Active selected document
   const activeDocument = useMemo(() => {
@@ -259,18 +291,28 @@ export default function CustomerFeedbackPage({
   // Helper to categorize document status into Pending, Progress, Hold, Rejected, Cleared
   const getFeedbackCategory = (doc: DbInvoice): "PENDING" | "PROGRESS" | "HOLD" | "REJECTED" | "CLEARED" => {
     const st = (doc.status || "").toLowerCase().trim();
-    if (st.includes("hold") || st.includes("pause") || st.includes("wait")) {
+    if (st.includes("hold") || st.includes("pause") || st.includes("wait") || st.includes("clarif")) {
       return "HOLD";
     }
-    if (st.includes("reject") || st.includes("declin") || st.includes("cancel") || st.includes("refus")) {
+    if (st.includes("reject") || st.includes("declin") || st.includes("cancel") || st.includes("refus") || st.includes("void") || st.includes("fail") || st.includes("returned")) {
       return "REJECTED";
     }
-    if (st.includes("approved") || st.includes("cleared") || st.includes("settled") || st.includes("resolved") || st.includes("completed")) {
-      return "CLEARED";
-    }
-    if (st.includes("progress") || st.includes("investigat") || st.includes("routing") || st.includes("processing") || st.includes("initiated") || st.includes("stage")) {
+    // Intermediate stage in progress (e.g. In Progress (Stage 2), Stage 2, Stage 3, First Approval when stage > 1)
+    const isStageOrProgress = (
+      st.includes("progress") ||
+      st.includes("investigat") ||
+      st.includes("routing") ||
+      st.includes("processing") ||
+      (st.includes("stage") && !st.includes("stage 1") && !st.includes("stage-1"))
+    );
+    if (isStageOrProgress && !st.includes("initiated") && !st.includes("attachment")) {
       return "PROGRESS";
     }
+    // Terminal approved/cleared
+    if (!st.includes("stage") && !st.includes("progress") && (st.includes("approved") || st.includes("cleared") || st.includes("settled") || st.includes("resolved") || st.includes("completed"))) {
+      return "CLEARED";
+    }
+    // Stage 1, attachment, initiated, or unrouted are PENDING action
     return "PENDING";
   };
 
