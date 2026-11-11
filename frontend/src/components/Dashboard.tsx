@@ -172,7 +172,6 @@ export default function Dashboard({
 
   // Strictly check if current logged-in user is the actual approver for the document's CURRENT pending stage
   const isActionRequiredForUser = (doc: any): boolean => {
-    if (doc.has_approved) return false;
     if (!isPendingStatus(doc.status)) return false;
 
     // 1. Direct current approver flag from backend (evaluated without admin bypass)
@@ -185,7 +184,12 @@ export default function Dashboard({
     const approverStr = (doc.assigned_approver || "").toLowerCase();
     const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
 
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+
     if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
+    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
 
     // 3. Stage-specific role match (only when stage is assigned specifically by role name, not universal bypass)
@@ -208,11 +212,6 @@ export default function Dashboard({
       account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
-    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
-    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
-
-    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
 
     if (rHandle && rHandle !== "admin" && rHandle !== "superadmin") {
       const activeAliases = roleAliases[rHandle] || [rHandle];
@@ -229,6 +228,7 @@ export default function Dashboard({
     if (isUnrouted && isUploader) return true;
     if (isStage1 && isUploader) return true;
 
+    if (doc.has_approved) return false;
     return false;
   };
 
@@ -240,7 +240,7 @@ export default function Dashboard({
 
   const isRejectedStatus = (st: string) => {
     const s = (st || "").toLowerCase();
-    return s.includes("reject") || s.includes("cancel") || s.includes("void") || s.includes("fail") || s.includes("returned");
+    return s.includes("cancel") || s.includes("void") || s.includes("fail") || s.includes("declined");
   };
 
   const isApprovedStatus = (st: string) => {
@@ -252,13 +252,13 @@ export default function Dashboard({
   const isPendingStatus = (st: string) => {
     const s = (st || "").toLowerCase();
     if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
-    return s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review");
+    return s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
   };
 
   const isProgressStatus = (st: string) => {
     const s = (st || "").toLowerCase();
     if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
-    return s.includes("progress") || s.includes("stage") || s.includes("review") || s.includes("verification") || s.includes("step");
+    return s.includes("progress") || s.includes("stage") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("return") || s.includes("revision");
   };
 
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)

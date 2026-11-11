@@ -294,7 +294,8 @@ export default function CustomerFeedbackPage({
     if (st.includes("hold") || st.includes("pause") || st.includes("wait") || st.includes("clarif")) {
       return "HOLD";
     }
-    if (st.includes("reject") || st.includes("declin") || st.includes("cancel") || st.includes("refus") || st.includes("void") || st.includes("fail") || st.includes("returned")) {
+    // "in rejeced we have only teh cancelled ok ha"
+    if (st.includes("cancel") || st.includes("void") || st.includes("fail") || st.includes("declin")) {
       return "REJECTED";
     }
     // Intermediate stage in progress (e.g. In Progress (Stage 2), Stage 2, Stage 3, First Approval when stage > 1)
@@ -312,7 +313,7 @@ export default function CustomerFeedbackPage({
     if (!st.includes("stage") && !st.includes("progress") && (st.includes("approved") || st.includes("cleared") || st.includes("settled") || st.includes("resolved") || st.includes("completed"))) {
       return "CLEARED";
     }
-    // Stage 1, attachment, initiated, or unrouted are PENDING action
+    // Stage 1, attachment, initiated, returned for revision, or unrouted are PENDING action
     return "PENDING";
   };
 

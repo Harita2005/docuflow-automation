@@ -1864,7 +1864,15 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
         inv.current_stage = prev_stage
         prev_step_name = f'Stage {prev_stage}'
         if inv.workflow_profile_id:
-            prev_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == prev_stage).first()
+            wf_name, steps = resolve_workflow_steps_for_document(db, inv)
+            if steps:
+                prev_step = next((s for s in steps if s.stage_number == prev_stage), None)
+            else:
+                prev_step = db.query(WorkflowStepDefinition).filter(
+                    (WorkflowStepDefinition.profile_name == inv.workflow_profile_id) |
+                    (WorkflowStepDefinition.profile_name.ilike(inv.workflow_profile_id.strip())),
+                    WorkflowStepDefinition.stage_number == prev_stage
+                ).first()
             if prev_step:
                 inv.assigned_approver = prev_step.approver_target
                 prev_step_name = prev_step.step_name
@@ -1872,10 +1880,11 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
                 inv.assigned_approver = None
         else:
             inv.assigned_approver = None
+
         if prev_stage == 1:
-            inv.status = 'Rejected / Returned (Attachment Status)'
+            inv.status = 'Initiated (Attachment Status)'
         else:
-            inv.status = f'Rejected / Returned (Stage {prev_stage} - {prev_step_name})'
+            inv.status = f'In Progress (Stage {prev_stage} - {prev_step_name})'
         existing_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == prev_step_name).all()
         if not existing_items:
             checklist_items = resolve_checklist_items(db, inv, prev_step_name)
@@ -2358,9 +2367,15 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
             AuditLog.invoice_id == inv.id,
             AuditLog.action.ilike('%approved%'),
             (AuditLog.user.ilike(f"%{user.username}%") | AuditLog.user.ilike(f"%{user_name_lower}%") | (AuditLog.user == user_id_str))
-        ).first()
+        ).order_by(AuditLog.id.desc()).first()
         if has_user_approved:
-            raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
+            has_return_after = db.query(AuditLog).filter(
+                AuditLog.invoice_id == inv.id,
+                AuditLog.id > has_user_approved.id,
+                or_(AuditLog.action.ilike('%reject%'), AuditLog.action.ilike('%return%'), AuditLog.action.ilike('%send back%'))
+            ).first()
+            if not has_return_after:
+                raise HTTPException(status_code=400, detail="You have already submitted your approval for this document.")
 
     approvers = [s.strip().lower() for s in (inv.assigned_approver or '').split(',') if s.strip()]
     u_role = (user.role or '').strip().lower()
@@ -4922,23 +4937,23 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
                     approved_count += 1
                 elif any(k in st_lower for k in ['hold', 'pause', 'wait', 'clarif']):
                     hold_count += 1
-                elif any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned']):
+                elif any(k in st_lower for k in ['cancel', 'void', 'fail']):
                     if has_rejected or is_creator:
                         rejected_count += 1
                 elif any(k in st_lower for k in ['progress', 'stage', 'review', 'verification']) and not ('attachment' in st_lower or 'initiated' in st_lower):
                     progress_count += 1
                 else:
-                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled', 'Cancelled']
+                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
                     if is_active_flow:
                         pending_count += 1
         total_docs = len(scoped_invoices)
     else:
         total_docs = len(invoices)
         hold_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['hold', 'pause', 'wait', 'clarif']))
-        rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['reject', 'cancel', 'void', 'fail', 'returned']))
+        rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['cancel', 'void', 'fail']))
         approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']) and not any(k in (i.status or '').lower() for k in ['stage', 'progress']))
-        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
-        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
+        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'cancel', 'void', 'fail', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
+        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'cancel', 'void', 'fail', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
         if pending_count == 0 and total_docs > (approved_count + progress_count + hold_count + rejected_count):
             pending_count = total_docs - (approved_count + progress_count + hold_count + rejected_count)
         total_spend = sum((float(i.amount or 0.0) for i in invoices))
