@@ -432,11 +432,29 @@ export default function DocumentUpload({
         const data = await response.json();
         const ext = data.extracted_data || {};
         setPreviewZoomLevel(100);
+
+        // Create reliable local blob URL from the client's file for instant preview
+        let previewTarget = "";
+        try {
+          previewTarget = URL.createObjectURL(file);
+        } catch {
+          previewTarget = "";
+        }
+
+        // Fallback to backend preview URL with auth token if local blob cannot be created
+        if (!previewTarget) {
+          const authToken = localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+          previewTarget = data.preview_url || "";
+          if (authToken && previewTarget && !previewTarget.includes("token=")) {
+            previewTarget += (previewTarget.includes("?") ? "&" : "?") + `token=${encodeURIComponent(authToken)}`;
+          }
+        }
+
         setStagedDoc({
           tempFileId: data.temp_file_id,
           fileName: data.file_name || file.name,
           fileSize: data.file_size || file.size,
-          previewUrl: data.preview_url,
+          previewUrl: previewTarget,
           extractedData: ext
         });
 

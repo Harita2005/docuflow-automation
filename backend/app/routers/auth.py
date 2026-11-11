@@ -184,12 +184,12 @@ async def login(
             if not device_info and body_dict.get("device_info"):
                 device_info = str(body_dict["device_info"])
     if not ident_str:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Username or employee ID required')
-    # Strict restriction: Only Employee ID or Username allowed. Email and Phone numbers are strictly forbidden.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Name, Username, or Employee ID required')
+    # Strict restriction: Only Name, Employee ID, or Username allowed. Email and Phone numbers are strictly forbidden.
     if "@" in ident_str:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with email address is not permitted. Please sign in using your Employee ID or Username."
+            detail="Login with email address is not permitted. Please sign in using your Name, Employee ID, or Username."
         )
     clean_digits = re.sub(r"[\s\-\(\)\+]", "", ident_str)
     is_phone_candidate = ident_str.startswith("+") or (
@@ -199,12 +199,17 @@ async def login(
     )
     if is_phone_candidate:
         exact_user_exists = db.query(User.id).filter(
-            or_(User.employee_id == ident_str, User.username == ident_str)
+            or_(
+                User.employee_id == ident_str,
+                User.username == ident_str,
+                User.name == ident_str,
+                User.employee_name == ident_str
+            )
         ).first()
         if not exact_user_exists:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Login with phone number is not permitted. Please sign in using your Employee ID or Username."
+                detail="Login with phone number is not permitted. Please sign in using your Name, Employee ID, or Username."
             )
     # User authentication lookup
     user = (
@@ -236,6 +241,8 @@ async def login(
             User.username.ilike(ident_str)
             | User.employee_id.ilike(ident_str)
             | User.user_uid.ilike(ident_str)
+            | User.employee_name.ilike(ident_str)
+            | User.name.ilike(ident_str)
         )
         .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
         .first()
@@ -247,6 +254,8 @@ async def login(
                 User.employee_id.ilike(f'%_{ident_str}')
                 | User.employee_id.ilike(f'%{ident_str}%')
                 | User.username.ilike(f'%{ident_str}%')
+                | User.employee_name.ilike(f'%{ident_str}%')
+                | User.name.ilike(f'%{ident_str}%')
             )
             .filter(or_(User.is_deleted == False, User.is_deleted.is_(None)))
             .first()
@@ -966,7 +975,12 @@ def forgot_password(
         )
 
     user = db.query(User).filter(
-        (User.username.ilike(ident) | User.employee_id.ilike(ident)) &
+        (
+            User.username.ilike(ident)
+            | User.employee_id.ilike(ident)
+            | User.name.ilike(ident)
+            | User.employee_name.ilike(ident)
+        ) &
         (or_(User.is_deleted == False, User.is_deleted.is_(None)))
     ).first()
     raw_token = None

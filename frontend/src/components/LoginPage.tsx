@@ -420,12 +420,12 @@ export default function LoginPage({
     const identifier = employeeId.trim();
 
     if (!identifier) {
-      setOtpError("Please enter your Employee ID or Username");
+      setOtpError("Please enter your Name, Employee ID, or Username");
       return;
     }
 
     if (identifier.includes("@")) {
-      setOtpError("Login with email address is not permitted. Please enter your Employee ID or Username.");
+      setOtpError("Login with email address is not permitted. Please enter your Name, Employee ID, or Username.");
       return;
     }
 
@@ -437,7 +437,7 @@ export default function LoginPage({
         ["6", "7", "8", "9"].includes(cleanDigits.slice(-10)[0]));
 
     if (isPhoneNumber) {
-      setOtpError("Login with phone number is not permitted. Please enter your Employee ID or Username.");
+      setOtpError("Login with phone number is not permitted. Please enter your Name, Employee ID, or Username.");
       return;
     }
 
@@ -1292,10 +1292,10 @@ export default function LoginPage({
                 }}
                 className="space-y-5 pt-2"
               >
-                {/* Employee ID / Username */}
+                {/* Employee ID / Username / Name */}
                 <div className="space-y-1.5 text-left">
                   <label htmlFor="login-employee-id" className="text-xs font-semibold text-gray-800">
-                    Employee ID or Username
+                    Name, Employee ID, or Username
                   </label>
 
                   <div className="relative">
@@ -1311,7 +1311,7 @@ export default function LoginPage({
                       onChange={(e) =>
                         setEmployeeId(e.target.value)
                       }
-                      placeholder="Enter Employee ID (e.g. 16220) or Username"
+                      placeholder="Enter Name, Employee ID (e.g. 16220), or Username"
                       required
                       autoFocus
                       autoComplete="username"
