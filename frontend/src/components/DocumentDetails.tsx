@@ -1257,7 +1257,8 @@ export default function DocumentDetails({
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
 
   // For approval and cancellation, strictly only the assigned approver for this stage is authorized
-  const isAdmin = ["admin", "administrator", "system_admin", "superadmin"].includes((currentUserRole || "").toLowerCase());
+  const roleClean = (currentUserRole || "").toLowerCase().trim();
+  const isAdmin = ["admin", "administrator", "system_admin", "superadmin", "system administrator"].includes(roleClean) || roleClean.includes("admin");
 
   const isAssignedApprover = useMemo(() => {
     if (!document) return false;
@@ -1272,8 +1273,11 @@ export default function DocumentDetails({
       const approverList = assignedApprover.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       if (userHandles.some(h => approverList.includes(h))) return true;
     }
+    const isStage1 = ((document.current_stage || 1) === 1 || (document.status || "").toLowerCase().includes("attachment") || (document.status || "").toLowerCase().includes("initiated"));
+    const isUploader = roleClean.includes("uplod") || roleClean.includes("account") || roleClean.includes("manager");
+    if (isStage1 && isUploader) return true;
     return false;
-  }, [document, currentUserUsername, currentUserEmail, isAdmin]);
+  }, [document, currentUserUsername, currentUserEmail, isAdmin, roleClean]);
 
   const isCurrentApprover = isAssignedApprover || isAdmin;
   const isDocumentLocked = isTerminal || (!isCurrentApprover && !isAdmin) || (Boolean(document?.completed_by_peer) && !isAdmin);

@@ -132,6 +132,26 @@ def safe_broadcast_event(event_type: str, payload: dict):
         logger.debug('Handled exception: %s', e)
 router = APIRouter(tags=['Invoices & Documents'])
 
+def is_user_admin(user: Optional[User], db: Optional[Session] = None) -> bool:
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    u_role = (getattr(user, 'role', '') or '').strip().lower()
+    if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator']:
+        return True
+    if 'admin' in u_role:
+        return True
+    if db:
+        try:
+            from app.services.rbac_service import check_permission
+            if check_permission(user, 'role:manage', db) or check_permission(user, 'admin:rbac', db) or check_permission(user, 'admin:system', db):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 from app.services.document_query_service import (
     unpack_custom_data_into_dict,
     attach_dynamic_columns_to_document,
@@ -432,7 +452,7 @@ def get_approved_invoices(
     # 2. Strict Access Control Enforcement:
     # Admin: Can view all approved documents
     # Non-admin: Strictly only documents the user actually approved / signed off on (recorded in AuditLog as having approved).
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    is_admin = is_user_admin(current_user, db)
     if not is_admin:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
         user_names = [name.strip() for name in user_names if name and name.strip()]
@@ -637,7 +657,7 @@ def get_filter_options(
     )
     query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
 
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    is_admin = is_user_admin(current_user, db)
     if not is_admin:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
         user_names = [name.strip() for name in user_names if name and name.strip()]
@@ -778,7 +798,7 @@ def get_all_invoices(
     current_user: User = Depends(get_current_active_user),
     response: Response = None,
 ):
-    user_is_admin = bool(current_user and (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'])
+    user_is_admin = is_user_admin(current_user, db)
     is_paginated = isinstance(page, int) and isinstance(page_size, int) and page > 0 and page_size > 0
     if user_is_admin:
         if not is_paginated:
@@ -928,8 +948,9 @@ def get_all_invoices(
                 continue
         else:
             # Active workflow: check current approver, creator/uploader, flow member, or unrouted documents
-            is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower()
-            if is_curr or is_creator or has_approved_this_doc or is_member_of_flow or (is_unrouted and is_uploader_role):
+            is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
+            is_stage1 = ((getattr(inv, 'current_stage', 1) or 1) == 1 or 'attachment' in (inv.status or '').lower() or 'initiated' in (inv.status or '').lower())
+            if is_curr or is_creator or has_approved_this_doc or is_member_of_flow or (is_unrouted and is_uploader_role) or (is_stage1 and is_uploader_role):
                 filtered_invoices.append(inv)
                 continue
 
@@ -942,10 +963,11 @@ def get_all_invoices(
         
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
+        is_stage1 = ((getattr(inv, 'current_stage', 1) or 1) == 1 or 'attachment' in (inv.status or '').lower() or 'initiated' in (inv.status or '').lower())
         is_curr = False
         if is_active_flow and inv.assigned_approver and not has_appr:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
-        if is_active_flow and is_unrouted and (is_uploader_role or is_creator):
+        if is_active_flow and (is_unrouted or is_stage1) and (is_uploader_role or is_creator):
             is_curr = True
 
         # Status filter query parameter enforcement
@@ -955,7 +977,7 @@ def get_all_invoices(
                 if not (is_curr and is_active_flow):
                     continue
             elif s_req in ['in_progress', 'tracking']:
-                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or (is_unrouted and is_uploader_role)) and is_active_flow):
+                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or ((is_unrouted or is_stage1) and is_uploader_role)) and is_active_flow):
                     continue
             elif s_req == 'approved':
                 if not (inv.status in ['Approved', 'Settled', 'Paid'] and (user_is_admin or has_appr)):
@@ -1042,7 +1064,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
     else:
         user_wf_profiles = set()
 
-    user_is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    user_is_admin = is_user_admin(current_user, db)
     results = []
 
     # Batch pre-load cached workflow steps for all distinct profile IDs in this invoice batch
@@ -1086,10 +1108,12 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
         is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
         is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
 
+        is_stage1 = ((getattr(inv, 'current_stage', 1) or 1) == 1 or 'attachment' in (inv.status or '').lower() or 'initiated' in (inv.status or '').lower())
+
         is_curr = False
         if inv.assigned_approver and not has_approved_curr_stage:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
-        if is_unrouted and is_uploader_role:
+        if (is_unrouted or is_stage1) and is_uploader_role:
             is_curr = True
 
         # Division check
@@ -1102,7 +1126,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         if not user_is_admin:
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow or (is_unrouted and is_uploader_role)):
+            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow or (is_unrouted and is_uploader_role) or (is_stage1 and is_uploader_role)):
                 continue
 
         # Status filter query parameter enforcement
@@ -1269,7 +1293,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Rejected', 'Failed', 'Settled']
         if is_active_flow:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    is_admin = is_user_admin(current_user, db)
     completed_by_peer = False
     curr_stg = inv.current_stage or 1
     is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
@@ -2101,7 +2125,7 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         if db is not None and (not inv.workflow_profile_id or str(inv.workflow_profile_id).strip() in ['', 'None']):
             raise HTTPException(status_code=400, detail="Document has no workflow profile assigned.")
 
-    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    is_admin = is_user_admin(user, db)
 
     # Explicit assignment detection for current step: allows explicitly assigned approver across divisions
     user_identity_handles = {
@@ -2195,8 +2219,8 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
                         detail="Maker-Checker policy violation: The creator/submitter of a document cannot approve their own document."
                     )
 
-    # Check if this user has already approved this invoice in an earlier action (skip for feedback documents)
-    if db and user and not is_feedback_doc:
+    # Check if this user has already approved this invoice in an earlier action (skip for feedback documents and admin users)
+    if db and user and not is_feedback_doc and not is_admin:
         user_id_str = str(user.id)
         user_name_lower = (user.employee_name or user.name or user.username or '').strip().lower()
         has_user_approved = db.query(AuditLog).filter(
@@ -4555,7 +4579,7 @@ def get_document_comments(id: str, db: Session=Depends(get_db), current_user: Us
     is_admin = False
     user_names = []
     if current_user:
-        is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+        is_admin = is_user_admin(current_user, db)
         user_names = [n.lower() for n in [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email] if n]
 
     comments = []
@@ -4665,7 +4689,10 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         if or_filters:
             audit_query = db.query(AuditLog.invoice_id).filter(AuditLog.action.ilike('%approve%'), or_(*or_filters))
             approved_invoice_ids = {row[0] for row in audit_query.all()}
-    if current_user and current_user.role != 'admin':
+    user_is_admin = is_user_admin(current_user, db)
+    if current_user and not user_is_admin:
+        u_role_clean = (current_user.role or '').strip().lower()
+        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
         user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
         user_handles = [h for h in user_handles if h]
         scoped_invoices = []
@@ -4683,6 +4710,10 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
                     if handle in approvers or any((handle in app or app in handle for app in approvers)):
                         is_assigned = True
                         break
+            st_lower = (inv.status or '').lower()
+            is_stage1_or_unrouted = ('attachment' in st_lower or 'unrouted' in st_lower or 'unassigned' in (inv.assigned_approver or '').lower() or 'initiated' in st_lower)
+            if is_uploader_role and is_stage1_or_unrouted:
+                is_assigned = True
             if has_approved or is_assigned:
                 scoped_invoices.append(inv)
                 total_spend += float(inv.amount or 0.0)
@@ -4880,7 +4911,7 @@ def save_app_config(key: str, value: str, description: str=''):
         logger.debug('Handled exception: %s', e)
 
 def _require_docs_admin(user: User, db: Session):
-    is_admin = (user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(user, 'admin:rbac', db) or check_permission(user, 'admin:system', db)
+    is_admin = is_user_admin(user, db) or check_permission(user, 'admin:rbac', db) or check_permission(user, 'admin:system', db)
     if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

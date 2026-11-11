@@ -203,7 +203,7 @@ export default function Sidebar({
     (rawRole.includes("approver") || rawRole.includes("manager") || rawRole.includes("account") ? (rolePermissions?.["manager"] || rolePermissions?.["accounts_approver"] || rolePermissions?.["accounts.approver"]) : undefined) ||
     (rawRole.includes("feedback") ? (rolePermissions?.["customer_feedback_agent"] || rolePermissions?.["employee"]) : undefined);
 
-  if (rawRole === "admin" || rawRole === "administrator" || rawRole === "settings_editor") {
+  if (rawRole === "admin" || rawRole === "administrator" || rawRole === "settings_editor" || rawRole.includes("admin") || rawRole === "superadmin") {
     permissions = ["dashboard", "work-tracker", "approved-documents", "customer-feedback", "upload", "data-verification", "workflow-rules", "admin", "dapi-sync-back", "integrations", "applications", "callback-rules", "integration-logs"];
   } else if (Array.isArray(rolePermObj)) {
     permissions = [...rolePermObj];

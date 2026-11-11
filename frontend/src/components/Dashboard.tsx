@@ -154,10 +154,12 @@ export default function Dashboard({
 
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
     const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
 
     if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
     if (isUnrouted && isUploader) return true;
+    if (isStage1 && isUploader) return true;
     return false;
   };
 
@@ -214,9 +216,11 @@ export default function Dashboard({
 
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
     const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
     if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
     if (isUnrouted && isUploader) return true;
+    if (isStage1 && isUploader) return true;
 
     return false;
   };
@@ -262,13 +266,13 @@ export default function Dashboard({
   }, [baseDocs]);
 
   const roleLower = (currentUserRole || "").toLowerCase().trim();
-  const isAdmin = roleLower === "admin" || roleLower === "administrator" || roleLower === "system_admin" || roleLower === "superadmin";
+  const isAdmin = roleLower === "admin" || roleLower === "administrator" || roleLower === "system_admin" || roleLower === "superadmin" || roleLower.includes("admin");
   const effectivePendingScope = isAdmin ? pendingScope : "my";
 
   const activePendingDocs = effectivePendingScope === "all" ? allPendingDocs : myPendingDocs;
   const pendingCount = activePendingDocs.length;
 
-  const isSuperUser = currentUserRole === "admin" || currentUserRole === "manager" || currentUserRole === "finance_manager";
+  const isSuperUser = isAdmin || currentUserRole === "manager" || currentUserRole === "finance_manager";
 
   const calculatedHold = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
   const holdCount = calculatedHold;

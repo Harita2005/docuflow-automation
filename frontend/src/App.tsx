@@ -306,7 +306,7 @@ export default function App() {
     const eHandle = (currentUserEmail || "").toLowerCase().trim();
     const rHandle = (currentUserRole || "").toLowerCase().trim();
 
-    if (rHandle === "admin" || rHandle === "manager" || rHandle === "finance_manager") return true;
+    if (rHandle === "admin" || rHandle === "administrator" || rHandle === "superadmin" || rHandle.includes("admin") || rHandle === "manager" || rHandle === "finance_manager") return true;
 
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
@@ -337,9 +337,11 @@ export default function App() {
 
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
     const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
     if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
     if (isUnrouted && isUploader) return true;
+    if (isStage1 && isUploader) return true;
 
     return false;
   };
