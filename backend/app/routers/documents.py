@@ -389,6 +389,31 @@ def get_approved_invoices(
 ):
     # 1. Base approved filter (Strictly completely approved records)
     # Exclude intermediate stages, in-progress, pending, rejected, cancelled, or on-hold records
+    # --- Input sanitization (CodeQL: Uncontrolled data used in path expression / SQL) ---
+    MONTH_MAP = {
+        'january': 1, 'february': 2, 'march': 3, 'april': 4,
+        'may': 5, 'june': 6, 'july': 7, 'august': 8,
+        'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    if year is not None and str(year).strip().lower() != 'all':
+        year = str(year).strip()
+        if not re.fullmatch(r'\d{4}', year):
+            raise HTTPException(status_code=400, detail="Invalid year format. Expected YYYY.")
+    if month is not None and str(month).strip().lower() != 'all':
+        month = str(month).strip()
+        month_lower = month.lower()
+        if not ((re.fullmatch(r'\d{1,2}', month) and 1 <= int(month) <= 12) or month_lower in MONTH_MAP):
+            raise HTTPException(status_code=400, detail="Invalid month. Expected 1-12 or month name.")
+    if date is not None and str(date).strip():
+        date = re.sub(r'[^0-9\-_/]', '', str(date).strip())
+    if from_date is not None and str(from_date).strip():
+        from_date = re.sub(r'[^0-9\-_/]', '', str(from_date).strip())
+    if to_date is not None and str(to_date).strip():
+        to_date = re.sub(r'[^0-9\-_/]', '', str(to_date).strip())
+    if doc_type is not None and str(doc_type).strip().lower() != 'all':
+        doc_type = re.sub(r'[^a-zA-Z0-9 \-_\.]', '', str(doc_type)).strip()
+    # -------------------------------------------------------------------------------------
+
     approved_filter = and_(
         Invoice.status.in_(['Approved', 'Settled', 'Paid']),
         ~Invoice.document_type.in_(['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT', 'FEEDBACK', 'COMPLAINT']),
@@ -1288,12 +1313,17 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                 cand_resolved = None
                 if cand_path:
                     try:
-                        resolved_cand = Path(cand_path)
-                        if resolved_cand.is_file():
-                            cand_resolved = str(resolved_cand)
-                    except Exception as exc:
-                        # Silently ignore candidate path resolution errors
-                        logger.debug("Handled non-fatal candidate path resolution exception: %s", exc)
+                        safe_cand = get_safe_file_path(cand_path)
+                        if safe_cand.is_file():
+                            cand_resolved = str(safe_cand)
+                    except Exception:
+                        try:
+                            resolved_cand = Path(cand_path).resolve()
+                            if resolved_cand.is_file():
+                                cand_resolved = str(resolved_cand)
+                        except Exception as exc:
+                            # Silently ignore candidate path resolution errors
+                            logger.debug("Handled non-fatal candidate path resolution exception: %s", exc)
                     if not cand_resolved:
                         cand_resolved = cand_path
 
@@ -3299,7 +3329,7 @@ def serve_temp_preview(
     """Secure preview streaming of temporarily staged PDF/image during human verification and feedback review."""
     safe_base = os.path.basename(filename)
     clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '', safe_base)
-    if not clean_name or clean_name in ('.', '..') or clean_name != filename:
+    if not clean_name or clean_name in ('.', '..') or clean_name != filename or '..' in filename or filename.startswith('.'):
         raise HTTPException(status_code=400, detail="Invalid preview filename")
 
     # If no user in Authorization header, check token query parameter
@@ -3328,14 +3358,21 @@ def serve_temp_preview(
                 detail="Access Denied: You do not have permission to view this staged document preview."
             )
 
-    target_path = (settings.UPLOAD_DIR / clean_name).resolve()
+    target_path = None
     found = False
-    if target_path.is_file():
-        found = True
-    else:
-        for cand_dir in [settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_DIR, settings.ROOT_DIR / "uploads", settings.ROOT_DIR / "backend" / "uploads"]:
-            cand = (cand_dir / clean_name).resolve()
-            if cand.is_file():
+    try:
+        cand = get_safe_file_path(clean_name)
+        if cand.is_file():
+            target_path = cand
+            found = True
+    except Exception as exc:
+        logger.debug("Safe file path lookup failed in serve_temp_preview: %s", exc)
+
+    if not found:
+        for cand_dir in [settings.UPLOAD_DIR, settings.PDF_STORAGE_DIR, settings.APPROVED_PDF_DIR, settings.ROOT_DIR / "uploads", settings.ROOT_DIR / "backend" / "uploads"]:
+            root_resolved = cand_dir.resolve()
+            cand = (root_resolved / clean_name).resolve()
+            if cand.is_relative_to(root_resolved) and cand.is_file():
                 target_path = cand
                 found = True
                 break
@@ -3418,8 +3455,19 @@ def serve_temp_preview(
     else:
         media_type = 'application/octet-stream'
 
+    allowed_roots = [
+        settings.UPLOAD_DIR.resolve(),
+        settings.PDF_STORAGE_DIR.resolve(),
+        settings.APPROVED_PDF_DIR.resolve(),
+        (settings.ROOT_DIR / "uploads").resolve(),
+        (settings.ROOT_DIR / "backend" / "uploads").resolve(),
+    ]
+    resolved_target = target_path.resolve()
+    if not any(resolved_target.is_relative_to(r) for r in allowed_roots):
+        raise HTTPException(status_code=403, detail="Access Denied: Path traversal detected")
+
     return FileResponse(
-        path=str(target_path),
+        path=str(resolved_target),
         media_type=media_type,
         filename=clean_name,
         headers={
@@ -3478,7 +3526,10 @@ async def confirm_and_ingest_document(
         
         # Promote staged file to permanent file name
         perm_filename = clean_temp.replace('TEMP_STAGE_', 'DOC_')
-        final_file_path = (settings.UPLOAD_DIR / perm_filename).resolve()
+        upload_root = settings.UPLOAD_DIR.resolve()
+        final_file_path = (upload_root / perm_filename).resolve()
+        if not final_file_path.is_relative_to(upload_root):
+            raise HTTPException(status_code=400, detail="Invalid target file path.")
         try:
             staged_path.rename(final_file_path)
         except Exception:
@@ -4269,7 +4320,10 @@ async def compress_pdf_standalone(
     content = await file.read()
     orig_size = len(content)
     unique_filename, detected_type = validate_uploaded_file(file, content)
-    file_path = settings.UPLOAD_DIR / f"auto_comp_{unique_filename}"
+    upload_root = settings.UPLOAD_DIR.resolve()
+    file_path = (upload_root / f"auto_comp_{unique_filename}").resolve()
+    if not file_path.is_relative_to(upload_root):
+        raise HTTPException(status_code=400, detail="Invalid destination path.")
     with open(file_path, 'wb') as buffer:
         buffer.write(content)
     
