@@ -135,15 +135,25 @@ export default function Dashboard({
       ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
       accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
       accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
-      employee: ["employee", "standard employee", "standard_employee"]
+      employee: ["employee", "standard employee", "standard_employee"],
+      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
     const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
 
     if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
+    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
     if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p.includes(a) || a.includes(p))))) return true;
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
+    if (doc.status === "Unrouted (No Rule Matched)" && (rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin")) return true;
     return false;
   };
 
@@ -178,12 +188,22 @@ export default function Dashboard({
       jmd: ["joint managing director", "jmd", "joint_managing_director"],
       md: ["managing director", "md", "managing_director"],
       finance_auditor: ["finance & internal auditor", "finance and internal auditor", "finance_auditor", "finance auditor", "auditor", "internal auditor"],
-      employee: ["employee", "standard employee", "standard_employee"]
+      employee: ["employee", "standard employee", "standard_employee"],
+      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+
+    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
+    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
 
     if (rHandle && rHandle !== "admin" && rHandle !== "superadmin") {
       const activeAliases = roleAliases[rHandle] || [rHandle];
-      if (pool.some((p: string) => activeAliases.includes(p))) {
+      if (pool.some((p: string) => activeAliases.includes(p) || activeAliases.some(a => p.includes(a)))) {
         return true;
       }
     }

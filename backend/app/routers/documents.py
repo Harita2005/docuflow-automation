@@ -877,15 +877,34 @@ def get_all_invoices(
         is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
         is_curr = bool(inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True))
 
+        # Check creator / submitter and uploader desk authority
+        u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
+        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
+        u_names_clean = {
+            (current_user.username or '').strip().lower(),
+            (current_user.employee_id or '').strip().lower(),
+            (current_user.employee_name or '').strip().lower(),
+            (current_user.name or '').strip().lower(),
+            (current_user.email or '').strip().lower(),
+        } if current_user else set()
+        u_names_clean = {n for n in u_names_clean if n}
+        inv_creator = (
+            getattr(inv, 'contact_person', None)
+            or getattr(inv, 'employee_id', None)
+            or getattr(inv, 'employee_name', None)
+            or ''
+        ).strip().lower()
+        is_creator = bool(inv_creator and inv_creator in u_names_clean)
+
         is_approved_doc = inv.status in ['Approved', 'Settled', 'Paid']
         if is_approved_doc:
-            # Strictly: Only admin can see all approved docs; others see ONLY docs they approved
-            if user_is_admin or has_approved_this_doc:
+            # Strictly: Only admin can see all approved docs; others see docs they approved or created
+            if user_is_admin or has_approved_this_doc or is_creator:
                 filtered_invoices.append(inv)
             continue
 
         # Division scoping check
-        if not is_curr and not has_approved_this_doc and not is_member_of_flow:
+        if not is_curr and not is_creator and not has_approved_this_doc and not is_member_of_flow:
             doc_div = (inv.division or '').strip().upper()
             if doc_div and user_approval_divs and not has_hq_division and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
                 if doc_div not in user_approval_divs:
@@ -893,15 +912,16 @@ def get_all_invoices(
         
         is_terminal = inv.status in ['Approved', 'Settled', 'Paid', 'Cancelled', 'Failed']
         if is_terminal:
-            if has_approved_this_doc or has_rejected_this_doc:
+            if has_approved_this_doc or has_rejected_this_doc or is_creator:
                 filtered_invoices.append(inv)
                 continue
             if user_is_admin or authorize_document_access(current_user, inv):
                 filtered_invoices.append(inv)
                 continue
         else:
-            # Active workflow: strictly check if user is current approver, prior approver, or flow member
-            if is_curr or has_approved_this_doc or is_member_of_flow:
+            # Active workflow: check current approver, creator/uploader, flow member, or unrouted documents
+            is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower()
+            if is_curr or is_creator or has_approved_this_doc or is_member_of_flow or (is_unrouted and is_uploader_role):
                 filtered_invoices.append(inv)
                 continue
 
@@ -1262,7 +1282,25 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         is_feedback_role = (current_user.role or '').lower() in ['customer_feedback_agent', 'customer_feedback', 'feedback_agent']
         is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None))
         
-        if not is_curr and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
+        u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
+        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
+        u_names_clean = {
+            (current_user.username or '').strip().lower(),
+            (current_user.employee_id or '').strip().lower(),
+            (current_user.employee_name or '').strip().lower(),
+            (current_user.name or '').strip().lower(),
+            (current_user.email or '').strip().lower(),
+        } if current_user else set()
+        u_names_clean = {n for n in u_names_clean if n}
+        inv_creator = (
+            getattr(inv, 'contact_person', None)
+            or getattr(inv, 'employee_id', None)
+            or getattr(inv, 'employee_name', None)
+            or ''
+        ).strip().lower()
+        is_creator = bool(inv_creator and inv_creator in u_names_clean)
+
+        if not is_curr and not is_creator and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
             user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
             if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
@@ -1273,17 +1311,19 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         if is_terminal:
             is_approved = inv.status in ['Approved', 'Settled', 'Paid']
             if is_approved:
-                if not has_appr and not is_feedback_doc:
+                if not has_appr and not is_creator and not is_feedback_doc:
                     raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view approved document '{invoice_id}'. Only users who personally approved this document and administrators may view it.")
-            elif not has_appr and not has_rej and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
+            elif not has_appr and not has_rej and not is_creator and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
                 raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
         else:
-            # Active document: allowed if current approver, prior approver who approved, or peer from completed prior stage
-            if not is_curr and not has_appr and not has_rej and not completed_by_peer:
-                raise HTTPException(
-                    status_code=403, 
-                    detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
-                )
+            # Active document: allowed if current approver, creator/uploader, prior approver who approved, peer from completed prior stage, or unrouted doc for uploader role
+            is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower()
+            if not is_curr and not is_creator and not has_appr and not has_rej and not completed_by_peer:
+                if not (is_unrouted and is_uploader_role):
+                    raise HTTPException(
+                        status_code=403, 
+                        detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
+                    )
 
     # For Customer Feedback records: dynamically ensure matching approved invoice PDF is attached if not yet set
     is_feedback_doc = (

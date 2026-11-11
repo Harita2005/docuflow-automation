@@ -315,18 +315,28 @@ export default function App() {
       ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
       accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
       accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
-      employee: ["employee", "standard employee", "standard_employee"]
+      employee: ["employee", "standard employee", "standard_employee"],
+      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
+      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
     const activeAliases = roleAliases[rHandle] || [rHandle];
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
 
     if (doc.assigned_approver) {
       const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
       if (uHandle && approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
+      if (nHandle && approvers.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
+      if (empHandle && approvers.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
       if (eHandle && approvers.some((p: string) => p && (p.includes(eHandle) || eHandle.includes(p)))) return true;
       if (rHandle && approvers.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
     }
 
     if (doc.status === "Data Verification Pending" && (rHandle === "ap_executive" || rHandle === "executive")) return true;
+    if (doc.status === "Unrouted (No Rule Matched)" && (rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin")) return true;
 
     return false;
   };
@@ -858,8 +868,36 @@ export default function App() {
     }
   }, [currentView, documents, isLoggedIn, currentUserRole]);
 
+  // Fallback single-document fetching for direct route loading (e.g. /review/:id)
+  const [directDocument, setDirectDocument] = useState<DbInvoice | null>(null);
+  const [directDocLoading, setDirectDocLoading] = useState(false);
+
+  useEffect(() => {
+    if (isLoggedIn && selectedDocId && !documents.some(d => String(d.id) === String(selectedDocId))) {
+      let isMounted = true;
+      setDirectDocLoading(true);
+      const token = localStorage.getItem("authToken");
+      fetch(`/api/documents/${selectedDocId}`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {}
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (isMounted && data) {
+          setDirectDocument(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setDirectDocLoading(false);
+      });
+      return () => { isMounted = false; };
+    } else {
+      setDirectDocument(null);
+    }
+  }, [isLoggedIn, selectedDocId, documents]);
+
   // Get active selected doc object
-  const activeDocument = documents.find((d) => String(d.id) === String(selectedDocId)) || null;
+  const activeDocument = documents.find((d) => String(d.id) === String(selectedDocId)) || directDocument || null;
 
   // Unauthenticated viewport
   if (!isLoggedIn) {
@@ -1039,7 +1077,7 @@ export default function App() {
 
             {currentView === "details" && (
               !activeDocument ? (
-                loadingDocs ? (
+                (loadingDocs || directDocLoading) ? (
                   <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center animate-pulse">
                     <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4" />
                     <p className="text-slate-500 font-semibold text-[10px] tracking-wider uppercase">Loading Document Details...</p>

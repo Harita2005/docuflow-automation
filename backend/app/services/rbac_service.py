@@ -375,6 +375,10 @@ def authorize_document_access(
         (user.name or "").strip().lower(),
         (user.email or "").strip().lower(),
     ]
+    UPLOADER_ROLES = {"account_uploader", "account_uploder", "accounts_uploder", "doc_uploder", "doc_uploader", "uploader"}
+    if u_role in UPLOADER_ROLES:
+        raw_handles.extend(list(UPLOADER_ROLES))
+        raw_handles.extend(["accounts", "account", "approver"])
     user_handles = [handle for handle in raw_handles if handle]
     # -----------------------------------------------------------------------
     # Strict Division Boundary

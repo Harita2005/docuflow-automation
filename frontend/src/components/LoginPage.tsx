@@ -236,6 +236,8 @@ export default function LoginPage({
       localStorage.setItem("currentUserUsername", data.user.username);
       localStorage.setItem("currentUserRole", data.user.role || "");
       localStorage.setItem("currentUserEmail", data.user.email || "");
+      localStorage.setItem("currentUserName", data.user.name || "");
+      localStorage.setItem("currentUserEmployeeId", data.user.employee_id || "");
 
       onLoginSuccess(
         data.user.id,
@@ -303,6 +305,8 @@ export default function LoginPage({
         localStorage.setItem("currentUserUsername", user.username);
         localStorage.setItem("currentUserRole", user.role || "");
         localStorage.setItem("currentUserEmail", user.email || "");
+        localStorage.setItem("currentUserName", user.name || "");
+        localStorage.setItem("currentUserEmployeeId", user.employee_id || "");
 
         setIsFirstTimeChange(false);
         onLoginSuccess(user.id, user.role, user.email, user.username);
