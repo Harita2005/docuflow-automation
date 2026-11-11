@@ -32,8 +32,8 @@ RUN groupadd -r appgroup && useradd -r -u 10001 -g appgroup appuser \
 # Copy backend source code
 COPY --chown=appuser:appgroup . .
 
-# Switch to non-root user
-USER appuser
+# Run as root in container to avoid host bind-mount volume permission issues on /app/uploads and /app/stored_pdfs
+# USER appuser
 
 # Expose backend port
 EXPOSE 3000

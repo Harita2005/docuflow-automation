@@ -24,6 +24,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: docuflow-backend
+    user: "0:0"
     ports:
       - "3000:3000"
     environment:

@@ -8,6 +8,27 @@ from app.config.settings import settings
 
 BASE_DIR = Path(__file__).resolve().parent
 
+def ensure_storage_directories():
+    """Ensures uploads and PDF storage directories exist and are writable."""
+    storage_dirs = [
+        settings.UPLOAD_DIR,
+        settings.PDF_STORAGE_PATH,
+        settings.APPROVED_PDF_PATH,
+        Path("/app/uploads"),
+        Path("/app/stored_pdfs"),
+        Path("/app/stored_pdfs/approved"),
+    ]
+    for d in storage_dirs:
+        try:
+            p = Path(d)
+            p.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chmod(str(p), 0o777)
+            except Exception:
+                pass
+        except Exception as exc:
+            logging.getLogger("uvicorn.error").warning("Could not ensure directory %s: %s", d, exc)
+
 def free_port_if_occupied(port: int = 3000):
     """Checks if the port is held by an orphan process and terminates it to prevent WinError 10013 / WSAEACCES."""
     if os.name != 'nt':
@@ -133,6 +154,7 @@ def initialize_database():
 
 if __name__ == '__main__':
     free_port_if_occupied(3000)
+    ensure_storage_directories()
     initialize_database()
 
     env = (settings.ENVIRONMENT or os.getenv("ENVIRONMENT", "development")).strip().lower()
