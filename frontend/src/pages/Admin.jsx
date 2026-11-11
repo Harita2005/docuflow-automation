@@ -30,7 +30,7 @@ const formatAuditTimestamp = (ts) => {
 };
 
 export default function Admin() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const [rules, setRules] = useState([]);
@@ -113,10 +113,13 @@ export default function Admin() {
   useEffect(() => {
     setIsRootView(true);
     if (activeTab === "audit") {
+      setLoading(false);
       fetchAuditLogs();
       fetchRetentionInfo();
     } else if (activeTab === "templates" || activeTab === "routing" || activeTab === "matrix") {
       fetchData();
+    } else {
+      setLoading(false);
     }
   }, [activeTab]);
 
@@ -428,14 +431,6 @@ export default function Admin() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
   const _groupedSteps = Array.from(new Set(steps.map(s => s.profile_name))).map(profile => ({
     profile_name: profile,
     stages: steps.filter(s => s.profile_name === profile).sort((a, b) => a.stage_number - b.stage_number)
@@ -585,13 +580,19 @@ export default function Admin() {
         )}
 
         <Suspense fallback={<TabLoadingFallback />}>
+        {loading && (activeTab === "routing" || activeTab === "matrix" || activeTab === "templates") && (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+          </div>
+        )}
+
         {/* --- ROUTING TAB CONTENT --- */}
-        {activeTab === "routing" && (
+        {!loading && activeTab === "routing" && (
           <FlowBuilder users={allUsers} />
         )}
 
         {/* --- POLICY MATRIX TAB CONTENT --- */}
-        {activeTab === "matrix" && (
+        {!loading && activeTab === "matrix" && (
           <ConditionBuilder 
             rules={rules} 
             setRules={setRules} 
@@ -606,7 +607,7 @@ export default function Admin() {
         )}
 
     {/* --- TEMPLATES TAB CONTENT --- */}
-    {activeTab === "templates" && (
+    {!loading && activeTab === "templates" && (
       <div className="flex flex-col gap-4 mt-2">
 
         <div className="flex flex-col gap-4">
