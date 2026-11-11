@@ -3268,9 +3268,22 @@ async def extract_document_preview(
     unique_filename, detected_type = validate_uploaded_file(file, content)
     
     staged_filename = f"TEMP_STAGE_U{current_user.id}_{uuid.uuid4().hex[:8]}_{unique_filename}"
-    file_path = settings.UPLOAD_DIR / staged_filename
-    with open(file_path, 'wb') as buffer:
-        buffer.write(content)
+    upload_dir = settings.UPLOAD_DIR
+    try:
+        upload_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as dir_err:
+        logger.warning("Could not ensure upload_dir: %s", dir_err)
+
+    file_path = upload_dir / staged_filename
+    try:
+        with open(file_path, 'wb') as buffer:
+            buffer.write(content)
+    except Exception as write_err:
+        logger.error("Failed writing uploaded file to %s: %s", file_path, write_err)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Server storage write error: {write_err}. Please ensure /app/uploads is writable."
+        )
 
     final_file_size = process_and_validate_pdf_size(file_path, detected_type)
 
