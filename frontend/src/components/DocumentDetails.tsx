@@ -2042,7 +2042,8 @@ export default function DocumentDetails({
       const formattedTarget = targetCompletionDate 
         ? new Date(targetCompletionDate).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
         : 'Not Specified';
-      const holdComment = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${comments}`;
+      const targetIso = targetCompletionDate ? new Date(targetCompletionDate).toISOString() : '';
+      const holdComment = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${targetIso ? `[TARGET_ISO: ${targetIso}] ` : ''}${comments}`;
 
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const isReturn = selectedAction.toLowerCase().includes("return") || selectedAction.toLowerCase().includes("revision") || selectedAction.toLowerCase().includes("sendback");
@@ -2054,7 +2055,17 @@ export default function DocumentDetails({
           "Content-Type": "application/json",
           "Authorization": token ? `Bearer ${token}` : ""
         },
-        body: JSON.stringify(isReturn ? { invoiceId: activeDoc?.id, expected_version: activeDoc?.version ?? 1, comments: holdComment } : { remarks: holdComment, expected_version: activeDoc?.version ?? 1 }),
+        body: JSON.stringify(isReturn ? { 
+          invoiceId: activeDoc?.id, 
+          expected_version: activeDoc?.version ?? 1, 
+          comments: holdComment,
+          target_completion_date: targetIso || targetCompletionDate
+        } : { 
+          remarks: holdComment, 
+          expected_version: activeDoc?.version ?? 1,
+          target_completion_date: targetIso || targetCompletionDate,
+          scheduled_time: targetIso || targetCompletionDate
+        }),
       });
       if (response.ok) {
         clearDraft();

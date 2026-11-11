@@ -3137,93 +3137,104 @@ def reject_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceAc
 def parse_and_validate_scheduled_clock_time(val: Any) -> Optional[str]:
     """
     Validates and normalizes a scheduled clock time/datetime string.
-    Ensures the value is an actual clock time (e.g. '5:30 PM', '2026-10-12T17:30:00'), NOT a duration (e.g. '3 hours').
-    Restricts minute component to 00, 15, 30, 45.
-    Returns normalized string (e.g. '2026-10-12T17:30:00') or raises HTTPException.
+    Supports ISO datetimes, standard 12-hour/24-hour clock times, and locale-formatted dates
+    (e.g., '08/11/26, 12:26 PM', '2026-11-08T12:26:00', '5:30 PM').
+    Returns normalized ISO string (e.g. '2026-11-08T12:26:00') or None.
     """
     if not val:
         return None
     s = str(val).strip()
-    if not s or s.lower() == 'not specified':
+    if not s or s.lower() in ['not specified', 'none', 'null', 'undefined']:
         return None
 
     lower = s.lower()
-    # Reject duration-like formats e.g. "3 hours", "3 hrs", "2 hr", "45 mins"
+    # Reject relative duration phrases e.g. "3 hours", "45 mins"
     for kw in ['hour', 'hours', 'hr', 'hrs', 'minute', 'minutes', 'min', 'mins', 'day', 'days']:
-        if re.search(r'\b\d+\s*' + kw + r'\b', lower) or re.search(r'\b' + kw + r'\b', lower):
+        if re.search(r'\b\d+\s*' + kw + r'\b', lower):
             raise HTTPException(
                 status_code=400,
                 detail=f"Duration-style time '{s}' is not permitted. Please select a specific scheduled clock time (e.g. 5:30 PM)."
             )
 
-    # Match ISO or Date + Time: 2026-10-12T17:30, 2026-10-12 17:30, 2026-10-12 5:30 PM
-    iso_match = re.search(r'(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?', s, re.IGNORECASE)
+    today = datetime.date.today()
+
+    # 1. Match ISO or Date + Time: 2026-10-12T17:30, 2026-10-12 17:30, 2026-10-12 5:30 PM
+    iso_match = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?', s, re.IGNORECASE)
     if iso_match:
-        date_part = iso_match.group(1)
-        h_part = int(iso_match.group(2))
-        m_part = int(iso_match.group(3))
-        ampm_part = iso_match.group(5)
-
-        if m_part not in [0, 15, 30, 45]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m_part:02d}."
-            )
-
-        if ampm_part:
-            ampm_upper = ampm_part.upper()
-            if not (1 <= h_part <= 12):
-                raise HTTPException(status_code=400, detail=f"Invalid 12-hour value: {h_part}")
-            if ampm_upper == 'AM':
-                h24 = 0 if h_part == 12 else h_part
-            else:
-                h24 = 12 if h_part == 12 else h_part + 12
+        year, month, day = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
+        h, m = int(iso_match.group(4)), int(iso_match.group(5))
+        ampm = iso_match.group(7)
+        if ampm:
+            ampm_u = ampm.upper()
+            h24 = 0 if h == 12 and ampm_u == 'AM' else (12 if h == 12 and ampm_u == 'PM' else (h if ampm_u == 'AM' else h + 12))
         else:
-            h24 = h_part
+            h24 = h
+        if 0 <= h24 <= 23 and 0 <= m <= 59:
+            return f"{year:04d}-{month:02d}-{day:02d}T{h24:02d}:{m:02d}:00"
 
-        if not (0 <= h24 <= 23):
-            raise HTTPException(status_code=400, detail=f"Invalid hour: {h_part}")
+    # 2. Match locale formatted dates: e.g. "08/11/26, 12:26 PM", "08/11/2026, 12:26 PM"
+    locale_match = re.search(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{2,4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?', s, re.IGNORECASE)
+    if locale_match:
+        p1 = int(locale_match.group(1))
+        p2 = int(locale_match.group(2))
+        raw_year = int(locale_match.group(3))
+        year = raw_year if raw_year >= 100 else (2000 + raw_year)
+        # en-IN / en-GB default is DD/MM/YYYY; if p1 > 12, p1 is day, p2 is month
+        if p1 > 12:
+            day, month = p1, p2
+        elif p2 > 12:
+            month, day = p1, p2
+        else:
+            day, month = p1, p2
 
-        return f"{date_part}T{h24:02d}:{m_part:02d}:00"
+        h = int(locale_match.group(4))
+        m = int(locale_match.group(5))
+        ampm = locale_match.group(7)
+        if ampm:
+            ampm_u = ampm.upper()
+            h24 = 0 if h == 12 and ampm_u == 'AM' else (12 if h == 12 and ampm_u == 'PM' else (h if ampm_u == 'AM' else h + 12))
+        else:
+            h24 = h
+        if 0 <= h24 <= 23 and 0 <= m <= 59:
+            try:
+                valid_date = datetime.date(year, month, day)
+                return f"{valid_date.isoformat()}T{h24:02d}:{m:02d}:00"
+            except ValueError:
+                try:
+                    valid_date = datetime.date(year, day, month)
+                    return f"{valid_date.isoformat()}T{h24:02d}:{m:02d}:00"
+                except ValueError:
+                    pass
 
-    # Match 12-hour clock time only: e.g. "5:30 PM", "05:30 PM", "12:00 AM"
+    # 3. Match 12-hour clock time only: e.g. "5:30 PM", "12:26 PM", "12:00 AM"
     time_12_match = re.match(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', s, re.IGNORECASE)
     if time_12_match:
         h12 = int(time_12_match.group(1))
         m = int(time_12_match.group(2))
         ampm = time_12_match.group(3).upper()
+        if 1 <= h12 <= 12 and 0 <= m <= 59:
+            h24 = 0 if h12 == 12 and ampm == 'AM' else (12 if h12 == 12 and ampm == 'PM' else (h12 if ampm == 'AM' else h12 + 12))
+            return f"{today.isoformat()}T{h24:02d}:{m:02d}:00"
 
-        if not (1 <= h12 <= 12):
-            raise HTTPException(status_code=400, detail=f"Invalid 12-hour value: {h12}")
-        if m not in [0, 15, 30, 45]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m:02d}."
-            )
-
-        h24 = 0 if h12 == 12 and ampm == 'AM' else (12 if h12 == 12 and ampm == 'PM' else (h12 if ampm == 'AM' else h12 + 12))
-        today_str = datetime.date.today().isoformat()
-        return f"{today_str}T{h24:02d}:{m:02d}:00"
-
-    # Match 24-hour clock time only: e.g. "17:30"
+    # 4. Match 24-hour clock time only: e.g. "17:30", "12:26"
     time_24_match = re.match(r'^(\d{1,2}):(\d{2})$', s)
     if time_24_match:
         h24 = int(time_24_match.group(1))
         m = int(time_24_match.group(2))
-        if not (0 <= h24 <= 23):
-            raise HTTPException(status_code=400, detail=f"Invalid hour: {h24}")
-        if m not in [0, 15, 30, 45]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Scheduled time minutes must be in 15-minute intervals (00, 15, 30, 45). Received minute: {m:02d}."
-            )
-        today_str = datetime.date.today().isoformat()
-        return f"{today_str}T{h24:02d}:{m:02d}:00"
+        if 0 <= h24 <= 23 and 0 <= m <= 59:
+            return f"{today.isoformat()}T{h24:02d}:{m:02d}:00"
 
-    raise HTTPException(
-        status_code=400,
-        detail=f"Invalid scheduled clock time format: '{s}'. Expected 12-hour AM/PM format (e.g. 5:30 PM) or ISO date-time."
-    )
+    # 5. Try standard dateutil/datetime parsing
+    try:
+        from dateutil import parser as dt_parser
+        dt = dt_parser.parse(s)
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+    except Exception:
+        pass
+
+    # If parsing is inconclusive, do not block the user's hold action with a 400 error
+    logger.warning("Unrecognized scheduled clock time format: '%s'. Proceeding with Hold without setting due_date.", s)
+    return None
 
 @router.post('/api/workflows/hold')
 @router.post('/api/workflow/hold')
