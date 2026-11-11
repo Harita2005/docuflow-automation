@@ -1087,7 +1087,7 @@ export default function DocumentDetails({
       const origMb = (file.size / (1024 * 1024)).toFixed(1);
       showToast(`⚡ File size is ${origMb} MB (exceeds 15MB). Auto-compressing PDF...`, "info");
       try {
-        const token = localStorage.getItem("authToken");
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
         const compFormData = new FormData();
         compFormData.append("file", file);
         const compRes = await fetch('/api/documents/compress-pdf', {
@@ -1108,7 +1108,7 @@ export default function DocumentDetails({
     }
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const formData = new FormData();
       formData.append("file", fileToUpload);
 
@@ -1257,8 +1257,11 @@ export default function DocumentDetails({
   const isTerminal = ["Approved", "Settled", "Paid", "Ready for Payment", "Cancelled", "Failed"].includes(document?.status || "");
 
   // For approval and cancellation, strictly only the assigned approver for this stage is authorized
+  const isAdmin = ["admin", "administrator", "system_admin", "superadmin"].includes((currentUserRole || "").toLowerCase());
+
   const isAssignedApprover = useMemo(() => {
     if (!document) return false;
+    if (isAdmin) return true;
     if (document.is_current_approver) return true;
     const userHandles = [
       (currentUserUsername || "").trim().toLowerCase(),
@@ -1270,16 +1273,21 @@ export default function DocumentDetails({
       if (userHandles.some(h => approverList.includes(h))) return true;
     }
     return false;
-  }, [document, currentUserUsername, currentUserEmail]);
+  }, [document, currentUserUsername, currentUserEmail, isAdmin]);
 
-  const isCurrentApprover = isAssignedApprover;
-  const isDocumentLocked = isTerminal || !isCurrentApprover || Boolean(document?.completed_by_peer);
+  const isCurrentApprover = isAssignedApprover || isAdmin;
+  const isDocumentLocked = isTerminal || (!isCurrentApprover && !isAdmin) || (Boolean(document?.completed_by_peer) && !isAdmin);
   const isAttachmentStatus = !isTerminal && (
     (document?.current_stage || 1) === 1 ||
     (document?.status || "").toLowerCase().includes("attachment") ||
-    (document?.status || "").toLowerCase().includes("initiated")
+    (document?.status || "").toLowerCase().includes("initiated") ||
+    !document?.file_url
   );
-  const canReplacePdf = !isDocumentLocked && isAttachmentStatus;
+  const canReplacePdf = !isTerminal && (
+    isAdmin ||
+    (!isDocumentLocked && isAttachmentStatus) ||
+    (!document?.file_url && !document?.file_path)
+  );
   const isAssignedInitiator = isAssignedApprover;
 
   // Periodic background stage poll: If another approver advances the stage, update immediately
