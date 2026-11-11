@@ -517,6 +517,26 @@ def get_all_roles(
     return result
 
 
+def expand_canonical_permissions(codes: List[str]) -> List[str]:
+    expanded = list(codes)
+    lower_set = {c.strip().lower() for c in codes if c}
+    if lower_set & {"upload", "doc:upload", "upload:create", "upload:write", "doc:create", "doc:upload:create"}:
+        for p in ["doc:create", "doc:upload:create", "doc:upload", "upload", "wf:trigger", "doc:read", "doc:edit", "doc:verification:edit"]:
+            if p.lower() not in lower_set:
+                expanded.append(p)
+                lower_set.add(p.lower())
+    if lower_set & {"work-tracker", "work_tracker", "doc:work_tracker:view"}:
+        for p in ["doc:work_tracker:view", "doc:detail:view", "doc:read", "doc:edit"]:
+            if p.lower() not in lower_set:
+                expanded.append(p)
+                lower_set.add(p.lower())
+    if lower_set & {"workflow-rules", "workflow:rules", "workflow:write"}:
+        for p in ["workflow:read", "workflow:write", "workflow:routing:view", "workflow:matrix:view"]:
+            if p.lower() not in lower_set:
+                expanded.append(p)
+                lower_set.add(p.lower())
+    return expanded
+
 @router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
 def create_role(
     payload: RoleCreate,
@@ -533,7 +553,8 @@ def create_role(
 
     permission_codes = []
     seen_codes = set()
-    for p_code in payload.permissions or []:
+    expanded_permissions = expand_canonical_permissions(payload.permissions or [])
+    for p_code in expanded_permissions:
         clean_code = p_code.strip()
         if not clean_code:
             continue
@@ -619,7 +640,8 @@ def update_role_permissions(
     assigned_permissions = []
     seen_codes = set()
 
-    for p_code in (payload.permission_codes or []):
+    expanded_permissions = expand_canonical_permissions(payload.permission_codes or [])
+    for p_code in expanded_permissions:
         clean_code = p_code.strip()
         if not clean_code:
             continue

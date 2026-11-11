@@ -1312,6 +1312,23 @@ export default function AdminRBAC({ onRefreshSignal }) {
       }
     });
 
+    // Guarantee upload action permissions map to backend doc:create & wf:trigger
+    const hasUploadAccess = newRolePages.upload?.enabled || newRoleCapabilities.create || newRoleCapabilities.edit;
+    const hasUploadWrite = newRolePages.upload?.write || newRoleCapabilities.create || newRoleCapabilities.edit;
+    if (hasUploadAccess) {
+      if (hasUploadWrite) {
+        ["doc:create", "doc:upload:create", "doc:upload", "upload:create", "upload:write", "wf:trigger", "doc:read", "doc:edit", "doc:verification:edit"].forEach(code => {
+          if (!activePermCodes.includes(code)) activePermCodes.push(code);
+          compiledRolePerms[code] = { read: true, write: true, admin: false };
+        });
+      } else {
+        ["doc:upload:view", "doc:read"].forEach(code => {
+          if (!activePermCodes.includes(code)) activePermCodes.push(code);
+          compiledRolePerms[code] = { read: true, write: false, admin: false };
+        });
+      }
+    }
+
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
       const headers = {
@@ -1396,6 +1413,17 @@ export default function AdminRBAC({ onRefreshSignal }) {
       const pState = currentPermMap[permCode];
       return pState && (pState.read || pState.write || pState.admin);
     });
+
+    const upPerm = currentPermMap["upload"] || currentPermMap["doc:upload"] || {};
+    if (upPerm.write || upPerm.admin) {
+      ["doc:create", "doc:upload:create", "doc:upload", "upload:create", "upload:write", "wf:trigger", "doc:read", "doc:edit", "doc:verification:edit"].forEach(code => {
+        if (!activePermCodes.includes(code)) activePermCodes.push(code);
+      });
+    } else if (upPerm.read) {
+      ["doc:upload:view", "doc:read"].forEach(code => {
+        if (!activePermCodes.includes(code)) activePermCodes.push(code);
+      });
+    }
 
     setSavingRolePerms(true);
     setErrorMsg("");

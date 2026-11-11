@@ -65,16 +65,87 @@ __all__ = [
 # RBAC PERMISSION CHECK
 # ---------------------------------------------------------------------------
 
+PERMISSION_EQUIVALENTS = {
+    "doc:create": {
+        "doc:create",
+        "doc:upload:create",
+        "upload:create",
+        "upload:write",
+        "upload",
+        "doc:upload",
+        "document:create",
+        "doc:write",
+        "wf:trigger",
+    },
+    "wf:trigger": {
+        "wf:trigger",
+        "doc:create",
+        "doc:upload:create",
+        "upload:create",
+        "upload:write",
+        "upload",
+        "doc:upload",
+        "workflow:trigger",
+        "workflow:write",
+    },
+    "doc:read": {
+        "doc:read",
+        "document:read",
+        "doc:view",
+        "doc:upload:view",
+        "doc:detail:view",
+        "doc:work_tracker:view",
+        "upload",
+        "work-tracker",
+        "dashboard",
+        "approved-documents",
+    },
+    "doc:edit": {
+        "doc:edit",
+        "document:edit",
+        "doc:detail:edit",
+        "doc:verification:edit",
+        "doc:create",
+        "upload",
+        "upload:write",
+        "work-tracker",
+        "work-tracker:write",
+    },
+    "doc:approve": {
+        "doc:approve",
+        "document:approve",
+        "doc:detail:approve",
+        "wf:approve",
+        "workflow:approve",
+        "work-tracker:admin",
+        "work-tracker:write",
+    },
+    "doc:reject": {
+        "doc:reject",
+        "document:reject",
+        "doc:detail:reject",
+        "wf:reject",
+        "workflow:reject",
+        "work-tracker:admin",
+        "work-tracker:write",
+    },
+    "doc:cancel": {
+        "doc:cancel",
+        "document:cancel",
+        "doc:detail:cancel",
+        "work-tracker:admin",
+        "work-tracker:write",
+    },
+}
+
 def check_permission(user: User, permission_code: str, db: Session) -> bool:
     """
     Check whether the user has the requested permission.
 
     Canonical RBAC flow:
-        User.role_id
+        User.role_id (or user.role lookup)
             -> RolePermission.role_id
-            -> Permission.code / Permission.legacy_code
-
-    `user.role` is retained only for legacy system-admin compatibility.
+            -> Permission.code / Permission.legacy_code (including equivalent functional permissions)
     """
 
     if not user or not user.is_active:
@@ -87,9 +158,6 @@ def check_permission(user: User, permission_code: str, db: Session) -> bool:
 
     # -----------------------------------------------------------------------
     # Legacy system-admin bypass
-    #
-    # Keep this for existing installations where admin users may still have
-    # the legacy `role` string populated.
     # -----------------------------------------------------------------------
     legacy_role = (user.role or "").strip().lower()
 
@@ -103,15 +171,66 @@ def check_permission(user: User, permission_code: str, db: Session) -> bool:
 
     # -----------------------------------------------------------------------
     # Canonical RBAC
-    #
-    # role_id is now the source of truth.
     # -----------------------------------------------------------------------
-    if not user.role_id:
+    role_id = user.role_id
+    if not role_id and user.role:
+        from app.database.models import Role
+        r_clean = user.role.strip()
+        matched = db.query(Role.id).filter(
+            (Role.code.ilike(r_clean)) | (Role.name.ilike(r_clean))
+        ).first()
+        if matched:
+            role_id = matched[0]
+            user.role_id = role_id
+
+    if not role_id:
         return False
 
     try:
-        perms = get_role_permissions_set(user.role_id, db)
-        return clean_code in perms
+        perms = get_role_permissions_set(role_id, db)
+        if clean_code in perms:
+            return True
+
+        # Check aliases / equivalent permissions
+        equivalents = PERMISSION_EQUIVALENTS.get(clean_code)
+        if equivalents and (equivalents & perms):
+            return True
+
+        # Fallback: check UI permissions matrix (RBAC_GRANULAR_MATRIX / ROLE_PERMISSIONS)
+        try:
+            from app.routers.documents import load_app_configs
+            import json
+            configs = load_app_configs()
+            for c in configs:
+                if c.get("key") in ("RBAC_GRANULAR_MATRIX", "ROLE_PERMISSIONS"):
+                    matrix = json.loads(c.get("value", "{}"))
+                    role_keys = [str(role_id), str(user.role or "").lower(), str(user.role or "")]
+                    for rk in role_keys:
+                        if rk in matrix:
+                            r_matrix = matrix[rk]
+                            if clean_code in ("doc:create", "wf:trigger", "doc:upload:create"):
+                                up_perm = r_matrix.get("upload") or {}
+                                if up_perm.get("write") or up_perm.get("admin"):
+                                    return True
+                                dc_perm = r_matrix.get("doc:create") or {}
+                                if dc_perm.get("write") or dc_perm.get("read"):
+                                    return True
+                            elif clean_code in ("doc:read", "doc:view"):
+                                if any((r_matrix.get(p) or {}).get("read") for p in ("upload", "work-tracker", "dashboard", "approved-documents")):
+                                    return True
+                            elif clean_code in ("doc:edit", "doc:verification:edit", "doc:detail:edit"):
+                                wt_perm = r_matrix.get("work-tracker") or {}
+                                up_perm = r_matrix.get("upload") or {}
+                                if wt_perm.get("write") or up_perm.get("write"):
+                                    return True
+                            elif clean_code in ("doc:approve", "doc:reject", "doc:cancel"):
+                                wt_perm = r_matrix.get("work-tracker") or {}
+                                if wt_perm.get("write") or wt_perm.get("admin"):
+                                    return True
+        except Exception as matrix_err:
+            logger.debug("Non-fatal matrix fallback check error: %s", matrix_err)
+
+        return False
 
     except Exception:
         logger.exception(
