@@ -6,7 +6,7 @@ import datetime
 from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from app.auth import get_current_active_user, get_password_hash, invalidate_user_cache
+from app.auth import get_current_active_user, get_password_hash, invalidate_user_cache, is_user_admin
 from app.services.rbac_service import check_permission
 from app.database.connection import get_db
 from app.database.models import Department, Division, Role, User, AuditLog
@@ -119,7 +119,7 @@ def get_users(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db)
+    is_admin = is_user_admin(current_user, db)
 
     query = db.query(User).filter(User.is_deleted == False)
     if not is_admin or not include_inactive:
@@ -156,7 +156,7 @@ def get_user_by_id(
         ).filter(User.is_deleted == False).first()
     if not user:
         raise HTTPException(status_code=404, detail='Employee not found in User Master')
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin'] or check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db)
+    is_admin = is_user_admin(current_user, db)
     if not is_admin and user.id != current_user.id:
         user.phone_number = None
     return user
@@ -169,15 +169,15 @@ def create_user_master(
     db: Session = Depends(get_db)
 ):
     # Enforce admin authorization
-    if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
+    if not is_user_admin(current_user, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to create users.')
 
     # Prevent unauthorized assignment of privileged executive roles (Admin, GM, JMD, MD)
     target_role = (payload.role or '').strip().lower()
-    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'gm', 'jmd', 'md'}
+    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'system administrator', 'gm', 'jmd', 'md'}
     if target_role in PRIVILEGED_ROLES:
-        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False)
-        if not has_privilege_auth and (current_user.role or '').lower() not in ['admin', 'superadmin']:
+        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False) or is_user_admin(current_user, db)
+        if not has_privilege_auth and not is_user_admin(current_user, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access Denied: Creating a user with privileged executive role '{target_role.upper()}' requires explicit 'admin:rbac' authorization."
@@ -247,7 +247,8 @@ def create_user_master(
         mfa_type=payload.mfa_type,
         must_change_password=True,
         created_by=current_user.employee_name or current_user.name or 'System Admin',
-        created_at=datetime.datetime.utcnow()
+        created_at=datetime.datetime.utcnow(),
+        is_superuser=bool((payload.role or '').strip().lower() in ['admin', 'superadmin', 'system_admin', 'administrator', 'system administrator'] or 'admin' in (payload.role or '').strip().lower())
     )
     db.add(new_user)
     db.commit()
@@ -295,7 +296,7 @@ def update_user_master(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = (current_user.role or '').lower() in ['admin', 'administrator', 'system_admin', 'superadmin']
+    is_admin = is_user_admin(current_user, db)
     # If not admin, can only edit own profile and CANNOT escalate role or active status
     if not is_admin and current_user.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Access Denied: Cannot modify another user account.')
@@ -329,11 +330,11 @@ def update_user_master(
             )
 
     # For admin callers: restrict assignment of executive privileged roles (Admin, GM, JMD, MD)
-    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'gm', 'jmd', 'md'}
+    PRIVILEGED_ROLES = {'admin', 'administrator', 'system_admin', 'superadmin', 'system administrator', 'gm', 'jmd', 'md'}
     target_role = (update_data.get('role') or '').strip().lower()
     if target_role and target_role in PRIVILEGED_ROLES and target_role != (user.role or '').strip().lower():
-        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False)
-        if not has_privilege_auth and (current_user.role or '').lower() not in ['admin', 'superadmin']:
+        has_privilege_auth = check_permission(current_user, 'admin:rbac', db) or check_permission(current_user, 'admin:users', db) or getattr(current_user, 'is_superuser', False) or is_user_admin(current_user, db)
+        if not has_privilege_auth and not is_user_admin(current_user, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access Denied: Promoting a user to privileged executive role '{target_role.upper()}' requires explicit 'admin:rbac' authorization."
@@ -373,6 +374,13 @@ def update_user_master(
 
     for field, value in update_data.items():
         setattr(user, field, value)
+
+    if 'role' in update_data:
+        r_str = (update_data['role'] or '').strip().lower()
+        if r_str in ['admin', 'superadmin', 'system_admin', 'administrator', 'system administrator'] or 'admin' in r_str:
+            user.is_superuser = True
+        elif user.id != current_user.id:
+            user.is_superuser = False
 
     # Sync foreign keys
     target_div = user.division_id or user.division
@@ -428,7 +436,7 @@ def toggle_user_status(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
+    if not is_user_admin(current_user, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to toggle employee status.')
 
     user = db.query(User).filter(User.id == user_id).filter(User.is_deleted == False).first()
@@ -454,7 +462,7 @@ def delete_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
+    if not is_user_admin(current_user, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to delete employee accounts.')
 
     user = db.query(User).filter(User.id == user_id).filter(User.is_deleted == False).first()
@@ -482,7 +490,7 @@ def unlock_user(
     Allows an administrator to immediately unlock an account locked out due to failed attempts,
     by purging recent LOGIN_FAILED and ACCOUNT_LOCKED logs for the user.
     """
-    if (current_user.role or '').lower() not in ['admin', 'administrator', 'system_admin', 'superadmin']:
+    if not is_user_admin(current_user, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrator authorization required to unlock employee accounts.')
 
     user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()

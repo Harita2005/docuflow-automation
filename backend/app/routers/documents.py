@@ -138,14 +138,20 @@ def is_user_admin(user: Optional[User], db: Optional[Session] = None) -> bool:
     if getattr(user, 'is_superuser', False):
         return True
     u_role = (getattr(user, 'role', '') or '').strip().lower()
-    if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator']:
+    if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator', 'settings_editor']:
         return True
     if 'admin' in u_role:
         return True
     if db:
         try:
             from app.services.rbac_service import check_permission
-            if check_permission(user, 'role:manage', db) or check_permission(user, 'admin:rbac', db) or check_permission(user, 'admin:system', db):
+            if (
+                check_permission(user, 'role:manage', db)
+                or check_permission(user, 'admin:rbac', db)
+                or check_permission(user, 'admin:system', db)
+                or check_permission(user, 'admin:users', db)
+                or check_permission(user, 'user:manage', db)
+            ):
                 return True
         except Exception:
             pass

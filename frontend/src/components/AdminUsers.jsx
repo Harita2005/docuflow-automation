@@ -47,8 +47,8 @@ export default function AdminUsers() {
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   
 
-  const currentUserRole = (localStorage.getItem("currentUserRole") || "admin").toLowerCase();
-  const isAdmin = currentUserRole === "admin" || currentUserRole === "settings_editor";
+  const currentUserRole = (localStorage.getItem("currentUserRole") || "admin").toLowerCase().trim();
+  const isAdmin = currentUserRole === "admin" || currentUserRole === "administrator" || currentUserRole === "system_admin" || currentUserRole === "superadmin" || currentUserRole === "settings_editor" || currentUserRole.includes("admin");
 
   useEffect(() => { 
   fetchUsers();

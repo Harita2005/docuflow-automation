@@ -750,8 +750,8 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setMenuOpenUserId(prev => prev === userId ? null : userId);
   };
 
-  const currentUserRole = (localStorage.getItem("currentUserRole") || "admin").toLowerCase();
-  const isAdmin = currentUserRole === "admin" || currentUserRole === "settings_editor";
+  const currentUserRole = (localStorage.getItem("currentUserRole") || "admin").toLowerCase().trim();
+  const isAdmin = currentUserRole === "admin" || currentUserRole === "administrator" || currentUserRole === "system_admin" || currentUserRole === "superadmin" || currentUserRole === "settings_editor" || currentUserRole.includes("admin");
 
   useEffect(() => {
     loadData();
@@ -1101,7 +1101,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, role: newRole } : u));
     
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
       await fetch(`/api/users/${selectedUser.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
@@ -1663,7 +1663,7 @@ export default function AdminRBAC({ onRefreshSignal }) {
     if (!editingUserModal) return;
     setIsUpdatingUser(true);
     try {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token");
       const headers = { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) };
       
       const approvalDivsStr = Array.isArray(editingUserModal.approval_divisions)

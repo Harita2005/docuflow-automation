@@ -157,16 +157,18 @@ def check_permission(user: User, permission_code: str, db: Session) -> bool:
         return False
 
     # -----------------------------------------------------------------------
-    # Legacy system-admin bypass
+    # System administrator / superuser bypass
     # -----------------------------------------------------------------------
     legacy_role = (user.role or "").strip().lower()
 
-    if legacy_role in {
+    if getattr(user, 'is_superuser', False) or legacy_role in {
         "admin",
         "administrator",
         "system_admin",
         "superadmin",
-    }:
+        "system administrator",
+        "settings_editor",
+    } or "admin" in legacy_role:
         return True
 
     # -----------------------------------------------------------------------
