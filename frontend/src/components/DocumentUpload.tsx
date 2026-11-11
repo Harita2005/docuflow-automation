@@ -951,6 +951,8 @@ export default function DocumentUpload({
                       >
                         <option value="AP INVOICE">AP INVOICE</option>
                         <option value="PURCHASE INVOICE">PURCHASE INVOICE</option>
+                        <option value="CUSTOMER FEEDBACK">CUSTOMER FEEDBACK</option>
+                        <option value="CUSTOMER COMPLAINT">CUSTOMER COMPLAINT</option>
                         <option value="CAPEX / FIXED ASSET">CAPEX / FIXED ASSET</option>
                         <option value="UTILITY & RENT">UTILITY & RENT</option>
                         <option value="STAFF & HR EXPENSE">STAFF & HR EXPENSE</option>
@@ -1552,6 +1554,8 @@ export default function DocumentUpload({
                     >
                       <optgroup label="Standard Document Types">
                         <option value="AP Invoice">AP Invoice</option>
+                        <option value="CUSTOMER FEEDBACK">CUSTOMER FEEDBACK</option>
+                        <option value="CUSTOMER COMPLAINT">CUSTOMER COMPLAINT</option>
                         <option value="CAPEX / FIXED ASSET">CAPEX / FIXED ASSET</option>
                         <option value="UTILITY & RENT">UTILITY & RENT</option>
                         <option value="STAFF & HR EXPENSE">STAFF & HR EXPENSE</option>
