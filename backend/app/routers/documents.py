@@ -423,8 +423,8 @@ def get_approved_invoices(
     approved_filter = and_(
         Invoice.status.in_(['Approved', 'Settled', 'Paid']),
         ~Invoice.document_type.in_(['CUSTOMER FEEDBACK', 'CUSTOMER COMPLAINT', 'FEEDBACK', 'COMPLAINT']),
-        ~Invoice.id.like('CMP%'),
-        ~Invoice.id.like('CF%'),
+        ~Invoice.document_code.like('CMP%'),
+        ~Invoice.document_code.like('CF%'),
         ~Invoice.workflow_profile_id.like('%feedback%')
     )
     query = db.query(Invoice).filter(Invoice.is_deleted == False, approved_filter)
@@ -445,13 +445,14 @@ def get_approved_invoices(
 
         user_approved_doc_ids = set()
         for r in user_approval_logs:
-            if r[0]:
+            if r[0] is not None:
                 val = str(r[0]).strip()
-                user_approved_doc_ids.add(val)
                 if val.startswith('DOC-'):
-                    user_approved_doc_ids.add(val[4:])
-                else:
-                    user_approved_doc_ids.add(f'DOC-{val}')
+                    val = val[4:]
+                try:
+                    user_approved_doc_ids.add(int(val))
+                except (ValueError, TypeError):
+                    pass
 
         if not user_approved_doc_ids:
             if response:
@@ -649,13 +650,14 @@ def get_filter_options(
 
         user_approved_doc_ids = set()
         for r in user_approval_logs:
-            if r[0]:
+            if r[0] is not None:
                 val = str(r[0]).strip()
-                user_approved_doc_ids.add(val)
                 if val.startswith('DOC-'):
-                    user_approved_doc_ids.add(val[4:])
-                else:
-                    user_approved_doc_ids.add(f'DOC-{val}')
+                    val = val[4:]
+                try:
+                    user_approved_doc_ids.add(int(val))
+                except (ValueError, TypeError):
+                    pass
 
         if not user_approved_doc_ids:
             return {"document_types": [], "years": [], "months": [], "dates": []}
@@ -1254,10 +1256,10 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
     has_appr = False
     has_rej = False
     if current_user:
-        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.email]
-        user_names_set = {name.lower() for name in user_names if name}
+        user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email]
+        user_names_set = {str(name).strip().lower() for name in user_names if name}
         for u_actor, act in audit_logs_tuples:
-            if u_actor in user_names_set:
+            if any(n in u_actor for n in user_names_set):
                 if 'approve' in act:
                     has_appr = True
                 if 'reject' in act or 'return' in act or 'cancel' in act or 'hold' in act:
@@ -1276,7 +1278,7 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
         all_steps = steps
         user_stages = [
             s.stage_number for s in all_steps 
-            if s.approver_target and is_user_in_approver_pool(current_user, s.approver_target)
+            if s.approver_target and is_user_in_approver_pool(current_user, s.approver_target, db=db)
         ]
         
         # 1. Future stage restriction: If user only belongs to future stages, forbid access
@@ -1307,13 +1309,20 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
             (current_user.email or '').strip().lower(),
         } if current_user else set()
         u_names_clean = {n for n in u_names_clean if n}
-        inv_creator = (
-            getattr(inv, 'contact_person', None)
-            or getattr(inv, 'employee_id', None)
-            or getattr(inv, 'employee_name', None)
-            or ''
-        ).strip().lower()
-        is_creator = bool(inv_creator and inv_creator in u_names_clean)
+        inv_creator_tokens = {
+            str(getattr(inv, 'user_id', '') or '').strip().lower(),
+            str(getattr(inv, 'created_by_id', '') or '').strip().lower(),
+            str(getattr(inv, 'created_by', '') or '').strip().lower(),
+            str(getattr(inv, 'uploaded_by', '') or '').strip().lower(),
+            str(getattr(inv, 'contact_person', '') or '').strip().lower(),
+            str(getattr(inv, 'employee_id', '') or '').strip().lower(),
+            str(getattr(inv, 'employee_name', '') or '').strip().lower(),
+        }
+        u_id_str = str(current_user.id) if current_user else ''
+        is_creator = bool(
+            (u_id_str and (u_id_str == str(getattr(inv, 'user_id', None)) or u_id_str == str(getattr(inv, 'created_by_id', None))))
+            or any(t and (t in u_names_clean or any(n in t for n in u_names_clean)) for t in inv_creator_tokens if t)
+        )
 
         if not is_curr and not is_creator and not has_appr and not completed_by_peer and not (is_feedback_role and is_feedback_doc):
             user_approval_divs = get_user_approval_divisions(current_user)
@@ -1331,10 +1340,11 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
             elif not has_appr and not has_rej and not is_creator and not completed_by_peer and not is_feedback_doc and not authorize_document_access(current_user, inv):
                 raise HTTPException(status_code=403, detail=f"Access Denied: You do not have permission to view document '{invoice_id}'.")
         else:
-            # Active document: allowed if current approver, creator/uploader, prior approver who approved, peer from completed prior stage, or unrouted doc for uploader role
+            # Active document: allowed if current approver, creator/uploader, prior approver who approved, peer from completed prior stage, or uploader role
             is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower()
+            curr_stage = inv.current_stage or 1
             if not is_curr and not is_creator and not has_appr and not has_rej and not completed_by_peer:
-                if not (is_unrouted and is_uploader_role):
+                if not (is_uploader_role and (is_unrouted or is_creator or curr_stage == 1)):
                     raise HTTPException(
                         status_code=403, 
                         detail=f"Access Denied: Document '{invoice_id}' is currently at Stage {inv.current_stage or 1} and assigned to {inv.assigned_approver or 'another approver'}. You can only view documents assigned to your desk."
@@ -2490,6 +2500,10 @@ def workflow_approve_payload(req: Request, payload: dict, db: Session=Depends(ge
             db.refresh(inv)
             safe_broadcast_event('STAGE_APPROVED', {'document_id': str(inv.id), 'approved_stage': prev_stage_num, 'new_stage': inv.current_stage, 'status': inv.status, 'approver': approver_name})
             safe_broadcast_event('DOCUMENT_UPDATED', {'document_id': str(inv.id), 'status': inv.status, 'current_stage': inv.current_stage, 'assigned_approver': inv.assigned_approver})
+        try:
+            invalidate_invoices_cache(str(inv.id))
+        except Exception:
+            pass
         return {
             'success': True,
             'status': inv.status,

@@ -124,16 +124,16 @@ export default function CustomerFeedbackPage({
   const feedbackDocs = useMemo(() => {
     return documents.filter((doc) => {
       if (!doc) return false;
-      const rawType = (
+      const rawType = String(
         doc.document_type ||
         doc.subtype_of_complaint ||
         doc.type_of_complaint ||
         ""
       ).toUpperCase();
       const canonicalType = getCanonicalDocumentType(doc);
-      const docIdUpper = (doc.id || "").toUpperCase();
-      const docNumUpper = (doc.document_number || doc.invoice_number || "").toUpperCase();
-      const wfProf = (doc.workflow_profile_id || doc.workflow_profile || "").toUpperCase();
+      const docIdUpper = String(doc.id || "").toUpperCase();
+      const docNumUpper = String(doc.document_number || doc.invoice_number || "").toUpperCase();
+      const wfProf = String(doc.workflow_profile_id || doc.workflow_profile || "").toUpperCase();
 
       return (
         canonicalType === "CUSTOMER FEEDBACK" ||

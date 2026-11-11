@@ -467,6 +467,8 @@ def authorize_document_access(
         return True
     if getattr(doc, "uploaded_by", None) and str(doc.uploaded_by).strip().lower() in user_handles:
         return True
+    if getattr(doc, "created_by", None) and str(doc.created_by).strip().lower() in user_handles:
+        return True
     if doc.contact_person and doc.contact_person.strip().lower() in user_handles:
         return True
 
