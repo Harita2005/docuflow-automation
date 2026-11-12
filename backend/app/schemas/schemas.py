@@ -189,6 +189,7 @@ class InvoiceBase(BaseModel):
     current_stage: Optional[int] = None
     total_stages: Optional[int] = None
     assigned_approver: Optional[str] = None
+    assigned_to: Optional[str] = None
     workflow_profile_id: Optional[str] = None
     checklist_state: Optional[str] = None
     line_items_json: Optional[str] = None

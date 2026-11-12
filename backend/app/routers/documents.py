@@ -159,15 +159,15 @@ def safe_broadcast_event(event_type: str, payload: dict):
         logger.debug('Handled thread launch exception: %s', e)
 router = APIRouter(tags=['Invoices & Documents'])
 
+ADMIN_ROLES = frozenset({"admin", "administrator", "system_admin", "superadmin"})
+
 def is_user_admin(user: Optional[User], db: Optional[Session] = None) -> bool:
     if not user:
         return False
     if getattr(user, 'is_superuser', False):
         return True
     u_role = (getattr(user, 'role', '') or '').strip().lower()
-    if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator', 'settings_editor']:
-        return True
-    if 'admin' in u_role:
+    if u_role in ADMIN_ROLES:
         return True
     if db:
         try:
@@ -1114,6 +1114,7 @@ def get_all_invoices(
 
         attach_dynamic_columns_to_document(db, inv)
         inv_res = InvoiceResponse.model_validate(inv)
+        inv_res.assigned_to = inv.assigned_approver
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_appr
         inv_res.has_rejected = has_rej
@@ -1262,6 +1263,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
                     continue
 
         inv_res = InvoiceResponse.model_validate(inv)
+        inv_res.assigned_to = inv.assigned_approver
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_approved_curr_stage or has_approved_any_stage
         inv_res.has_rejected = has_rej
@@ -2740,15 +2742,15 @@ def approve_invoice_url(req: Request, invoice_id: str, action: Optional[InvoiceA
             detail="Missing mandatory 'expected_version' for concurrency control."
         )
     inv = find_invoice_by_identifier(db, invoice_id)
+    current_version = inv.version or 1
+    if expected_ver != current_version:
+        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
     verified_items = data.get('verifiedItems') or data.get('checked_items') or data.get('verified_items')
     check_approval_authorization(inv, user, db=db, require_compliance=True, verified_items=verified_items)
     username = user.employee_name or user.name if user else 'Reviewer'
     remarks = data.get('remarks') or (action.remarks if action and action.remarks else 'Compliance items verified and signed off.')
     stage_name = data.get('stage_name') or (action.stage_name if action and action.stage_name else f'Stage {inv.current_stage or 1}')
     prev_stage_num = inv.current_stage or 1
-    current_version = inv.version or 1
-    if expected_ver != current_version:
-        raise HTTPException(status_code=409, detail="This approval stage has already been completed by another approver.")
     next_assigned_info = 'Final Settlement Completed. Ready for payment disbursement.'
     next_assigned_val = inv.assigned_approver
     next_checklist_val = inv.checklist_state
@@ -4900,7 +4902,14 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
     if current_user and not user_is_admin:
         u_role_clean = (current_user.role or '').strip().lower()
         is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
-        user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
+        user_handles = [
+            str(current_user.id),
+            current_user.username.lower() if current_user.username else '',
+            current_user.employee_id.lower() if current_user.employee_id else '',
+            current_user.employee_name.lower() if current_user.employee_name else '',
+            current_user.email.lower() if current_user.email else '',
+            current_user.role.lower() if current_user.role else ''
+        ]
         user_handles = [h for h in user_handles if h]
         scoped_invoices = []
         approved_count = 0
@@ -4915,16 +4924,17 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
             inv_creator = (getattr(inv, 'contact_person', None) or getattr(inv, 'employee_id', None) or getattr(inv, 'employee_name', None) or '').strip().lower()
             is_creator = bool(inv_creator and inv_creator in user_handles)
             is_assigned = False
-            if inv.assigned_approver:
-                approvers = [s.strip().lower() for s in inv.assigned_approver.split(',') if s.strip()]
+            assigned_target = getattr(inv, 'assigned_approver', None) or getattr(inv, 'assigned_to', None) or ''
+            if assigned_target:
+                approvers = [s.strip().lower() for s in str(assigned_target).split(',') if s.strip()]
                 for handle in user_handles:
                     if handle in approvers or any((handle in app or app in handle for app in approvers)):
                         is_assigned = True
                         break
             st_lower = (inv.status or '').lower()
-            is_cancelled = any(k in st_lower for k in ['cancel', 'void', 'fail'])
+            is_cancelled = any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned'])
             # Cancelled documents must only be visible to the user who cancelled/created it and the admin alone!
-            if is_cancelled and not (has_rejected or is_creator):
+            if is_cancelled and not (has_rejected or is_creator or is_assigned):
                 continue
 
             is_stage1_or_unrouted = ('attachment' in st_lower or 'unrouted' in st_lower or 'unassigned' in (inv.assigned_approver or '').lower() or 'initiated' in st_lower)
@@ -4937,23 +4947,23 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
                     approved_count += 1
                 elif any(k in st_lower for k in ['hold', 'pause', 'wait', 'clarif']):
                     hold_count += 1
-                elif any(k in st_lower for k in ['cancel', 'void', 'fail']):
-                    if has_rejected or is_creator:
+                elif any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned']):
+                    if has_rejected or is_creator or is_assigned or user_is_admin:
                         rejected_count += 1
-                elif any(k in st_lower for k in ['progress', 'stage', 'review', 'verification']) and not ('attachment' in st_lower or 'initiated' in st_lower):
+                elif any(k in st_lower for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not ('attachment' in st_lower or 'initiated' in st_lower):
                     progress_count += 1
                 else:
-                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
+                    is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled'] and not any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned'])
                     if is_active_flow:
                         pending_count += 1
         total_docs = len(scoped_invoices)
     else:
         total_docs = len(invoices)
         hold_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['hold', 'pause', 'wait', 'clarif']))
-        rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['cancel', 'void', 'fail']))
+        rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['reject', 'cancel', 'void', 'fail', 'returned']))
         approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']) and not any(k in (i.status or '').lower() for k in ['stage', 'progress']))
-        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'cancel', 'void', 'fail', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
-        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'cancel', 'void', 'fail', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
+        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
+        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
         if pending_count == 0 and total_docs > (approved_count + progress_count + hold_count + rejected_count):
             pending_count = total_docs - (approved_count + progress_count + hold_count + rejected_count)
         total_spend = sum((float(i.amount or 0.0) for i in invoices))
@@ -5843,10 +5853,16 @@ def get_invoice_checklist(invoice_id: str, stage_num: Optional[int]=None, stage_
 @router.post('/api/documents/{invoice_id}/checklist')
 @router.post('/api/invoices/{invoice_id}/checklist-state')
 @router.post('/api/documents/{invoice_id}/checklist-state')
-def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: Optional[User]=Depends(get_current_user)):
+def update_invoice_checklist(invoice_id: str, payload: dict, db: Session=Depends(get_db), user: User=Depends(get_current_active_user)):
     inv = find_invoice_by_identifier(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail='Invoice not found')
+
+    if not authorize_document_access(user, inv) and not is_user_in_approver_pool(user, inv.assigned_approver):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Access Denied: You are not authorized to modify verification checklists for this document.'
+        )
     
     is_unrouted = (
         not inv.workflow_profile_id

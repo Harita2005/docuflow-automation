@@ -157,6 +157,7 @@ def is_user_in_approver_pool(
     user_handles = getattr(user, '_cached_handles', None)
     if user_handles is None:
         raw_handles = [
+            str(user.id) if getattr(user, 'id', None) is not None else '',
             (user.username or '').strip().lower(),
             (user.employee_id or '').strip().lower(),
             (user.employee_name or '').strip().lower(),

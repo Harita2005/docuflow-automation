@@ -131,9 +131,21 @@ def auth_tokens(db_session):
     if not approver:
         approver = db_session.query(User).filter(User.role == "manager", User.is_active == True).first()
 
-    token_admin = create_access_token({"sub": admin.username if admin else "admin", "role": admin.role if admin else "admin"})
-    token_emp = create_access_token({"sub": employee.username if employee else "YUVASREE", "role": employee.role if employee else "employee"})
-    token_approver = create_access_token({"sub": approver.username if approver else "VIGNESH", "role": approver.role if approver else "manager"})
+    token_admin = create_access_token({
+        "sub": admin.username if admin else "admin",
+        "role": admin.role if admin else "admin",
+        "session_id": getattr(admin, "active_session_id", None) if admin else None,
+    })
+    token_emp = create_access_token({
+        "sub": employee.username if employee else "YUVASREE",
+        "role": employee.role if employee else "employee",
+        "session_id": getattr(employee, "active_session_id", None) if employee else None,
+    })
+    token_approver = create_access_token({
+        "sub": approver.username if approver else "VIGNESH",
+        "role": approver.role if approver else "manager",
+        "session_id": getattr(approver, "active_session_id", None) if approver else None,
+    })
 
     return {
         "admin_user": admin,

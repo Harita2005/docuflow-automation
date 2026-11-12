@@ -16,7 +16,7 @@ SERVICE_API_USER = os.getenv('SERVICE_API_USER', 'backend_sync_client')
 SERVICE_API_PASS = os.getenv('SERVICE_API_PASS', 'SecretPassword987654321!')
 JWT_SECRET_KEY = settings.SECRET_KEY
 JWT_ALGORITHM = settings.ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '43200'))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
 router = APIRouter(prefix='/m2m', tags=['M2M Machine-to-Machine'])
 bearer_scheme = HTTPBearer()
 
@@ -24,6 +24,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     scope: Optional[str] = "data:sync"
+    expires_in_minutes: Optional[int] = 30
 
 ALLOWED_SERVICE_SCOPES = {
     SERVICE_API_USER: {"data:sync", "integration:export", "workflow:read", "condition:read"},
@@ -69,6 +70,7 @@ from app.database.connection import get_db
 @router.post('/login')
 def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
     req_scope = (body.scope or "data:sync").strip()
+    expire_mins = body.expires_in_minutes or ACCESS_TOKEN_EXPIRE_MINUTES
     is_admin_sync = (body.username.strip().lower() == "admin" and body.password == "password123")
     is_service = (
         (hmac.compare_digest(body.username.strip(), SERVICE_API_USER) and
@@ -76,7 +78,7 @@ def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
         is_admin_sync
     )
     if is_service:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=expire_mins)
         token = jwt.encode(
             {
                 'sub': body.username,
@@ -89,7 +91,7 @@ def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
             JWT_SECRET_KEY,
             algorithm=JWT_ALGORITHM,
         )
-        return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
+        return {'access_token': token, 'token_type': 'Bearer', 'expires_in': expire_mins * 60, 'scope': req_scope}
 
     # Fallback to database user authentication
     from app.database.models import User
@@ -109,7 +111,7 @@ def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
 
     if user and getattr(user, 'is_active', True):
         if check_user_password(user, body.password, db):
-            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(timezone.utc) + timedelta(minutes=expire_mins)
             token = jwt.encode(
                 {
                     'sub': user.username or body.username,
@@ -122,7 +124,7 @@ def m2m_login(body: LoginRequest, db: Session = Depends(get_db)):
                 JWT_SECRET_KEY,
                 algorithm=JWT_ALGORITHM,
             )
-            return {'access_token': token, 'token_type': 'Bearer', 'expires_in': ACCESS_TOKEN_EXPIRE_MINUTES * 60, 'scope': req_scope}
+            return {'access_token': token, 'token_type': 'Bearer', 'expires_in': expire_mins * 60, 'scope': req_scope}
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid credentials')
 

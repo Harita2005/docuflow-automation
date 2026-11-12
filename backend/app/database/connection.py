@@ -10,6 +10,16 @@ from app.config.settings import settings
 
 DATABASE_URL = settings.get_database_url()
 
+# Print connection target on startup
+_target_server = (settings.DB_SERVER or settings.DB_HOST or "localhost").strip()
+_target_db = (settings.DB_NAME or "DocuFlowDB").strip()
+if DATABASE_URL:
+    import re
+    _m = re.search(r"@([^:/]+)(?::\d+)?/([^?]+)", DATABASE_URL)
+    if _m:
+        _target_server, _target_db = _m.group(1), _m.group(2)
+print(f"[DB] Connected to {_target_server}/{_target_db}")
+
 if "sqlite" in DATABASE_URL.lower():
     engine = create_engine(
         DATABASE_URL,

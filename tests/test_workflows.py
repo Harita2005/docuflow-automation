@@ -12,11 +12,10 @@ class TestWorkflowTransitionsAndApprovals:
         """Creates an isolated test invoice with assigned approver set to the active admin user."""
         admin_uname = auth_tokens["admin_user"].username if auth_tokens["admin_user"] else "admin"
         db = SessionLocal()
-        doc_id = f"TEST-WF-{uuid.uuid4().hex[:8]}"
+        doc_key_val = f"TEST-WF-{uuid.uuid4().hex[:8]}"
         doc = Invoice(
-            id=doc_id,
-            doc_key=doc_id,
-            invoice_number=f"INV-{doc_id}",
+            doc_key=doc_key_val,
+            invoice_number=f"INV-{doc_key_val}",
             amount=12000.0,
             division="VCC",
             document_type="AP INVOICE",
@@ -33,17 +32,17 @@ class TestWorkflowTransitionsAndApprovals:
         db.add(doc)
         db.commit()
         db.refresh(doc)
-        doc_key = doc.id
+        doc_id = doc.id
         db.close()
 
-        yield doc_key
+        yield doc_id
 
         # Teardown
         clean_db = SessionLocal()
         try:
-            clean_db.query(AuditLog).filter(AuditLog.invoice_id == doc_key).delete()
-            clean_db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == doc_key).delete()
-            clean_db.query(Invoice).filter(Invoice.id == doc_key).delete()
+            clean_db.query(AuditLog).filter(AuditLog.invoice_id == str(doc_id)).delete()
+            clean_db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == str(doc_id)).delete()
+            clean_db.query(Invoice).filter(Invoice.id == doc_id).delete()
             clean_db.commit()
         except Exception:
             clean_db.rollback()

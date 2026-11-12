@@ -37,29 +37,48 @@ export default function App() {
   useEffect(() => {
     initAuthTokenMigration();
   }, []);
-  const getInitialRoute = () => {
-    const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-    if (!isStoredLoggedIn) {
-      if (typeof window !== "undefined" && window.location.pathname !== "/") {
-        window.history.replaceState({}, "", "/");
-      }
-      return { docId: null, view: "dashboard" };
+  const parseRouteFromPath = (pathname: string): { view: string; docId: string | null } => {
+    const path = (pathname || "/").trim();
+    const lower = path.toLowerCase();
+
+    if (lower === "/login") {
+      return { view: "login", docId: null };
     }
-    const path = window.location.pathname;
-    const matchFeedback = path.match(/^\/customer-feedback\/([^/]+)$/);
+
+    const matchFeedback = path.match(/^\/customer-feedback\/([^/]+)$/i);
     if (matchFeedback) {
-      return { docId: matchFeedback[1], view: "customer-feedback" };
+      return { view: "customer-feedback", docId: decodeURIComponent(matchFeedback[1]) };
     }
-    const match = path.match(/^\/review\/([^/]+)$/);
-    if (match) {
-      const docId = match[1];
+
+    const matchReview = path.match(/^\/(?:review|documents|details)\/([^/]+)$/i);
+    if (matchReview) {
+      const docId = decodeURIComponent(matchReview[1]);
       const docType = getCanonicalDocumentType(docId);
-      if (docType === "CUSTOMER FEEDBACK" || docId.toUpperCase().startsWith("CMP")) {
-        return { docId, view: "customer-feedback" };
+      if (docType === "CUSTOMER FEEDBACK" || docId.toUpperCase().startsWith("CMP") || docId.toUpperCase().startsWith("CF")) {
+        return { view: "customer-feedback", docId };
       }
-      return { docId, view: "details" };
+      return { view: "details", docId };
     }
-        let savedView = localStorage.getItem("currentView") || "dashboard";
+
+    if (lower === "/work-tracker") return { view: "work-tracker", docId: null };
+    if (lower === "/approved-docs" || lower === "/approved-documents") return { view: "approved-documents", docId: null };
+    if (lower === "/upload" || lower === "/upload-document") return { view: "upload", docId: null };
+    if (lower === "/customer-feedback") return { view: "customer-feedback", docId: null };
+    if (lower === "/workflow-rules" || lower === "/workflows") return { view: "workflow-rules", docId: null };
+    if (lower === "/admin" || lower === "/settings" || lower === "/control-settings") return { view: "admin", docId: null };
+    if (lower === "/data-verification") return { view: "data-verification", docId: null };
+    if (lower === "/payment-readiness") return { view: "payment-readiness", docId: null };
+    if (lower === "/approval-queue") return { view: "approval-queue", docId: null };
+    if (lower === "/getting-started") return { view: "getting-started", docId: null };
+    if (lower === "/dapi-sync-back" || lower === "/integrations" || lower === "/applications" || lower === "/callback-rules" || lower === "/integration-logs") {
+      return { view: "dapi-sync-back", docId: null };
+    }
+
+    if (lower === "/dashboard" || lower === "/") {
+      return { view: "dashboard", docId: null };
+    }
+
+    let savedView = localStorage.getItem("currentView") || "dashboard";
     if (savedView === "audit-logs") {
       localStorage.setItem("adminActiveTab", "audit");
       savedView = "admin";
@@ -67,8 +86,53 @@ export default function App() {
     return { docId: null, view: savedView };
   };
 
+  const getPathFromRoute = (view: string, docId: string | null = null): string => {
+    if (view === "login") return "/login";
+    if (view === "customer-feedback" && docId) return `/customer-feedback/${encodeURIComponent(docId)}`;
+    if (view === "details" && docId) return `/review/${encodeURIComponent(docId)}`;
+    if (view === "dashboard") return "/dashboard";
+    if (view === "work-tracker") return "/work-tracker";
+    if (view === "approved-documents") return "/approved-docs";
+    if (view === "upload") return "/upload";
+    if (view === "customer-feedback") return "/customer-feedback";
+    if (view === "workflow-rules") return "/workflow-rules";
+    if (view === "admin") return "/admin";
+    if (view === "data-verification") return "/data-verification";
+    if (view === "payment-readiness") return "/payment-readiness";
+    if (view === "approval-queue") return "/approval-queue";
+    if (view === "getting-started") return "/getting-started";
+    if (view === "dapi-sync-back") return "/dapi-sync-back";
+    return `/${view}`;
+  };
+
+  const getInitialRoute = () => {
+    const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken"));
+    if (!isStoredLoggedIn) {
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.history.replaceState({ view: "login", docId: null }, "", "/login");
+      }
+      return { docId: null, view: "login" };
+    }
+    const path = typeof window !== "undefined" ? window.location.pathname : "/";
+    const route = parseRouteFromPath(path);
+    if (route.view === "login") {
+      if (typeof window !== "undefined") {
+        window.history.replaceState({ view: "dashboard", docId: null }, "", "/dashboard");
+      }
+      return { docId: null, view: "dashboard" };
+    }
+    if (typeof window !== "undefined") {
+      const canonicalPath = getPathFromRoute(route.view, route.docId);
+      if (window.location.pathname !== canonicalPath && window.location.pathname !== "/") {
+        window.history.replaceState({ view: route.view, docId: route.docId }, "", canonicalPath);
+      }
+    }
+    return route;
+  };
+
+  const isNavigatingFromPopStateRef = useRef(false);
   const [initialRoute] = useState(getInitialRoute);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("isLoggedIn") === "true");
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken")));
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(initialRoute.docId);
   const [previousView, setPreviousView] = useState<string>("dashboard");
@@ -77,10 +141,36 @@ export default function App() {
     return localStorage.getItem("workTrackerStatusFilter") || "all";
   });
 
+  const navigate = (newView: string, docId: string | null = null, replace = false) => {
+    const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken"));
+    if (!isStoredLoggedIn && newView !== "login") {
+      newView = "login";
+      docId = null;
+      replace = true;
+    }
+
+    const targetPath = getPathFromRoute(newView, docId);
+    const currentPath = window.location.pathname;
+
+    if (targetPath !== currentPath) {
+      if (replace) {
+        window.history.replaceState({ view: newView, docId }, "", targetPath);
+      } else {
+        window.history.pushState({ view: newView, docId }, "", targetPath);
+      }
+    }
+
+    if (newView !== "details" && newView !== "customer-feedback") {
+      setPreviousView(currentView);
+    }
+    setCurrentView(newView);
+    setSelectedDocId(docId);
+  };
+
   const handleNavigateToWorkTracker = (statusFilter: string) => {
     setWorkTrackerInitialFilter(statusFilter);
     localStorage.setItem("workTrackerStatusFilter", statusFilter);
-    setCurrentView("work-tracker");
+    navigate("work-tracker", null, false);
   };
 
   // Default Actor settings
@@ -137,8 +227,8 @@ export default function App() {
             setCurrentView("dashboard");
             setSelectedDocId(null);
             setPreviousView("dashboard");
-            if (typeof window !== "undefined" && window.location.pathname !== "/") {
-              window.history.replaceState({}, "", "/");
+            if (typeof window !== "undefined") {
+              window.history.replaceState({ view: "dashboard", docId: null }, "", "/dashboard");
             }
             setIsLoggedIn(true);
             setCurrentUserRole(event.data.role || localStorage.getItem("currentUserRole") || "");
@@ -188,8 +278,8 @@ export default function App() {
           setCurrentView("dashboard");
           setSelectedDocId(null);
           setPreviousView("dashboard");
-          if (typeof window !== "undefined" && window.location.pathname !== "/") {
-            window.history.replaceState({}, "", "/");
+          if (typeof window !== "undefined") {
+            window.history.replaceState({ view: "dashboard", docId: null }, "", "/dashboard");
           }
           setIsLoggedIn(true);
           setCurrentUserRole(localStorage.getItem("currentUserRole") || "");
@@ -207,18 +297,61 @@ export default function App() {
 
     const handleNavigateView = (e: any) => {
       if (e.detail) {
-        setCurrentView(e.detail);
+        navigate(e.detail, null, false);
+      }
+    };
+
+    const handlePopState = () => {
+      const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken"));
+
+      // Logout Security Guard: block protected views if not logged in
+      if (!isStoredLoggedIn) {
+        setIsLoggedIn(false);
+        setCurrentView("login");
         setSelectedDocId(null);
+        if (window.location.pathname !== "/login") {
+          window.history.replaceState({ view: "login", docId: null }, "", "/login");
+        }
+        return;
+      }
+
+      // If user is authenticated, parse destination route
+      const route = parseRouteFromPath(window.location.pathname);
+      if (route.view === "login") {
+        window.history.replaceState({ view: "dashboard", docId: null }, "", "/dashboard");
+        setCurrentView("dashboard");
+        setSelectedDocId(null);
+        return;
+      }
+
+      isNavigatingFromPopStateRef.current = true;
+      setCurrentView(route.view);
+      setSelectedDocId(route.docId);
+    };
+
+    const handlePageShow = () => {
+      const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken"));
+      if (!isStoredLoggedIn) {
+        setIsLoggedIn(false);
+        setCurrentView("login");
+        setSelectedDocId(null);
+        if (window.location.pathname !== "/login") {
+          window.history.replaceState({ view: "login", docId: null }, "", "/login");
+        }
       }
     };
 
     window.addEventListener("storage", handleStorage);
     window.addEventListener("navigate-view", handleNavigateView);
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
       if (authChannel) authChannel.close();
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("navigate-view", handleNavigateView);
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("pageshow", handlePageShow);
     };
   }, []);
 
@@ -326,8 +459,14 @@ export default function App() {
     const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
     const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
 
-    if (doc.assigned_approver) {
-      const approvers = doc.assigned_approver.toLowerCase().split(",").map((s: string) => s.trim());
+    const idHandle = (localStorage.getItem("currentUserId") || localStorage.getItem("userId") || "").toLowerCase().trim();
+    const docUserId = String(doc.user_id || (doc as any).assigned_user_id || (doc as any).approver_user_id || "").toLowerCase().trim();
+    if (idHandle && docUserId && idHandle === docUserId) return true;
+
+    const rawAssigned = (doc.assigned_approver || (doc as any).assigned_to || (doc as any).assigned_user || "").toLowerCase();
+    if (rawAssigned) {
+      const approvers = rawAssigned.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (idHandle && approvers.some((p: string) => p && p === idHandle)) return true;
       if (uHandle && approvers.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
       if (nHandle && approvers.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
       if (empHandle && approvers.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
@@ -512,6 +651,8 @@ export default function App() {
 
   const handleLoginSuccess = (userId: string, role: string, email: string, username: string) => {
     localStorage.setItem("isLoggedIn", "true");
+    localStorage.setItem("currentUserId", String(userId || ""));
+    localStorage.setItem("userId", String(userId || ""));
     localStorage.setItem("currentUserRole", role);
     localStorage.setItem("currentUserEmail", email);
     localStorage.setItem("currentUserUsername", username);
@@ -522,8 +663,8 @@ export default function App() {
     setCurrentView("dashboard");
     setSelectedDocId(null);
     setPreviousView("dashboard");
-    if (typeof window !== "undefined" && window.location.pathname !== "/") {
-      window.history.replaceState({}, "", "/");
+    if (typeof window !== "undefined") {
+      window.history.replaceState({ view: "dashboard", docId: null }, "", "/dashboard");
     }
 
     setCurrentUserRole(role);
@@ -567,26 +708,21 @@ export default function App() {
 
   // Synchronize browser address bar pathname dynamically based on currentView and selectedDocId
   useEffect(() => {
+    if (isNavigatingFromPopStateRef.current) {
+      isNavigatingFromPopStateRef.current = false;
+      return;
+    }
+
     if (!isLoggedIn) {
-      if (typeof window !== "undefined" && window.location.pathname !== "/") {
-        window.history.replaceState({}, "", "/");
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.history.replaceState({ view: "login", docId: null }, "", "/login");
       }
       return;
     }
-    if (currentView === "customer-feedback" && selectedDocId) {
-      const targetPath = `/customer-feedback/${selectedDocId}`;
-      if (window.location.pathname !== targetPath) {
-        window.history.replaceState({}, "", targetPath);
-      }
-    } else if (currentView === "details" && selectedDocId) {
-      const targetPath = `/review/${selectedDocId}`;
-      if (window.location.pathname !== targetPath) {
-        window.history.replaceState({}, "", targetPath);
-      }
-    } else {
-      if (window.location.pathname.startsWith("/review/") || window.location.pathname.startsWith("/customer-feedback/")) {
-        window.history.replaceState({}, "", "/");
-      }
+
+    const targetPath = getPathFromRoute(currentView, selectedDocId);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ view: currentView, docId: selectedDocId }, "", targetPath);
     }
   }, [currentView, selectedDocId, isLoggedIn]);
 
@@ -765,9 +901,9 @@ export default function App() {
     const docType = getCanonicalDocumentType(rawType);
 
     if (docType === "CUSTOMER FEEDBACK" || docIdStr.toUpperCase().startsWith("CMP") || docIdStr.toUpperCase().startsWith("CF")) {
-      setCurrentView("customer-feedback");
+      navigate("customer-feedback", docIdStr, false);
     } else {
-      setCurrentView("details");
+      navigate("details", docIdStr, false);
     }
     fetchDocuments(true);
   };
@@ -794,6 +930,7 @@ export default function App() {
       } catch {}
     }
 
+    // 1. Clear all authentication tokens and storage
     removeAuthTokens();
     localStorage.removeItem("authToken");
     localStorage.removeItem("token");
@@ -803,13 +940,24 @@ export default function App() {
     localStorage.removeItem("currentUserRole");
     localStorage.removeItem("currentUserEmail");
     localStorage.removeItem("currentUserUsername");
+    localStorage.removeItem("currentUserName");
+    localStorage.removeItem("currentUserEmployeeId");
     localStorage.removeItem("workTrackerStatusFilter");
-    sessionStorage.removeItem("hasShownWelcomeQueue");
-    sessionStorage.removeItem("sessionKickedReason");
-    
-    // Reset all views and document activity back to Dashboard
-    setCurrentView("dashboard");
+    localStorage.removeItem("adminActiveTab");
+
+    // Clear session storage, preserving kicked reason if present
+    const savedKickedReason = reason || sessionStorage.getItem("sessionKickedReason");
+    sessionStorage.clear();
+    if (savedKickedReason) {
+      sessionStorage.setItem("sessionKickedReason", savedKickedReason);
+      setKickedReason(savedKickedReason);
+    } else {
+      setKickedReason(null);
+    }
+
+    // 2. Clear in-memory sensitive application data
     setSelectedDocId(null);
+    setCurrentView("login");
     setPreviousView("dashboard");
     setCurrentUserRole("");
     setCurrentUserEmail("");
@@ -817,24 +965,20 @@ export default function App() {
     setShowPendingModal(false);
     setDocuments([]);
     setStats(null);
-    setLoadingDocs(true);
-    
-    if (typeof window !== "undefined" && window.location.pathname !== "/") {
-      window.history.replaceState({}, "", "/");
-    }
-
-    if (reason) {
-      setKickedReason(reason);
-      sessionStorage.setItem("sessionKickedReason", reason);
-    }
+    setLoadingDocs(false);
     setIsLoggedIn(false);
+
+    // 3. Replace browser history with /login so Chrome Back cannot enter authenticated views
+    if (typeof window !== "undefined") {
+      window.history.replaceState({ view: "login", docId: null }, "", "/login");
+    }
 
     if (broadcast) {
       try {
         if (typeof BroadcastChannel !== "undefined") {
           const channel = new BroadcastChannel("docuflow_auth_channel");
-          if (reason) {
-            channel.postMessage({ type: "SESSION_KICKED", reason });
+          if (savedKickedReason) {
+            channel.postMessage({ type: "SESSION_KICKED", reason: savedKickedReason });
           } else {
             channel.postMessage({ type: "LOGOUT" });
           }
@@ -935,8 +1079,7 @@ export default function App() {
       <Sidebar
         currentView={currentView}
         setCurrentView={(view) => {
-          setCurrentView(view);
-          setSelectedDocId(null);
+          navigate(view, null, false);
         }}
         currentUserRole={currentUserRole}
         stats={stats}
@@ -952,8 +1095,7 @@ export default function App() {
         <Header
           currentView={currentView}
           setCurrentView={(view) => {
-            setCurrentView(view);
-            setSelectedDocId(null);
+            navigate(view, null, false);
           }}
           currentUserRole={currentUserRole}
           setCurrentUserRole={setCurrentUserRole}
@@ -1090,7 +1232,7 @@ export default function App() {
                 ) : (
                   <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl max-w-md mx-auto flex flex-col items-center justify-center">
                     <p className="text-slate-700 font-bold mb-4">Document Not Found or Access Denied</p>
-                    <button onClick={() => setCurrentView("dashboard")} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
+                    <button onClick={() => navigate("dashboard", null, false)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
                       Return to Dashboard
                     </button>
                   </div>
@@ -1103,8 +1245,11 @@ export default function App() {
                   currentUserUsername={currentUserUsername}
                   onRefreshDocument={handleFullRefresh}
                   onGoBack={() => {
-                    setCurrentView(previousView || "dashboard");
-                    setSelectedDocId(null);
+                    if (typeof window !== "undefined" && window.history.length > 1) {
+                      window.history.back();
+                    } else {
+                      navigate(previousView || "dashboard", null, false);
+                    }
                   }}
                   onSelectDocument={(docId) => setSelectedDocId(docId)}
                   pendingDocIds={pendingActionDocs.map(d => d.id)}

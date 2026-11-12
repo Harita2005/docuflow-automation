@@ -233,6 +233,8 @@ export default function LoginPage({
 
     if (data.token && data.user) {
       localStorage.setItem("authToken", data.token);
+      localStorage.setItem("currentUserId", String(data.user.id || ""));
+      localStorage.setItem("userId", String(data.user.id || ""));
       localStorage.setItem("currentUserUsername", data.user.username);
       localStorage.setItem("currentUserRole", data.user.role || "");
       localStorage.setItem("currentUserEmail", data.user.email || "");
@@ -302,6 +304,8 @@ export default function LoginPage({
       // Finalize login on success
       const user = pendingAuthData?.user;
       if (user) {
+        localStorage.setItem("currentUserId", String(user.id || ""));
+        localStorage.setItem("userId", String(user.id || ""));
         localStorage.setItem("currentUserUsername", user.username);
         localStorage.setItem("currentUserRole", user.role || "");
         localStorage.setItem("currentUserEmail", user.email || "");

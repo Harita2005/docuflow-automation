@@ -91,7 +91,7 @@ class TestSyncDuplicatesAndIdempotency:
         try:
             matching = db.query(Invoice).filter(Invoice.doc_key == test_key).all()
             assert len(matching) == 1
-            assert matching[0].id == doc_id_1
+            assert str(matching[0].id) == str(doc_id_1)
             assert matching[0].amount == 3750.0
         finally:
             db.close()

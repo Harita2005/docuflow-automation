@@ -22,15 +22,15 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
+ADMIN_ROLES = frozenset({"admin", "administrator", "system_admin", "superadmin"})
+
 def is_user_admin(user: Optional[User], db: Optional[Any] = None) -> bool:
     if not user:
         return False
     if getattr(user, 'is_superuser', False):
         return True
     u_role = (getattr(user, 'role', '') or '').strip().lower()
-    if u_role in ['admin', 'administrator', 'system_admin', 'superadmin', 'system administrator', 'settings_editor']:
-        return True
-    if 'admin' in u_role:
+    if u_role in ADMIN_ROLES:
         return True
     if db:
         try:
@@ -186,16 +186,16 @@ def get_current_user(
     u_key = str(username).lower()
     with _USER_CACHE_LOCK:
         entry = _USER_CACHE.get(u_key)
-        if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
-            user = entry["user"]
 
-    if user is not None:
-        try:
-            user = db.merge(user, load=False)
-        except Exception as exc:
-            # Benign: database session already contains an instance or detached merge is unsupported
-            logger.debug("Database merge for cached user ignored: %s", exc)
-    else:
+    if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
+        user = (
+            db.query(User)
+            .options(joinedload(User.role_rel))
+            .filter(User.id == entry["user_id"], User.is_deleted == False)
+            .first()
+        )
+
+    if user is None:
         # Fast direct index seek on username first with joinedload for role_rel
         user = (
             db.query(User)
@@ -218,20 +218,15 @@ def get_current_user(
         if user is None:
             raise credentials_exception
 
-        try:
-            db.expunge(user)
-        except Exception as exc:
-            # Benign: user may already be detached from the active session
-            logger.debug("Database expunge for cached user ignored: %s", exc)
-
         with _USER_CACHE_LOCK:
-            _USER_CACHE[u_key] = {"user": user, "timestamp": now}
-
-        try:
-            user = db.merge(user, load=False)
-        except Exception as exc:
-            # Benign: re-attaching user to active session ignored if already bound
-            logger.debug("Database re-merge for user ignored: %s", exc)
+            _USER_CACHE[u_key] = {
+                "user_id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "is_active": user.is_active,
+                "active_session_id": user.active_session_id,
+                "timestamp": now,
+            }
 
     if not user.is_active:
         raise HTTPException(
@@ -276,16 +271,16 @@ def get_current_user_optional(
     u_key = str(username).lower()
     with _USER_CACHE_LOCK:
         entry = _USER_CACHE.get(u_key)
-        if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
-            user = entry["user"]
 
-    if user is not None:
-        try:
-            user = db.merge(user, load=False)
-        except Exception as exc:
-            # Benign: database session already contains an instance or detached merge is unsupported
-            logger.debug("Database merge for optional cached user ignored: %s", exc)
-    else:
+    if entry and (now - entry["timestamp"] < _USER_CACHE_TTL):
+        user = (
+            db.query(User)
+            .options(joinedload(User.role_rel))
+            .filter(User.id == entry["user_id"], User.is_deleted == False)
+            .first()
+        )
+
+    if user is None:
         user = (
             db.query(User)
             .options(joinedload(User.role_rel))
@@ -303,18 +298,15 @@ def get_current_user_optional(
                 .first()
             )
         if user:
-            try:
-                db.expunge(user)
-            except Exception as exc:
-                # Benign: user may already be detached from the active session
-                logger.debug("Database expunge for optional user ignored: %s", exc)
             with _USER_CACHE_LOCK:
-                _USER_CACHE[u_key] = {"user": user, "timestamp": now}
-            try:
-                user = db.merge(user, load=False)
-            except Exception as exc:
-                # Benign: re-attaching user to active session ignored if already bound
-                logger.debug("Database re-merge for optional user ignored: %s", exc)
+                _USER_CACHE[u_key] = {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "is_active": user.is_active,
+                    "active_session_id": user.active_session_id,
+                    "timestamp": now,
+                }
 
     if user and user.is_active:
         token_session_id = payload.get("session_id")

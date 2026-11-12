@@ -1218,7 +1218,7 @@ class SyncLoginRequest(BaseModel):
     password: Optional[str] = None
     Password: Optional[str] = None
     scope: Optional[str] = "data:sync"
-    expires_in_minutes: Optional[int] = None
+    expires_in_minutes: Optional[int] = 30
 
 class SyncLoginResponse(BaseModel):
     access_token: str
@@ -1300,7 +1300,7 @@ async def process_sync_login(
     )
 
     if is_admin_sync or is_service_sync:
-        expire_mins = expires_in_mins or int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '43200'))
+        expire_mins = expires_in_mins or int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
         delta = datetime.timedelta(minutes=expire_mins)
         token = create_access_token(
             data={
@@ -1333,7 +1333,7 @@ async def process_sync_login(
 
     if user and getattr(user, 'is_active', True):
         if check_user_password(user, password_str, db):
-            expire_mins = expires_in_mins or getattr(settings, 'ACCESS_TOKEN_EXPIRE_MINUTES', 43200)
+            expire_mins = expires_in_mins or int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
             delta = datetime.timedelta(minutes=expire_mins)
             token = create_access_token(
                 data={

@@ -113,7 +113,8 @@ export default function Dashboard({
             return "in_progress";
           })() as any,
           amount: d.amount || 45000,
-          assigned_approver: d.assigned_approver,
+          assigned_approver: d.assigned_approver || (d as any).assigned_to || (d as any).assigned_user,
+          assigned_to: (d as any).assigned_to || d.assigned_approver || (d as any).assigned_user,
           is_current_approver: d.is_current_approver,
           has_approved: d.has_approved,
           has_rejected: d.has_rejected,
@@ -129,11 +130,27 @@ export default function Dashboard({
   const isAssignedToUser = (doc: any) => {
     if (doc.is_current_approver) return true;
 
-    const uHandle = (currentUserUsername || "").toLowerCase().trim();
-    const eHandle = (currentUserEmail || "").toLowerCase().trim();
-    const rHandle = (currentUserRole || "").toLowerCase().trim();
-    const approverStr = (doc.assigned_approver || "").toLowerCase();
-    const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || "").toLowerCase().trim();
+    const eHandle = (currentUserEmail || localStorage.getItem("currentUserEmail") || "").toLowerCase().trim();
+    const rHandle = (currentUserRole || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    const idHandle = (localStorage.getItem("currentUserId") || localStorage.getItem("userId") || "").toLowerCase().trim();
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+
+    if (!uHandle && !eHandle && !rHandle && !idHandle) return false;
+
+    const docUserId = String(doc.user_id || (doc as any).assigned_user_id || (doc as any).approver_user_id || "").toLowerCase().trim();
+    if (idHandle && docUserId && idHandle === docUserId) return true;
+
+    const rawAssigned = (
+      doc.assigned_to ||
+      doc.assigned_approver ||
+      doc.assigned_user ||
+      doc.approver_name ||
+      ""
+    ).toString().toLowerCase().trim();
+
+    const pool = rawAssigned.split(",").map((s: string) => s.trim()).filter(Boolean);
 
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
@@ -150,17 +167,16 @@ export default function Dashboard({
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
     const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
-    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
-    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
 
-    if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
-    if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
-    if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p.includes(a) || a.includes(p))))) return true;
+    if (idHandle && pool.some((p: string) => p === idHandle)) return true;
+    if (uHandle && pool.some((p: string) => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (nHandle && pool.some((p: string) => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
+    if (empHandle && pool.some((p: string) => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
+    if (eHandle && pool.some((p: string) => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
+    if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p === a || p.includes(a) || a.includes(p))))) return true;
 
     const sLow = (doc.status || "").toLowerCase();
-    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
     const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
     const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
 
@@ -172,93 +188,47 @@ export default function Dashboard({
 
   // Strictly check if current logged-in user is the actual approver for the document's CURRENT pending stage
   const isActionRequiredForUser = (doc: any): boolean => {
-    if (!isPendingStatus(doc.status)) return false;
+    // 1. Terminal, hold, rejected, or approved documents never require approval action
+    if (isHoldStatus(doc.status) || isRejectedStatus(doc.status) || isApprovedStatus(doc.status)) {
+      return false;
+    }
+    // 2. If the user already approved this stage/document, action is no longer required
+    if (doc.has_approved) return false;
 
-    // 1. Direct current approver flag from backend (evaluated without admin bypass)
+    // 3. Direct current approver flag from backend (evaluated without admin bypass)
     if (doc.is_current_approver) return true;
 
-    // 2. Direct match with current user's username or email against current stage's assigned approver
-    const uHandle = (currentUserUsername || "").toLowerCase().trim();
-    const eHandle = (currentUserEmail || "").toLowerCase().trim();
-    const rHandle = (currentUserRole || "").toLowerCase().trim();
-    const approverStr = (doc.assigned_approver || "").toLowerCase();
-    const pool = approverStr.split(",").map((s: string) => s.trim()).filter(Boolean);
-
-    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
-    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
-
-    if (uHandle && pool.some((p: string) => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (nHandle && pool.some((p: string) => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some((p: string) => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
-    if (eHandle && pool.some((p: string) => p && p.includes(eHandle))) return true;
-
-    // 3. Stage-specific role match (only when stage is assigned specifically by role name, not universal bypass)
-    const roleAliases: Record<string, string[]> = {
-      admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
-      manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
-      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
-      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
-      accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
-      dept_mgr: ["department manager", "dept_mgr", "department_mgr", "hod"],
-      div_hod: ["division hod", "div_hod", "division_head", "hod"],
-      gm: ["general manager", "gm", "general_manager"],
-      jmd: ["joint managing director", "jmd", "joint_managing_director"],
-      md: ["managing director", "md", "managing_director"],
-      finance_auditor: ["finance & internal auditor", "finance and internal auditor", "finance_auditor", "finance auditor", "auditor", "internal auditor"],
-      employee: ["employee", "standard employee", "standard_employee"],
-      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
-    };
-
-    if (rHandle && rHandle !== "admin" && rHandle !== "superadmin") {
-      const activeAliases = roleAliases[rHandle] || [rHandle];
-      if (pool.some((p: string) => activeAliases.includes(p) || activeAliases.some(a => p.includes(a)))) {
-        return true;
-      }
-    }
-
-    const sLow = (doc.status || "").toLowerCase();
-    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
-    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
-    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
-    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
-    if (isUnrouted && isUploader) return true;
-    if (isStage1 && isUploader) return true;
-
-    if (doc.has_approved) return false;
-    return false;
+    // 4. Exact assignment match across user_id, username, email, employee_id, and role
+    return isAssignedToUser(doc);
   };
 
-  // Dynamic KPI Count Computations
+  // Dynamic KPI Count Computations aligned strictly with Work Tracker and DocuFlowDB
   const isHoldStatus = (st: string) => {
-    const s = (st || "").toLowerCase();
-    return s.includes("hold") || s.includes("pause") || s.includes("wait") || s.includes("clarif");
+    const s = (st || "").toLowerCase().trim();
+    return s.includes("hold") || s.includes("pause") || s.includes("wait") || s.includes("clarif") || s === "on hold";
   };
 
   const isRejectedStatus = (st: string) => {
-    const s = (st || "").toLowerCase();
-    return s.includes("cancel") || s.includes("void") || s.includes("fail") || s.includes("declined");
+    const s = (st || "").toLowerCase().trim();
+    return s.includes("reject") || s.includes("cancel") || s.includes("void") || s.includes("fail") || s.includes("declined") || s.includes("returned");
   };
 
   const isApprovedStatus = (st: string) => {
-    const s = (st || "").toLowerCase();
+    const s = (st || "").toLowerCase().trim();
     if (s.includes("stage") || s.includes("progress") || s.includes("pending")) return false;
-    return ["approved", "settled", "paid", "completed", "ready for payment"].some(k => s.includes(k));
+    return ["approved", "settled", "paid", "completed", "ready for payment", "ready_for_payment", "auto-approved"].some(k => s.includes(k));
   };
 
   const isPendingStatus = (st: string) => {
-    const s = (st || "").toLowerCase();
+    const s = (st || "").toLowerCase().trim();
     if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
-    return s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
+    return s === "pending" || s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
   };
 
   const isProgressStatus = (st: string) => {
-    const s = (st || "").toLowerCase();
+    const s = (st || "").toLowerCase().trim();
     if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
-    return s.includes("progress") || s.includes("stage") || s.includes("review") || s.includes("verification") || s.includes("step") || s.includes("return") || s.includes("revision");
+    return s === "in progress" || s.includes("progress") || s.includes("stage") || s.includes("review") || s.includes("verification") || s.includes("step");
   };
 
   // Base dataset strictly excludes approved documents from Dashboard (dedicated page only)
@@ -270,7 +240,7 @@ export default function Dashboard({
   }, [baseDocs, currentUserUsername, currentUserEmail, currentUserRole]);
 
   const allPendingDocs = useMemo(() => {
-    return baseDocs.filter(d => isPendingStatus(d.status));
+    return baseDocs.filter(d => isPendingStatus(d.status) || isActionRequiredForUser(d));
   }, [baseDocs]);
 
   const roleLower = (currentUserRole || "").toLowerCase().trim();
@@ -316,7 +286,12 @@ export default function Dashboard({
   }).length;
   const rejectedCount = calculatedRejected;
 
-  const calculatedProgress = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_approved || isActionRequiredForUser(d)) && (isProgressStatus(d.status) || isPendingStatus(d.status))).length;
+  const calculatedProgress = baseDocs.filter(d => {
+    if (isHoldStatus(d.status) || isRejectedStatus(d.status)) return false;
+    const isAssigned = isAssignedToUser(d);
+    const inProgressOrPending = isProgressStatus(d.status) || isPendingStatus(d.status) || d.has_approved;
+    return (isSuperUser || isAssigned || d.has_approved || isActionRequiredForUser(d)) && inProgressOrPending;
+  }).length;
   const progressCount = calculatedProgress;
 
   const calculatedApproved = displayDocs.filter(d => isApprovedStatus(d.status)).length;

@@ -61,6 +61,16 @@ export function removeAuthTokens(): void {
     localStorage.removeItem("currentUser");
     localStorage.removeItem("user_id");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("lastActivityTime");
+    localStorage.removeItem("currentView");
+    localStorage.removeItem("currentUserRole");
+    localStorage.removeItem("currentUserEmail");
+    localStorage.removeItem("currentUserUsername");
+    localStorage.removeItem("currentUserName");
+    localStorage.removeItem("currentUserEmployeeId");
+    localStorage.removeItem("workTrackerStatusFilter");
+    localStorage.removeItem("adminActiveTab");
   } catch (err) {
     console.debug("Failed to clear auth tokens:", err);
   }

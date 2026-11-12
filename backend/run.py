@@ -48,7 +48,7 @@ def free_port_if_occupied(port: int = 3000):
                 pid = int(parts[-1])
                 if pid and pid != my_pid:
                     print(f"[DocuFlow Startup] Port {port} occupied by previous process PID {pid}. Releasing port...")
-                    subprocess.run(f'taskkill /F /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(["taskkill", "/F", "/PID", str(pid)], shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as exc:
         logging.getLogger("uvicorn.error").debug("Port occupancy check skipped: %s", exc)
 

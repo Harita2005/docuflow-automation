@@ -6,6 +6,8 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=Admin@1234
       - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
     volumes:
       - docuflow_db_data:/var/opt/mssql
       - ./scripts/sql/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -43,6 +45,7 @@ services:
       - SECRET_KEY=strivh-daas-production-ultra-secure-jwt-key-2026-docuflow-core-token
       - FILE_URL_SIGNING_SECRET=strivh-daas-production-file-signing-secret-key-2026-hex-sha256
       - SERVICE_API_KEY=daas-prod-service-api-key-9f8e7d6c5b4a3210
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - ALLOWED_ORIGINS=http://localhost:8085,http://localhost:5174,http://localhost:3000
     depends_on:
       db:

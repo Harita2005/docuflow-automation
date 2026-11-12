@@ -59,54 +59,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/auth', tags=['Authentication'])
 def should_show_dev_otp() -> bool:
     """Return True if running in development/testing mode where OTP should be shown in UI."""
+    env = (getattr(settings, "ENVIRONMENT", "") or os.getenv("ENVIRONMENT", "")).strip().lower()
+    if env in ("development", "dev", "local", "test", "testing"):
+        return True
     return bool(getattr(settings, "SHOW_OTP_IN_UI", False) or os.getenv("SHOW_OTP_IN_UI", "").lower() in ("true", "1", "yes"))
 def check_user_password(user: User, candidate_password: str, db: Session) -> bool:
-    """Validate password against bcrypt hash.
-    Initial defaults (employee_id, etc.) are ONLY accepted if must_change_password is True.
-    Once changed (must_change_password=False), defaults are strictly rejected."""
-    if not candidate_password:
+    """Validate password strictly against bcrypt hash.
+    No hardcoded fallback credentials or default overrides are permitted."""
+    if not candidate_password or not user.password_hash:
         return False
     pwd_clean = candidate_password.strip()
     if not pwd_clean:
         return False
-    is_valid = verify_password(pwd_clean, user.password_hash or '')
-    if is_valid:
-        return True
-    # Admin username / role: allow password123 as a recognized credential
-    if (user.username and user.username.lower() == 'admin') and pwd_clean == 'password123':
-        return True
-    # Once a user has changed their password, initial default passwords are strictly rejected!
-    if not getattr(user, "must_change_password", False):
-        return False
-    pwd_norm = re.sub(r'[\s_\-]+', '', pwd_clean.upper())
-    emp_norm = re.sub(r'[\s_\-]+', '', (user.employee_id or '').upper())
-    user_norm = re.sub(r'[\s_\-]+', '', (user.username or '').upper())
-    uid_norm = re.sub(r'[\s_\-]+', '', (user.user_uid or '').upper())
-    # 1. Match against user's employee_id (raw or normalized e.g. EMP_01 vs EMP01)
-    if user.employee_id:
-        if pwd_clean.upper() == user.employee_id.strip().upper() or (pwd_norm and pwd_norm == emp_norm):
-            is_valid = True
-    # 2. Match against username (e.g. admin logging in with password 'admin')
-    if not is_valid and user.username:
-        if pwd_clean.lower() == user.username.strip().lower() or (pwd_norm and pwd_norm == user_norm):
-            is_valid = True
-    # 3. Match against user_uid
-    if not is_valid and user.user_uid:
-        if pwd_clean.upper() == user.user_uid.strip().upper() or (pwd_norm and pwd_norm == uid_norm):
-            is_valid = True
-    # 4. For admin role / username admin: accept standard admin defaults (including EMP_01, ADMIN01, Admin@1234, password123) on first login only
-    if not is_valid and ((user.username and user.username.lower() == 'admin') or (user.role and user.role.lower() == 'admin')):
-        admin_defaults = {'ADMIN', 'ADMIN01', 'ADMIN_01', 'EMP_01', 'EMP01', 'ADMIN@123', 'ADMIN@1234', 'PASSWORD', 'PASSWORD123'}
-        if pwd_clean.upper() in admin_defaults or pwd_norm in {'ADMIN', 'ADMIN01', 'EMP01', 'PASSWORD', 'PASSWORD123'}:
-            is_valid = True
-    if is_valid and getattr(user, "must_change_password", False):
-        try:
-            from app.auth import get_password_hash
-            user.password_hash = get_password_hash(pwd_clean)
-            db.commit()
-        except Exception as exc:
-            logger.debug("Failed to auto-upgrade password hash: %s", exc)
-    return is_valid
+    return verify_password(pwd_clean, user.password_hash)
 @router.get('/login')
 @router.get('/token')
 def login_get_info():
@@ -769,11 +734,7 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
                 delete_mfa_ticket(request.ticket)
                 raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
             remaining = 5 - ticket_data['attempts']
-            if getattr(user, "must_change_password", False):
-                hint = f" (Initial default is {user.employee_id or 'your Employee ID'})"
-            else:
-                hint = ""
-            raise HTTPException(status_code=400, detail=f'Invalid password. {remaining} attempt(s) remaining.{hint}')
+            raise HTTPException(status_code=400, detail=f'Invalid password. {remaining} attempt(s) remaining.')
     elif method_upper in ['EMAIL', 'SMS']:
         otp_record = get_valid_otp(db, user.id)
         if not otp_record:

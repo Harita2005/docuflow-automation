@@ -260,12 +260,20 @@ export default function WorkTrackerPage({
 
   const isAssignedToUser = (doc: DbInvoice): boolean => {
     if (doc.is_current_approver) return true;
-    if (!currentUserUsername && !currentUserEmail && !currentUserRole) return false;
-    const uHandle = (currentUserUsername || '').toLowerCase().trim();
-    const eHandle = (currentUserEmail || '').toLowerCase().trim();
-    const rHandle = (currentUserRole || '').toLowerCase().trim();
-    const approverStr = (doc.assigned_approver || '').toLowerCase();
-    const pool = approverStr.split(',').map(s => s.trim());
+    const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || '').toLowerCase().trim();
+    const eHandle = (currentUserEmail || localStorage.getItem("currentUserEmail") || '').toLowerCase().trim();
+    const rHandle = (currentUserRole || localStorage.getItem("currentUserRole") || '').toLowerCase().trim();
+    const idHandle = (localStorage.getItem("currentUserId") || localStorage.getItem("userId") || '').toLowerCase().trim();
+    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
+    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+
+    if (!uHandle && !eHandle && !rHandle && !idHandle) return false;
+
+    const docUserId = String(doc.user_id || (doc as any).assigned_user_id || (doc as any).approver_user_id || "").toLowerCase().trim();
+    if (idHandle && docUserId && idHandle === docUserId) return true;
+
+    const rawAssigned = (doc.assigned_approver || (doc as any).assigned_to || (doc as any).assigned_user || '').toString().toLowerCase().trim();
+    const pool = rawAssigned.split(',').map(s => s.trim()).filter(Boolean);
 
     // Role mapping for common designations
     const roleAliases: Record<string, string[]> = {
@@ -286,17 +294,16 @@ export default function WorkTrackerPage({
       account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
-    const activeAliases = roleAliases[rHandle] || [rHandle];
-    const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
-    const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
+    const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
 
-    if (uHandle && pool.some(p => p && (p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (nHandle && pool.some(p => p && (p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some(p => p && (p.includes(empHandle) || empHandle.includes(p)))) return true;
-    if (eHandle && pool.some(p => p && p.includes(eHandle))) return true;
-    if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p.includes(a) || a.includes(p))))) return true;
+    if (idHandle && pool.some(p => p === idHandle)) return true;
+    if (uHandle && pool.some(p => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
+    if (nHandle && pool.some(p => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
+    if (empHandle && pool.some(p => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
+    if (eHandle && pool.some(p => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
+    if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p === a || p.includes(a) || a.includes(p))))) return true;
     const sLow = (doc.status || "").toLowerCase();
-    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || (doc.assigned_approver || "").toLowerCase().includes("unassigned");
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
     const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
     if (isUnrouted && isUploader) return true;
     return false;
