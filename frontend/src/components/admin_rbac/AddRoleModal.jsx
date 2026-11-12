@@ -74,38 +74,22 @@ export default function AddRoleModal({
               <span className="text-rose-500">*</span>
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role Title / Job Name <span className="text-rose-500">*</span>
-                </label>
-                <input 
-                  type="text"
-                  required
-                  value={newRoleName}
-                  onChange={e => {
-                    setNewRoleName(e.target.value);
-                    if (!newRoleCode || newRoleCode === newRoleName.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, '')) {
-                      setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''));
-                    }
-                  }}
-                  placeholder="e.g. Accounts Payable Specialist"
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#14532D] focus:bg-white transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  System Role ID <span className="text-gray-400 font-normal">(Auto-generated)</span>
-                </label>
-                <input 
-                  type="text"
-                  value={newRoleCode}
-                  onChange={e => setNewRoleCode(e.target.value.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''))}
-                  placeholder="e.g. ap_specialist"
-                  className="w-full text-xs p-2.5 font-mono bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-700 focus:border-[#14532D] focus:bg-white transition"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Role Title / Job Name <span className="text-rose-500">*</span>
+              </label>
+              <input 
+                type="text"
+                required
+                value={newRoleName}
+                onChange={e => {
+                  const val = e.target.value;
+                  setNewRoleName(val);
+                  setNewRoleCode(val.toLowerCase().replace(/[\s\-/\\]+/g, '_').replace(/[^a-z0-9_]/g, ''));
+                }}
+                placeholder="e.g. Accounts Payable Specialist"
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-semibold text-slate-800 focus:border-[#14532D] focus:bg-white transition"
+              />
             </div>
 
             <div>
