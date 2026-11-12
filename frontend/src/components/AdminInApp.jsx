@@ -63,11 +63,16 @@ const EVENTS_META = [
 const TEMPLATE_VARS = [
   'document_number',
   'document_type',
+  'vendor_name',
+  'amount',
+  'currency',
   'initiator_name',
   'initiator_email',
   'assigned_to',
   'due_date',
-  'approval_stage'
+  'approval_stage',
+  'approver_name',
+  'remarks'
 ];
 
 export default function AdminInApp() {
@@ -235,11 +240,16 @@ export default function AdminInApp() {
     const sampleData = {
       document_number: "INV-2024-0089",
       document_type: "Tax Invoice",
+      vendor_name: "ABC Logistics Ltd",
+      amount: "INR 45,000.00",
+      currency: "INR",
       initiator_name: "Rahul Sharma",
       initiator_email: "rahul.sharma@company.com",
       assigned_to: "Operations Approver",
       due_date: "28 Oct 2026",
-      approval_stage: "Manager Approval"
+      approval_stage: "Stage 1",
+      approver_name: "Vignesh",
+      remarks: "Verified against delivery challan"
     };
 
     let title = titleTpl || "";
