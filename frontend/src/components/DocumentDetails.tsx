@@ -30,6 +30,7 @@ import {
   Settings,
   Activity,
   Image as ImageIcon,
+  MessageSquare,
 } from "lucide-react";
 import { DbInvoice, DbWorkflowInstance } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, getCanonicalDocumentType, formatDocumentTypeDisplay, resolvePersonsInRoleForDivision } from "../utils/formatters";
@@ -1429,6 +1430,7 @@ export default function DocumentDetails({
   const [activeApprovalLog, setActiveApprovalLog] = useState<any>(null);
   const [workflowStepDefinitions, setWorkflowStepDefinitions] = useState<any[]>([]);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
+  const [showDockedAudit, setShowDockedAudit] = useState<boolean>(false);
   const [showAuditHistoryModal, setShowAuditHistoryModal] = useState<boolean>(false);
   const [iframeSrc, setIframeSrc] = useState<string>("");
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -2440,6 +2442,56 @@ export default function DocumentDetails({
           </div>
         </div>
 
+        {/* TOP INLINE RETURN / HOLD ALERT BANNER */}
+        {(() => {
+          const docStLower = (document?.status || '').toLowerCase();
+          const isActiveDoc = docStLower.startsWith('in progress') || docStLower === 'in progress' || docStLower.includes('hold');
+          
+          // Check if document has return metadata or latest hold/reject action
+          const isRet = Boolean(document?.is_returned) || (document?.latest_action || '').toLowerCase().includes('reject') || (document?.latest_action || '').toLowerCase().includes('return');
+          const isHeld = docStLower.includes('hold') || (document?.latest_action || '').toLowerCase().includes('hold');
+          
+          if (!isActiveDoc || (!isRet && !isHeld)) return null;
+
+          const actorName = (document as any)?.latest_return_actor || (document as any)?.latest_action_actor || 'Reviewer';
+          const stageName = (document as any)?.latest_return_stage || (document as any)?.latest_action_stage || `Stage ${document?.current_stage || 1}`;
+          const remarkText = (document as any)?.latest_return_remark || (document as any)?.latest_action_remark || '';
+
+          return (
+            <div className={`px-4 py-2 border-b flex items-start gap-2.5 animate-fadeIn ${
+              isHeld ? 'bg-purple-50/90 border-purple-200 text-purple-900' : 'bg-amber-50/95 border-amber-300 text-amber-950'
+            }`}>
+              <div className={`p-1 rounded-md shrink-0 mt-0.5 ${
+                isHeld ? 'bg-purple-200/70 text-purple-800' : 'bg-amber-200/80 text-amber-900'
+              }`}>
+                {isHeld ? <PauseCircle className="h-4 w-4" /> : <RotateCcw className="h-4 w-4 stroke-[2.5]" />}
+              </div>
+              <div className="flex-1 min-w-0 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold tracking-tight uppercase text-[11px]">
+                    {isHeld ? 'Document Placed On Hold' : 'Returned from Higher Stage'}
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/80 border border-slate-200 font-bold">
+                    By: {actorName} ({stageName})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDockedAudit(true)}
+                    className="ml-auto text-[10.5px] font-bold underline hover:opacity-80 transition cursor-pointer"
+                  >
+                    View Timeline &rarr;
+                  </button>
+                </div>
+                {remarkText && (
+                  <p className="mt-1 text-[11px] font-medium bg-white/70 p-1.5 rounded border border-amber-200/60 italic">
+                    "{remarkText}"
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ACTIVE REVIEWER CONCURRENT COLLISION LOCK BANNER */}
         {lockInfo.isLocked && !lockInfo.isSelf && (
           <div className="bg-amber-500/15 border-b border-amber-400/40 px-4 py-2 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
@@ -3177,6 +3229,21 @@ export default function DocumentDetails({
                     </button>
                   </>
                 )}
+
+                {/* Docked Working Audit Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowDockedAudit(!showDockedAudit)}
+                  className={`px-2.5 py-1 rounded-md border text-[9.5px] font-bold flex items-center gap-1 transition shadow-2xs cursor-pointer ${
+                    showDockedAudit 
+                      ? "bg-emerald-400 text-slate-950 border-emerald-300 font-extrabold" 
+                      : "bg-white/10 hover:bg-white/20 text-emerald-100 border-white/20 hover:text-white"
+                  }`}
+                  title={showDockedAudit ? "Close Docked Working Audit Panel" : "Dock Working Audit Panel Alongside PDF"}
+                >
+                  <Clock className="h-3 w-3" />
+                  <span>{showDockedAudit ? "Hide Working Audit" : "Working Audit"}</span>
+                </button>
               </div>
             </div>
 
@@ -3241,6 +3308,138 @@ export default function DocumentDetails({
             </div>
 
           </div>
+
+          {/* DOCKED RIGHT-HAND WORKING AUDIT PANEL (ALONGSIDE DOCUMENT & FORM) */}
+          {showDockedAudit && (
+            <div className="w-full lg:w-[32%] xl:w-[30%] bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-sm flex flex-col shrink-0 min-w-0 h-full animate-fadeIn">
+              {/* Docked Header */}
+              <div className="bg-[#003F28] text-white px-3.5 py-2 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2 truncate">
+                  <Clock className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
+                  <span className="font-extrabold text-[11px] truncate">
+                    Working Audit & Timeline
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDockedAudit(false)}
+                  className="h-5 w-5 rounded hover:bg-white/20 text-emerald-100 hover:text-white flex items-center justify-center transition cursor-pointer"
+                  title="Close Working Audit"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Docked Body */}
+              <div className="p-3 overflow-y-auto flex-1 space-y-3 custom-scrollbar text-xs">
+                {/* Stepper overview */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Stage Progression
+                  </span>
+                  {workflowStepDefinitions && workflowStepDefinitions.length > 0 ? (
+                    workflowStepDefinitions.map((step: any, idx: number) => {
+                      const currentStageNum = activeApprovalLog?.current_stage_number || document?.current_stage || 1;
+                      const isPassed = step.stage_number < currentStageNum;
+                      const isCurrent = step.stage_number === currentStageNum;
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                          <span className={`h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center shrink-0 ${
+                            isPassed 
+                              ? "bg-emerald-600 text-white" 
+                              : isCurrent 
+                              ? "bg-[#003F28] text-white ring-2 ring-[#003F28]/20" 
+                              : "bg-slate-200 text-slate-600"
+                          }`}>
+                            {isPassed ? "✓" : step.stage_number}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-800 truncate flex-1">
+                            {step.stage_name}
+                          </span>
+                          {isCurrent && (
+                            <span className="text-[8px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 uppercase">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-[10px] text-slate-400 italic">No workflow stages defined</div>
+                  )}
+                </div>
+
+                {/* Chronological Action History Stream */}
+                <div className="pt-2 border-t border-slate-200">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <MessageSquare className="h-3 w-3 text-[#003F28]" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                      Action History & Remarks
+                    </span>
+                    <span className="text-[8.5px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full border border-slate-200 ml-auto">
+                      {commentsList?.length || 0}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {commentsList && commentsList.length > 0 ? (
+                      commentsList.map((logItem: any, lIdx: number) => {
+                        const act = (logItem.action || "").toLowerCase();
+                        const isAppr = act.includes("approve") || act.includes("signoff") || act.includes("verified");
+                        const isRej = act.includes("reject") || act.includes("returned") || act.includes("send back");
+                        const isCanc = act.includes("cancel") || act.includes("void");
+                        const isSub = act.includes("submit") || act.includes("upload") || act.includes("ingest");
+
+                        const badgeBg = isAppr ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                          : isRej ? "bg-amber-50 text-amber-900 border-amber-300"
+                          : isCanc ? "bg-rose-50 text-rose-900 border-rose-300"
+                          : isSub ? "bg-blue-50 text-blue-900 border-blue-300"
+                          : "bg-slate-50 text-slate-800 border-slate-300";
+
+                        const dotColor = isAppr ? "bg-emerald-500"
+                          : isRej ? "bg-amber-500"
+                          : isCanc ? "bg-rose-500"
+                          : isSub ? "bg-blue-500"
+                          : "bg-slate-400";
+
+                        const commentText = logItem.remarks || logItem.notes || logItem.comment || logItem.reason;
+
+                        return (
+                          <div key={lIdx} className={`p-2 rounded-lg border text-[9.5px] space-y-1 ${badgeBg}`}>
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColor}`} />
+                                <span className="font-extrabold truncate">
+                                  {logItem.action || "Action"}
+                                </span>
+                              </div>
+                              {logItem.created_at && (
+                                <span className="text-[8px] font-mono text-slate-500 shrink-0">
+                                  {formatDate(logItem.created_at)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[8.5px] text-slate-600">
+                              by <strong className="text-slate-800 font-semibold">{logItem.author || logItem.user_name || logItem.user || "User"}</strong>
+                              {logItem.stage && <span className="ml-1 text-slate-500 font-mono">({logItem.stage})</span>}
+                            </div>
+                            {commentText && (
+                              <div className="bg-white/90 p-1.5 rounded border border-slate-200/80 text-[9px] font-medium text-slate-800 italic">
+                                "{commentText}"
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-[9.5px] text-slate-400 italic">No action logs recorded</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
 
@@ -3498,6 +3697,12 @@ export default function DocumentDetails({
                     );
                   });
 
+                  // Specific submission log (for Stage 1)
+                  const submitLog = step.stage_number === 1 ? (commentsList || []).find((c: any) => {
+                    const action = (c.action || "").toLowerCase();
+                    return action.includes("submit") || action.includes("upload") || action.includes("ingest");
+                  }) : null;
+
                   // Terminal cancellation log for the cancelled stage
                   const terminalCancelLog = (commentsList || []).find((c: any) => {
                     const action = (c.action || "").toLowerCase();
@@ -3634,52 +3839,98 @@ export default function DocumentDetails({
                             )}
                           </div>
 
-                          {/* 2. Exact Sign-Off / Status Attribution */}
-                          {isTerminalCancelledStage ? (
-                            <div className="p-1 px-1.5 bg-rose-50/70 rounded border border-rose-200/70 text-[9.5px] flex items-center justify-between text-rose-900">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="h-3 w-3 rounded-full bg-rose-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✕</span>
-                                <span className="truncate">
-                                  <strong>Process Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : "Initiator"}
-                                </span>
+                          {/* 2. Exact Sign-Off / Status Attribution & User Action Comments */}
+                          {step.stage_number === 1 && submitLog && (
+                            <div className="p-1 px-1.5 bg-blue-50/70 rounded border border-blue-200/70 text-[9.5px] space-y-1 text-blue-900">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="h-3 w-3 rounded-full bg-blue-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">↑</span>
+                                  <span className="truncate">
+                                    <strong>Submitted By:</strong> {submitLog.author || submitLog.user_name || submitLog.user || "Uploader"}
+                                  </span>
+                                </div>
+                                {submitLog?.created_at && (
+                                  <div className="text-[8.5px] font-mono text-blue-700 text-right shrink-0 ml-2">
+                                    <span>Date: {formatDate(submitLog.created_at)}</span>
+                                    <span className="mx-1">•</span>
+                                    <span>Time: {formatTimeOnly(submitLog.created_at)}</span>
+                                  </div>
+                                )}
                               </div>
-                              {terminalCancelLog?.created_at && (
-                                <div className="text-[8.5px] font-mono text-slate-500 text-right shrink-0 ml-2">
-                                  <span>Date: {formatDate(terminalCancelLog.created_at)}</span>
-                                  <span className="mx-1">•</span>
-                                  <span>Time: {formatTimeOnly(terminalCancelLog.created_at)}</span>
+                              {(submitLog.remarks || submitLog.notes || submitLog.comment || submitLog.reason) && (
+                                <div className="bg-white/80 p-1.5 rounded border border-blue-200 text-slate-700 text-[9px] font-medium italic">
+                                  "{submitLog.remarks || submitLog.notes || submitLog.comment || submitLog.reason}"
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {isTerminalCancelledStage ? (
+                            <div className="p-1 px-1.5 bg-rose-50/70 rounded border border-rose-200/70 text-[9.5px] space-y-1 text-rose-900">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="h-3 w-3 rounded-full bg-rose-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✕</span>
+                                  <span className="truncate">
+                                    <strong>Process Cancelled By:</strong> {terminalCancelLog ? (terminalCancelLog.author || terminalCancelLog.user_name || terminalCancelLog.user) : "Initiator"}
+                                  </span>
+                                </div>
+                                {terminalCancelLog?.created_at && (
+                                  <div className="text-[8.5px] font-mono text-slate-500 text-right shrink-0 ml-2">
+                                    <span>Date: {formatDate(terminalCancelLog.created_at)}</span>
+                                    <span className="mx-1">•</span>
+                                    <span>Time: {formatTimeOnly(terminalCancelLog.created_at)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {terminalCancelLog && (terminalCancelLog.remarks || terminalCancelLog.notes || terminalCancelLog.comment || terminalCancelLog.reason) && (
+                                <div className="bg-white/80 p-1.5 rounded border border-rose-200 text-rose-900 text-[9px] font-medium italic">
+                                  <strong>Reason:</strong> "{terminalCancelLog.remarks || terminalCancelLog.notes || terminalCancelLog.comment || terminalCancelLog.reason}"
                                 </div>
                               )}
                             </div>
                           ) : isPassed ? (
-                            <div className="p-1 px-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[9.5px] flex items-center justify-between text-emerald-800">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="h-3 w-3 rounded-full bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✓</span>
-                                <span className="truncate">
-                                  <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : "Authorized Approver"}
-                                </span>
+                            <div className="p-1 px-1.5 bg-emerald-50/60 rounded border border-emerald-200/60 text-[9.5px] space-y-1 text-emerald-800">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="h-3 w-3 rounded-full bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center shrink-0">✓</span>
+                                  <span className="truncate">
+                                    <strong>Approved By:</strong> {matchingApprovalLog ? (matchingApprovalLog.author || matchingApprovalLog.user_name || matchingApprovalLog.user) : "Authorized Approver"}
+                                  </span>
+                                </div>
+                                {matchingApprovalLog?.created_at && (
+                                  <div className="text-[8.5px] font-mono text-emerald-700 text-right shrink-0 ml-2">
+                                    <span>Date: {formatDate(matchingApprovalLog.created_at)}</span>
+                                    <span className="mx-1">•</span>
+                                    <span>Time: {formatTimeOnly(matchingApprovalLog.created_at)}</span>
+                                  </div>
+                                )}
                               </div>
-                              {matchingApprovalLog?.created_at && (
-                                <div className="text-[8.5px] font-mono text-emerald-700 text-right shrink-0 ml-2">
-                                  <span>Date: {formatDate(matchingApprovalLog.created_at)}</span>
-                                  <span className="mx-1">•</span>
-                                  <span>Time: {formatTimeOnly(matchingApprovalLog.created_at)}</span>
+                              {matchingApprovalLog && (matchingApprovalLog.remarks || matchingApprovalLog.notes || matchingApprovalLog.comment || matchingApprovalLog.reason) && (
+                                <div className="bg-white/80 p-1.5 rounded border border-emerald-200 text-emerald-900 text-[9px] font-medium italic">
+                                  "{matchingApprovalLog.remarks || matchingApprovalLog.notes || matchingApprovalLog.comment || matchingApprovalLog.reason}"
                                 </div>
                               )}
                             </div>
                           ) : returnLog && !isDocSettled ? (
-                            <div className="p-1 px-1.5 bg-amber-50/60 rounded border border-amber-200/60 text-[9.5px] flex items-center justify-between text-amber-800">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="h-3 w-3 rounded-full bg-amber-500 text-white font-bold text-[8px] flex items-center justify-center shrink-0">↩</span>
-                                <span className="truncate">
-                                  <strong>Returned By:</strong> {returnLog.author || returnLog.user_name || returnLog.user || "Reviewer"}
-                                </span>
+                            <div className="p-1 px-1.5 bg-amber-50/60 rounded border border-amber-200/60 text-[9.5px] space-y-1 text-amber-800">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="h-3 w-3 rounded-full bg-amber-500 text-white font-bold text-[8px] flex items-center justify-center shrink-0">↩</span>
+                                  <span className="truncate">
+                                    <strong>Returned By:</strong> {returnLog.author || returnLog.user_name || returnLog.user || "Reviewer"}
+                                  </span>
+                                </div>
+                                {returnLog?.created_at && (
+                                  <div className="text-[8.5px] font-mono text-amber-700 text-right shrink-0 ml-2">
+                                    <span>Date: {formatDate(returnLog.created_at)}</span>
+                                    <span className="mx-1">•</span>
+                                    <span>Time: {formatTimeOnly(returnLog.created_at)}</span>
+                                  </div>
+                                )}
                               </div>
-                              {returnLog?.created_at && (
-                                <div className="text-[8.5px] font-mono text-amber-700 text-right shrink-0 ml-2">
-                                  <span>Date: {formatDate(returnLog.created_at)}</span>
-                                  <span className="mx-1">•</span>
-                                  <span>Time: {formatTimeOnly(returnLog.created_at)}</span>
+                              {(returnLog.remarks || returnLog.notes || returnLog.comment || returnLog.reason) && (
+                                <div className="bg-white/80 p-1.5 rounded border border-amber-200 text-amber-900 text-[9px] font-medium italic">
+                                  <strong>Reason:</strong> "{returnLog.remarks || returnLog.notes || returnLog.comment || returnLog.reason}"
                                 </div>
                               )}
                             </div>
@@ -3716,6 +3967,77 @@ export default function DocumentDetails({
                         Awaiting compliance checklist verification and sign-off.
                       </p>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Chronological Action Comments & Remarks Stream */}
+              {commentsList && commentsList.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-200">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-[#003F28]" />
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                      Action History & Remarks Stream
+                    </span>
+                    <span className="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full border border-slate-200 ml-auto">
+                      {commentsList.length} {commentsList.length === 1 ? 'entry' : 'entries'}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {commentsList.map((logItem: any, lIdx: number) => {
+                      const act = (logItem.action || "").toLowerCase();
+                      const isAppr = act.includes("approve") || act.includes("signoff") || act.includes("verified");
+                      const isRej = act.includes("reject") || act.includes("returned") || act.includes("send back");
+                      const isCanc = act.includes("cancel") || act.includes("void");
+                      const isSub = act.includes("submit") || act.includes("upload") || act.includes("ingest");
+
+                      const badgeBg = isAppr ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : isRej ? "bg-amber-50 text-amber-900 border-amber-300"
+                        : isCanc ? "bg-rose-50 text-rose-900 border-rose-300"
+                        : isSub ? "bg-blue-50 text-blue-900 border-blue-300"
+                        : "bg-slate-50 text-slate-800 border-slate-300";
+
+                      const dotColor = isAppr ? "bg-emerald-500"
+                        : isRej ? "bg-amber-500"
+                        : isCanc ? "bg-rose-500"
+                        : isSub ? "bg-blue-500"
+                        : "bg-slate-400";
+
+                      const commentText = logItem.remarks || logItem.notes || logItem.comment || logItem.reason;
+
+                      return (
+                        <div key={lIdx} className={`p-2 rounded-lg border text-[10px] space-y-1 ${badgeBg}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                              <span className="font-extrabold truncate">
+                                {logItem.action || "Action"}
+                              </span>
+                              <span className="text-[9px] text-slate-500 font-normal">
+                                by <strong className="font-semibold text-slate-800">{logItem.author || logItem.user_name || logItem.user || "User"}</strong>
+                              </span>
+                              {logItem.stage && (
+                                <span className="text-[8.5px] font-mono px-1 py-0.2 rounded bg-white/70 border border-slate-200 text-slate-600">
+                                  {logItem.stage}
+                                </span>
+                              )}
+                            </div>
+                            {logItem.created_at && (
+                              <div className="text-[8.5px] font-mono text-slate-500 shrink-0">
+                                <span>{formatDate(logItem.created_at)}</span>
+                                <span className="mx-1">•</span>
+                                <span>{formatTimeOnly(logItem.created_at)}</span>
+                              </div>
+                            )}
+                          </div>
+                          {commentText && (
+                            <div className="bg-white/90 p-1.5 rounded border border-slate-200/80 text-[9.5px] font-medium text-slate-800 italic">
+                              "{commentText}"
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

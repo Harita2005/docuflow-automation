@@ -41,7 +41,7 @@ export default function Dashboard({
   onNavigateToApproved
 }: DashboardProps) {
   const [activeDocType, setActiveDocType] = useState<string>("ALL");
-  const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected'>('pending');
+  const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected' | 'cancelled'>('pending');
   const [pendingScope, setPendingScope] = useState<'my' | 'all'>('my');
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [timeRange, setTimeRange] = useState<string>("ALL TIME");
@@ -158,7 +158,7 @@ export default function Dashboard({
       finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
       ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
       accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
-      accounts_approver2: ["accounts_approver2", "accounts approver 2", "accounts_approver", "accounts approver", "ap", "accounts"],
+      accounts_approver2: ["accounts_approver2", "accounts approver 2"],
       employee: ["employee", "standard employee", "standard_employee"],
       account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
       accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
@@ -178,21 +178,35 @@ export default function Dashboard({
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
     const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
-    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+    const isTrueUploader = rHandle.includes("uplod") || rHandle === "admin";
 
-    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive" || isUploader)) return true;
-    if (isUnrouted && isUploader) return true;
-    if (isStage1 && isUploader) return true;
+    // Rule 2: Hide docs from Approver 2's queue until Approver 1 approves
+    if (isStage1 && !doc.is_current_approver) {
+      return false;
+    }
+
+    if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive")) return true;
+    if (isUnrouted && isTrueUploader) return true;
+    if (isStage1 && isTrueUploader) return true;
     return false;
   };
 
   // Strictly check if current logged-in user is the actual approver for the document's CURRENT pending stage
   const isActionRequiredForUser = (doc: any): boolean => {
-    // 1. Terminal, hold, rejected, or approved documents never require approval action
-    if (isHoldStatus(doc.status) || isRejectedStatus(doc.status) || isApprovedStatus(doc.status)) {
+    // 1. Hold or approved documents never require approval action
+    if (isHoldStatus(doc.status) || isApprovedStatus(doc.status)) {
       return false;
     }
-    // 2. If the user already approved this stage/document, action is no longer required
+    // Terminal cancelled/failed
+    if (["cancelled", "void", "failed"].some(s => (doc.status || "").toLowerCase().includes(s))) {
+      return false;
+    }
+    // Rule 2: Hide docs from Approver 2's queue until Approver 1 approves
+    const currentStage = doc.current_stage || 1;
+    if (currentStage === 1 && !doc.is_current_approver) {
+      return false;
+    }
+    // 2. If the user already approved this current cycle, action is no longer required
     if (doc.has_approved) return false;
 
     // 3. Direct current approver flag from backend (evaluated without admin bypass)
@@ -210,7 +224,16 @@ export default function Dashboard({
 
   const isRejectedStatus = (st: string) => {
     const s = (st || "").toLowerCase().trim();
-    return s.includes("reject") || s.includes("cancel") || s.includes("void") || s.includes("fail") || s.includes("declined") || s.includes("returned");
+    // Exclude active documents in progress
+    if (s.startsWith("in progress") || s === "in progress") return false;
+    // Exclude cancelled documents (handled separately)
+    if (s.includes("cancel") || s.includes("void")) return false;
+    return s.includes("reject") || s.includes("fail") || s.includes("declined");
+  };
+
+  const isCancelledStatus = (st: string) => {
+    const s = (st || "").toLowerCase().trim();
+    return s.includes("cancel") || s.includes("void");
   };
 
   const isApprovedStatus = (st: string) => {
@@ -221,13 +244,13 @@ export default function Dashboard({
 
   const isPendingStatus = (st: string) => {
     const s = (st || "").toLowerCase().trim();
-    if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
+    if (isHoldStatus(s) || isRejectedStatus(s) || isCancelledStatus(s) || isApprovedStatus(s)) return false;
     return s === "pending" || s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
   };
 
   const isProgressStatus = (st: string) => {
     const s = (st || "").toLowerCase().trim();
-    if (isHoldStatus(s) || isRejectedStatus(s) || isApprovedStatus(s)) return false;
+    if (isHoldStatus(s) || isRejectedStatus(s) || isCancelledStatus(s) || isApprovedStatus(s)) return false;
     return s === "in progress" || s.includes("progress") || s.includes("stage") || s.includes("review") || s.includes("verification") || s.includes("step");
   };
 
@@ -255,6 +278,7 @@ export default function Dashboard({
   const canUserSeeCancelledDoc = (d: any): boolean => {
     if (isAdmin) return true;
     if (d.has_rejected) return true;
+    if (isAssignedToUser(d)) return true;
     const uHandle = (currentUserUsername || "").toLowerCase().trim();
     const eHandle = (currentUserEmail || "").toLowerCase().trim();
     const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
@@ -275,19 +299,28 @@ export default function Dashboard({
   const calculatedHold = baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status)).length;
   const holdCount = calculatedHold;
 
+  const isRejectedForDashboard = (d: any) => {
+    const s = (d.status || "").toLowerCase().trim();
+    if (s.startsWith("in progress") || s === "in progress") return false;
+    if (s.includes("cancel") || s.includes("void")) return false;
+    return isRejectedStatus(d.status) || (Boolean(d.has_rejected) && !isProgressStatus(d.status));
+  };
+
+  const isCancelledForDashboard = (d: any) => {
+    return isCancelledStatus(d.status) && canUserSeeCancelledDoc(d);
+  };
+
   const calculatedRejected = baseDocs.filter(d => {
-    if (!isRejectedStatus(d.status)) return false;
-    const s = (d.status || "").toLowerCase();
-    const isCancelled = s.includes("cancel") || s.includes("void") || s.includes("fail");
-    if (isCancelled) {
-      return canUserSeeCancelledDoc(d);
-    }
+    if (!isRejectedForDashboard(d)) return false;
     return isSuperUser || isAssignedToUser(d) || d.has_rejected;
   }).length;
   const rejectedCount = calculatedRejected;
 
+  const calculatedCancelled = baseDocs.filter(d => isCancelledForDashboard(d)).length;
+  const cancelledCount = calculatedCancelled;
+
   const calculatedProgress = baseDocs.filter(d => {
-    if (isHoldStatus(d.status) || isRejectedStatus(d.status)) return false;
+    if (isHoldStatus(d.status) || isRejectedForDashboard(d) || isCancelledForDashboard(d)) return false;
     const isAssigned = isAssignedToUser(d);
     const inProgressOrPending = isProgressStatus(d.status) || isPendingStatus(d.status) || d.has_approved;
     return (isSuperUser || isAssigned || d.has_approved || isActionRequiredForUser(d)) && inProgressOrPending;
@@ -298,29 +331,27 @@ export default function Dashboard({
   const statsApproved = Number(_stats?.approvedDocuments ?? 0);
   const approvedCount = Math.max(calculatedApproved, statsApproved);
 
-  const activeTotal = pendingCount + holdCount + rejectedCount;
+  const activeTotal = pendingCount + holdCount + rejectedCount + cancelledCount;
   const pendingPercent = activeTotal > 0 ? Math.round((pendingCount / activeTotal) * 100) : 0;
   const holdPercent = activeTotal > 0 ? Math.round((holdCount / activeTotal) * 100) : 0;
   const rejectedPercent = activeTotal > 0 ? Math.round((rejectedCount / activeTotal) * 100) : 0;
+  const cancelledPercent = activeTotal > 0 ? Math.round((cancelledCount / activeTotal) * 100) : 0;
   const progressPercent = activeTotal > 0 ? Math.round((progressCount / activeTotal) * 100) : 0;
   const approvedPercent = (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount)) > 0 
     ? Math.round((approvedCount / (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount))) * 100) 
     : 0;
 
-  // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected)
+  // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected, or Cancelled)
   const currentStatusDocs = kpiFilter === 'hold'
     ? baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
       ? baseDocs.filter(d => {
-          if (!isRejectedStatus(d.status)) return false;
-          const s = (d.status || "").toLowerCase();
-          const isCancelled = s.includes("cancel") || s.includes("void") || s.includes("fail");
-          if (isCancelled) {
-            return canUserSeeCancelledDoc(d);
-          }
+          if (!isRejectedForDashboard(d)) return false;
           return isSuperUser || isAssignedToUser(d) || d.has_rejected;
         })
-      : activePendingDocs;
+      : kpiFilter === 'cancelled'
+        ? baseDocs.filter(d => isCancelledForDashboard(d))
+        : activePendingDocs;
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {
@@ -668,7 +699,22 @@ export default function Dashboard({
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>IN DASHBOARD</span>
-              <span>{rejectedCount} OF {activeTotal}</span>
+              <div className="flex items-center gap-1">
+                <span>{rejectedCount} OF {activeTotal}</span>
+                {cancelledCount > 0 && (
+                  <span 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setKpiFilter('cancelled');
+                      setActiveDocType('ALL');
+                    }}
+                    className="text-[7.5px] px-1 py-0.2 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 font-bold ml-1 cursor-pointer"
+                    title="Click to view Cancelled documents"
+                  >
+                    ({cancelledCount} CANCELLED)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

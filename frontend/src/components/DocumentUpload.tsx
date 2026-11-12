@@ -79,6 +79,7 @@ export default function DocumentUpload({
     plant: string;
     document_type: string;
     workflow_profile: string;
+    submission_notes: string;
     line_items: Array<{
       s_no: number;
       description: string;
@@ -104,6 +105,7 @@ export default function DocumentUpload({
     plant: "MAIN",
     document_type: "AP INVOICE",
     workflow_profile: "auto",
+    submission_notes: "",
     line_items: [],
     dynamic_fields: {}
   });
@@ -478,6 +480,7 @@ export default function DocumentUpload({
           plant: "MAIN",
           document_type: ext.document_type || selectedDocType || "AP INVOICE",
           workflow_profile: selectedWorkflowProfile || "auto",
+          submission_notes: "",
           line_items: rawLineItems.map((itm: any, idx: number) => ({
             s_no: itm.s_no != null ? Number(itm.s_no) : idx + 1,
             description: String(itm.description || ""),
@@ -530,6 +533,10 @@ export default function DocumentUpload({
       formData.append("document_type", verifyForm.document_type);
       if (verifyForm.workflow_profile && verifyForm.workflow_profile !== "auto") {
         formData.append("workflow_profile", verifyForm.workflow_profile);
+      }
+      if (verifyForm.submission_notes && verifyForm.submission_notes.trim()) {
+        formData.append("comment", verifyForm.submission_notes.trim());
+        formData.append("remarks", verifyForm.submission_notes.trim());
       }
       if (verifyForm.line_items && verifyForm.line_items.length > 0) {
         formData.append("line_items", JSON.stringify(verifyForm.line_items));
@@ -1416,6 +1423,20 @@ export default function DocumentUpload({
                       ))}
                     </select>
                   </div>
+                </div>
+
+                {/* Submission Notes / Remarks */}
+                <div>
+                  <label className="block text-[10.5px] font-semibold text-slate-700 mb-0.5">
+                    Submission Notes / Remarks <span className="text-slate-400 font-normal">(Recorded in Timeline)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={verifyForm.submission_notes}
+                    onChange={(e) => setVerifyForm({ ...verifyForm, submission_notes: e.target.value })}
+                    placeholder="Add any context, invoice background, or instructions for the reviewers..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#003F28] resize-none"
+                  />
                 </div>
 
                 {/* Error Banner */}

@@ -37,12 +37,14 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
           if (terminalStates.includes(inv.status)) return false;
           if (inv.has_approved) return false;
 
-          // Pending IF AND ONLY IF current user is assigned approver for current stage
-          if (inv.is_current_approver) return true;
-          if (inv.activeApprovalLog && inv.activeApprovalLog.status === 'Pending') {
-             return !!inv.is_current_approver;
+          // Rule 2: Hide docs from Approver 2's queue until Approver 1 approves
+          const currentStage = inv.current_stage || 1;
+          if (currentStage === 1 && !inv.is_current_approver) {
+            return false;
           }
-          return false;
+
+          // Pending IF AND ONLY IF current user is assigned approver for current stage
+          return Boolean(inv.is_current_approver);
         });
 
         setActiveQueue(matched);
@@ -61,10 +63,10 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
     fetchQueue();
   }, [currentUserRole]);
 
-  const handleAuditAction = async (action: 'Approve' | 'Reject' | 'Request Clarification' | 'Send Back') => {
+  const handleAuditAction = async (action: 'Approve' | 'Reject' | 'Request Clarification' | 'Send Back' | 'Cancel') => {
     if (!selectedInvoice) return;
     if (!commentText.trim()) {
-      alert("Please state your professional evaluation audit comments before filing approval.");
+      alert(`Please state your professional evaluation audit comments / reason before filing ${action.toLowerCase()}.`);
       return;
     }
 
@@ -73,19 +75,32 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
     setSubmitting(true);
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const response = await fetch(`/api/invoices/${selectedInvoice.id}/step-action`, {
+      let endpoint = `/api/invoices/${selectedInvoice.id}/step-action`;
+      let bodyPayload: any = {
+        action,
+        comments: commentText,
+        approver: `${currentUserEmail} (${currentUserRole.toUpperCase()})`,
+        expected_version: selectedInvoice.version || 1,
+        expected_stage: selectedInvoice.current_stage || 1
+      };
+
+      if (action === 'Cancel') {
+        endpoint = '/api/workflows/cancel';
+        bodyPayload = {
+          invoiceId: selectedInvoice.id,
+          id: selectedInvoice.id,
+          comments: commentText,
+          expected_version: selectedInvoice.version || 1
+        };
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
           "Authorization": token ? `Bearer ${token}` : ""
         },
-        body: JSON.stringify({
-          action,
-          comments: commentText,
-          approver: `${currentUserEmail} (${currentUserRole.toUpperCase()})`,
-          expected_version: selectedInvoice.version || 1,
-          expected_stage: selectedInvoice.current_stage || 1
-        })
+        body: JSON.stringify(bodyPayload)
       });
 
       if (response.ok) {
@@ -311,38 +326,75 @@ export default function ApprovalQueuePage({ currentUserRole, currentUserEmail, o
                     </div>
                   )}
 
-                  <div className="space-y-2 pt-4 border-t border-slate-100">
-                    <button
-                      type="button"
-                      disabled={submitting || !hasScrolledToBottom}
-                      onClick={() => handleAuditAction("Approve")}
-                      className={`w-full py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition shadow-sm ${
-                        hasScrolledToBottom 
-                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20' 
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {submitting ? "Processing..." : "✔ Approve & Pass"}
-                    </button>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() => handleAuditAction("Request Clarification")}
-                        className="w-full py-2.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[9px] uppercase tracking-wide font-bold transition text-center"
-                      >
-                        Clarify
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() => handleAuditAction("Reject")}
-                        className="w-full py-2.5 px-2 bg-red-50 hover:bg-red-100 text-red-750 border border-red-200/60 rounded-xl text-[9px] uppercase tracking-wide font-bold transition text-center"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
+                  {(() => {
+                    const isDocInProgress = (selectedInvoice?.status === "In Progress") || (selectedInvoice?.status || "").toLowerCase().startsWith("in progress");
+                    const isCurrentTurn = Boolean(selectedInvoice?.is_current_approver);
+                    const isStage1Attachment = (selectedInvoice?.current_stage || 1) <= 1;
+                    const canApprove = hasScrolledToBottom && isDocInProgress && isCurrentTurn && !submitting;
+
+                    return (
+                      <div className="space-y-2 pt-4 border-t border-slate-100">
+                        <button
+                          type="button"
+                          disabled={!canApprove}
+                          onClick={() => handleAuditAction("Approve")}
+                          className={`w-full py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition shadow-sm ${
+                            canApprove 
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 cursor-pointer' 
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          }`}
+                          title={
+                            !isDocInProgress
+                              ? `Approval disabled: Document status must be 'In Progress' (current: ${selectedInvoice?.status})`
+                              : !isCurrentTurn
+                              ? "Approval disabled: It is not your turn to approve"
+                              : !hasScrolledToBottom
+                              ? "Please scroll to the bottom of the document first"
+                              : "Click to approve and pass to next stage"
+                          }
+                        >
+                          {submitting 
+                            ? "Processing..." 
+                            : !isDocInProgress
+                            ? "Status Not In Progress"
+                            : !isCurrentTurn
+                            ? "Not Your Turn"
+                            : "✔ Approve & Pass"}
+                        </button>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() => handleAuditAction("Request Clarification")}
+                            className="w-full py-2.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[9px] uppercase tracking-wide font-bold transition text-center cursor-pointer"
+                          >
+                            Clarify
+                          </button>
+                          {isStage1Attachment ? (
+                            <button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => handleAuditAction("Cancel")}
+                              className="w-full py-2.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200/60 rounded-xl text-[9px] uppercase tracking-wide font-bold transition text-center cursor-pointer"
+                              title="Cancel and void this document at Attachment stage (mapped to Rejected)"
+                            >
+                              Cancel Process
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => handleAuditAction("Reject")}
+                              className="w-full py-2.5 px-2 bg-red-50 hover:bg-red-100 text-red-750 border border-red-200/60 rounded-xl text-[9px] uppercase tracking-wide font-bold transition text-center cursor-pointer"
+                              title="Reject and route document back to previous approver"
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
              </div>
            ) : null}

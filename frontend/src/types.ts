@@ -81,6 +81,14 @@ export interface DbInvoice {
   is_current_approver?: boolean;
   has_approved?: boolean;
   has_rejected?: boolean;
+  is_returned?: boolean;
+  latest_return_remark?: string;
+  latest_return_actor?: string;
+  latest_return_stage?: string;
+  latest_action?: string;
+  latest_action_remark?: string;
+  latest_action_actor?: string;
+  latest_action_stage?: string;
   completed_by_peer?: boolean;
   version?: number;
 }

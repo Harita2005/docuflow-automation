@@ -41,7 +41,7 @@ export default function WorkTrackerPage({
   const [_selectedDocIds, _setSelectedDocIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = initialStatusFilter || localStorage.getItem("workTrackerStatusFilter") || "all";
-    return saved === "approved" || saved === "cancelled" ? "all" : saved;
+    return saved === "approved" ? "all" : saved;
   });
   const [sortColumn, setSortColumn] = useState<"id" | "vendor" | "type" | "amount" | "assigned" | "status">("id");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -287,6 +287,7 @@ export default function WorkTrackerPage({
       accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
       ap_specialist: ["ap_specialist", "ap specialist", "ap_executive", "ap executive", "accounts_approver", "accounts approver", "ap", "accounts"],
       finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
+      accounts_approver2: ["accounts_approver2", "accounts approver 2"],
       employee: ["employee", "standard employee", "standard_employee"],
       account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
       accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
@@ -302,9 +303,13 @@ export default function WorkTrackerPage({
     if (empHandle && pool.some(p => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some(p => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
     if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p === a || p.includes(a) || a.includes(p))))) return true;
+    const currentStage = doc.current_stage || 1;
+    if (currentStage === 1 && !doc.is_current_approver) {
+      return false;
+    }
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
-    const isUploader = rHandle.includes("uplod") || rHandle.includes("account") || rHandle === "admin" || rHandle === "manager";
+    const isUploader = rHandle.includes("uplod") || rHandle === "admin";
     if (isUnrouted && isUploader) return true;
     return false;
   };
@@ -475,8 +480,8 @@ export default function WorkTrackerPage({
       // Document-wise Tab filter
       if (!matchesTab(doc, activeTab)) return false;
 
-      // Status filter (strictly handles: pending, in_progress, hold, rejected)
-      if (statusFilter !== "all" && statusFilter !== "approved" && statusFilter !== "cancelled") {
+      // Status filter (strictly handles: pending, in_progress, hold, rejected, returned, cancelled)
+      if (statusFilter !== "all" && statusFilter !== "approved") {
         const st = (doc.status || "").toLowerCase();
         const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !doc.has_approved;
         const isInProgress = Boolean(doc.has_approved) || st.includes("in progress") || st.includes("stage") || !isActionRequired;
@@ -488,7 +493,16 @@ export default function WorkTrackerPage({
         } else if (statusFilter === "hold") {
           if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
-          if (!st.includes("reject") && !st.includes("fail") && !st.includes("void") && !st.includes("returned")) return false;
+          // Rule 1: Exclude active documents with status 'In Progress' from Rejected filter
+          const isActiveInProgress = st.startsWith("in progress") || st === "in progress";
+          if (isActiveInProgress) return false;
+          // Rule 2: Strictly rejected, not cancelled
+          if (!st.includes("reject") && !st.includes("fail") && !st.includes("declined")) return false;
+        } else if (statusFilter === "returned") {
+          const isRet = Boolean(doc.is_returned) || (doc.status || "").toLowerCase().includes("returned");
+          if (!isRet) return false;
+        } else if (statusFilter === "cancelled") {
+          if (!st.includes("cancel") && !st.includes("void")) return false;
         }
       }
 
@@ -777,7 +791,9 @@ export default function WorkTrackerPage({
                       <option value="pending">Pending (Action Required)</option>
                       <option value="in_progress">In Progress</option>
                       <option value="hold">On Hold</option>
+                      <option value="returned">Returned</option>
                       <option value="rejected">Rejected</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
 
@@ -1067,17 +1083,27 @@ export default function WorkTrackerPage({
 
                     {/* STATUS */}
                     <td className="py-2.5 px-3 align-middle text-center">
-                      {isActionRequired ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          <span>Pending</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                          <span>In Progress</span>
-                        </span>
-                      )}
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        {isActionRequired ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            <span>Pending</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                            <span>In Progress</span>
+                          </span>
+                        )}
+                        {Boolean(doc.is_returned) && (
+                          <span 
+                            className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100/80 text-amber-900 border border-amber-300"
+                            title={doc.latest_return_remark ? `Returned: ${doc.latest_return_remark}` : "Returned from higher approval stage"}
+                          >
+                            <span>↩ Returned</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* ACTION */}

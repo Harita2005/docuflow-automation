@@ -969,17 +969,55 @@ def get_all_invoices(
     if current_user:
         user_names = [current_user.username, current_user.employee_id, current_user.employee_name, current_user.name, current_user.email, current_user.role]
         user_names = [name for name in user_names if name]
-        audit_query = db.query(AuditLog.invoice_id, AuditLog.action).filter(AuditLog.user.in_(user_names)).all()
-        for row in audit_query:
-            raw_id = str(row[0] or '')
-            doc_id_clean = raw_id.replace('DOC-', '')
-            act = (row[1] or '').lower()
-            if 'approve' in act:
-                approved_invoice_ids.add(raw_id)
-                approved_invoice_ids.add(doc_id_clean)
-            if 'reject' in act or 'return' in act or 'cancel' in act:
-                rejected_invoice_ids.add(raw_id)
-                rejected_invoice_ids.add(doc_id_clean)
+        audit_query = db.query(AuditLog.id, AuditLog.invoice_id, AuditLog.action, AuditLog.user).filter(
+            or_(
+                AuditLog.user.in_(user_names),
+                AuditLog.action.ilike('%reject%'),
+                AuditLog.action.ilike('%return%'),
+                AuditLog.action.ilike('%cancel%')
+            )
+        ).order_by(AuditLog.id.asc()).all()
+        user_names_set = set(user_names)
+        last_user_approve_id = {}
+        last_doc_reject_id = {}
+        latest_audit_meta = {}  # doc_key -> { 'action': ..., 'remarks': ..., 'actor': ..., 'stage': ... }
+        
+        # Query latest audit logs with remarks, stage and action for metadata computation
+        detailed_audit = db.query(
+            AuditLog.id, AuditLog.invoice_id, AuditLog.action, AuditLog.user, AuditLog.remarks, AuditLog.notes, AuditLog.stage
+        ).order_by(AuditLog.id.asc()).all()
+
+        for row in detailed_audit:
+            l_id, r_inv, a_str, a_usr, r_rem, r_not, r_stg = (
+                row[0], str(row[1] or ''), (row[2] or '').strip(), (row[3] or '').strip(),
+                row[4] or '', row[5] or '', row[6] or ''
+            )
+            d_clean = r_inv.replace('DOC-', '')
+            remark_text = (r_rem or r_not or '').strip()
+            entry_meta = {
+                'id': l_id,
+                'action': a_str,
+                'actor': a_usr,
+                'remarks': remark_text,
+                'stage': r_stg
+            }
+            latest_audit_meta[r_inv] = entry_meta
+            latest_audit_meta[d_clean] = entry_meta
+
+            a_str_low = a_str.lower()
+            if a_usr in user_names_set and 'approve' in a_str_low:
+                last_user_approve_id[r_inv] = l_id
+                last_user_approve_id[d_clean] = l_id
+            if 'reject' in a_str_low or 'return' in a_str_low or 'cancel' in a_str_low:
+                rejected_invoice_ids.add(r_inv)
+                rejected_invoice_ids.add(d_clean)
+                last_doc_reject_id[r_inv] = l_id
+                last_doc_reject_id[d_clean] = l_id
+
+        for inv_id_key, app_id in last_user_approve_id.items():
+            rej_id = last_doc_reject_id.get(inv_id_key, 0)
+            if app_id > rej_id:
+                approved_invoice_ids.add(inv_id_key)
 
         all_steps = db.query(WorkflowStepDefinition.profile_name, WorkflowStepDefinition.approver_target, WorkflowStepDefinition.delegate_approver).all()
         user_wf_profiles = set()
@@ -1020,7 +1058,7 @@ def get_all_invoices(
 
         # Check creator / submitter and uploader desk authority
         u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
-        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
+        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']))
         u_names_clean = {
             (current_user.username or '').strip().lower(),
             (current_user.employee_id or '').strip().lower(),
@@ -1086,7 +1124,7 @@ def get_all_invoices(
         is_curr = False
         if is_active_flow and inv.assigned_approver and not has_appr:
             is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
-        if is_active_flow and (is_unrouted or is_stage1) and (is_uploader_role or is_creator):
+        if is_active_flow and is_unrouted and (is_uploader_role or is_creator):
             is_curr = True
 
         # Status filter query parameter enforcement
@@ -1096,7 +1134,7 @@ def get_all_invoices(
                 if not (is_curr and is_active_flow):
                     continue
             elif s_req in ['in_progress', 'tracking']:
-                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or ((is_unrouted or is_stage1) and is_uploader_role)) and is_active_flow):
+                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or (is_unrouted and is_uploader_role)) and is_active_flow):
                     continue
             elif s_req == 'approved':
                 if not (inv.status in ['Approved', 'Settled', 'Paid'] and (user_is_admin or has_appr)):
@@ -1107,9 +1145,21 @@ def get_all_invoices(
             elif s_req == 'hold':
                 if inv.status != 'On Hold':
                     continue
-            elif s_req in ['rejected', 'returned', 'failed']:
+            elif s_req in ['rejected', 'failed']:
                 st_low = (inv.status or '').lower()
-                if not any(k in st_low for k in ['reject', 'return', 'failed', 'cancelled']):
+                # Strictly terminal rejection; active documents with status starting with 'In Progress' belong in pending/active queues
+                is_active_st = st_low.startswith('in progress') or st_low == 'in progress'
+                if is_active_st or not (any(k in st_low for k in ['reject', 'failed', 'declined']) or (has_rej and not is_active_flow)):
+                    continue
+            elif s_req in ['returned']:
+                st_low = (inv.status or '').lower()
+                meta_item = latest_audit_meta.get(str(inv.id)) or latest_audit_meta.get(doc_key_clean, {})
+                last_act = (meta_item.get('action') or '').lower()
+                if not (st_low.startswith('in progress') and ('return' in last_act or 'reject' in last_act)):
+                    continue
+            elif s_req in ['cancelled', 'cancel', 'void']:
+                st_low = (inv.status or '').lower()
+                if not any(k in st_low for k in ['cancel', 'void']):
                     continue
 
         attach_dynamic_columns_to_document(db, inv)
@@ -1118,6 +1168,20 @@ def get_all_invoices(
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_appr
         inv_res.has_rejected = has_rej
+        
+        # Metadata flags for returned/held requests
+        meta_item = latest_audit_meta.get(str(inv.id)) or latest_audit_meta.get(doc_key_clean, {})
+        last_action = meta_item.get('action') or ''
+        last_action_low = last_action.lower()
+        is_ret = bool('reject' in last_action_low or 'return' in last_action_low or 'send back' in last_action_low)
+        inv_res.is_returned = is_ret
+        inv_res.latest_action = last_action
+        inv_res.latest_action_remark = meta_item.get('remarks') or ''
+        if is_ret:
+            inv_res.latest_return_remark = meta_item.get('remarks') or ''
+            inv_res.latest_return_actor = meta_item.get('actor') or ''
+            inv_res.latest_return_stage = meta_item.get('stage') or ''
+        
         inv_res.current_stage_name = resolve_document_stage_name(db, inv, cached_steps=p_steps)
         results.append(inv_res)
 
@@ -1606,6 +1670,20 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
 
     if audit_trail_list:
         inv_dict['audit_trail'] = audit_trail_list
+        # Derive latest action metadata for top alert banner
+        latest_entry = audit_trail_list[-1] if len(audit_trail_list) > 0 else {}
+        l_action = latest_entry.get('action') or ''
+        l_act_low = l_action.lower()
+        is_ret = bool('reject' in l_act_low or 'return' in l_act_low or 'send back' in l_act_low)
+        inv_dict['is_returned'] = is_ret
+        inv_dict['latest_action'] = l_action
+        inv_dict['latest_action_remark'] = latest_entry.get('comments') or latest_entry.get('details') or ''
+        inv_dict['latest_action_actor'] = latest_entry.get('user') or ''
+        inv_dict['latest_action_stage'] = latest_entry.get('stage') or ''
+        if is_ret:
+            inv_dict['latest_return_remark'] = latest_entry.get('comments') or latest_entry.get('details') or ''
+            inv_dict['latest_return_actor'] = latest_entry.get('user') or ''
+            inv_dict['latest_return_stage'] = latest_entry.get('stage') or ''
 
     inv_dict['is_current_approver'] = is_curr
     inv_dict['has_approved'] = has_appr
@@ -1915,7 +1993,7 @@ def process_rejection_logic(db: Session, inv: Invoice, approver_name: str, remar
             inv.assigned_approver = None
 
         if prev_stage == 1:
-            inv.status = 'Initiated (Attachment Status)'
+            inv.status = 'In Progress (Stage 1)'
         else:
             inv.status = f'In Progress (Stage {prev_stage} - {prev_step_name})'
         existing_items = db.query(InvoiceChecklistState).filter(InvoiceChecklistState.invoice_id == inv.id, InvoiceChecklistState.stage_name == prev_step_name).all()
@@ -2552,6 +2630,14 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
 
     if inv.status in ['Settled', 'Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Rejected']:
         raise HTTPException(status_code=409, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
+
+    if not is_rejection_or_cancellation:
+        is_in_prog = (inv.status == 'In Progress') or (inv.status or '').lower().startswith('in progress')
+        if not is_in_prog:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Approval Restricted: Documents can only be approved when status is 'In Progress' (current status: '{inv.status}')."
+            )
 
     is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')
 
@@ -3729,9 +3815,14 @@ def workflow_cancel_route(req: Request, invoice_id: Optional[str]=None, payload:
             detail="This document version has been modified by another approver or process."
         )
 
-    # Require mandatory cancellation comment or use default
+    # Require mandatory cancellation comment
     raw_remarks = (data.get('comments') or data.get('remarks') or data.get('comment') or data.get('reason'))
-    remarks = str(raw_remarks).strip() if raw_remarks and str(raw_remarks).strip() else 'Document process cancelled and voided at Attachment Stage.'
+    if not raw_remarks or not str(raw_remarks).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A cancellation comment / reason is mandatory to cancel the document in the Attachment Stage."
+        )
+    remarks = str(raw_remarks).strip()
 
     inv.version = current_version + 1
     username = user.employee_name or user.name or user.username or 'User'
@@ -3739,7 +3830,18 @@ def workflow_cancel_route(req: Request, invoice_id: Optional[str]=None, payload:
     inv.assigned_approver = None
     archive_rejected_pdf(inv)
     dispatch_rejection_inapp_notifications(db=db, inv=inv, approver_name=username, from_stage=inv.current_stage or 1, to_stage=0, remarks=remarks, target_approver=None, is_cancelled=True)
-    db.add(AuditLog(invoice_id=inv.id, user=username, action='Process Cancelled', stage=f'Stage {inv.current_stage or 1}', notes=f'Process cancelled/voided: {remarks}'))
+    db.add(AuditLog(
+        invoice_id=inv.id,
+        user=username,
+        action='Process Cancelled',
+        stage=f'Stage {inv.current_stage or 1}',
+        remarks=remarks,
+        notes=f'Process cancelled/voided: {remarks}',
+        approver_user_id=user.id if user else None,
+        stage_id=inv.current_stage or 1,
+        previous_status=current_status,
+        new_status='Cancelled'
+    ))
     db.commit()
     db.refresh(inv)
     trigger_async_integration_push(str(inv.id), decision='REJECTED')
@@ -4145,6 +4247,9 @@ async def confirm_and_ingest_document(
     line_items: Optional[str] = Form(None),
     dynamic_fields: Optional[str] = Form(None),
     custom_data: Optional[str] = Form(None),
+    comment: Optional[str] = Form(None),
+    reason: Optional[str] = Form(None),
+    remarks: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -4341,18 +4446,23 @@ async def confirm_and_ingest_document(
             new_inv.current_stage = 1
             if steps and steps[0].approver_target:
                 new_inv.assigned_approver = steps[0].approver_target.strip()
-                new_inv.status = f'Initiated ({steps[0].step_name})'
+                new_inv.status = 'In Progress (Stage 1)'
             else:
                 new_inv.assigned_approver = 'Unassigned (No Step Approvers)'
-                new_inv.status = 'Initiated (Stage 1)'
+                new_inv.status = 'In Progress (Stage 1)'
             dispatch_assignment_inapp_notification(db, new_inv)
             
+            submit_remarks = (comment or reason or remarks or 'Document verified and submitted into approval workflow.').strip()
             db.add(AuditLog(
                 invoice_id=new_inv.id,
-                user=current_user.employee_name or current_user.username or 'Document Uploader',
-                action='Verified & Confirmed',
+                user=current_user.employee_name or current_user.username or 'Document Submitter',
+                action='Submit',
                 stage='Stage 1',
-                notes=f"Manual document verified & ingested. Assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."
+                remarks=submit_remarks,
+                notes=f"Submitted: {submit_remarks}",
+                approver_user_id=current_user.id,
+                stage_id=1,
+                new_status=new_inv.status
             ))
 
         # Universal Checklist Resolution
@@ -4549,12 +4659,12 @@ async def upload_document(
             new_inv.current_stage = 1
             if steps and steps[0].approver_target:
                 new_inv.assigned_approver = steps[0].approver_target.strip()
-                new_inv.status = f'Initiated ({steps[0].step_name})'
+                new_inv.status = 'In Progress (Stage 1)'
             else:
                 new_inv.assigned_approver = 'Unassigned (No Step Approvers)'
-                new_inv.status = 'Initiated (Stage 1)'
+                new_inv.status = 'In Progress (Stage 1)'
             dispatch_assignment_inapp_notification(db, new_inv)
-            db.add(AuditLog(invoice_id=new_inv.id, user=uploader_name, action='Created & Uploaded', stage='Stage 1', notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."))
+            db.add(AuditLog(invoice_id=new_inv.id, user=uploader_name, action='Submit', stage='Stage 1', remarks='Document uploaded and submitted into approval workflow.', notes=f"Document uploaded and assigned to Stage 1 pool '{new_inv.assigned_approver}' under workflow '{matched_wf}'."))
         first_stage = 'Attachment Status'
         if steps and len(steps) > 0 and steps[0].step_name:
             first_stage = steps[0].step_name
@@ -4774,16 +4884,17 @@ async def upload_document_auto_workflow(
         candidate_doc.current_stage = 1
         if steps and steps[0].approver_target:
             candidate_doc.assigned_approver = steps[0].approver_target.strip()
-            candidate_doc.status = f'Initiated ({steps[0].step_name})'
+            candidate_doc.status = 'In Progress (Stage 1)'
         else:
             candidate_doc.assigned_approver = 'Unassigned (No Step Approvers)'
-            candidate_doc.status = 'Initiated (Stage 1)'
+            candidate_doc.status = 'In Progress (Stage 1)'
         dispatch_assignment_inapp_notification(db, candidate_doc)
         db.add(AuditLog(
             invoice_id=candidate_doc.id,
             user=uploader_name,
-            action='Auto Workflow Started',
+            action='Submit',
             stage='Stage 1',
+            remarks='Document analyzed via OCR/LLM & submitted into workflow.',
             notes=f"Document analyzed via OCR/LLM & automatically routed under rule '{rule_name}' to workflow '{matched_wf}' (Assigned: '{candidate_doc.assigned_approver}')."
         ))
 
@@ -4929,10 +5040,10 @@ async def upload_and_route(
         inv.current_stage = 1
         if steps:
             inv.assigned_approver = steps[0].approver_target
-            inv.status = f'Initiated ({steps[0].step_name})'
+            inv.status = 'In Progress (Stage 1)'
         else:
-            inv.status = 'Initiated (Stage 1)'
-        db.add(AuditLog(invoice_id=inv.id, user='Metadata Editor / Sync Uploader', action='Metadata Completed & Routed', stage='Stage 1', notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."))
+            inv.status = 'In Progress (Stage 1)'
+        db.add(AuditLog(invoice_id=inv.id, user='Metadata Editor / Sync Uploader', action='Submit', stage='Stage 1', remarks='Physical document uploaded and routed.', notes=f"Physical document uploaded & routed under workflow '{matched_wf}'."))
     first_stage = 'Attachment Status'
     if inv.current_stage and inv.workflow_profile_id:
         curr_step = db.query(WorkflowStepDefinition).filter(WorkflowStepDefinition.profile_name == inv.workflow_profile_id, WorkflowStepDefinition.stage_number == inv.current_stage).first()
@@ -5084,15 +5195,6 @@ def get_document_comments(id: str, db: Session=Depends(get_db), current_user: Us
         if not text_val:
             continue
 
-        act_lower = (l.action or '').lower()
-        is_reject_or_hold = any(k in act_lower for k in ['reject', 'hold', 'return', 'send back'])
-        if is_reject_or_hold and not is_admin:
-            author_lower = (l.user or '').lower()
-            is_author = any(un in author_lower for un in user_names) if user_names else False
-            if not is_author:
-                # Reject/Hold comments are hidden from future/uninvolved approvers
-                continue
-
         ts_str = l.timestamp.isoformat() if l.timestamp else datetime.datetime.utcnow().isoformat()
         if not ts_str.endswith('Z') and '+' not in ts_str and ('-' not in ts_str[10:]):
             ts_str += 'Z'
@@ -5100,7 +5202,10 @@ def get_document_comments(id: str, db: Session=Depends(get_db), current_user: Us
             'id': str(l.id),
             'author': l.user or 'System',
             'text': text_val,
+            'remarks': l.remarks or text_val,
+            'notes': l.notes or text_val,
             'created_at': ts_str,
+            'timestamp': ts_str,
             'action': l.action,
             'stage': l.stage,
             'ip_address': l.ip_address

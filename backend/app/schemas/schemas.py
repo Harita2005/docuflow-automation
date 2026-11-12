@@ -274,6 +274,12 @@ class InvoiceResponse(InvoiceBase):
     is_current_approver: Optional[bool] = None
     has_approved: Optional[bool] = None
     has_rejected: Optional[bool] = None
+    is_returned: Optional[bool] = None
+    latest_return_remark: Optional[str] = None
+    latest_return_actor: Optional[str] = None
+    latest_return_stage: Optional[str] = None
+    latest_action: Optional[str] = None
+    latest_action_remark: Optional[str] = None
     completed_by_peer: Optional[bool] = None
     current_stage_name: Optional[str] = None
 
