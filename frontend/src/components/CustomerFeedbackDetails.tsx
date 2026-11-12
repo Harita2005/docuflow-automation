@@ -30,6 +30,7 @@ import {
   Check,
   Plus,
   Trash2,
+  Eye,
 } from "lucide-react";
 import { DbInvoice } from "../types";
 import { formatDocNumber, formatDate, formatTimeOnly, formatDateTime, getCanonicalDocumentType, resolvePersonsInRoleForDivision, formatAssignedToDisplay } from "../utils/formatters";
@@ -585,6 +586,7 @@ export default function CustomerFeedbackDetails({
   // In-Page Image Preview Modal State
   const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title?: string } | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [previewBlobType, setPreviewBlobType] = useState<string>("image");
   const [imageZoom, setImageZoom] = useState<number>(1);
   const [imageRotation, setImageRotation] = useState<number>(0);
   const [imageLoading, setImageLoading] = useState<boolean>(true);
@@ -667,6 +669,9 @@ export default function CustomerFeedbackDetails({
     const token = localStorage.getItem("token") || localStorage.getItem("authToken");
 
     let raw = previewImageModal.url.trim();
+    const isUrlPdf = /\.pdf($|\?)/i.test(raw);
+    setPreviewBlobType(isUrlPdf ? "application/pdf" : "image");
+
     // Normalize any legacy hardcoded IP URLs to relative /api paths
     if (raw.includes("/api/documents/temp-preview/")) {
       raw = raw.substring(raw.indexOf("/api/documents/temp-preview/"));
@@ -691,17 +696,23 @@ export default function CustomerFeedbackDetails({
       })
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const ct = (res.headers.get("content-type") || "").toLowerCase();
+          if (ct.includes("pdf")) {
+            setPreviewBlobType("application/pdf");
+          }
           return res.blob();
         })
         .then((blob) => {
           if (isMounted) {
             createdBlobUrl = URL.createObjectURL(blob);
             setPreviewBlobUrl(createdBlobUrl);
+            setImageLoading(false);
           }
         })
         .catch(() => {
           if (isMounted) {
             setPreviewBlobUrl(directWithToken);
+            setImageLoading(false);
           }
         });
     }
@@ -780,20 +791,83 @@ export default function CustomerFeedbackDetails({
   const image4 = getFieldValueByKey("image_4") || getFieldValueByKey("image4");
   const image5 = getFieldValueByKey("image_5") || getFieldValueByKey("image5");
 
-  const imageFields = useMemo(() => [
-    { key: "image_1", label: "IMAGE 1", value: image1 },
-    { key: "image_2", label: "IMAGE 2", value: image2 },
-    { key: "image_3", label: "IMAGE 3", value: image3 },
-    { key: "image_4", label: "IMAGE 4", value: image4 },
-    { key: "image_5", label: "IMAGE 5", value: image5 },
-  ], [image1, image2, image3, image4, image5]);
-
   const activeImageFields = useMemo(() => {
-    return imageFields.filter((img) => {
-      const v = (img.value || "").trim().toLowerCase();
-      return v && v !== "not available" && v !== "null" && v !== "n/a";
+    const list: Array<{
+      key: string;
+      label: string;
+      value: string;
+      url: string;
+      isPdf: boolean;
+      fileName?: string;
+    }> = [];
+    const seenSlots = new Set<string>();
+    const docId = activeDoc?.id || documentId || "";
+
+    const resolveImgUrl = (val: string, slotKey: string): string => {
+      const trimmed = (val || "").trim();
+      if (!trimmed) return "";
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+        return trimmed;
+      }
+      if (trimmed.startsWith("/")) {
+        return trimmed;
+      }
+      if (docId) {
+        const slotClean = slotKey.replace(/^image_?|^slot_?/i, "").trim() || slotKey;
+        return `/api/documents/${encodeURIComponent(String(docId))}/images/${encodeURIComponent(slotClean)}`;
+      }
+      return trimmed;
+    };
+
+    // 1. Process feedback_images_list from backend if present
+    const rawList = (activeDoc as any)?.feedback_images_list;
+    if (Array.isArray(rawList)) {
+      rawList.forEach((item: any) => {
+        const slotStr = String(item.slot || item.key || "").trim();
+        if (slotStr && !seenSlots.has(slotStr)) {
+          seenSlots.add(slotStr);
+          const u = item.url ? (item.url.startsWith("/") ? item.url : `/${item.url}`) : resolveImgUrl(item.file_name || slotStr, slotStr);
+          const isPdf = Boolean(item.content_type?.includes("pdf") || u.toLowerCase().includes(".pdf"));
+          list.push({
+            key: `slot_${slotStr}`,
+            label: `IMAGE ${slotStr.toUpperCase()}`,
+            value: u,
+            url: u,
+            isPdf,
+            fileName: item.file_name || `slot_${slotStr}`,
+          });
+        }
+      });
+    }
+
+    // 2. Check standard image_1 .. image_5
+    const baseSlots = [
+      { key: "image_1", slotNum: "1", label: "IMAGE 1", value: image1 },
+      { key: "image_2", slotNum: "2", label: "IMAGE 2", value: image2 },
+      { key: "image_3", slotNum: "3", label: "IMAGE 3", value: image3 },
+      { key: "image_4", slotNum: "4", label: "IMAGE 4", value: image4 },
+      { key: "image_5", slotNum: "5", label: "IMAGE 5", value: image5 },
+    ];
+
+    baseSlots.forEach(({ key, slotNum, label, value }) => {
+      const v = (value || "").trim();
+      if (v && v.toLowerCase() !== "not available" && v.toLowerCase() !== "null" && v.toLowerCase() !== "n/a" && !seenSlots.has(slotNum)) {
+        seenSlots.add(slotNum);
+        const resolvedUrl = resolveImgUrl(v, slotNum);
+        const isPdf = /\.pdf($|\?)/i.test(resolvedUrl) || /\.pdf($|\?)/i.test(v);
+        list.push({
+          key,
+          label,
+          value: v,
+          url: resolvedUrl,
+          isPdf,
+          fileName: v.startsWith("/") ? v.split("/").pop() : v,
+        });
+      }
     });
-  }, [imageFields]);
+
+    return list;
+  }, [activeDoc, documentId, image1, image2, image3, image4, image5]);
 
   // Derive Invoice PDF Source URL via HMAC Signed URL
   const [signedPdfSrc, setSignedPdfSrc] = useState<string>("");
@@ -1691,8 +1765,8 @@ export default function CustomerFeedbackDetails({
               </div>
             </div>
 
-            <div className="pt-0.5">
-              <div className="text-[8.5px] font-extrabold uppercase text-slate-500 mb-1 flex items-center gap-1 justify-between">
+            <div className="pt-1">
+              <div className="text-[8.5px] font-extrabold uppercase text-slate-500 mb-1.5 flex items-center gap-1 justify-between">
                 <div className="flex items-center gap-1">
                   <ImageIcon className="h-2.5 w-2.5 text-emerald-700" />
                   <span>Feedback Image Attachments</span>
@@ -1704,25 +1778,69 @@ export default function CustomerFeedbackDetails({
                 )}
               </div>
               {activeImageFields.length > 0 ? (
-                <div className={`grid gap-1.5 ${
-                  activeImageFields.length === 1 ? "grid-cols-1" :
+                <div className={`grid gap-2 ${
+                  activeImageFields.length === 1 ? "grid-cols-1 sm:grid-cols-2" :
                   activeImageFields.length === 2 ? "grid-cols-2" :
                   activeImageFields.length === 3 ? "grid-cols-3" :
-                  activeImageFields.length === 4 ? "grid-cols-4" : "grid-cols-5"
+                  activeImageFields.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
                 }`}>
-                  {activeImageFields.map((img) => (
-                    <div
-                      key={img.key}
-                      className="bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-200/70 flex items-center justify-between gap-2"
-                    >
-                      <span className="text-[9px] font-extrabold uppercase text-slate-600">{img.label}</span>
-                      {renderImageFieldContent(img.key, img.value)}
-                    </div>
-                  ))}
+                  {activeImageFields.map((img) => {
+                    const isPdf = img.isPdf || /\.pdf($|\?)/i.test(img.url || img.value);
+                    const targetUrl = img.url || img.value;
+                    return (
+                      <div
+                        key={img.key}
+                        onClick={() => setPreviewImageModal({ url: targetUrl, title: `${img.label} EVIDENCE` })}
+                        className="group relative bg-white rounded-lg border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all overflow-hidden cursor-pointer flex flex-col"
+                        title={`Click to preview ${img.label}`}
+                      >
+                        {/* Thumbnail Viewport */}
+                        <div className="h-20 w-full bg-slate-900/5 relative flex items-center justify-center overflow-hidden">
+                          {isPdf ? (
+                            <div className="flex flex-col items-center justify-center text-rose-600 p-2 text-center">
+                              <FileText className="h-7 w-7 text-rose-500 mb-0.5 group-hover:scale-110 transition-transform" />
+                              <span className="text-[7.5px] font-bold text-slate-600 uppercase">PDF Evidence</span>
+                            </div>
+                          ) : (
+                            <img
+                              src={targetUrl}
+                              alt={img.label}
+                              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              loading="lazy"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = "none";
+                                const parent = e.currentTarget.parentElement;
+                                if (parent && !parent.querySelector(".fallback-thumb")) {
+                                  const fallback = document.createElement("div");
+                                  fallback.className = "fallback-thumb flex flex-col items-center justify-center text-slate-400 p-2";
+                                  fallback.innerHTML = '<span class="text-[8px] font-bold">Image Evidence</span>';
+                                  parent.appendChild(fallback);
+                                }
+                              }}
+                            />
+                          )}
+                          {/* Hover action overlay */}
+                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white">
+                            <Eye className="h-3.5 w-3.5" />
+                            <span className="text-[9px] font-bold tracking-wide">View</span>
+                          </div>
+                        </div>
+
+                        {/* Card Footer Badge */}
+                        <div className="px-2 py-1 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[8.5px] font-extrabold uppercase text-slate-700 truncate">{img.label}</span>
+                          <span className="text-[8px] font-black text-emerald-700 group-hover:text-emerald-800 flex items-center gap-0.5">
+                            <span>Open</span>
+                            <span className="text-[9px]">↗</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-200/70 text-slate-400 text-[10px] font-normal italic flex items-center gap-1.5">
-                  <ImageIcon className="h-3 w-3 text-slate-400" />
+                <div className="bg-slate-50/80 px-2.5 py-2 rounded-lg border border-slate-200/70 text-slate-400 text-[10px] font-normal italic flex items-center gap-1.5">
+                  <ImageIcon className="h-3.5 w-3.5 text-slate-400" />
                   <span>No image attachments provided for this ticket.</span>
                 </div>
               )}
@@ -2305,63 +2423,83 @@ export default function CustomerFeedbackDetails({
             <div className="bg-[#003F28] text-white px-3.5 py-2 flex items-center justify-between gap-4 shadow-sm shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="p-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
-                  <ImageIcon className="h-4 w-4" />
+                  {previewBlobType === "application/pdf" || (previewImageModal.url && previewImageModal.url.toLowerCase().includes(".pdf")) ? (
+                    <FileText className="h-4 w-4 text-rose-300" />
+                  ) : (
+                    <ImageIcon className="h-4 w-4" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-extrabold text-xs text-white flex items-center gap-2 truncate">
-                    <span>{previewImageModal.title ? previewImageModal.title.toUpperCase().replace(/_/g, " ") : "IMAGE PREVIEW"}</span>
+                    <span>
+                      {previewImageModal.title
+                        ? previewImageModal.title.toUpperCase().replace(/_/g, " ")
+                        : (previewBlobType === "application/pdf" ? "PDF EVIDENCE PREVIEW" : "IMAGE PREVIEW")}
+                    </span>
                   </h3>
                 </div>
               </div>
 
               {/* Action Controls & Close Button */}
               <div className="flex items-center gap-1.5 shrink-0">
-                <div className="flex items-center bg-emerald-950/70 border border-emerald-700/60 rounded-lg p-0.5 text-xs text-white">
-                  <button
-                    type="button"
-                    onClick={() => setImageZoom((prev) => Math.max(0.5, prev - 0.25))}
-                    className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
-                    title="Zoom Out"
-                  >
-                    <ZoomOut className="h-3 w-3" />
-                  </button>
-                  <span className="px-1 font-mono text-[10px] text-emerald-200 min-w-[32px] text-center font-bold">
-                    {Math.round(imageZoom * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setImageZoom((prev) => Math.min(3, prev + 0.25))}
-                    className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageZoom(1);
-                      setImageRotation(0);
-                    }}
-                    className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer border-l border-emerald-700/60 ml-0.5"
-                    title="Reset Zoom & Rotation"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
-                    className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
-                    title="Rotate Clockwise"
-                  >
-                    <RotateCw className="h-3 w-3" />
-                  </button>
-                </div>
+                {previewBlobType !== "application/pdf" && !previewImageModal.url.toLowerCase().includes(".pdf") && (
+                  <div className="flex items-center bg-emerald-950/70 border border-emerald-700/60 rounded-lg p-0.5 text-xs text-white">
+                    <button
+                      type="button"
+                      onClick={() => setImageZoom((prev) => Math.max(0.5, prev - 0.25))}
+                      className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="h-3 w-3" />
+                    </button>
+                    <span className="px-1 font-mono text-[10px] text-emerald-200 min-w-[32px] text-center font-bold">
+                      {Math.round(imageZoom * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setImageZoom((prev) => Math.min(3, prev + 0.25))}
+                      className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageZoom(1);
+                        setImageRotation(0);
+                      }}
+                      className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer border-l border-emerald-700/60 ml-0.5"
+                      title="Reset Zoom & Rotation"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
+                      className="p-1 hover:bg-emerald-800/60 rounded transition text-emerald-200 hover:text-white cursor-pointer"
+                      title="Rotate Clockwise"
+                    >
+                      <RotateCw className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                <a
+                  href={previewBlobUrl || previewImageModal.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition cursor-pointer"
+                  title="Open full size in new tab"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </a>
 
                 <a
                   href={previewBlobUrl || previewImageModal.url}
                   download
                   className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white transition cursor-pointer"
-                  title="Download image"
+                  title="Download file"
                 >
                   <Download className="h-3.5 w-3.5" />
                 </a>
@@ -2377,16 +2515,25 @@ export default function CustomerFeedbackDetails({
               </div>
             </div>
 
-            {/* Modal Content - Dynamic Aspect-Ratio Fitted Display Image */}
+            {/* Modal Content - Dynamic Aspect-Ratio Fitted Display Image or PDF Iframe */}
             <div className="flex-1 min-h-0 bg-slate-950/95 p-2 flex items-center justify-center overflow-hidden relative select-none">
               {imageLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-10 text-slate-300 gap-2">
                   <RotateCw className="h-4 w-4 animate-spin text-emerald-400" />
-                  <span className="text-xs font-medium">Loading image...</span>
+                  <span className="text-xs font-medium">Loading preview...</span>
                 </div>
               )}
 
-              {imageError ? (
+              {previewBlobType === "application/pdf" || (previewImageModal.url && previewImageModal.url.toLowerCase().includes(".pdf")) ? (
+                <div className="w-[85vw] max-w-5xl h-[68vh] flex flex-col bg-white rounded-lg overflow-hidden shadow-lg border border-slate-700">
+                  <iframe
+                    src={previewBlobUrl || previewImageModal.url}
+                    title={previewImageModal.title || "PDF Evidence"}
+                    className="w-full h-full border-0 bg-white"
+                    onLoad={() => setImageLoading(false)}
+                  />
+                </div>
+              ) : imageError ? (
                 <div className="flex flex-col items-center justify-center text-center p-4 bg-slate-900/90 rounded-xl border border-slate-800 text-slate-300 max-w-sm">
                   <AlertCircle className="h-8 w-8 text-amber-400 mb-2" />
                   <h4 className="font-bold text-white mb-1 text-sm">Image Preview Unavailable</h4>

@@ -20,12 +20,13 @@ from app.database.models import (
     WorkflowProfile,
     WorkflowStepDefinition,
 )
-from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse
+from app.schemas import DocumentSyncRequest, DocumentSyncResponse, BatchSyncRequest, BatchSyncResponse, BatchSyncItemResult, Base64AttachmentSyncRequest, AttachmentSyncResponse, FeedbackImageUploadResponse
 from app.services.rules_engine import get_doc_type_prefix, generate_document_id
 from app.constants.document_types import DocumentType, normalize_document_type, is_feedback_or_complaint
 from app.services.ocr_service import extract_text_from_pdf
 from app.auth import verify_service_api_key, create_access_token
 from app.routers.documents import resolve_checklist_items
+from app.services.document_query_service import find_invoice_by_identifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/sync', tags=['Enterprise Data & Attachment Sync'])
@@ -1182,6 +1183,211 @@ def sync_record_attachment_by_pk_base64(
     db.commit()
     return AttachmentSyncResponse(success=True, message='Base64 attachment decoded, saved, and linked via primary key successfully', document_id=inv.id, file_name=payload.file_name, file_url=file_url, file_size_bytes=file_size, ocr_extracted_fields=ocr_data)
 
+# ---------------------------------------------------------------------------
+# Customer Feedback Permanent Image Upload (CFMS Integration)
+# ---------------------------------------------------------------------------
+
+async def handle_feedback_image_upload(
+    record_id: str,
+    slot: str,
+    req: Request,
+    file: Optional[UploadFile] = None,
+    uploaded_by: Optional[str] = None,
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key),
+) -> FeedbackImageUploadResponse:
+    """
+    Permanently uploads and binds an image or PDF attachment to a feedback record
+    under a specific slot (1, 2, 3, etc.) without overwriting existing images or
+    the primary document (file_url / file_path / file_name).
+    """
+    clean_rid = str(record_id).strip()
+    inv = None
+    try:
+        inv = find_invoice_by_identifier(db, clean_rid)
+    except Exception as exc:
+        logger.debug("find_invoice_by_identifier lookup failed: %s", exc)
+
+    if not inv:
+        if clean_rid.isdigit():
+            inv = db.query(Invoice).filter(Invoice.id == int(clean_rid), Invoice.is_deleted == False).first()
+        if not inv:
+            inv = db.query(Invoice).filter(
+                or_(
+                    Invoice.document_code == clean_rid,
+                    Invoice.doc_key == clean_rid,
+                    Invoice.doc_num == clean_rid,
+                    Invoice.document_number == clean_rid,
+                    Invoice.invoice_number == clean_rid
+                ),
+                Invoice.is_deleted == False
+            ).first()
+
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Target feedback record '{record_id}' not found. Please sync record data first."
+        )
+
+    contents = b""
+    original_name = None
+    content_type = ""
+
+    if file is not None:
+        try:
+            contents = await file.read()
+            original_name = file.filename
+            content_type = file.content_type or ""
+        except Exception as read_err:
+            logger.debug("Failed reading file upload: %s", read_err)
+
+    if not contents:
+        try:
+            body = await req.body()
+            if body:
+                contents = body
+                original_name = req.headers.get("x-file-name") or req.headers.get("file-name")
+                content_type = req.headers.get("content-type", "")
+        except Exception as body_err:
+            logger.debug("Failed reading request body: %s", body_err)
+
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No image or PDF file content provided in multipart form-data or request body."
+        )
+
+    clean_orig = os.path.basename(original_name or "").strip()
+    raw_ext = ""
+    if "." in clean_orig:
+        raw_ext = clean_orig.rsplit(".", 1)[-1].lower()
+
+    if raw_ext in ["jpg", "jpeg", "png", "pdf"]:
+        ext = "jpg" if raw_ext == "jpeg" else raw_ext
+    else:
+        if contents.startswith(b"%PDF"):
+            ext = "pdf"
+        elif contents.startswith(b"\x89PNG\r\n\x1a\n"):
+            ext = "png"
+        elif contents.startswith(b"\xff\xd8\xff"):
+            ext = "jpg"
+        elif "pdf" in content_type.lower():
+            ext = "pdf"
+        elif "png" in content_type.lower():
+            ext = "png"
+        elif "jpeg" in content_type.lower() or "jpg" in content_type.lower():
+            ext = "jpg"
+        else:
+            ext = "jpg"
+
+    if not content_type or content_type == "application/octet-stream":
+        if ext == "pdf":
+            content_type = "application/pdf"
+        elif ext == "png":
+            content_type = "image/png"
+        else:
+            content_type = "image/jpeg"
+
+    clean_slot = re.sub(r"[^a-zA-Z0-9_-]", "", str(slot)).lower()
+    slot_digits = re.sub(r"[^0-9]", "", clean_slot)
+    canonical_slot = slot_digits if (slot_digits and int(slot_digits) <= 20) else clean_slot
+    if not canonical_slot:
+        canonical_slot = "1"
+
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    feedback_dir = upload_root / "feedback_images" / str(inv.id)
+    feedback_dir.mkdir(parents=True, exist_ok=True)
+
+    final_filename = f"slot_{canonical_slot}.{ext}"
+    target_file = (feedback_dir / final_filename).resolve()
+
+    try:
+        if not target_file.is_relative_to(upload_root):
+            raise HTTPException(status_code=400, detail="Invalid file path detected.")
+    except (ValueError, RuntimeError):
+        raise HTTPException(status_code=400, detail="Invalid file path detected.")
+
+    with open(target_file, "wb") as f:
+        f.write(contents)
+
+    file_size = len(contents)
+    file_url = f"/api/documents/{inv.id}/images/{canonical_slot}"
+
+    if canonical_slot in {"1", "2", "3", "4", "5"}:
+        setattr(inv, f"image_{canonical_slot}", file_url)
+
+    custom_dict = {}
+    if inv.custom_data:
+        try:
+            custom_dict = json.loads(inv.custom_data) if isinstance(inv.custom_data, str) else dict(inv.custom_data)
+        except Exception:
+            custom_dict = {}
+
+    fb_images = custom_dict.setdefault("feedback_images", {})
+    fb_images[str(canonical_slot)] = {
+        "slot": str(slot),
+        "canonical_slot": canonical_slot,
+        "url": file_url,
+        "file_name": clean_orig or final_filename,
+        "file_path": str(target_file),
+        "file_size": file_size,
+        "content_type": content_type,
+        "uploaded_at": datetime.datetime.utcnow().isoformat()
+    }
+    inv.custom_data = json.dumps(custom_dict)
+
+    actor = uploaded_by or "CFMS Image Sync"
+    db.add(AuditLog(
+        invoice_id=inv.id,
+        user=actor,
+        action="Image Synced",
+        stage=f"Stage {inv.current_stage}",
+        notes=f"Permanently uploaded evidence {clean_orig or final_filename} for slot {slot} ({round(file_size / 1024, 1)} KB)."
+    ))
+    db.commit()
+    db.refresh(inv)
+
+    from app.routers.documents import invalidate_invoices_cache
+    invalidate_invoices_cache(str(inv.id))
+
+    return FeedbackImageUploadResponse(
+        success=True,
+        message=f"Image permanently saved for record {inv.id} slot {slot}",
+        document_id=str(inv.id),
+        record_id=str(inv.id),
+        slot=str(slot),
+        file_url=file_url,
+        file_name=clean_orig or final_filename,
+        file_size_bytes=file_size,
+        content_type=content_type
+    )
+
+@router.post('/record/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@router.post('/records/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@router.post('/record/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@router.post('/records/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+async def upload_feedback_record_image_endpoint(
+    record_id: str,
+    slot: str,
+    req: Request,
+    file: Optional[UploadFile] = File(None, description="Actual image or PDF evidence file"),
+    uploaded_by: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key),
+):
+    """
+    Permanently upload an image or PDF file against a customer feedback record slot.
+    """
+    return await handle_feedback_image_upload(
+        record_id=record_id,
+        slot=slot,
+        req=req,
+        file=file,
+        uploaded_by=uploaded_by,
+        db=db,
+        api_key=api_key,
+    )
+
 # Seed demo endpoint removed to prevent reseeding of demo data
 def seed_demo_invoices_endpoint(db: Session=Depends(get_db)):
     """API endpoint to seed/sync the 10 standard multi-category demo documents directly into the database on demand."""
@@ -1400,3 +1606,38 @@ def sync_single_document_alias(
     Direct root and /api/ alias routes for /records and /record.
     """
     return sync_single_document(payload=payload, db=db, api_key=api_key)
+
+@alias_router.post('/record/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/records/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/record/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/records/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/record/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/records/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/record/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/records/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/sync/record/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/sync/records/{record_id}/image/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/sync/record/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+@alias_router.post('/api/sync/records/{record_id}/images/{slot}', response_model=FeedbackImageUploadResponse)
+async def upload_feedback_record_image_alias(
+    record_id: str,
+    slot: str,
+    req: Request,
+    file: Optional[UploadFile] = File(None, description="Actual image or PDF evidence file"),
+    uploaded_by: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    api_key: bool = Depends(verify_service_api_key),
+):
+    """
+    Root and /api/ alias routes for permanent feedback image upload.
+    """
+    return await handle_feedback_image_upload(
+        record_id=record_id,
+        slot=slot,
+        req=req,
+        file=file,
+        uploaded_by=uploaded_by,
+        db=db,
+        api_key=api_key,
+    )
+

@@ -1573,6 +1573,37 @@ def get_invoice_by_id(invoice_id: str, db: Session=Depends(get_db), current_user
                         db.rollback()
 
     inv_dict = dict(inv_dict_base)
+
+    fb_list = []
+    seen_slots = set()
+    if inv.custom_data:
+        try:
+            cd = json.loads(inv.custom_data) if isinstance(inv.custom_data, str) else inv.custom_data
+            if isinstance(cd, dict):
+                for s_k, s_d in cd.get("feedback_images", {}).items():
+                    seen_slots.add(str(s_k))
+                    fb_list.append({
+                        "slot": str(s_k),
+                        "url": s_d.get("url") or f"/api/documents/{inv.id}/images/{s_k}",
+                        "file_name": s_d.get("file_name") or f"slot_{s_k}",
+                        "content_type": s_d.get("content_type") or "image/jpeg",
+                    })
+        except Exception:
+            pass
+    for i in range(1, 6):
+        v = getattr(inv, f"image_{i}", None)
+        if v and str(i) not in seen_slots:
+            seen_slots.add(str(i))
+            v_str = str(v).strip()
+            u = v_str if (v_str.startswith("/") or v_str.startswith("http")) else f"/api/documents/{inv.id}/images/{i}"
+            fb_list.append({
+                "slot": str(i),
+                "url": u,
+                "file_name": f"Image {i}.{'pdf' if '.pdf' in v_str.lower() else 'jpg'}",
+                "content_type": "application/pdf" if ".pdf" in v_str.lower() else "image/jpeg",
+            })
+    inv_dict['feedback_images_list'] = sorted(fb_list, key=lambda x: str(x['slot']))
+
     if audit_trail_list:
         inv_dict['audit_trail'] = audit_trail_list
 
@@ -2134,6 +2165,268 @@ def stream_document_file(
         media_type='application/pdf',
         headers=resp_headers
     )
+
+
+# ---------------------------------------------------------------------------
+# Customer Feedback Permanent Image & Evidence Retrieval (CFMS Integration)
+# ---------------------------------------------------------------------------
+
+@router.get('/api/documents/{record_id}/images/{slot}')
+@router.get('/api/documents/{record_id}/image/{slot}')
+@router.get('/api/records/{record_id}/images/{slot}')
+@router.get('/api/records/{record_id}/image/{slot}')
+def get_document_image_by_slot(
+    record_id: str,
+    slot: str,
+    req: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Retrieve a stored evidence image or PDF for the corresponding feedback record and slot.
+    Permits optional authentication so that <img> and <iframe> tags render reliably
+    without failing with HTTP 401 on session expiration.
+    """
+    clean_rid = str(record_id).strip()
+    inv = None
+    try:
+        inv = find_invoice_by_identifier(db, clean_rid)
+    except Exception:
+        inv = None
+
+    if not inv:
+        if clean_rid.isdigit():
+            inv = db.query(Invoice).filter(Invoice.id == int(clean_rid), Invoice.is_deleted == False).first()
+        if not inv:
+            inv = db.query(Invoice).filter(
+                or_(
+                    Invoice.document_code == clean_rid,
+                    Invoice.doc_key == clean_rid,
+                    Invoice.doc_num == clean_rid,
+                    Invoice.document_number == clean_rid,
+                    Invoice.invoice_number == clean_rid
+                ),
+                Invoice.is_deleted == False
+            ).first()
+
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Target record '{record_id}' not found.")
+
+    clean_slot = re.sub(r"[^a-zA-Z0-9_-]", "", str(slot)).lower()
+    slot_digits = re.sub(r"[^0-9]", "", clean_slot)
+    canonical_slot = slot_digits if (slot_digits and int(slot_digits) <= 20) else clean_slot
+    if not canonical_slot:
+        canonical_slot = "1"
+
+    target_file = None
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    fb_dir = upload_root / "feedback_images" / str(inv.id)
+
+    # 1. Search in feedback_images directory
+    if fb_dir.is_dir():
+        for f in fb_dir.iterdir():
+            if f.is_file():
+                stem = f.stem.lower()
+                if stem in [f"slot_{canonical_slot}", f"slot_{clean_slot}", canonical_slot, clean_slot]:
+                    target_file = f
+                    break
+
+    # 2. Check custom_data.feedback_images
+    if not target_file and inv.custom_data:
+        try:
+            cd = json.loads(inv.custom_data) if isinstance(inv.custom_data, str) else inv.custom_data
+            if isinstance(cd, dict):
+                fb_images = cd.get("feedback_images", {})
+                entry = fb_images.get(str(canonical_slot)) or fb_images.get(str(clean_slot)) or fb_images.get(str(slot))
+                if isinstance(entry, dict) and entry.get("file_path"):
+                    cand = Path(entry["file_path"]).resolve()
+                    if cand.is_file() and cand.is_relative_to(upload_root):
+                        target_file = cand
+        except Exception as cd_err:
+            logger.debug("Failed parsing custom_data for feedback_images: %s", cd_err)
+
+    # 3. Check inv.image_1 .. inv.image_5
+    if not target_file and canonical_slot in {"1", "2", "3", "4", "5"}:
+        val = getattr(inv, f"image_{canonical_slot}", None)
+        if val:
+            val_str = str(val).strip()
+            try:
+                cand = get_safe_file_path(val_str)
+                if cand.is_file():
+                    target_file = cand
+            except Exception:
+                pass
+            if not target_file and os.path.isfile(val_str):
+                cand = Path(val_str).resolve()
+                if cand.is_relative_to(upload_root):
+                    target_file = cand
+            if not target_file:
+                cand = (upload_root / val_str).resolve()
+                if cand.is_file() and cand.is_relative_to(upload_root):
+                    target_file = cand
+
+    # 4. Check base64 fallback in image column
+    if not target_file and canonical_slot in {"1", "2", "3", "4", "5"}:
+        val = getattr(inv, f"image_{canonical_slot}", None)
+        if val and ("base64," in str(val) or (len(str(val)) > 200 and not str(val).startswith("http") and not str(val).startswith("/"))):
+            try:
+                val_str = str(val)
+                raw_b64 = val_str.split("base64,")[-1]
+                data = base64.b64decode(raw_b64)
+                media_type = "image/jpeg"
+                ext = "jpg"
+                if "image/png" in val_str or data.startswith(b"\x89PNG"):
+                    media_type = "image/png"
+                    ext = "png"
+                elif "application/pdf" in val_str or data.startswith(b"%PDF"):
+                    media_type = "application/pdf"
+                    ext = "pdf"
+                return Response(
+                    content=data,
+                    media_type=media_type,
+                    headers={
+                        "Content-Disposition": f'inline; filename="slot_{slot}.{ext}"',
+                        "Content-Security-Policy": "frame-ancestors 'self'",
+                        "X-Content-Type-Options": "nosniff",
+                        "Cache-Control": "public, max-age=86400",
+                    }
+                )
+            except Exception as b64_err:
+                logger.debug("Failed decoding base64 image: %s", b64_err)
+
+    if not target_file or not target_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image for slot '{slot}' not found on record '{record_id}'."
+        )
+
+    ext = target_file.suffix.lower()
+    if ext == ".pdf":
+        media_type = "application/pdf"
+    elif ext == ".png":
+        media_type = "image/png"
+    elif ext in [".jpg", ".jpeg", ".jfif"]:
+        media_type = "image/jpeg"
+    elif ext == ".webp":
+        media_type = "image/webp"
+    elif ext == ".gif":
+        media_type = "image/gif"
+    else:
+        media_type = "application/octet-stream"
+
+    return FileResponse(
+        path=str(target_file),
+        media_type=media_type,
+        filename=target_file.name,
+        headers={
+            "Content-Disposition": f'inline; filename="{target_file.name}"',
+            "Content-Security-Policy": "frame-ancestors 'self'",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "public, max-age=86400",
+        }
+    )
+
+
+@router.get('/api/documents/{record_id}/images')
+@router.get('/api/records/{record_id}/images')
+def list_document_images(
+    record_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    List all permanently attached images and PDF evidence files for a document.
+    """
+    clean_rid = str(record_id).strip()
+    inv = None
+    try:
+        inv = find_invoice_by_identifier(db, clean_rid)
+    except Exception:
+        inv = None
+
+    if not inv:
+        if clean_rid.isdigit():
+            inv = db.query(Invoice).filter(Invoice.id == int(clean_rid), Invoice.is_deleted == False).first()
+        if not inv:
+            inv = db.query(Invoice).filter(
+                or_(
+                    Invoice.document_code == clean_rid,
+                    Invoice.doc_key == clean_rid,
+                    Invoice.doc_num == clean_rid,
+                    Invoice.document_number == clean_rid,
+                    Invoice.invoice_number == clean_rid
+                ),
+                Invoice.is_deleted == False
+            ).first()
+
+    if not inv:
+        raise HTTPException(status_code=404, detail=f"Target record '{record_id}' not found.")
+
+    images = []
+    seen_slots = set()
+
+    # 1. Custom data feedback_images
+    if inv.custom_data:
+        try:
+            cd = json.loads(inv.custom_data) if isinstance(inv.custom_data, str) else inv.custom_data
+            if isinstance(cd, dict):
+                fb_imgs = cd.get("feedback_images", {})
+                for s_key, s_data in fb_imgs.items():
+                    seen_slots.add(str(s_key))
+                    images.append({
+                        "slot": str(s_key),
+                        "url": s_data.get("url") or f"/api/documents/{inv.id}/images/{s_key}",
+                        "file_name": s_data.get("file_name") or f"slot_{s_key}",
+                        "content_type": s_data.get("content_type") or "image/jpeg",
+                        "file_size": s_data.get("file_size", 0),
+                        "uploaded_at": s_data.get("uploaded_at"),
+                    })
+        except Exception as cd_err:
+            logger.debug("Failed extracting feedback_images: %s", cd_err)
+
+    # 2. Check image_1 .. image_5 columns
+    for i in range(1, 6):
+        val = getattr(inv, f"image_{i}", None)
+        if val and str(i) not in seen_slots:
+            seen_slots.add(str(i))
+            val_str = str(val).strip()
+            url = val_str if (val_str.startswith("/") or val_str.startswith("http")) else f"/api/documents/{inv.id}/images/{i}"
+            is_pdf = ".pdf" in val_str.lower()
+            images.append({
+                "slot": str(i),
+                "url": url,
+                "file_name": f"Image {i}.{'pdf' if is_pdf else 'jpg'}",
+                "content_type": "application/pdf" if is_pdf else "image/jpeg",
+                "file_size": 0,
+                "uploaded_at": None,
+            })
+
+    # 3. Check feedback_images directory on disk
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    fb_dir = upload_root / "feedback_images" / str(inv.id)
+    if fb_dir.is_dir():
+        for f in fb_dir.iterdir():
+            if f.is_file():
+                stem = f.stem.lower().replace("slot_", "")
+                if stem not in seen_slots:
+                    seen_slots.add(stem)
+                    is_pdf = f.suffix.lower() == ".pdf"
+                    images.append({
+                        "slot": stem,
+                        "url": f"/api/documents/{inv.id}/images/{stem}",
+                        "file_name": f.name,
+                        "content_type": "application/pdf" if is_pdf else "image/jpeg",
+                        "file_size": f.stat().st_size,
+                        "uploaded_at": None,
+                    })
+
+    return {
+        "record_id": str(inv.id),
+        "document_number": inv.document_number or inv.doc_num or inv.invoice_number,
+        "total_images": len(images),
+        "images": sorted(images, key=lambda x: str(x["slot"]))
+    }
+
 
 
 @router.get('/api/documents/{invoice_id}/signed-url')

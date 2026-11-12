@@ -579,6 +579,17 @@ class AttachmentSyncResponse(BaseModel):
     file_size_bytes: int
     ocr_extracted_fields: Optional[dict] = None
 
+class FeedbackImageUploadResponse(BaseModel):
+    success: bool = True
+    message: str
+    document_id: str
+    record_id: str
+    slot: str
+    file_url: str
+    file_name: str
+    file_size_bytes: int
+    content_type: str
+
 class NotificationProviderSchema(BaseModel):
     smtp_server: str
     port: int = 587

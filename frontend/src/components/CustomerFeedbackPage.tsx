@@ -113,8 +113,12 @@ export default function CustomerFeedbackPage({
     e.preventDefault();
     const firstImg = doc.image_1 || doc.image_2 || doc.image_3 || doc.image_4 || doc.image_5;
     if (firstImg) {
+      let url = String(firstImg).trim();
+      if (!url.startsWith("http") && !url.startsWith("/") && !url.startsWith("data:") && !url.startsWith("blob:")) {
+        url = `/api/documents/${doc.id}/images/1`;
+      }
       setPreviewImageModal({
-        url: String(firstImg),
+        url,
         title: `${doc.document_number || doc.id} - EVIDENCE`,
       });
     }
@@ -1335,11 +1339,19 @@ export default function CustomerFeedbackPage({
               </button>
             </div>
             <div className="flex-1 bg-slate-950 p-4 flex items-center justify-center overflow-auto min-h-[360px]">
-              <img
-                src={previewBlobUrl || previewImageModal.url}
-                alt="Feedback Image"
-                className="max-h-[65vh] max-w-full object-contain rounded shadow-lg"
-              />
+              {previewImageModal.url && /\.pdf($|\?)/i.test(previewImageModal.url) ? (
+                <iframe
+                  src={previewBlobUrl || previewImageModal.url}
+                  className="w-full h-[65vh] rounded border-0 bg-white"
+                  title={previewImageModal.title || "PDF Evidence Preview"}
+                />
+              ) : (
+                <img
+                  src={previewBlobUrl || previewImageModal.url}
+                  alt="Feedback Image"
+                  className="max-h-[65vh] max-w-full object-contain rounded shadow-lg"
+                />
+              )}
             </div>
           </div>
         </div>
