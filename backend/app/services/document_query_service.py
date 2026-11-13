@@ -198,7 +198,7 @@ def is_user_in_approver_pool(
         t_clean = target.strip().lower()
         if not t_clean:
             continue
-        if t_clean in user_handles:
+        if t_clean in user_handles or any(h == t_clean or (len(h) >= 3 and (h in t_clean or t_clean in h)) for h in user_handles):
             return True
 
     return False

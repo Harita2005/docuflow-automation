@@ -441,9 +441,8 @@ export default function App() {
     if (st.includes("hold") || st.includes("pause") || st.includes("reject") || st.includes("cancel") || st.includes("fail")) return false;
     if ((doc as any).has_approved) return false;
 
-    // Check if the user is explicitly assigned to it at current stage
-    if (doc.is_current_approver === false) return false;
-    if (doc.is_current_approver) return true;
+    // Check if the user is explicitly marked as current approver or directly assigned
+    if (doc.is_current_approver === true) return true;
 
     const uHandle = (currentUserUsername || "").toLowerCase().trim();
     const eHandle = (currentUserEmail || "").toLowerCase().trim();

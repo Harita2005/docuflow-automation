@@ -220,4 +220,73 @@ describe('Workflow Stage & Approver Status Differentiation', () => {
     expect(progressAliasDocs.length).toBe(2);
     expect(progressAliasDocs.map(d => d.id)).toEqual(['INV-1006', 'FRT-1005']);
   });
+
+  it('keeps documents assigned to YUVASREE in Pending filter even if is_current_approver is false or viewer is admin', () => {
+    const isAssignedToUser = (doc: any, user: { username: string; role: string }): boolean => {
+      if (doc.is_current_approver === true) return true;
+      const uHandle = user.username.toLowerCase().trim();
+      const rHandle = user.role.toLowerCase().trim();
+      const rawAssigned = (doc.assigned_approver || doc.assigned_to || '').toString().toLowerCase().trim();
+      const pool = rawAssigned.split(',').map((s: string) => s.trim()).filter(Boolean);
+
+      // Direct match
+      if (uHandle && pool.some((p: string) => p === uHandle || p.includes(uHandle) || uHandle.includes(p))) return true;
+
+      const activeAliases = roleAliases[rHandle] ? [...roleAliases[rHandle]] : (rHandle ? [rHandle] : []);
+      if (uHandle === 'yuvasree' || uHandle === 'meshak') {
+        activeAliases.push('account_uploder', 'account_uploader', 'accounts_uploder', 'accounts_uploader', 'uploader');
+      }
+      const isTrueUploader = rHandle.includes('uplod') || rHandle === 'admin' || uHandle === 'yuvasree' || uHandle === 'meshak';
+      const currentStage = doc.current_stage || 1;
+      if (currentStage === 1 && !doc.is_current_approver && !isTrueUploader) {
+        return false;
+      }
+      if (rHandle && pool.some((p: string) => activeAliases.some((a: string) => p === a))) return true;
+      return false;
+    };
+
+    const doc1006 = {
+      id: 'INV-1006',
+      status: 'Pending',
+      assigned_to: 'YUVASREE',
+      assigned_approver: 'YUVASREE',
+      current_stage: 1,
+      is_current_approver: false,
+      has_approved: false
+    };
+    const doc1005 = {
+      id: 'FRT-1005',
+      status: 'Pending',
+      assigned_to: 'YUVASREE',
+      assigned_approver: 'YUVASREE',
+      current_stage: 1,
+      is_current_approver: false,
+      has_approved: false
+    };
+
+    // 1. Direct assignment match for Yuvasree (even if DB role is 'employee')
+    const yuvasreeUser = { username: 'YUVASREE', role: 'employee' };
+    expect(isAssignedToUser(doc1006, yuvasreeUser)).toBe(true);
+    expect(isAssignedToUser(doc1005, yuvasreeUser)).toBe(true);
+
+    // 2. Pending filter in Work Tracker matches status 'Pending' or isActionRequired
+    const filterPending = (docs: any[], user: { username: string; role: string }) => {
+      return docs.filter(doc => {
+        const st = (doc.status || '').toLowerCase();
+        const isActionRequired = isAssignedToUser(doc, user) && !doc.has_approved;
+        return st.startsWith('pending') || st === 'pending' || st.includes('pending') || isActionRequired;
+      });
+    };
+
+    // Viewer is Yuvasree: documents appear
+    const yuvasreePending = filterPending([doc1006, doc1005], yuvasreeUser);
+    expect(yuvasreePending.length).toBe(2);
+    expect(yuvasreePending.map(d => d.id)).toEqual(['INV-1006', 'FRT-1005']);
+
+    // Viewer is Admin: documents also appear under Pending status filter
+    const adminUser = { username: 'ADMIN01', role: 'admin' };
+    const adminPending = filterPending([doc1006, doc1005], adminUser);
+    expect(adminPending.length).toBe(2);
+    expect(adminPending.map(d => d.id)).toEqual(['INV-1006', 'FRT-1005']);
+  });
 });

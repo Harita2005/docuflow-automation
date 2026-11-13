@@ -1143,7 +1143,7 @@ def get_all_invoices(
             s_req = status.strip().lower()
             if s_req == 'pending':
                 st_low = (inv.status or '').strip().lower()
-                is_pending_status = st_low.startswith('pending') or st_low == 'pending'
+                is_pending_status = st_low.startswith('pending') or st_low == 'pending' or 'pending' in st_low
                 if not (is_pending_status or (is_curr and is_active_flow)):
                     continue
             elif s_req in ['in_progress', 'tracking', 'progress']:
@@ -1361,7 +1361,7 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
             s_req = status.strip().lower()
             if s_req == 'pending':
                 st_low = (inv.status or '').strip().lower()
-                is_pending_status = st_low.startswith('pending') or st_low == 'pending'
+                is_pending_status = st_low.startswith('pending') or st_low == 'pending' or 'pending' in st_low
                 if not (is_pending_status or (is_curr and not has_approved_curr_stage)):
                     continue
             elif s_req == 'hold':

@@ -52,7 +52,10 @@ export default function Dashboard({
   };
   const [activeDocType, setActiveDocType] = useState<string>("ALL");
   const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected' | 'cancelled'>('pending');
-  const [pendingScope, setPendingScope] = useState<'my' | 'all'>('my');
+  const [pendingScope, setPendingScope] = useState<'my' | 'all'>(() => {
+    const r = (currentUserRole || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    return r.includes("admin") ? "all" : "my";
+  });
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [timeRange, setTimeRange] = useState<string>("ALL TIME");
   const [customFromDate, setCustomFromDate] = useState<string>("");
@@ -140,8 +143,7 @@ export default function Dashboard({
 
   // Filter documents strictly by assigned user without universal admin bypass
   const isAssignedToUser = (doc: any) => {
-    if (doc.is_current_approver === false) return false;
-    if (doc.is_current_approver) return true;
+    if (doc.is_current_approver === true) return true;
 
     const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || "").toLowerCase().trim();
     const eHandle = (currentUserEmail || localStorage.getItem("currentUserEmail") || "").toLowerCase().trim();
@@ -165,6 +167,16 @@ export default function Dashboard({
 
     const pool = rawAssigned.split(",").map((s: string) => s.trim()).filter(Boolean);
 
+    // Direct match check FIRST: if the user's handle matches the assigned pool directly
+    const isDirectMatch = (
+      (idHandle && pool.some((p: string) => p === idHandle)) ||
+      (uHandle && pool.some((p: string) => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) ||
+      (nHandle && pool.some((p: string) => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) ||
+      (empHandle && pool.some((p: string) => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) ||
+      (eHandle && pool.some((p: string) => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p))))
+    );
+    if (isDirectMatch) return true;
+
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
       manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
@@ -179,7 +191,7 @@ export default function Dashboard({
       account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"]
     };
-    const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
+    const activeAliases = roleAliases[rHandle] ? [...roleAliases[rHandle]] : (rHandle ? [rHandle] : []);
     if (uHandle === "yuvasree" || uHandle === "meshak") {
       activeAliases.push("account_uploder", "account_uploader", "accounts_uploder", "accounts_uploader", "uploader");
     }
@@ -194,11 +206,6 @@ export default function Dashboard({
       return false;
     }
 
-    if (idHandle && pool.some((p: string) => p === idHandle)) return true;
-    if (uHandle && pool.some((p: string) => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (nHandle && pool.some((p: string) => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some((p: string) => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
-    if (eHandle && pool.some((p: string) => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
     if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p === a || p.replace(/[_ ]/g, '') === a.replace(/[_ ]/g, ''))))) return true;
 
     if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive")) return true;
@@ -221,7 +228,7 @@ export default function Dashboard({
     if (doc.has_approved) return false;
 
     // 3. Exact matching aligned strictly with Work Tracker predicate
-    const isActionRequired = (typeof doc.is_current_approver === "boolean" ? doc.is_current_approver : isAssignedToUser(doc)) && !doc.has_approved;
+    const isActionRequired = (doc.is_current_approver === true || isAssignedToUser(doc)) && !doc.has_approved;
     return isActionRequired;
   };
 
@@ -529,8 +536,8 @@ export default function Dashboard({
           role="button"
           tabIndex={0}
           aria-label="Filter Pending Documents"
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setKpiFilter('pending'); setPendingScope('my'); setActiveDocType('ALL'); } }}
-          onClick={() => { setKpiFilter('pending'); setPendingScope('my'); setActiveDocType('ALL'); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setKpiFilter('pending'); setPendingScope(isAdmin ? 'all' : 'my'); setActiveDocType('ALL'); } }}
+          onClick={() => { setKpiFilter('pending'); setPendingScope(isAdmin ? 'all' : 'my'); setActiveDocType('ALL'); }}
           title="Click to show your Pending documents in Dashboard"
           className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
             kpiFilter === 'pending'

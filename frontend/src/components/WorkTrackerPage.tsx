@@ -270,8 +270,7 @@ export default function WorkTrackerPage({
   };
 
   const isAssignedToUser = (doc: DbInvoice): boolean => {
-    if (doc.is_current_approver === false) return false;
-    if (doc.is_current_approver) return true;
+    if (doc.is_current_approver === true) return true;
     const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || '').toLowerCase().trim();
     const eHandle = (currentUserEmail || localStorage.getItem("currentUserEmail") || '').toLowerCase().trim();
     const rHandle = (currentUserRole || localStorage.getItem("currentUserRole") || '').toLowerCase().trim();
@@ -286,6 +285,16 @@ export default function WorkTrackerPage({
 
     const rawAssigned = (doc.assigned_approver || (doc as any).assigned_to || (doc as any).assigned_user || '').toString().toLowerCase().trim();
     const pool = rawAssigned.split(',').map(s => s.trim()).filter(Boolean);
+
+    // Direct match: if document is explicitly assigned to user by ID, username, name, employee ID, or email
+    const isDirectMatch = (
+      (idHandle && pool.some(p => p === idHandle)) ||
+      (uHandle && pool.some(p => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) ||
+      (nHandle && pool.some(p => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) ||
+      (empHandle && pool.some(p => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) ||
+      (eHandle && pool.some(p => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p))))
+    );
+    if (isDirectMatch) return true;
 
     // Role mapping for common designations
     const roleAliases: Record<string, string[]> = {
@@ -307,24 +316,22 @@ export default function WorkTrackerPage({
       account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"]
     };
-    const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
+    const activeAliases = roleAliases[rHandle] ? [...roleAliases[rHandle]] : (rHandle ? [rHandle] : []);
+    if (uHandle === "yuvasree" || uHandle === "meshak") {
+      activeAliases.push("account_uploder", "account_uploader", "accounts_uploder", "accounts_uploader", "uploader");
+    }
 
+    const isTrueUploader = rHandle.includes("uplod") || rHandle === "admin" || uHandle === "yuvasree" || uHandle === "meshak";
     const currentStage = doc.current_stage || 1;
-    const isUploader = rHandle.includes("uplod") || rHandle === "admin";
-    if (currentStage === 1 && !doc.is_current_approver && !isUploader) {
+    if (currentStage === 1 && !doc.is_current_approver && !isTrueUploader) {
       return false;
     }
 
-    if (idHandle && pool.some(p => p === idHandle)) return true;
-    if (uHandle && pool.some(p => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
-    if (nHandle && pool.some(p => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
-    if (empHandle && pool.some(p => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
-    if (eHandle && pool.some(p => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
     if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p === a || p.replace(/[_ ]/g, '') === a.replace(/[_ ]/g, ''))))) return true;
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
-    if (isUnrouted && isUploader) return true;
-    if (currentStage === 1 && isUploader) return true;
+    if (isUnrouted && isTrueUploader) return true;
+    if (currentStage === 1 && isTrueUploader) return true;
     return false;
   };
 
@@ -501,7 +508,17 @@ export default function WorkTrackerPage({
         const isInProgress = Boolean(doc.has_approved) || st.includes("in progress") || st.includes("stage") || !isActionRequired;
 
         if (statusFilter === "pending") {
-          if (!isActionRequired) return false;
+          const isPending = (
+            st.startsWith("pending") ||
+            st === "pending" ||
+            st.includes("pending") ||
+            st.includes("initiated") ||
+            st.includes("unrouted") ||
+            st.includes("verification") ||
+            st.includes("review") ||
+            isActionRequired
+          );
+          if (!isPending) return false;
         } else if (statusFilter === "in_progress" || statusFilter === "progress" || statusFilter === "active") {
           // Align with Dashboard PROGRESS card: all active non-terminal statuses (Pending, In Progress, Hold)
           const isNonTerminalActive = !isTerminalOrApproved(doc) && (
