@@ -18,6 +18,14 @@ export default function AdminRACI() {
   const [grid, setGrid] = useState({});
   const [providerConfig, setProviderConfig] = useState({ smtp_server: '', port: 587, username: '', encrypted_password: '', sender_email: '', sender_name: '' });
 
+  const getHeaders = () => {
+    const token = localStorage.getItem("authToken") || localStorage.getItem("token") || localStorage.getItem("access_token") || "";
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
+  };
+
   useEffect(() => {
     fetchMatrices();
     fetchProviderConfig();
@@ -27,7 +35,7 @@ export default function AdminRACI() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/users', { headers });
+      const res = await fetch('/api/admin/users', { headers: getHeaders() });
       if (res.ok) {
         setDbUsers(await res.json());
       }
@@ -46,7 +54,19 @@ export default function AdminRACI() {
       
       const safeParse = (str) => {
         if (!str) return [];
-        try { return JSON.parse(str); } catch { return []; }
+        if (Array.isArray(str)) return str;
+        try {
+          const parsed = JSON.parse(str);
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && typeof parsed === 'string') {
+            return parsed.includes(',') ? parsed.split(',').map(s => s.trim()).filter(Boolean) : [parsed];
+          }
+        } catch {}
+        if (typeof str === 'string') {
+          if (str.includes(',')) return str.split(',').map(s => s.trim()).filter(Boolean);
+          if (str.trim()) return [str.trim()];
+        }
+        return [];
       };
 
       newGrid[event] = {
@@ -61,15 +81,10 @@ export default function AdminRACI() {
     setGrid(newGrid);
   }, [workflowProfile, customWorkflow, matrices]);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(localStorage.getItem("authToken") ? { "Authorization": `Bearer ${localStorage.getItem("authToken")}` } : {})
-  };
-
   const fetchMatrices = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/notifications/raci', { headers });
+      const res = await fetch('/api/admin/notifications/raci', { headers: getHeaders() });
       if (res.ok) {
         setMatrices(await res.json());
       }
@@ -81,17 +96,17 @@ export default function AdminRACI() {
 
   const fetchProviderConfig = async () => {
     try {
-      const res = await fetch('/api/admin/notifications/provider', { headers });
+      const res = await fetch('/api/admin/notifications/provider', { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
-        if (data) setProviderConfig(data);
+        if (data && data.smtp_server) setProviderConfig(data);
       }
     } catch {}
   };
 
   const fetchWorkflows = async () => {
     try {
-      const res = await fetch('/api/admin/workflows', { headers });
+      const res = await fetch('/api/admin/workflows', { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
         setWorkflows(data);
@@ -101,6 +116,39 @@ export default function AdminRACI() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const persistGrid = async (gridToSave) => {
+    const activeWorkflow = customWorkflow || workflowProfile;
+    if (!activeWorkflow) return;
+    try {
+      const eventsToSave = [UNIFIED_EVENT, ...LEGACY_EVENTS];
+      for (const event of eventsToSave) {
+        const sourceData = gridToSave[UNIFIED_EVENT] || { R: [], A: [], C: [], I: [], title_template: '', message_template: '' };
+        const payload = {
+          workflow_profile: activeWorkflow,
+          event_name: event,
+          responsible_emails: JSON.stringify(sourceData.R || []),
+          accountable_emails: JSON.stringify(sourceData.A || []),
+          consulted_emails: JSON.stringify(sourceData.C || []),
+          informed_emails: JSON.stringify(sourceData.I || []),
+          title_template: sourceData.title_template || '',
+          message_template: sourceData.message_template || ''
+        };
+        await fetch('/api/admin/notifications/raci', {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(payload)
+        });
+      }
+      // Re-sync matrices in background without blocking UI
+      const refreshRes = await fetch('/api/admin/notifications/raci', { headers: getHeaders() });
+      if (refreshRes.ok) {
+        setMatrices(await refreshRes.json());
+      }
+    } catch (e) {
+      console.error("Auto-persist RACI error:", e);
     }
   };
 
@@ -130,21 +178,25 @@ export default function AdminRACI() {
         const payload = {
           workflow_profile: activeWorkflow,
           event_name: event,
-          responsible_emails: JSON.stringify(sourceData.R),
-          accountable_emails: JSON.stringify(sourceData.A),
-          consulted_emails: JSON.stringify(sourceData.C),
-          informed_emails: JSON.stringify(sourceData.I),
-          title_template: sourceData.title_template,
-          message_template: sourceData.message_template
+          responsible_emails: JSON.stringify(sourceData.R || []),
+          accountable_emails: JSON.stringify(sourceData.A || []),
+          consulted_emails: JSON.stringify(sourceData.C || []),
+          informed_emails: JSON.stringify(sourceData.I || []),
+          title_template: sourceData.title_template || '',
+          message_template: sourceData.message_template || ''
         };
 
-        await fetch('/api/admin/notifications/raci', {
+        const res = await fetch('/api/admin/notifications/raci', {
           method: 'POST',
-          headers,
+          headers: getHeaders(),
           body: JSON.stringify(payload)
         });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server error (${res.status})`);
+        }
       }
-      alert('RACI Matrix saved successfully!');
+      alert('RACI Matrix saved permanently to Database!');
       fetchMatrices();
     } catch (e) {
       alert('Error saving RACI Matrix: ' + e.message);
@@ -155,22 +207,33 @@ export default function AdminRACI() {
   const saveProviderConfig = async () => {
     setLoading(true);
     try {
-      await fetch('/api/admin/notifications/provider', { method: 'POST', headers, body: JSON.stringify(providerConfig) });
-      alert('SMTP settings saved successfully!');
-    } catch(e) { alert(e.message); }
+      const res = await fetch('/api/admin/notifications/provider', { 
+        method: 'POST', 
+        headers: getHeaders(), 
+        body: JSON.stringify(providerConfig) 
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Server error (${res.status})`);
+      }
+      alert('SMTP settings saved permanently to Database!');
+      fetchProviderConfig();
+    } catch(e) { 
+      alert('Error saving SMTP Config: ' + e.message); 
+    }
     setLoading(false);
   };
 
   const testSMTPConnection = async () => {
     const userEmail = localStorage.getItem("currentUserEmail") || "";
-    const targetEmail = window.prompt("Enter recipient email address for SMTP test:", userEmail || "admin@company.com");
+    const targetEmail = window.prompt("Enter recipient email address for SMTP test:", userEmail || "communication@ramrajcotton.net");
     if (!targetEmail) return;
 
     setLoading(true);
     try {
       const res = await fetch('/api/admin/notifications/test', {
         method: 'POST',
-        headers,
+        headers: getHeaders(),
         body: JSON.stringify({
           to: targetEmail.trim(),
           subject: 'DocuFlow Automation - SMTP Test',
@@ -191,23 +254,31 @@ export default function AdminRACI() {
 
   const handleAddEmail = (event, role, email) => {
     if (!email) return;
-    setGrid(prev => ({
-      ...prev,
-      [event]: {
-        ...prev[event],
-        [role]: [...new Set([...prev[event][role], email])]
-      }
-    }));
+    setGrid(prev => {
+      const updated = {
+        ...prev,
+        [event]: {
+          ...prev[event],
+          [role]: [...new Set([...(prev[event]?.[role] || []), email])]
+        }
+      };
+      persistGrid(updated);
+      return updated;
+    });
   };
 
   const handleRemoveEmail = (event, role, email) => {
-    setGrid(prev => ({
-      ...prev,
-      [event]: {
-        ...prev[event],
-        [role]: prev[event][role].filter(e => e !== email)
-      }
-    }));
+    setGrid(prev => {
+      const updated = {
+        ...prev,
+        [event]: {
+          ...prev[event],
+          [role]: (prev[event]?.[role] || []).filter(e => e !== email)
+        }
+      };
+      persistGrid(updated);
+      return updated;
+    });
   };
 
   const insertVariable = (event, field, varName) => {

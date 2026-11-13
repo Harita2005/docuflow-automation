@@ -5830,16 +5830,25 @@ def get_admin_recycle_bin(db: Session=Depends(get_db), current_user: User=Depend
 def get_admin_notifications_provider(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     _require_docs_admin(current_user, db)
     config = db.query(NotificationProviderConfig).first()
-    if config:
-        masked_pwd = mask_secret(config.encrypted_password)
-        return {'smtp_server': config.smtp_server, 'port': config.port, 'username': config.username, 'encrypted_password': masked_pwd, 'sender_email': config.sender_email, 'sender_name': config.sender_name}
+    if config and config.smtp_server:
+        masked_pwd = mask_secret(config.encrypted_password) if config.encrypted_password else "••••••••"
+        return {'smtp_server': config.smtp_server, 'port': config.port or 587, 'username': config.username or '', 'encrypted_password': masked_pwd, 'sender_email': config.sender_email or config.username or '', 'sender_name': config.sender_name or 'Ramraj Cotton'}
+    
+    # Fallback to configured SMTP environment variables or company defaults
+    smtp_host = (os.getenv('SMTP_HOST') or os.getenv('SMTP_SERVER') or os.getenv('DOCUFLOW_SMTP_SERVER') or 'smtp.office365.com').strip()
+    smtp_port = int(os.getenv('SMTP_PORT') or os.getenv('DOCUFLOW_SMTP_PORT') or 587)
+    smtp_user = (os.getenv('SMTP_USER') or os.getenv('SMTP_USERNAME') or os.getenv('DOCUFLOW_SMTP_USER') or 'communication@ramrajcotton.net').strip()
+    sender_email = (os.getenv('SMTP_FROM') or os.getenv('SMTP_SENDER_EMAIL') or os.getenv('DOCUFLOW_SMTP_SENDER') or smtp_user or 'communication@ramrajcotton.net').strip()
+    sender_name = (os.getenv('SMTP_SENDER_NAME') or 'Ramraj Cotton').strip('\"\'')
+    has_pwd = bool(os.getenv('SMTP_PASS') or os.getenv('SMTP_PASSWORD') or 'QDjuS8BvQWq6bY')
+    
     return {
-        'smtp_server': os.getenv('DOCUFLOW_SMTP_SERVER', 'smtp.example.com'),
-        'port': int(os.getenv('DOCUFLOW_SMTP_PORT', '587')),
-        'username': os.getenv('DOCUFLOW_SMTP_USER', 'alerts@example.com'),
-        'encrypted_password': '',
-        'sender_email': os.getenv('DOCUFLOW_SMTP_SENDER', 'alerts@example.com'),
-        'sender_name': 'DocuFlow Alerts'
+        'smtp_server': smtp_host,
+        'port': smtp_port,
+        'username': smtp_user,
+        'encrypted_password': '••••••••' if has_pwd else '',
+        'sender_email': sender_email,
+        'sender_name': sender_name
     }
 
 @router.post('/api/admin/notifications/provider')
@@ -5849,10 +5858,12 @@ def save_admin_notifications_provider(payload: NotificationProviderSchema, db: S
     new_pwd = payload.encrypted_password
     if config and (new_pwd in ['••••••••', '********', None, '']):
         encrypted_pwd = config.encrypted_password
-    elif new_pwd:
+    elif new_pwd and new_pwd not in ['••••••••', '********']:
         encrypted_pwd = encrypt_secret(new_pwd)
+    elif config:
+        encrypted_pwd = config.encrypted_password
     else:
-        encrypted_pwd = None
+        encrypted_pwd = encrypt_secret(os.getenv('SMTP_PASS') or os.getenv('SMTP_PASSWORD') or 'QDjuS8BvQWq6bY')
 
     if not config:
         config = NotificationProviderConfig(smtp_server=payload.smtp_server, port=payload.port, username=payload.username, encrypted_password=encrypted_pwd, sender_email=payload.sender_email, sender_name=payload.sender_name)
@@ -5866,6 +5877,48 @@ def save_admin_notifications_provider(payload: NotificationProviderSchema, db: S
         config.sender_email = payload.sender_email
         config.sender_name = payload.sender_name
     db.commit()
+
+    # Also persist to .env file so settings survive any database recreation or env reload
+    try:
+        from pathlib import Path
+        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+        if env_path.exists():
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            keys_to_update = {
+                "SMTP_HOST": payload.smtp_server,
+                "SMTP_SERVER": payload.smtp_server,
+                "SMTP_PORT": str(payload.port),
+                "SMTP_USER": payload.username,
+                "SMTP_USERNAME": payload.username,
+                "SMTP_FROM": payload.sender_email,
+                "SMTP_SENDER_EMAIL": payload.sender_email,
+                "SMTP_SENDER_NAME": f'"{payload.sender_name}"',
+            }
+            if new_pwd and new_pwd not in ['••••••••', '********']:
+                keys_to_update["SMTP_PASS"] = new_pwd
+                keys_to_update["SMTP_PASSWORD"] = new_pwd
+
+            new_lines = []
+            updated = set()
+            for line in lines:
+                matched = False
+                for k, v in keys_to_update.items():
+                    if line.strip().startswith(f"{k}=") or line.strip().startswith(f"# {k}="):
+                        new_lines.append(f"{k}={v}\n")
+                        updated.add(k)
+                        matched = True
+                        break
+                if not matched:
+                    new_lines.append(line)
+            for k, v in keys_to_update.items():
+                if k not in updated:
+                    new_lines.append(f"{k}={v}\n")
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+    except Exception as exc:
+        logger.debug("Failed updating .env from admin API: %s", exc)
+
     return {'success': True, 'message': 'SMTP provider configuration saved successfully'}
 
 @router.get('/api/admin/notifications/raci')
@@ -5877,9 +5930,11 @@ def get_admin_notifications_raci(db: Session=Depends(get_db), current_user: User
 @router.post('/api/admin/notifications/raci')
 def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     _require_docs_admin(current_user, db)
-    item = db.query(NotificationRaciMatrix).filter(NotificationRaciMatrix.workflow_profile == payload.workflow_profile, NotificationRaciMatrix.event_name == payload.event_name).first()
+    wf_profile = (payload.workflow_profile or "").strip()
+    ev_name = (payload.event_name or "").strip()
+    item = db.query(NotificationRaciMatrix).filter(NotificationRaciMatrix.workflow_profile == wf_profile, NotificationRaciMatrix.event_name == ev_name).first()
     if not item:
-        item = NotificationRaciMatrix(workflow_profile=payload.workflow_profile, event_name=payload.event_name)
+        item = NotificationRaciMatrix(workflow_profile=wf_profile, event_name=ev_name)
         db.add(item)
     item.responsible_emails = payload.responsible_emails
     item.accountable_emails = payload.accountable_emails
@@ -5888,7 +5943,7 @@ def save_admin_notifications_raci(payload: NotificationRaciSchema, db: Session=D
     item.title_template = payload.title_template
     item.message_template = payload.message_template
     db.commit()
-    return {'success': True, 'message': f'RACI configuration saved for {payload.event_name}'}
+    return {'success': True, 'message': f'RACI configuration saved for {ev_name}'}
 
 @router.post('/api/admin/notifications/test')
 def test_admin_notifications_smtp(payload: NotificationTestSchema, db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
