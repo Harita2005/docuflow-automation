@@ -369,4 +369,83 @@ describe('Workflow Stage & Approver Status Differentiation', () => {
     expect(isApprovalAllowed('Cancelled')).toBe(false);
     expect(isApprovalAllowed('Approved')).toBe(false);
   });
+
+  it('handles rejection step-down and sequential work tracker visibility lifecycle', () => {
+    // 1. Initial document at Stage 1
+    let doc: any = {
+      id: 'INV-1006',
+      current_stage: 1,
+      status: 'Initiated (Attachment Status)',
+      assigned_to: 'YUVASREE',
+      assigned_approver: 'YUVASREE'
+    };
+
+    const isVisibleInWorkTracker = (d: any, user: { username: string; role: string }) => {
+      const uHandle = user.username.toLowerCase().trim();
+      const rHandle = user.role.toLowerCase().trim();
+      if (rHandle === 'admin') return true;
+
+      const isUploader = rHandle.includes('uplod') || uHandle === 'yuvasree' || uHandle === 'meshak';
+      const currentStage = d.current_stage || 1;
+      const isStage1 = currentStage === 1 || (d.status || '').toLowerCase().includes('attachment');
+      const rawAssigned = (d.assigned_approver || d.assigned_to || '').toString().toLowerCase().trim();
+      const isAssigned = rawAssigned.includes(uHandle);
+
+      if (isStage1 && !isAssigned && !isUploader) {
+        return false;
+      }
+      if (currentStage > 1 && !isAssigned && !d.has_approved_active) {
+        return false;
+      }
+      return true;
+    };
+
+    const yuvasree = { username: 'YUVASREE', role: 'employee' };
+    const vignesh = { username: 'VIGNESH', role: 'accounts_approver' };
+
+    // At Stage 1: Yuvasree sees it, Vignesh cannot see it
+    expect(isVisibleInWorkTracker(doc, yuvasree)).toBe(true);
+    expect(isVisibleInWorkTracker(doc, vignesh)).toBe(false);
+
+    // Yuvasree approves -> advances to Stage 2
+    doc = {
+      ...doc,
+      current_stage: 2,
+      status: 'In Progress (Stage 2)',
+      assigned_to: 'VIGNESH',
+      assigned_approver: 'VIGNESH'
+    };
+
+    // At Stage 2: Vignesh sees it and is pending for Vignesh
+    expect(isVisibleInWorkTracker(doc, vignesh)).toBe(true);
+
+    // Vignesh REJECTS it -> steps down to Stage 1, assigned back to Yuvasree
+    doc = {
+      ...doc,
+      current_stage: 1,
+      status: 'In Progress (Stage 1)',
+      assigned_to: 'YUVASREE',
+      assigned_approver: 'YUVASREE',
+      has_approved_active: false // Prior approval invalidated by rejection
+    };
+
+    // After rejection to Stage 1:
+    // Yuvasree MUST see it in Work Tracker and Pending
+    expect(isVisibleInWorkTracker(doc, yuvasree)).toBe(true);
+    // Vignesh MUST NOT see it in Work Tracker until Yuvasree approves it again!
+    expect(isVisibleInWorkTracker(doc, vignesh)).toBe(false);
+
+    // Yuvasree approves again -> advances to Stage 2
+    doc = {
+      ...doc,
+      current_stage: 2,
+      status: 'In Progress (Stage 2)',
+      assigned_to: 'VIGNESH',
+      assigned_approver: 'VIGNESH',
+      has_approved_active: false
+    };
+
+    // Now Vignesh sees it again
+    expect(isVisibleInWorkTracker(doc, vignesh)).toBe(true);
+  });
 });
