@@ -1352,6 +1352,11 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
                     continue
 
         if not user_is_admin:
+            # Sequential workflow isolation: when at Stage 1, only Stage 1 assignee, uploader desk, or creator can see the document.
+            # Subsequent approvers (Stage 2+) must NOT see the document until Stage 1 approves it.
+            if is_stage1 and not (is_curr or is_assigned or is_uploader_role or is_creator):
+                continue
+
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
             if not ((is_curr and not has_approved_curr_stage) or is_assigned or has_approved_any_stage or is_creator or is_member_of_flow or (is_unrouted and is_uploader_role) or (is_stage1 and is_uploader_role)):
                 continue
@@ -2687,11 +2692,27 @@ def check_approval_authorization(inv: Invoice, user: Optional[User], db: Optiona
         raise HTTPException(status_code=409, detail=f"This document is already in a terminal/completed state ('{inv.status}') and cannot accept further workflow actions.")
 
     if not is_rejection_or_cancellation:
-        is_in_prog = (inv.status == 'In Progress') or (inv.status or '').lower().startswith('in progress')
-        if not is_in_prog:
+        st_clean = (inv.status or '').strip().lower()
+        if 'hold' in st_clean or 'pause' in st_clean:
             raise HTTPException(
                 status_code=400,
-                detail=f"Approval Restricted: Documents can only be approved when status is 'In Progress' (current status: '{inv.status}')."
+                detail="Approval Restricted: Documents on hold cannot be approved. Please resume or release hold first."
+            )
+        is_active_st = (
+            st_clean.startswith('in progress')
+            or st_clean.startswith('initiated')
+            or st_clean.startswith('pending')
+            or 'progress' in st_clean
+            or 'initiated' in st_clean
+            or 'pending' in st_clean
+            or 'attachment' in st_clean
+            or 'verification' in st_clean
+            or 'stage' in st_clean
+        )
+        if not is_active_st:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Approval Restricted: Documents can only be approved when active in workflow (current status: '{inv.status}')."
             )
 
     is_feedback_doc = is_feedback_or_complaint(inv.document_type) or str(inv.id).startswith('CMP') or str(inv.id).startswith('CF') or bool(getattr(inv, 'type_of_complaint', None)) or (inv.workflow_profile_id or '').lower().startswith('customer_feedback')

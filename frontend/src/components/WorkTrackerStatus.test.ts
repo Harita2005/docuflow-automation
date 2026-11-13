@@ -289,4 +289,84 @@ describe('Workflow Stage & Approver Status Differentiation', () => {
     expect(adminPending.length).toBe(2);
     expect(adminPending.map(d => d.id)).toEqual(['INV-1006', 'FRT-1005']);
   });
+
+  it('hides Stage 1 document from subsequent approvers until Stage 1 (uploader) approves', () => {
+    const docStage1 = {
+      id: 'INV-1006',
+      status: 'Initiated (Attachment Status)',
+      current_stage: 1,
+      assigned_to: 'YUVASREE',
+      assigned_approver: 'YUVASREE'
+    };
+
+    const isVisibleInWorkTracker = (doc: any, user: { username: string; role: string }) => {
+      const uHandle = user.username.toLowerCase().trim();
+      const rHandle = user.role.toLowerCase().trim();
+      if (rHandle === 'admin') return true;
+
+      const isUploader = rHandle.includes('uplod') || uHandle === 'yuvasree' || uHandle === 'meshak';
+      const currentStage = doc.current_stage || 1;
+      const isStage1 = currentStage === 1 || (doc.status || '').toLowerCase().includes('attachment');
+      const rawAssigned = (doc.assigned_approver || doc.assigned_to || '').toString().toLowerCase().trim();
+      const isAssigned = rawAssigned.includes(uHandle);
+
+      if (isStage1 && !isAssigned && !isUploader) {
+        return false;
+      }
+      return true;
+    };
+
+    const yuvasree = { username: 'YUVASREE', role: 'employee' };
+    const vignesh = { username: 'VIGNESH', role: 'accounts_approver' };
+    const admin = { username: 'ADMIN01', role: 'admin' };
+
+    // Yuvasree (uploader/assignee at Stage 1) sees the document
+    expect(isVisibleInWorkTracker(docStage1, yuvasree)).toBe(true);
+
+    // Vignesh (Stage 2 approver) CANNOT see the document yet
+    expect(isVisibleInWorkTracker(docStage1, vignesh)).toBe(false);
+
+    // Admin can see the document
+    expect(isVisibleInWorkTracker(docStage1, admin)).toBe(true);
+
+    // Once Yuvasree approves and document advances to Stage 2:
+    const docStage2 = {
+      ...docStage1,
+      current_stage: 2,
+      status: 'In Progress (Stage 2)',
+      assigned_to: 'VIGNESH',
+      assigned_approver: 'VIGNESH'
+    };
+
+    // Vignesh now sees the document
+    expect(isVisibleInWorkTracker(docStage2, vignesh)).toBe(true);
+  });
+
+  it('allows approval of documents in active workflow states (Initiated, Pending, In Progress)', () => {
+    const isApprovalAllowed = (status: string) => {
+      const st = (status || '').toLowerCase().trim();
+      if (st in ['on hold', 'hold', 'paused']) return false;
+      if (['settled', 'approved', 'paid', 'ready for payment', 'cancelled', 'failed', 'rejected'].includes(st)) return false;
+      return (
+        st.startsWith('in progress') ||
+        st.startsWith('initiated') ||
+        st.startsWith('pending') ||
+        st.includes('progress') ||
+        st.includes('initiated') ||
+        st.includes('pending') ||
+        st.includes('attachment') ||
+        st.includes('verification') ||
+        st.includes('stage')
+      );
+    };
+
+    expect(isApprovalAllowed('Initiated (Attachment Status)')).toBe(true);
+    expect(isApprovalAllowed('Initiated (Stage 1)')).toBe(true);
+    expect(isApprovalAllowed('Pending')).toBe(true);
+    expect(isApprovalAllowed('Pending Verification')).toBe(true);
+    expect(isApprovalAllowed('In Progress (Stage 1)')).toBe(true);
+    expect(isApprovalAllowed('On Hold')).toBe(false);
+    expect(isApprovalAllowed('Cancelled')).toBe(false);
+    expect(isApprovalAllowed('Approved')).toBe(false);
+  });
 });

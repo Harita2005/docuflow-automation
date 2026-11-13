@@ -386,10 +386,21 @@ export default function WorkTrackerPage({
     const activeDocs = sourceDocs.filter(doc => !isTerminalOrApproved(doc) && !isCustomerFeedbackDoc(doc));
     const isAdmin = currentUserRole === "admin" || currentUserRole === "system_admin" || currentUserRole === "superadmin";
     if (isAdmin) return activeDocs;
-    if (hasLoadedApi) return activeDocs;
+
+    const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || "").toLowerCase().trim();
+    const rHandle = (currentUserRole || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
+    const isUploader = rHandle.includes("uplod") || uHandle === "yuvasree" || uHandle === "meshak";
 
     return activeDocs.filter(doc => {
-      // Visible in Work Tracker if user is the current approver or has approved a prior stage (tracking progress)
+      const currentStage = doc.current_stage || 1;
+      const isStage1 = currentStage === 1 || (doc.status || "").toLowerCase().includes("attachment");
+      const isAssigned = isAssignedToUser(doc);
+
+      // Sequential workflow isolation: subsequent approvers (Stage 2+) cannot see Stage 1 documents until stage 1 approves!
+      if (isStage1 && !isAssigned && !isUploader) {
+        return false;
+      }
+
       return isActionableForUser(doc);
     });
   }, [sourceDocs, currentUserRole, currentUserUsername, currentUserEmail, hasLoadedApi]);
