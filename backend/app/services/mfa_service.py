@@ -309,7 +309,7 @@ def is_email_otp_available(
                 or os.getenv("SMTP_HOST", "")
                 or os.getenv("SMTP_SERVER", "")
                 or getattr(settings, "SMTP_HOST", "")
-                or ""
+                or "smtp.office365.com"
             ).strip()
 
             port_val = (
@@ -325,7 +325,7 @@ def is_email_otp_available(
                 or os.getenv("SMTP_USER", "")
                 or getattr(settings, "SMTP_USERNAME", "")
                 or getattr(settings, "SMTP_USER", "")
-                or ""
+                or "communication@ramrajcotton.net"
             ).strip()
 
             smtp_password = (
@@ -334,7 +334,7 @@ def is_email_otp_available(
                 or os.getenv("SMTP_PASS", "")
                 or getattr(settings, "SMTP_PASSWORD", "")
                 or getattr(settings, "SMTP_PASS", "")
-                or ""
+                or "QDjuS8BvQWq6bY"
             ).strip()
 
             sender_email = (
@@ -345,6 +345,7 @@ def is_email_otp_available(
                 or getattr(settings, "SMTP_FROM", "")
                 or getattr(settings, "SMTP_SENDER_EMAIL", "")
                 or smtp_user
+                or "communication@ramrajcotton.net"
             ).strip()
 
         def is_placeholder(val: str) -> bool:
@@ -405,16 +406,17 @@ def send_email_otp(
     config = smtp_config or {}
 
     smtp_host = (
-        os.getenv("SMTP_HOST", "")
+        (config.get("smtp_server") or "")
+        or os.getenv("SMTP_HOST", "")
         or os.getenv("SMTP_SERVER", "")
         or getattr(settings, "SMTP_HOST", "")
-        or (config.get("smtp_server") or "")
+        or "smtp.office365.com"
     ).strip()
 
     port_val = (
-        os.getenv("SMTP_PORT")
+        config.get("port")
+        or os.getenv("SMTP_PORT")
         or getattr(settings, "SMTP_PORT", None)
-        or config.get("port")
         or 587
     )
     try:
@@ -423,36 +425,39 @@ def send_email_otp(
         smtp_port = 587
 
     smtp_user = (
-        os.getenv("SMTP_USERNAME", "")
+        (config.get("username") or "")
+        or os.getenv("SMTP_USERNAME", "")
         or os.getenv("SMTP_USER", "")
         or getattr(settings, "SMTP_USERNAME", "")
         or getattr(settings, "SMTP_USER", "")
-        or (config.get("username") or "")
+        or "communication@ramrajcotton.net"
     ).strip()
 
     smtp_password = (
-        os.getenv("SMTP_PASSWORD", "")
+        (config.get("encrypted_password") or "")
+        or os.getenv("SMTP_PASSWORD", "")
         or os.getenv("SMTP_PASS", "")
         or getattr(settings, "SMTP_PASSWORD", "")
         or getattr(settings, "SMTP_PASS", "")
-        or (config.get("encrypted_password") or "")
+        or "QDjuS8BvQWq6bY"
     ).strip()
 
     sender_email = (
-        os.getenv("SMTP_FROM", "")
+        (config.get("sender_email") or "")
+        or os.getenv("SMTP_FROM", "")
         or os.getenv("SMTP_SENDER_EMAIL", "")
         or os.getenv("SMTP_SENDER_MAIL", "")
         or getattr(settings, "SMTP_FROM", "")
         or getattr(settings, "SMTP_SENDER_EMAIL", "")
-        or (config.get("sender_email") or "")
         or smtp_user
+        or "communication@ramrajcotton.net"
     ).strip()
 
     sender_name = (
-        os.getenv("SMTP_SENDER_NAME", "")
+        (config.get("sender_name") or "")
+        or os.getenv("SMTP_SENDER_NAME", "")
         or getattr(settings, "SMTP_SENDER_NAME", "")
-        or (config.get("sender_name") or "")
-        or "DocuFlow Security"
+        or "Ramraj Cotton"
     ).strip()
 
     if not smtp_host or not smtp_user or not smtp_password:
@@ -659,16 +664,17 @@ def send_password_reset_email(
     config = smtp_config or {}
 
     smtp_host = (
-        os.getenv("SMTP_HOST", "")
+        (config.get("smtp_server") or "")
+        or os.getenv("SMTP_HOST", "")
         or os.getenv("SMTP_SERVER", "")
         or getattr(settings, "SMTP_HOST", "")
-        or (config.get("smtp_server") or "")
+        or "smtp.office365.com"
     ).strip()
 
     port_val = (
-        os.getenv("SMTP_PORT")
+        config.get("port")
+        or os.getenv("SMTP_PORT")
         or getattr(settings, "SMTP_PORT", None)
-        or config.get("port")
         or 587
     )
     try:
@@ -677,36 +683,39 @@ def send_password_reset_email(
         smtp_port = 587
 
     smtp_user = (
-        os.getenv("SMTP_USERNAME", "")
+        (config.get("username") or "")
+        or os.getenv("SMTP_USERNAME", "")
         or os.getenv("SMTP_USER", "")
         or getattr(settings, "SMTP_USERNAME", "")
         or getattr(settings, "SMTP_USER", "")
-        or (config.get("username") or "")
+        or "communication@ramrajcotton.net"
     ).strip()
 
     smtp_password = (
-        os.getenv("SMTP_PASSWORD", "")
+        (config.get("encrypted_password") or "")
+        or os.getenv("SMTP_PASSWORD", "")
         or os.getenv("SMTP_PASS", "")
         or getattr(settings, "SMTP_PASSWORD", "")
         or getattr(settings, "SMTP_PASS", "")
-        or (config.get("encrypted_password") or "")
+        or "QDjuS8BvQWq6bY"
     ).strip()
 
     sender_email = (
-        os.getenv("SMTP_FROM", "")
+        (config.get("sender_email") or "")
+        or os.getenv("SMTP_FROM", "")
         or os.getenv("SMTP_SENDER_EMAIL", "")
         or os.getenv("SMTP_SENDER_MAIL", "")
         or getattr(settings, "SMTP_FROM", "")
         or getattr(settings, "SMTP_SENDER_EMAIL", "")
-        or (config.get("sender_email") or "")
         or smtp_user
+        or "communication@ramrajcotton.net"
     ).strip()
 
     sender_name = (
-        os.getenv("SMTP_SENDER_NAME", "")
+        (config.get("sender_name") or "")
+        or os.getenv("SMTP_SENDER_NAME", "")
         or getattr(settings, "SMTP_SENDER_NAME", "")
-        or (config.get("sender_name") or "")
-        or "DocuFlow Security"
+        or "Ramraj Cotton"
     ).strip()
 
     if not smtp_host or not smtp_user or not smtp_password:
