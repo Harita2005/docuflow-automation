@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { CheckCircle, Search, Clock, RefreshCw, ChevronRight } from "lucide-react";
 import { DbInvoice } from "../types";
 
@@ -7,6 +8,16 @@ interface DataVerificationPageProps {
 }
 
 export default function DataVerificationPage({ onViewDocument }: DataVerificationPageProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleOpenDocument = (docId: string | number) => {
+    navigate(`/review/${encodeURIComponent(docId)}`, { state: { from: location.pathname } });
+    if (onViewDocument) {
+      onViewDocument(String(docId));
+    }
+  };
+
   const [invoices, setInvoices] = useState<DbInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,7 +115,7 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
                   <tr 
                     key={inv.id} 
                     className="hover:bg-slate-50/80 group transition-all cursor-pointer relative bg-white" 
-                    onClick={() => onViewDocument(inv.id)}
+                    onClick={() => handleOpenDocument(inv.id)}
                   >
                     <td className="py-2.5 px-4 whitespace-nowrap relative">
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -140,7 +151,7 @@ export default function DataVerificationPage({ onViewDocument }: DataVerificatio
                     <td className="py-2.5 px-4 text-right">
                       <button 
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onViewDocument(inv.id); }}
+                        onClick={(e) => { e.stopPropagation(); handleOpenDocument(inv.id); }}
                         className="inline-flex items-center justify-center gap-1 px-2.5 py-1 bg-[#003F28] hover:bg-[#002d1d] text-white rounded font-bold text-[9px] uppercase tracking-widest transition-all shadow-sm shadow-emerald-950/20 group-hover:-translate-y-px cursor-pointer"
                         title="Verify Document"
                         aria-label="Verify Document"

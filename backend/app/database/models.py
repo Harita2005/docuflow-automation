@@ -452,6 +452,14 @@ class Document(Base):
                 return pending[0].approver_user_id
         return None
 
+    @property
+    def assigned_to(self):
+        return self.assigned_approver
+
+    @assigned_to.setter
+    def assigned_to(self, val):
+        self.assigned_approver = val
+
     def _get_current_stage_name(self):
         return getattr(self, "_current_stage_name", None)
 

@@ -1,5 +1,6 @@
 import { RefreshCw, LogOut, ShieldAlert, User, Bell, Settings, ChevronDown, BookOpen, Clock, CheckCircle2, XCircle, CheckCheck } from "lucide-react";
 import { useState, useEffect, lazy, Suspense } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const UserManualModal = lazy(() => import("./UserManualModal"));
 
@@ -28,6 +29,8 @@ export default function Header({
   onViewDocument,
   userPermissions = []
 }: HeaderProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [spinning, setSpinning] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -162,8 +165,11 @@ export default function Header({
     // 2. Selective navigation logic
     if (isActionRequiredNotification(n)) {
       // Action Required: Redirect to corresponding invoice approval/details page and close dropdown
-      if (onViewDocument && n.document_id) {
-        onViewDocument(n.document_id);
+      if (n.document_id) {
+        navigate(`/review/${encodeURIComponent(n.document_id)}`, { state: { from: location.pathname } });
+        if (onViewDocument) {
+          onViewDocument(n.document_id);
+        }
       }
       setPopoverOpen(false);
     } else {

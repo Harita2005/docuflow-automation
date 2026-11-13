@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   FileText,
   ArrowLeft,
@@ -57,6 +58,42 @@ interface LocalLineItem {
   warranty_text?: string;
   serial_numbers?: string[];
 }
+
+interface PdfViewerPaneProps {
+  pdfSrc: string;
+  zoomLevel: number;
+  fileName?: string;
+  docId: string;
+}
+
+const PdfViewerPane = React.memo(function PdfViewerPane({
+  pdfSrc,
+  zoomLevel,
+  fileName,
+  docId
+}: PdfViewerPaneProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const formattedSrc = useMemo(() => {
+    if (!pdfSrc) return "";
+    const clean = pdfSrc.split("#")[0];
+    return `${clean}#toolbar=0&navpanes=0&zoom=${zoomLevel}`;
+  }, [pdfSrc, zoomLevel]);
+
+  if (!pdfSrc) return null;
+
+  return (
+    <div className="w-full h-full overflow-auto rounded-lg bg-white shadow-inner flex items-start justify-center">
+      <iframe
+        ref={iframeRef}
+        key={`${docId}-${pdfSrc.split('#')[0]}`}
+        src={formattedSrc}
+        title={fileName || `${docId}.pdf`}
+        className="w-full h-full border-0 rounded-lg bg-white"
+      />
+    </div>
+  );
+});
 
 const DEFAULT_FIELD_PERMS: Record<string, Record<string, "hidden" | "view" | "edit">> = {
   admin: {
@@ -370,6 +407,44 @@ export default function DocumentDetails({
   onSelectDocument,
   pendingDocIds,
 }: DocumentDetailsProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationStateRef = useRef<{ from?: string } | null>(
+    (location.state as any) ||
+    (typeof window !== "undefined" && (window.history.state as any)?.usr?.from ? { from: (window.history.state as any)?.usr?.from } : null) ||
+    (typeof window !== "undefined" && (window.history.state as any)?.from ? { from: (window.history.state as any)?.from } : null)
+  );
+
+  // Preserve location.state across Approve/Reject/Hold re-renders and document refreshes
+  useEffect(() => {
+    if (location.state && (location.state as any).from) {
+      locationStateRef.current = location.state as any;
+    }
+    if (typeof window !== "undefined" && locationStateRef.current?.from) {
+      try {
+        const histState = window.history.state || {};
+        if (!histState.usr?.from || !histState.from) {
+          window.history.replaceState({
+            ...histState,
+            from: locationStateRef.current.from,
+            usr: { ...(histState.usr || {}), from: locationStateRef.current.from }
+          }, "");
+        }
+      } catch {}
+    }
+  }, [location.state]);
+
+  const handleBack = () => {
+    const originFrom = location.state?.from || 
+                       locationStateRef.current?.from || 
+                       (typeof window !== "undefined" && (window.history.state as any)?.usr?.from) || 
+                       (typeof window !== "undefined" && (window.history.state as any)?.from);
+    navigate(originFrom || (window.history.length > 2 ? -1 : '/dashboard'));
+    if (onGoBack) {
+      onGoBack();
+    }
+  };
+
   const [freshDocument, setFreshDocument] = useState<DbInvoice | null>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
@@ -538,6 +613,16 @@ export default function DocumentDetails({
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelComment, setCancelComment] = useState("");
   const [cancelCommentError, setCancelCommentError] = useState("");
+
+  const [actionReasonModal, setActionReasonModal] = useState<{
+    isOpen: boolean;
+    actionType: 'hold' | 'cancel' | 'reject';
+    reason: string;
+  }>({
+    isOpen: false,
+    actionType: 'hold',
+    reason: ''
+  });
 
   const [showNextActionModal, setShowNextActionModal] = useState(false);
   const [pendingNextId, setPendingNextId] = useState<string | null>(null);
@@ -1275,7 +1360,7 @@ export default function DocumentDetails({
       if (userHandles.some(h => approverList.includes(h))) return true;
     }
     const isStage1 = ((document.current_stage || 1) === 1 || (document.status || "").toLowerCase().includes("attachment") || (document.status || "").toLowerCase().includes("initiated"));
-    const isUploader = roleClean.includes("uplod") || roleClean.includes("account") || roleClean.includes("manager");
+    const isUploader = ["account_uploader", "account_uploder", "accounts_uploader", "accounts_uploder", "doc_uploader", "doc_uploder", "uploader"].includes(roleClean) || roleClean === "admin";
     if (isStage1 && isUploader) return true;
     return false;
   }, [document, currentUserUsername, currentUserEmail, isAdmin, roleClean]);
@@ -1437,14 +1522,36 @@ export default function DocumentDetails({
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Reset zoom to 100% when changing documents
+  const docId = document?.id ? String(document.id) : "";
+  const fileUrl = document?.file_url || document?.file_path || "";
+  const fileUrlRef = useRef(fileUrl);
+  useEffect(() => {
+    fileUrlRef.current = fileUrl;
+  }, [fileUrl]);
+
+  const blobUrlRef = useRef<string | null>(null);
+
+  // Revoke Blob URL only on unmount or docId change
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        try {
+          URL.revokeObjectURL(blobUrlRef.current);
+        } catch {}
+        blobUrlRef.current = null;
+      }
+    };
+  }, [docId]);
+
   useEffect(() => {
     setZoomLevel(100);
-  }, [document?.id]);
+  }, [docId]);
 
-  const cleanPdfSrc = useMemo(() => {
+  const memoizedPdfSrc = useMemo(() => {
     if (!iframeSrc) return "";
     return iframeSrc.split("#")[0];
-  }, [iframeSrc]);
+  }, [docId, fileUrl, iframeSrc]);
+  const cleanPdfSrc = memoizedPdfSrc;
 
   const handleZoomIn = () => {
     setZoomLevel((prev) => Math.min(prev + 10, 500));
@@ -1791,34 +1898,36 @@ export default function DocumentDetails({
 
   useEffect(() => {
     if (!document) {
-      onGoBack();
+      handleBack();
     }
-  }, [document, onGoBack]);
+  }, [document]);
 
   useEffect(() => {
     let isMounted = true;
     let refreshTimer: any = null;
 
-    if (!document?.id) {
+    if (!docId) {
       setIframeSrc("");
       return;
     }
-    const rawPath = document.file_url || document.file_path || "";
+    const currentFileUrl = fileUrlRef.current || "";
     
-    // Check if rawPath points to a valid file route
-    if (
-      rawPath &&
-      rawPath !== "/" &&
-      rawPath !== "invoice.pdf" &&
-      rawPath !== "/uploads/invoice.pdf" &&
-      rawPath !== "uploads/invoice.pdf"
-    ) {
+    // Check if currentFileUrl points to a valid file route
+    const hasValidFile = Boolean(
+      currentFileUrl &&
+      currentFileUrl !== "/" &&
+      currentFileUrl !== "invoice.pdf" &&
+      currentFileUrl !== "/uploads/invoice.pdf" &&
+      currentFileUrl !== "uploads/invoice.pdf"
+    );
+
+    if (hasValidFile) {
       const loadSignedUrl = async () => {
         try {
           const token = localStorage.getItem("token") || localStorage.getItem("authToken");
           const headers: Record<string, string> = {};
           if (token) headers["Authorization"] = `Bearer ${token}`;
-          const res = await fetch(`/api/documents/${encodeURIComponent(document.id)}/signed-url?disp=inline`, { headers });
+          const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/signed-url?disp=inline`, { headers });
           if (res.ok) {
             const data = await res.json();
             if (isMounted && data.signed_url) {
@@ -1845,7 +1954,7 @@ export default function DocumentDetails({
       isMounted = false;
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-  }, [document?.id, document?.file_url, document?.file_path]);
+  }, [docId]);
 
   const fetchVersions = async () => {
     if (!document) return;
@@ -1866,9 +1975,9 @@ export default function DocumentDetails({
     }
   };
 
-  const confirmCancelProcess = async () => {
+  const confirmCancelProcess = async (reasonOverride?: string) => {
     if (!document || isSubmittingRef.current || actionLoading) return;
-    const trimmedComment = cancelComment.trim();
+    const trimmedComment = (reasonOverride !== undefined ? reasonOverride : cancelComment).trim();
     if (!trimmedComment) {
       setCancelCommentError("A cancellation comment / reason is required before cancelling.");
       return;
@@ -1901,6 +2010,7 @@ export default function DocumentDetails({
         clearDraft();
         setApprovalComment("");
         setShowCancelModal(false);
+        setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
         if (activeDoc) activeDoc.status = "Cancelled";
         showToast("✓ Document Process Cancelled Successfully!", "amber");
         await fetchWorkflowData();
@@ -1914,6 +2024,7 @@ export default function DocumentDetails({
           alert("Document was modified by someone else, please refresh");
           onRefreshDocument();
           setShowCancelModal(false);
+          setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
           return;
         }
         let errDetail = "Cancellation failed";
@@ -1941,7 +2052,7 @@ export default function DocumentDetails({
     }
   };
 
-  const handleInlineReject = async () => {
+  const handleInlineReject = () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
     const isStage1 = (document?.current_stage || 1) <= 1;
     if (isStage1 && !isAssignedApprover) {
@@ -1949,22 +2060,26 @@ export default function DocumentDetails({
       return;
     }
 
-    // Attachment Stage cancellation: open dedicated modal requiring comment/reason before cancel
     if (isStage1) {
-      setCancelComment(approvalComment.trim());
-      setCancelCommentError("");
-      setShowCancelModal(true);
+      setActionReasonModal({
+        isOpen: true,
+        actionType: 'cancel',
+        reason: approvalComment.trim()
+      });
       return;
     }
 
-    let comments = approvalComment.trim();
-    if (!comments) {
-      const enteredReason = window.prompt(
-        `Please enter rejection reason notes to return to Stage ${(document.current_stage || 2) - 1} approver:`
-      );
-      if (!enteredReason || !enteredReason.trim()) return;
-      comments = enteredReason.trim();
-    }
+    setActionReasonModal({
+      isOpen: true,
+      actionType: 'reject',
+      reason: approvalComment.trim()
+    });
+  };
+
+  const executeReject = async (reasonOverride?: string) => {
+    if (!document || isSubmittingRef.current || actionLoading) return;
+    const comments = (reasonOverride !== undefined ? reasonOverride : approvalComment).trim();
+    if (!comments) return;
 
     isSubmittingRef.current = true;
     setActionLoading(true);
@@ -1991,6 +2106,7 @@ export default function DocumentDetails({
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
+        setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
         if (activeDoc) activeDoc.status = "Rejected";
         showToast("✓ Document Rejection Recorded Successfully!", "amber");
         await fetchWorkflowData();
@@ -2003,6 +2119,7 @@ export default function DocumentDetails({
         if (response.status === 409) {
           alert("Document was modified by someone else, please refresh");
           onRefreshDocument();
+          setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
           return;
         }
         let errDetail = "Rejection failed";
@@ -2028,14 +2145,19 @@ export default function DocumentDetails({
     }
   };
 
-  const handleInlineHold = async () => {
+  const handleInlineHold = () => {
     if (!document || isSubmittingRef.current || actionLoading) return;
-    let comments = approvalComment.trim();
-    if (!comments) {
-      const entered = window.prompt("Enter reason notes to place document on hold / request clarification:");
-      if (!entered || !entered.trim()) return;
-      comments = entered.trim();
-    }
+    setActionReasonModal({
+      isOpen: true,
+      actionType: 'hold',
+      reason: approvalComment.trim()
+    });
+  };
+
+  const executeHold = async (reasonOverride?: string) => {
+    if (!document || isSubmittingRef.current || actionLoading) return;
+    const comments = (reasonOverride !== undefined ? reasonOverride : approvalComment).trim();
+    if (!comments) return;
 
     isSubmittingRef.current = true;
     setActionLoading(true);
@@ -2045,10 +2167,10 @@ export default function DocumentDetails({
         ? new Date(targetCompletionDate).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
         : 'Not Specified';
       const targetIso = targetCompletionDate ? new Date(targetCompletionDate).toISOString() : '';
-      const holdComment = `[ACTION: ${selectedAction}] [TARGET SLA: ${formattedTarget}] ${targetIso ? `[TARGET_ISO: ${targetIso}] ` : ''}${comments}`;
+      const holdComment = `[ACTION: ${selectedAction || 'Hold'}] [TARGET SLA: ${formattedTarget}] ${targetIso ? `[TARGET_ISO: ${targetIso}] ` : ''}${comments}`;
 
       const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-      const isReturn = selectedAction.toLowerCase().includes("return") || selectedAction.toLowerCase().includes("revision") || selectedAction.toLowerCase().includes("sendback");
+      const isReturn = (selectedAction || '').toLowerCase().includes("return") || (selectedAction || '').toLowerCase().includes("revision") || (selectedAction || '').toLowerCase().includes("sendback");
       const targetEndpoint = isReturn ? `/api/workflows/sendback` : `/api/documents/${encodeURIComponent(document.id)}/hold`;
 
       const response = await fetch(targetEndpoint, {
@@ -2072,7 +2194,8 @@ export default function DocumentDetails({
       if (response.ok) {
         clearDraft();
         setApprovalComment("");
-        showToast(`✓ Document Placed on Hold! Action: ${selectedAction} (Target SLA: ${formattedTarget})`, "info");
+        setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
+        showToast(`✓ Document Placed on Hold! Action: ${selectedAction || 'Hold'} (Target SLA: ${formattedTarget})`, "info");
         await fetchWorkflowData();
         onRefreshDocument();
         const nextId = getNextPendingDocId();
@@ -2083,6 +2206,7 @@ export default function DocumentDetails({
         if (response.status === 409) {
           alert("Document was modified by someone else, please refresh");
           onRefreshDocument();
+          setActionReasonModal(prev => ({ ...prev, isOpen: false, reason: '' }));
           return;
         }
         let errDetail = "Hold action failed";
@@ -2383,7 +2507,7 @@ export default function DocumentDetails({
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              onClick={onGoBack}
+              onClick={handleBack}
               className="h-7 w-7 rounded-md bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 flex items-center justify-center text-[#003F28] hover:text-[#005333] shrink-0 transition cursor-pointer shadow-3xs active:scale-95"
               title="Back to Documents"
             >
@@ -2433,7 +2557,7 @@ export default function DocumentDetails({
             )}
 
             <button
-              onClick={onGoBack}
+              onClick={handleBack}
                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
               title="Close Workspace"
             >
@@ -2684,7 +2808,7 @@ export default function DocumentDetails({
                     type="button"
                     onClick={handleInlineApprove}
                     disabled={!canApprove}
-                    className={`flex-1 py-1.5 px-2.5 font-extrabold text-[10.5px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
+                    className={`flex-1 py-1.5 px-2.5 font-extrabold text-[12.5px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer ${
                       canApprove
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/35 hover:shadow-emerald-600/50 hover:shadow-md ring-1 ring-emerald-500/20"
                         : "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
@@ -2713,7 +2837,7 @@ export default function DocumentDetails({
                     type="button"
                     onClick={handleInlineHold}
                     disabled={actionLoading}
-                    className="px-2.5 py-1.5 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                    className="px-2.5 py-1.5 bg-amber-50/80 hover:bg-amber-100/90 text-amber-800 font-bold text-[11.5px] uppercase tracking-wider rounded-lg border border-amber-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
                     title="Hold and request clarification"
                   >
                     <Pause className="h-3 w-3" />
@@ -2725,7 +2849,7 @@ export default function DocumentDetails({
                       type="button"
                       onClick={handleInlineReject}
                       disabled={actionLoading}
-                      className="px-2.5 py-1.5 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[9.5px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
+                      className="px-2.5 py-1.5 bg-rose-50/80 hover:bg-rose-100/90 text-rose-800 font-bold text-[11.5px] uppercase tracking-wider rounded-lg border border-rose-200/80 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 shadow-3xs hover:shadow-2xs cursor-pointer"
                       title={
                         (document?.current_stage || 1) > 1
                           ? `Reject and return to Stage ${(document.current_stage || 2) - 1} approver for review`
@@ -3250,15 +3374,12 @@ export default function DocumentDetails({
             {/* LIVE ORIGINAL PDF VIEWER OR EMPTY STATE */}
             <div className="flex-1 bg-slate-100/70 overflow-hidden flex flex-col p-1.5 min-h-0">
               {iframeSrc ? (
-                <div className="w-full h-full overflow-auto rounded-lg bg-white shadow-inner flex items-start justify-center">
-                  <iframe
-                    ref={iframeRef}
-                    key={`${cleanPdfSrc}-${zoomLevel}`}
-                    src={`${cleanPdfSrc}#toolbar=0&navpanes=0&zoom=${zoomLevel}`}
-                    title={document.file_name || `${document.id}.pdf`}
-                    className="w-full h-full border-0 rounded-lg bg-white"
-                  />
-                </div>
+                <PdfViewerPane
+                  pdfSrc={memoizedPdfSrc}
+                  zoomLevel={zoomLevel}
+                  fileName={document?.file_name}
+                  docId={docId}
+                />
               ) : (
                 <div 
                   onDragOver={(e) => e.preventDefault()}
@@ -4243,7 +4364,7 @@ export default function DocumentDetails({
                     onClick={() => {
                       setShowNextActionModal(false);
                       onRefreshDocument();
-                      window.dispatchEvent(new CustomEvent("navigate-view", { detail: "work-tracker" }));
+                      handleBack();
                     }}
                     className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -4256,7 +4377,7 @@ export default function DocumentDetails({
                     onClick={() => {
                       setShowNextActionModal(false);
                       onRefreshDocument();
-                      window.dispatchEvent(new CustomEvent("navigate-view", { detail: "approved-documents" }));
+                      navigate("/approved-documents", { state: { from: location.pathname } });
                     }}
                     className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -4271,11 +4392,11 @@ export default function DocumentDetails({
                 onClick={() => {
                   setShowNextActionModal(false);
                   onRefreshDocument();
-                  onGoBack();
+                  handleBack();
                 }}
                 className="w-full py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
-                <span>Back to Dashboard ➔</span>
+                <span>Back to Origin ➔</span>
               </button>
             </div>
 
@@ -4283,105 +4404,108 @@ export default function DocumentDetails({
         </div>
       )}
 
-      {/* MANDATORY CANCELLATION REASON MODAL */}
-      {showCancelModal && (
+      {/* ========================================================= */}
+      {/* ACTION REASON MODAL (Hold, Cancel, Reject Document)      */}
+      {/* ========================================================= */}
+      {actionReasonModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-rose-200 p-6 animate-in fade-in zoom-in-95 duration-150 space-y-4">
-            
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-inner">
-                <AlertCircle className="h-6 w-6 stroke-[2.5]" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-extrabold text-slate-900 text-base tracking-tight leading-snug">
-                  Cancel Document Process
-                </h3>
-                <span className="text-[10px] text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                  Attachment Stage (Stage 1)
-                </span>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/90 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header: Action Name & Icon */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-[#0B4F32]/10 text-[#0B4F32] flex items-center justify-center shrink-0">
+                  {actionReasonModal.actionType === 'hold' && <Pause className="h-5 w-5" />}
+                  {actionReasonModal.actionType === 'cancel' && <X className="h-5 w-5 stroke-[2.5]" />}
+                  {actionReasonModal.actionType === 'reject' && <RotateCcw className="h-5 w-5" />}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-[16px] tracking-tight leading-snug">
+                    {actionReasonModal.actionType === 'hold' && 'Hold Document'}
+                    {actionReasonModal.actionType === 'cancel' && 'Cancel Document'}
+                    {actionReasonModal.actionType === 'reject' && 'Reject Document'}
+                  </h3>
+                  <span className="text-[12px] text-slate-400 font-medium">
+                    ID: {document?.id ? formatDocNumber(document.id, getCanonicalDocumentType(document), (document as any).category) : ''}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   if (!actionLoading) {
-                    setShowCancelModal(false);
-                    setCancelCommentError("");
+                    setActionReasonModal(prev => ({ ...prev, isOpen: false }));
                   }
                 }}
                 disabled={actionLoading}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition cursor-pointer"
+                aria-label="Close"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-3 bg-rose-50/80 border border-rose-200/80 rounded-xl text-rose-900 text-xs space-y-1">
-              <p className="font-bold">
-                Are you sure you want to cancel and void this document?
+            {/* Body */}
+            <div className="p-6 space-y-4 text-left">
+              <p className="text-[14px] text-slate-600 leading-relaxed font-medium">
+                {actionReasonModal.actionType === 'hold' && 'Please provide a reason for placing this document on hold or requesting clarification.'}
+                {actionReasonModal.actionType === 'cancel' && 'Please provide a reason for cancelling this document.'}
+                {actionReasonModal.actionType === 'reject' && 'Please specify the reason for rejecting and returning this document for correction.'}
               </p>
-              <p className="text-[11px] text-rose-800/90 leading-relaxed">
-                This document process will be permanently voided. A cancellation reason/comment is <strong>mandatory</strong> before proceeding.
-              </p>
-            </div>
 
-            <div className="space-y-1.5 text-left">
-              <label className="block text-xs font-bold text-slate-800">
-                Cancellation Reason / Comment <span className="text-rose-600 font-black">*</span>
-              </label>
-              <textarea
-                rows={3}
-                value={cancelComment}
-                onChange={(e) => {
-                  setCancelComment(e.target.value);
-                  if (cancelCommentError && e.target.value.trim()) {
-                    setCancelCommentError("");
-                  }
-                }}
-                disabled={actionLoading}
-                placeholder="Enter mandatory reason for cancelling (e.g. duplicate document, incorrect vendor, pricing error)..."
-                className={`w-full text-xs font-medium p-2.5 border rounded-xl outline-none transition resize-none ${
-                  cancelCommentError
-                    ? "border-rose-400 bg-rose-50/50 focus:border-rose-600 focus:ring-2 focus:ring-rose-500/20"
-                    : "border-slate-200 bg-slate-50/80 focus:border-rose-600 focus:bg-white focus:ring-2 focus:ring-rose-500/20"
-                }`}
-              />
-              {cancelCommentError && (
-                <p className="text-[11px] font-semibold text-rose-600 flex items-center gap-1 animate-fadeIn">
-                  <span>⚠️</span> {cancelCommentError}
-                </p>
-              )}
-            </div>
+              <div className="space-y-1.5">
+                <label className="block text-[14px] font-bold text-slate-800">
+                  Reason Notes <span className="text-rose-500 font-black">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  autoFocus
+                  value={actionReasonModal.reason}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setActionReasonModal(prev => ({ ...prev, reason: val }));
+                  }}
+                  disabled={actionLoading}
+                  placeholder="Enter mandatory reason notes here..."
+                  className="w-full text-[14px] font-medium p-3.5 border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-[#0B4F32] focus:ring-2 focus:ring-[#0B4F32]/20 rounded-xl outline-none transition resize-none text-slate-800 placeholder:text-slate-400"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                disabled={actionLoading}
-                onClick={() => {
-                  setShowCancelModal(false);
-                  setCancelCommentError("");
-                }}
-                className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
-              >
-                Keep Document
-              </button>
-              <button
-                type="button"
-                disabled={actionLoading || !cancelComment.trim()}
-                onClick={confirmCancelProcess}
-                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer disabled:cursor-not-allowed"
-              >
-                {actionLoading ? (
-                  <>
-                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                    <span>Cancelling...</span>
-                  </>
-                ) : (
-                  <>
-                    <X className="h-3.5 w-3.5 stroke-[3]" />
-                    <span>Confirm & Cancel</span>
-                  </>
-                )}
-              </button>
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => setActionReasonModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[14px] rounded-xl transition cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading || !actionReasonModal.reason.trim()}
+                  onClick={async () => {
+                    const reason = actionReasonModal.reason.trim();
+                    if (!reason) return;
+                    if (actionReasonModal.actionType === 'hold') {
+                      await executeHold(reason);
+                    } else if (actionReasonModal.actionType === 'cancel') {
+                      await confirmCancelProcess(reason);
+                    } else if (actionReasonModal.actionType === 'reject') {
+                      await executeReject(reason);
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-[#0B4F32] hover:bg-[#083b25] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[14px] rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  {actionLoading ? (
+                    <>
+                      <RotateCw className="h-4 w-4 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>Confirm</span>
+                  )}
+                </button>
+              </div>
             </div>
 
           </div>

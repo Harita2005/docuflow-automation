@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   Search, 
   FileText, 
@@ -33,6 +34,16 @@ export default function WorkTrackerPage({
   currentUserUsername = "",
   initialStatusFilter
 }: WorkTrackerPageProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleOpenDocument = (docId: string | number) => {
+    navigate(`/review/${encodeURIComponent(docId)}`, { state: { from: location.pathname } });
+    if (onViewDocument) {
+      onViewDocument(String(docId));
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
   const [divisionFilter, setDivisionFilter] = useState<string>(() => {
@@ -259,6 +270,7 @@ export default function WorkTrackerPage({
   };
 
   const isAssignedToUser = (doc: DbInvoice): boolean => {
+    if (doc.is_current_approver === false) return false;
     if (doc.is_current_approver) return true;
     const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || '').toLowerCase().trim();
     const eHandle = (currentUserEmail || localStorage.getItem("currentUserEmail") || '').toLowerCase().trim();
@@ -283,34 +295,36 @@ export default function WorkTrackerPage({
       jmd: ["jmd", "joint managing director", "joint_managing_director"],
       md: ["md", "managing director", "managing_director"],
       finance_auditor: ["finance auditor", "auditor", "internal auditor", "finance & internal auditor", "finance and internal auditor"],
-      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
-      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
-      ap_specialist: ["ap_specialist", "ap specialist", "ap_executive", "ap executive", "accounts_approver", "accounts approver", "ap", "accounts"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist"],
+      ap_specialist: ["ap_specialist", "ap specialist", "ap_executive", "ap executive", "accounts_approver", "accounts approver"],
       finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
       accounts_approver2: ["accounts_approver2", "accounts approver 2"],
       employee: ["employee", "standard employee", "standard_employee"],
-      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
+      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"]
     };
     const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
+
+    const currentStage = doc.current_stage || 1;
+    const isUploader = rHandle.includes("uplod") || rHandle === "admin";
+    if (currentStage === 1 && !doc.is_current_approver && !isUploader) {
+      return false;
+    }
 
     if (idHandle && pool.some(p => p === idHandle)) return true;
     if (uHandle && pool.some(p => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (nHandle && pool.some(p => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
     if (empHandle && pool.some(p => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some(p => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
-    if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p === a || p.includes(a) || a.includes(p))))) return true;
-    const currentStage = doc.current_stage || 1;
-    if (currentStage === 1 && !doc.is_current_approver) {
-      return false;
-    }
+    if (rHandle && pool.some(p => p && activeAliases.some(a => a && (p === a || p.replace(/[_ ]/g, '') === a.replace(/[_ ]/g, ''))))) return true;
     const sLow = (doc.status || "").toLowerCase();
     const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
-    const isUploader = rHandle.includes("uplod") || rHandle === "admin";
     if (isUnrouted && isUploader) return true;
+    if (currentStage === 1 && isUploader) return true;
     return false;
   };
 
@@ -483,13 +497,29 @@ export default function WorkTrackerPage({
       // Status filter (strictly handles: pending, in_progress, hold, rejected, returned, cancelled)
       if (statusFilter !== "all" && statusFilter !== "approved") {
         const st = (doc.status || "").toLowerCase();
-        const isActionRequired = (Boolean(doc.is_current_approver) || isAssignedToUser(doc)) && !doc.has_approved;
+        const isActionRequired = (typeof doc.is_current_approver === "boolean" ? doc.is_current_approver : isAssignedToUser(doc)) && !doc.has_approved;
         const isInProgress = Boolean(doc.has_approved) || st.includes("in progress") || st.includes("stage") || !isActionRequired;
 
         if (statusFilter === "pending") {
           if (!isActionRequired) return false;
-        } else if (statusFilter === "in_progress") {
-          if (!isInProgress) return false;
+        } else if (statusFilter === "in_progress" || statusFilter === "progress" || statusFilter === "active") {
+          // Align with Dashboard PROGRESS card: all active non-terminal statuses (Pending, In Progress, Hold)
+          const isNonTerminalActive = !isTerminalOrApproved(doc) && (
+            st.includes("pending") ||
+            st.includes("progress") ||
+            st.includes("stage") ||
+            st.includes("hold") ||
+            st.includes("pause") ||
+            st.includes("wait") ||
+            st.includes("clarif") ||
+            st.includes("verification") ||
+            st.includes("review") ||
+            st.includes("initiated") ||
+            st.includes("unrouted") ||
+            isActionRequired ||
+            isInProgress
+          );
+          if (!isNonTerminalActive) return false;
         } else if (statusFilter === "hold") {
           if (!st.includes("hold") && !st.includes("pause") && !st.includes("wait") && !st.includes("clarif")) return false;
         } else if (statusFilter === "rejected") {
@@ -900,7 +930,7 @@ export default function WorkTrackerPage({
           )}
           {statusFilter !== "all" && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-medium">
-              <span>Status: {statusFilter.toUpperCase()}</span>
+              <span>Status: {statusFilter === "in_progress" || statusFilter === "progress" ? "IN PROGRESS" : statusFilter.toUpperCase()}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -1019,12 +1049,12 @@ export default function WorkTrackerPage({
                 const isUnassigned = resolved.isUnassigned || resolved.displayName === "Unassigned";
 
                 // Status calculation
-                const isActionRequired = Boolean(doc.is_current_approver) || isAssignedToUser(doc);
+                const isActionRequired = (typeof doc.is_current_approver === "boolean" ? doc.is_current_approver : isAssignedToUser(doc)) && !doc.has_approved;
 
                 return (
                   <tr 
                     key={doc.id} 
-                    onClick={() => onViewDocument(doc.id)}
+                    onClick={() => handleOpenDocument(doc.id)}
                     className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                   >
                     {/* # */}
@@ -1112,7 +1142,7 @@ export default function WorkTrackerPage({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onViewDocument(doc.id);
+                          handleOpenDocument(doc.id);
                         }}
                         className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
                         title="View Document"

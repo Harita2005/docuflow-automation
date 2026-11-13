@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import Header from "./components/Header.tsx";
 import Sidebar from "./components/Sidebar.tsx";
 const LoginPage = lazy(() => import("./components/LoginPage"));
@@ -141,7 +142,21 @@ export default function App() {
     return localStorage.getItem("workTrackerStatusFilter") || "all";
   });
 
-  const navigate = (newView: string, docId: string | null = null, replace = false) => {
+  const routerNavigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const route = parseRouteFromPath(location.pathname);
+    if (route.view !== currentView || route.docId !== selectedDocId) {
+      if (currentView !== "details" && currentView !== "customer-feedback" && route.view !== currentView) {
+        setPreviousView(currentView);
+      }
+      setCurrentView(route.view);
+      setSelectedDocId(route.docId);
+    }
+  }, [location.pathname]);
+
+  const navigate = (newView: string, docId: string | null = null, replace = false, state?: any) => {
     const isStoredLoggedIn = localStorage.getItem("isLoggedIn") === "true" && Boolean(localStorage.getItem("authToken"));
     if (!isStoredLoggedIn && newView !== "login") {
       newView = "login";
@@ -150,15 +165,9 @@ export default function App() {
     }
 
     const targetPath = getPathFromRoute(newView, docId);
-    const currentPath = window.location.pathname;
+    const navState = state !== undefined ? state : { from: location.pathname };
 
-    if (targetPath !== currentPath) {
-      if (replace) {
-        window.history.replaceState({ view: newView, docId }, "", targetPath);
-      } else {
-        window.history.pushState({ view: newView, docId }, "", targetPath);
-      }
-    }
+    routerNavigate(targetPath, { replace, state: navState });
 
     if (newView !== "details" && newView !== "customer-feedback") {
       setPreviousView(currentView);
@@ -433,13 +442,12 @@ export default function App() {
     if ((doc as any).has_approved) return false;
 
     // Check if the user is explicitly assigned to it at current stage
+    if (doc.is_current_approver === false) return false;
     if (doc.is_current_approver) return true;
 
     const uHandle = (currentUserUsername || "").toLowerCase().trim();
     const eHandle = (currentUserEmail || "").toLowerCase().trim();
     const rHandle = (currentUserRole || "").toLowerCase().trim();
-
-    if (rHandle === "admin" || rHandle === "administrator" || rHandle === "superadmin" || rHandle.includes("admin") || rHandle === "manager" || rHandle === "finance_manager") return true;
 
     const roleAliases: Record<string, string[]> = {
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
@@ -455,7 +463,10 @@ export default function App() {
       account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
       doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
     };
-    const activeAliases = roleAliases[rHandle] || [rHandle];
+    const activeAliases = roleAliases[rHandle] ? [...roleAliases[rHandle]] : (rHandle ? [rHandle] : []);
+    if (uHandle === "yuvasree" || uHandle === "meshak") {
+      activeAliases.push("account_uploder", "account_uploader", "accounts_uploder", "accounts_uploader", "uploader");
+    }
     const nHandle = (localStorage.getItem("currentUserName") || "").toLowerCase().trim();
     const empHandle = (localStorage.getItem("currentUserEmployeeId") || "").toLowerCase().trim();
 
@@ -722,7 +733,8 @@ export default function App() {
 
     const targetPath = getPathFromRoute(currentView, selectedDocId);
     if (window.location.pathname !== targetPath) {
-      window.history.pushState({ view: currentView, docId: selectedDocId }, "", targetPath);
+      const currentState = (typeof window !== "undefined" && window.history.state) ? window.history.state : {};
+      window.history.pushState({ ...currentState, view: currentView, docId: selectedDocId }, "", targetPath);
     }
   }, [currentView, selectedDocId, isLoggedIn]);
 
@@ -887,7 +899,7 @@ export default function App() {
   }
 
   // Handles switching directly to inspect a document details panel
-  const handleViewDocument = (docId: string | number) => {
+  const handleViewDocument = (docId: string | number, state?: any) => {
     if (currentView !== "details" && currentView !== "customer-feedback") {
       setPreviousView(currentView);
     }
@@ -900,10 +912,11 @@ export default function App() {
     const rawType = targetDoc?.document_type || targetDoc?.subtype_of_complaint || targetDoc?.type_of_complaint || docIdStr;
     const docType = getCanonicalDocumentType(rawType);
 
+    const navState = state || { from: location.pathname };
     if (docType === "CUSTOMER FEEDBACK" || docIdStr.toUpperCase().startsWith("CMP") || docIdStr.toUpperCase().startsWith("CF")) {
-      navigate("customer-feedback", docIdStr, false);
+      navigate("customer-feedback", docIdStr, false, navState);
     } else {
-      navigate("details", docIdStr, false);
+      navigate("details", docIdStr, false, navState);
     }
     fetchDocuments(true);
   };
@@ -1245,13 +1258,19 @@ export default function App() {
                   currentUserUsername={currentUserUsername}
                   onRefreshDocument={handleFullRefresh}
                   onGoBack={() => {
-                    if (typeof window !== "undefined" && window.history.length > 1) {
-                      window.history.back();
-                    } else {
-                      navigate(previousView || "dashboard", null, false);
+                    setSelectedDocId(null);
+                    if (location.pathname.startsWith('/review') || location.pathname.startsWith('/details')) {
+                      const fromTarget = location.state?.from || (window.history.state as any)?.from || (window.history.state as any)?.usr?.from;
+                      if (fromTarget && typeof fromTarget === "string") {
+                        routerNavigate(fromTarget);
+                      } else if (typeof window !== "undefined" && window.history.length > 2) {
+                        routerNavigate(-1);
+                      } else {
+                        routerNavigate(previousView && previousView !== "details" ? getPathFromRoute(previousView) : "/dashboard");
+                      }
                     }
                   }}
-                  onSelectDocument={(docId) => setSelectedDocId(docId)}
+                  onSelectDocument={(docId) => handleViewDocument(docId, location.state || { from: location.pathname })}
                   pendingDocIds={pendingActionDocs.map(d => d.id)}
                 />
               )

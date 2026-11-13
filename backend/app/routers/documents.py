@@ -925,8 +925,12 @@ def get_all_invoices(
                     return entry["data"]
 
         query = db.query(Invoice).filter(Invoice.is_deleted == False)
-        if status and str(status).strip() and str(status).strip().lower() not in ['pending', 'in_progress', 'tracking', 'workflow', 'active', 'all']:
-            query = query.filter(Invoice.status == str(status).strip())
+        if status and str(status).strip():
+            s_clean = str(status).strip().lower()
+            if s_clean == 'pending':
+                query = query.filter(func.lower(Invoice.status).like('pending%'))
+            elif s_clean not in ['in_progress', 'tracking', 'workflow', 'active', 'all']:
+                query = query.filter(Invoice.status == str(status).strip())
         
         total_count = query.count()
         if response is not None:
@@ -952,8 +956,12 @@ def get_all_invoices(
     has_hq_division = any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs)
 
     query = db.query(Invoice).filter(Invoice.is_deleted == False)
-    if status and str(status).strip() and str(status).strip().lower() not in ['pending', 'in_progress', 'tracking', 'workflow', 'active', 'all']:
-        query = query.filter(Invoice.status == str(status).strip())
+    if status and str(status).strip():
+        s_clean = str(status).strip().lower()
+        if s_clean == 'pending':
+            query = query.filter(func.lower(Invoice.status).like('pending%'))
+        elif s_clean not in ['in_progress', 'tracking', 'workflow', 'active', 'all']:
+            query = query.filter(Invoice.status == str(status).strip())
     if user_approval_divs and not has_hq_division:
         query = query.filter(
             or_(
@@ -1054,11 +1062,13 @@ def get_all_invoices(
         has_approved_this_doc = (str(inv.id) in approved_invoice_ids) or (doc_key_clean in approved_invoice_ids)
         has_rejected_this_doc = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
         is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-        is_curr = bool(inv.assigned_approver and is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True))
+        assigned_target = getattr(inv, 'assigned_to', None) or getattr(inv, 'assigned_approver', None) or ''
+        is_curr = bool(assigned_target and is_user_in_approver_pool(current_user, assigned_target, db, ignore_admin_bypass=True))
 
         # Check creator / submitter and uploader desk authority
         u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
-        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']))
+        u_name_clean = (current_user.username or '').strip().lower() if current_user else ''
+        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']) or u_name_clean in ['yuvasree', 'meshak'])
         u_names_clean = {
             (current_user.username or '').strip().lower(),
             (current_user.employee_id or '').strip().lower(),
@@ -1121,19 +1131,22 @@ def get_all_invoices(
         is_active_flow = inv.status not in ['Approved', 'Paid', 'Ready for Payment', 'Cancelled', 'Failed', 'Settled']
         is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
         is_stage1 = ((getattr(inv, 'current_stage', 1) or 1) == 1 or 'attachment' in (inv.status or '').lower() or 'initiated' in (inv.status or '').lower())
+        assigned_target = getattr(inv, 'assigned_to', None) or getattr(inv, 'assigned_approver', None) or ''
         is_curr = False
-        if is_active_flow and inv.assigned_approver and not has_appr:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
-        if is_active_flow and is_unrouted and (is_uploader_role or is_creator):
+        if is_active_flow and assigned_target and not has_appr:
+            is_curr = is_user_in_approver_pool(current_user, assigned_target, db, ignore_admin_bypass=True)
+        if is_active_flow and ((is_unrouted and (is_uploader_role or is_creator)) or (is_stage1 and is_uploader_role)):
             is_curr = True
 
         # Status filter query parameter enforcement
         if status and isinstance(status, str):
             s_req = status.strip().lower()
             if s_req == 'pending':
-                if not (is_curr and is_active_flow):
+                st_low = (inv.status or '').strip().lower()
+                is_pending_status = st_low.startswith('pending') or st_low == 'pending'
+                if not (is_pending_status or (is_curr and is_active_flow)):
                     continue
-            elif s_req in ['in_progress', 'tracking']:
+            elif s_req in ['in_progress', 'tracking', 'progress']:
                 if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or (is_unrouted and is_uploader_role)) and is_active_flow):
                     continue
             elif s_req == 'approved':
@@ -1164,7 +1177,8 @@ def get_all_invoices(
 
         attach_dynamic_columns_to_document(db, inv)
         inv_res = InvoiceResponse.model_validate(inv)
-        inv_res.assigned_to = inv.assigned_approver
+        inv_res.assigned_to = assigned_target or inv.assigned_approver
+        inv_res.assigned_approver = assigned_target or inv.assigned_approver
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_appr
         inv_res.has_rejected = has_rej
@@ -1289,19 +1303,48 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
         has_rej = (str(inv.id) in rejected_invoice_ids) or (doc_key_clean in rejected_invoice_ids)
 
         u_role_clean = (current_user.role or '').strip().lower() if current_user else ''
-        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
-        is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
+        u_name_clean = (current_user.username or '').strip().lower() if current_user else ''
+        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']) or u_name_clean in ['yuvasree', 'meshak'])
+        user_handles = [
+            str(current_user.id),
+            current_user.username.lower() if current_user.username else '',
+            current_user.employee_id.lower() if current_user.employee_id else '',
+            current_user.employee_name.lower() if current_user.employee_name else '',
+            current_user.email.lower() if current_user.email else '',
+            current_user.role.lower() if current_user.role else ''
+        ] if current_user else []
+        if u_name_clean in ['yuvasree', 'meshak']:
+            user_handles.extend(['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'uploader'])
+        user_handles = [h for h in user_handles if h]
 
-        is_stage1 = ((getattr(inv, 'current_stage', 1) or 1) == 1 or 'attachment' in (inv.status or '').lower() or 'initiated' in (inv.status or '').lower())
+        is_unrouted = inv.status in ['Unrouted (No Rule Matched)', 'Unassigned (No Rule Matched)'] or not inv.assigned_approver or 'unassigned' in (inv.assigned_approver or '').lower() or 'unrouted' in (inv.status or '').lower()
+        curr_stg = getattr(inv, 'current_stage', 1) or 1
+        is_stage1 = (curr_stg == 1 or 'attachment' in st_low or 'initiated' in st_low)
+
+        assigned_target = getattr(inv, 'assigned_to', None) or getattr(inv, 'assigned_approver', None) or ''
+        is_assigned = False
+        if assigned_target:
+            approvers = [s.strip().lower() for s in str(assigned_target).split(',') if s.strip()]
+            for handle in user_handles:
+                if handle in approvers or any((handle in app or app in handle for app in approvers)):
+                    is_assigned = True
+                    break
+
+        is_stage1_or_unrouted = (curr_stg == 1 or 'attachment' in st_low or 'unrouted' in st_low or 'unassigned' in str(assigned_target).lower() or 'initiated' in st_low)
+        if is_uploader_role and is_stage1_or_unrouted:
+            is_assigned = True
+
+        inv_creator = (getattr(inv, 'contact_person', None) or getattr(inv, 'employee_id', None) or getattr(inv, 'employee_name', None) or '').strip().lower()
+        is_creator = bool(inv_creator and inv_creator in user_handles)
 
         is_curr = False
-        if inv.assigned_approver and not has_approved_curr_stage:
-            is_curr = is_user_in_approver_pool(current_user, inv.assigned_approver, db, ignore_admin_bypass=True)
+        if assigned_target and not has_approved_curr_stage:
+            is_curr = is_user_in_approver_pool(current_user, assigned_target, db, ignore_admin_bypass=True)
         if (is_unrouted or is_stage1) and is_uploader_role:
             is_curr = True
 
         # Division check
-        if not is_curr and not has_approved_any_stage:
+        if not is_curr and not has_approved_any_stage and not is_creator:
             user_approval_divs = get_user_approval_divisions(current_user)
             doc_div = (inv.division or '').strip().upper()
             if doc_div and user_approval_divs and not any(d in ['HQ', 'GLOBAL', 'ALL', ''] for d in user_approval_divs) and doc_div not in ['HQ', 'GLOBAL', 'ALL', '']:
@@ -1310,24 +1353,27 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 
         if not user_is_admin:
             is_member_of_flow = bool(inv.workflow_profile_id and (inv.workflow_profile_id in user_wf_profiles or any(p.lower() == inv.workflow_profile_id.lower() for p in user_wf_profiles)))
-            if not ((is_curr and not has_approved_curr_stage) or has_approved_any_stage or is_member_of_flow or (is_unrouted and is_uploader_role) or (is_stage1 and is_uploader_role)):
+            if not ((is_curr and not has_approved_curr_stage) or is_assigned or has_approved_any_stage or is_creator or is_member_of_flow or (is_unrouted and is_uploader_role) or (is_stage1 and is_uploader_role)):
                 continue
 
         # Status filter query parameter enforcement
         if status:
             s_req = status.strip().lower()
             if s_req == 'pending':
-                if not (is_curr and not has_approved_curr_stage):
+                st_low = (inv.status or '').strip().lower()
+                is_pending_status = st_low.startswith('pending') or st_low == 'pending'
+                if not (is_pending_status or (is_curr and not has_approved_curr_stage)):
                     continue
             elif s_req == 'hold':
-                if inv.status != 'On Hold':
+                if not ('hold' in (inv.status or '').lower() or 'pause' in (inv.status or '').lower() or 'wait' in (inv.status or '').lower()):
                     continue
-            elif s_req in ['in_progress', 'active']:
-                if inv.status == 'On Hold':
-                    continue
+            elif s_req in ['in_progress', 'progress', 'active', 'workflow']:
+                # All active non-terminal statuses: Pending, In Progress, Hold
+                pass
 
         inv_res = InvoiceResponse.model_validate(inv)
-        inv_res.assigned_to = inv.assigned_approver
+        inv_res.assigned_to = assigned_target or inv.assigned_approver
+        inv_res.assigned_approver = assigned_target or inv.assigned_approver
         inv_res.is_current_approver = is_curr
         inv_res.has_approved = has_approved_curr_stage or has_approved_any_stage
         inv_res.has_rejected = has_rej
@@ -1343,17 +1389,26 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
 def get_synced_pending_documents(db: Session=Depends(get_db), current_user: User=Depends(get_current_active_user)):
     invoices = db.query(Invoice).filter(Invoice.is_deleted == False, Invoice.doc_key.isnot(None), Invoice.file_url.is_(None) | (Invoice.file_url == '')).order_by(Invoice.created_at.desc()).all()
     if current_user and current_user.role != 'admin':
-        user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '']
+        u_role_clean = (current_user.role or '').strip().lower()
+        u_name_clean = (current_user.username or '').strip().lower()
+        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']) or u_name_clean in ['yuvasree', 'meshak'])
+        user_handles = [current_user.username.lower() if current_user.username else '', current_user.employee_id.lower() if current_user.employee_id else '', current_user.employee_name.lower() if current_user.employee_name else '', current_user.email.lower() if current_user.email else '', current_user.role.lower() if current_user.role else '']
+        if u_name_clean in ['yuvasree', 'meshak']:
+            user_handles.extend(['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'uploader'])
         user_handles = [h for h in user_handles if h]
         filtered_invoices = []
         for inv in invoices:
             is_assigned = False
-            if inv.assigned_approver:
-                approvers = [s.strip().lower() for s in inv.assigned_approver.split(',') if s.strip()]
+            assigned_target = getattr(inv, 'assigned_to', None) or getattr(inv, 'assigned_approver', None)
+            if assigned_target:
+                approvers = [s.strip().lower() for s in str(assigned_target).split(',') if s.strip()]
                 for handle in user_handles:
                     if handle in approvers or any((handle in app or app in handle for app in approvers)):
                         is_assigned = True
                         break
+            curr_stg = getattr(inv, 'current_stage', 1) or 1
+            if is_uploader_role and curr_stg == 1:
+                is_assigned = True
             if is_assigned or authorize_document_access(current_user, inv):
                 filtered_invoices.append(inv)
         invoices = filtered_invoices
@@ -5259,6 +5314,10 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         Invoice.subtype_of_complaint,
         Invoice.document_number,
         Invoice.invoice_number,
+        Invoice.current_stage,
+        Invoice.contact_person,
+        Invoice.employee_id,
+        Invoice.employee_name,
     ).filter(Invoice.is_deleted == False).all()
 
     # Exclude Customer Feedback records from AP Operations Dashboard stats
@@ -5299,7 +5358,8 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
     user_is_admin = is_user_admin(current_user, db)
     if current_user and not user_is_admin:
         u_role_clean = (current_user.role or '').strip().lower()
-        is_uploader_role = bool(any(x in u_role_clean for x in ['uplod', 'upload', 'account', 'approver', 'manager']))
+        u_name_clean = (current_user.username or '').strip().lower()
+        is_uploader_role = bool(any(x in u_role_clean for x in ['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'doc_uploader', 'doc_uploder', 'uploader']) or u_name_clean in ['yuvasree', 'meshak'])
         user_handles = [
             str(current_user.id),
             current_user.username.lower() if current_user.username else '',
@@ -5308,6 +5368,8 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
             current_user.email.lower() if current_user.email else '',
             current_user.role.lower() if current_user.role else ''
         ]
+        if u_name_clean in ['yuvasree', 'meshak']:
+            user_handles.extend(['account_uploader', 'account_uploder', 'accounts_uploader', 'accounts_uploder', 'uploader'])
         user_handles = [h for h in user_handles if h]
         scoped_invoices = []
         approved_count = 0
@@ -5315,6 +5377,7 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         progress_count = 0
         hold_count = 0
         rejected_count = 0
+        cancelled_count = 0
         total_spend = 0.0
         for inv in invoices:
             has_approved = inv.id in approved_invoice_ids
@@ -5322,32 +5385,40 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
             inv_creator = (getattr(inv, 'contact_person', None) or getattr(inv, 'employee_id', None) or getattr(inv, 'employee_name', None) or '').strip().lower()
             is_creator = bool(inv_creator and inv_creator in user_handles)
             is_assigned = False
-            assigned_target = getattr(inv, 'assigned_approver', None) or getattr(inv, 'assigned_to', None) or ''
+            assigned_target = getattr(inv, 'assigned_to', None) or getattr(inv, 'assigned_approver', None) or ''
             if assigned_target:
                 approvers = [s.strip().lower() for s in str(assigned_target).split(',') if s.strip()]
                 for handle in user_handles:
                     if handle in approvers or any((handle in app or app in handle for app in approvers)):
                         is_assigned = True
                         break
-            st_lower = (inv.status or '').lower()
+            st_lower = (inv.status or '').strip().lower()
+            curr_stg = getattr(inv, 'current_stage', 1) or 1
             is_cancelled = any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned'])
             # Cancelled documents must only be visible to the user who cancelled/created it and the admin alone!
             if is_cancelled and not (has_rejected or is_creator or is_assigned):
                 continue
 
-            is_stage1_or_unrouted = ('attachment' in st_lower or 'unrouted' in st_lower or 'unassigned' in (inv.assigned_approver or '').lower() or 'initiated' in st_lower)
+            is_stage1_or_unrouted = (curr_stg == 1 or 'attachment' in st_lower or 'unrouted' in st_lower or 'unassigned' in str(assigned_target).lower() or 'initiated' in st_lower)
             if is_uploader_role and is_stage1_or_unrouted:
                 is_assigned = True
             if has_approved or is_assigned or has_rejected or is_creator:
                 scoped_invoices.append(inv)
                 total_spend += float(inv.amount or 0.0)
+                is_pending_status = st_lower.startswith('pending') or st_lower == 'pending'
                 if has_approved and any(k in st_lower for k in ['settled', 'approved', 'paid', 'ready for payment']) and not ('stage' in st_lower or 'progress' in st_lower):
                     approved_count += 1
                 elif any(k in st_lower for k in ['hold', 'pause', 'wait', 'clarif']):
                     hold_count += 1
-                elif any(k in st_lower for k in ['reject', 'cancel', 'void', 'fail', 'returned']):
+                elif any(k in st_lower for k in ['cancel', 'void']):
+                    if has_rejected or is_creator or is_assigned or user_is_admin:
+                        cancelled_count += 1
+                        rejected_count += 1
+                elif any(k in st_lower for k in ['reject', 'fail', 'returned']):
                     if has_rejected or is_creator or is_assigned or user_is_admin:
                         rejected_count += 1
+                elif is_pending_status:
+                    pending_count += 1
                 elif any(k in st_lower for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not ('attachment' in st_lower or 'initiated' in st_lower):
                     progress_count += 1
                 else:
@@ -5358,10 +5429,11 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
     else:
         total_docs = len(invoices)
         hold_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['hold', 'pause', 'wait', 'clarif']))
+        cancelled_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['cancel', 'void']))
         rejected_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['reject', 'cancel', 'void', 'fail', 'returned']))
         approved_count = sum(1 for i in invoices if any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment']) and not any(k in (i.status or '').lower() for k in ['stage', 'progress']))
-        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated']))
-        pending_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and not (any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification', 'in progress']) and not any(k in (i.status or '').lower() for k in ['attachment', 'initiated'])))
+        pending_count = sum(1 for i in invoices if (i.status or '').strip().lower().startswith('pending') or (i.status or '').strip().lower() == 'pending')
+        progress_count = sum(1 for i in invoices if not any(k in (i.status or '').lower() for k in ['settled', 'approved', 'paid', 'ready for payment', 'reject', 'cancel', 'void', 'fail', 'returned', 'hold', 'pause', 'wait', 'clarif']) and not ((i.status or '').strip().lower().startswith('pending')) and any(k in (i.status or '').lower() for k in ['progress', 'stage', 'review', 'verification', 'in progress']))
         if pending_count == 0 and total_docs > (approved_count + progress_count + hold_count + rejected_count):
             pending_count = total_docs - (approved_count + progress_count + hold_count + rejected_count)
         total_spend = sum((float(i.amount or 0.0) for i in invoices))
@@ -5373,6 +5445,7 @@ def get_dashboard_stats(db: Session=Depends(get_db), current_user: Optional[User
         'progressDocuments': progress_count,
         'holdDocuments': hold_count,
         'rejectedDocuments': rejected_count,
+        'cancelledDocuments': cancelled_count,
         'approvedDocuments': approved_count,
         'totalSpendINR': total_spend,
         'autoRoutedPercentage': 100.0 if total_docs > 0 else 0.0

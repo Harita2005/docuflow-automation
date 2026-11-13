@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   CheckCircle2, 
   Search, 
@@ -36,6 +37,16 @@ export default function ApprovedDocumentsPage({
   currentUserUsername: _currentUserUsername = "",
   onRefreshDocs
 }: ApprovedDocumentsPageProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleOpenDocument = (docId: string | number) => {
+    navigate(`/review/${encodeURIComponent(docId)}`, { state: { from: location.pathname } });
+    if (onViewDocument) {
+      onViewDocument(docId);
+    }
+  };
+
   // 1. Toolbar state: Search & Sort
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1097,7 +1108,7 @@ export default function ApprovedDocumentsPage({
                   return (
                     <tr
                       key={doc.id}
-                      onClick={() => onViewDocument(doc.id)}
+                      onClick={() => handleOpenDocument(doc.id)}
                       className="hover:bg-slate-50/80 cursor-pointer transition group"
                     >
                       {/* 1. Serial number */}
@@ -1157,10 +1168,10 @@ export default function ApprovedDocumentsPage({
                       </td>
 
                       {/* 8. Action */}
-                      <td className="py-1.5 px-2.5 text-center w-[9%]" onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}>
+                      <td className="py-1.5 px-2.5 text-center w-[9%]" onClick={(e) => { e.stopPropagation(); handleOpenDocument(doc.id); }}>
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); onViewDocument(doc.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleOpenDocument(doc.id); }}
                           className="p-1 rounded text-slate-400 hover:text-[#003F28] hover:bg-emerald-50/60 transition cursor-pointer inline-flex items-center justify-center mx-auto"
                           title="View Document Details"
                           aria-label="View Document Details"

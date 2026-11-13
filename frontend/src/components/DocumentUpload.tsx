@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
   FileText,
@@ -45,6 +46,8 @@ export default function DocumentUpload({
   setCurrentView,
   setSelectedDocId
 }: DocumentUploadProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progressMsgIndex, setProgressMsgIndex] = useState(0);
@@ -742,6 +745,7 @@ export default function DocumentUpload({
               <button
                 type="button"
                 onClick={() => {
+                  navigate(`/review/${encodeURIComponent(uploadedDoc.id)}`, { state: { from: location.pathname } });
                   setSelectedDocId(uploadedDoc.id);
                   setCurrentView("details");
                 }}

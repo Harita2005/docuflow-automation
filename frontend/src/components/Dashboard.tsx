@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   Clock, 
   PauseCircle, 
@@ -40,6 +41,15 @@ export default function Dashboard({
   onNavigateToWorkTracker,
   onNavigateToApproved
 }: DashboardProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleOpenDocument = (docId: string | number) => {
+    navigate(`/review/${encodeURIComponent(docId)}`, { state: { from: location.pathname } });
+    if (onViewDocument) {
+      onViewDocument(String(docId));
+    }
+  };
   const [activeDocType, setActiveDocType] = useState<string>("ALL");
   const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected' | 'cancelled'>('pending');
   const [pendingScope, setPendingScope] = useState<'my' | 'all'>('my');
@@ -88,13 +98,15 @@ export default function Dashboard({
   const displayDocs = useMemo(() => {
     const rawDisplayDocs = documents && documents.length > 0
       ? documents.map(d => ({
+          ...d,
           id: d.id,
           vendor_name: d.vendor_name || d.account_name || d.dealer_name || "Enterprise Vendor",
           document_type: (d.document_type || d.category || "GENERAL RECORDS").toUpperCase().trim(),
           invoice_number: d.invoice_number || d.document_number || `INV-${String(d.id).slice(0, 5)}`,
           invoice_date: d.invoice_date || d.doc_date || "2026-09-07",
           status: d.status || "UNROUTED (NO RULE MATCHED)",
-          current_stage: d.current_stage,
+          current_stage: d.current_stage || 1,
+          division: d.division || (d as any).branch || (d as any).plant || "",
           created_by: (d as any).created_by,
           employee_id: d.employee_id,
           employee_name: d.employee_name,
@@ -112,7 +124,7 @@ export default function Dashboard({
             if (s.includes("reject") || s.includes("cancel") || s.includes("fail")) return "rejected";
             return "in_progress";
           })() as any,
-          amount: d.amount || 45000,
+          amount: d.amount || 0,
           assigned_approver: d.assigned_approver || (d as any).assigned_to || (d as any).assigned_user,
           assigned_to: (d as any).assigned_to || d.assigned_approver || (d as any).assigned_user,
           is_current_approver: d.is_current_approver,
@@ -128,6 +140,7 @@ export default function Dashboard({
 
   // Filter documents strictly by assigned user without universal admin bypass
   const isAssignedToUser = (doc: any) => {
+    if (doc.is_current_approver === false) return false;
     if (doc.is_current_approver) return true;
 
     const uHandle = (currentUserUsername || localStorage.getItem("currentUserUsername") || "").toLowerCase().trim();
@@ -156,34 +169,37 @@ export default function Dashboard({
       admin: ["admin", "administrator", "system administrator", "superadmin", "system_admin"],
       manager: ["manager", "operations manager", "operations_manager", "finance_manager", "finance manager"],
       finance_manager: ["finance_manager", "finance manager", "manager", "operations_manager"],
-      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver", "ap", "accounts"],
-      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist", "ap", "accounts"],
+      ap_executive: ["ap_executive", "ap executive", "ap_specialist", "ap specialist", "accounts_approver", "accounts approver"],
+      accounts_approver: ["accounts_approver", "accounts approver", "ap_executive", "ap executive", "ap_specialist", "ap specialist"],
       accounts_approver2: ["accounts_approver2", "accounts approver 2"],
       employee: ["employee", "standard employee", "standard_employee"],
-      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"],
-      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader", "accounts", "account"]
+      account_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      accounts_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      doc_uploder: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      account_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"],
+      doc_uploader: ["account_uploder", "accounts_uploder", "account_uploader", "accounts_uploader", "doc_uploder", "doc_uploader", "uploader"]
     };
     const activeAliases = roleAliases[rHandle] || (rHandle ? [rHandle] : []);
+    if (uHandle === "yuvasree" || uHandle === "meshak") {
+      activeAliases.push("account_uploder", "account_uploader", "accounts_uploder", "accounts_uploader", "uploader");
+    }
+
+    const sLow = (doc.status || "").toLowerCase();
+    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
+    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
+    const isTrueUploader = rHandle.includes("uplod") || rHandle === "admin" || uHandle === "yuvasree" || uHandle === "meshak";
+
+    // Rule 2: Hide docs from Approver 2 / next approvers until Approver 1 / uploader approves
+    if (isStage1 && !doc.is_current_approver && !isTrueUploader) {
+      return false;
+    }
 
     if (idHandle && pool.some((p: string) => p === idHandle)) return true;
     if (uHandle && pool.some((p: string) => p && (p === uHandle || p.includes(uHandle) || uHandle.includes(p)))) return true;
     if (nHandle && pool.some((p: string) => p && (p === nHandle || p.includes(nHandle) || nHandle.includes(p)))) return true;
     if (empHandle && pool.some((p: string) => p && (p === empHandle || p.includes(empHandle) || empHandle.includes(p)))) return true;
     if (eHandle && pool.some((p: string) => p && (p === eHandle || p.includes(eHandle) || eHandle.includes(p)))) return true;
-    if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p === a || p.includes(a) || a.includes(p))))) return true;
-
-    const sLow = (doc.status || "").toLowerCase();
-    const isUnrouted = sLow.includes("unrouted") || sLow.includes("no rule") || rawAssigned.includes("unassigned");
-    const isStage1 = ((doc.current_stage || 1) === 1 || sLow.includes("attachment") || sLow.includes("initiated"));
-    const isTrueUploader = rHandle.includes("uplod") || rHandle === "admin";
-
-    // Rule 2: Hide docs from Approver 2's queue until Approver 1 approves
-    if (isStage1 && !doc.is_current_approver) {
-      return false;
-    }
+    if (rHandle && pool.some((p: string) => p && activeAliases.some((a: string) => a && (p === a || p.replace(/[_ ]/g, '') === a.replace(/[_ ]/g, ''))))) return true;
 
     if (sLow.includes("verification") && (rHandle === "ap_executive" || rHandle === "executive")) return true;
     if (isUnrouted && isTrueUploader) return true;
@@ -201,19 +217,12 @@ export default function Dashboard({
     if (["cancelled", "void", "failed"].some(s => (doc.status || "").toLowerCase().includes(s))) {
       return false;
     }
-    // Rule 2: Hide docs from Approver 2's queue until Approver 1 approves
-    const currentStage = doc.current_stage || 1;
-    if (currentStage === 1 && !doc.is_current_approver) {
-      return false;
-    }
     // 2. If the user already approved this current cycle, action is no longer required
     if (doc.has_approved) return false;
 
-    // 3. Direct current approver flag from backend (evaluated without admin bypass)
-    if (doc.is_current_approver) return true;
-
-    // 4. Exact assignment match across user_id, username, email, employee_id, and role
-    return isAssignedToUser(doc);
+    // 3. Exact matching aligned strictly with Work Tracker predicate
+    const isActionRequired = (typeof doc.is_current_approver === "boolean" ? doc.is_current_approver : isAssignedToUser(doc)) && !doc.has_approved;
+    return isActionRequired;
   };
 
   // Dynamic KPI Count Computations aligned strictly with Work Tracker and DocuFlowDB
@@ -245,7 +254,7 @@ export default function Dashboard({
   const isPendingStatus = (st: string) => {
     const s = (st || "").toLowerCase().trim();
     if (isHoldStatus(s) || isRejectedStatus(s) || isCancelledStatus(s) || isApprovedStatus(s)) return false;
-    return s === "pending" || s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
+    return s.startsWith("pending") || s === "pending" || s.includes("pending") || s.includes("initiated") || s.includes("unrouted") || s.includes("verification") || s.includes("review") || s.includes("return") || s.includes("revision");
   };
 
   const isProgressStatus = (st: string) => {
@@ -318,6 +327,7 @@ export default function Dashboard({
 
   const calculatedCancelled = baseDocs.filter(d => isCancelledForDashboard(d)).length;
   const cancelledCount = calculatedCancelled;
+  const rejectedKpiTotal = rejectedCount + cancelledCount;
 
   const calculatedProgress = baseDocs.filter(d => {
     if (isHoldStatus(d.status) || isRejectedForDashboard(d) || isCancelledForDashboard(d)) return false;
@@ -335,6 +345,7 @@ export default function Dashboard({
   const pendingPercent = activeTotal > 0 ? Math.round((pendingCount / activeTotal) * 100) : 0;
   const holdPercent = activeTotal > 0 ? Math.round((holdCount / activeTotal) * 100) : 0;
   const rejectedPercent = activeTotal > 0 ? Math.round((rejectedCount / activeTotal) * 100) : 0;
+  const rejectedKpiPercent = activeTotal > 0 ? Math.round((rejectedKpiTotal / activeTotal) * 100) : 0;
   const cancelledPercent = activeTotal > 0 ? Math.round((cancelledCount / activeTotal) * 100) : 0;
   const progressPercent = activeTotal > 0 ? Math.round((progressCount / activeTotal) * 100) : 0;
   const approvedPercent = (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount)) > 0 
@@ -346,6 +357,7 @@ export default function Dashboard({
     ? baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
       ? baseDocs.filter(d => {
+          if (isCancelledForDashboard(d)) return true;
           if (!isRejectedForDashboard(d)) return false;
           return isSuperUser || isAssignedToUser(d) || d.has_rejected;
         })
@@ -681,11 +693,11 @@ export default function Dashboard({
               <div className="h-6 w-10 bg-rose-100 animate-pulse rounded my-0.5" />
             ) : (
               <span className="text-xl sm:text-2xl font-black text-slate-900 font-display leading-none">
-                {rejectedCount}
+                {rejectedKpiTotal}
               </span>
             )}
             <span className="text-[8px] font-extrabold text-[#DC2626] bg-[#FFECEF] px-1.5 py-0.5 rounded border border-[#FECDD3]/60">
-              {rejectedPercent}% OF ACTIVE
+              {rejectedKpiPercent}% OF ACTIVE
             </span>
           </div>
 
@@ -694,13 +706,13 @@ export default function Dashboard({
             <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
               <div 
                 className="h-full rounded-full bg-[#EF4444] transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(rejectedCount > 0 ? 5 : 0, rejectedPercent))}%` }}
+                style={{ width: `${Math.min(100, Math.max(rejectedKpiTotal > 0 ? 5 : 0, rejectedKpiPercent))}%` }}
               />
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
               <span>IN DASHBOARD</span>
               <div className="flex items-center gap-1">
-                <span>{rejectedCount} OF {activeTotal}</span>
+                <span>{rejectedKpiTotal} OF {activeTotal}</span>
                 {cancelledCount > 0 && (
                   <span 
                     onClick={(e) => {
@@ -730,18 +742,18 @@ export default function Dashboard({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               if (onNavigateToWorkTracker) {
-                onNavigateToWorkTracker("all");
+                onNavigateToWorkTracker("in_progress");
               } else if (setCurrentView) {
-                localStorage.setItem("workTrackerStatusFilter", "all");
+                localStorage.setItem("workTrackerStatusFilter", "in_progress");
                 setCurrentView("work-tracker");
               }
             }
           }}
           onClick={() => {
             if (onNavigateToWorkTracker) {
-              onNavigateToWorkTracker("all");
+              onNavigateToWorkTracker("in_progress");
             } else if (setCurrentView) {
-              localStorage.setItem("workTrackerStatusFilter", "all");
+              localStorage.setItem("workTrackerStatusFilter", "in_progress");
               setCurrentView("work-tracker");
             }
           }}
@@ -878,6 +890,7 @@ export default function Dashboard({
                 {kpiFilter === 'pending' && (effectivePendingScope === 'my' ? `MY PENDING DOCUMENTS (${filteredDocs.length})` : `ALL PENDING DOCUMENTS (${filteredDocs.length})`)}
                 {kpiFilter === 'hold' && `HOLD DOCUMENTS (${filteredDocs.length})`}
                 {kpiFilter === 'rejected' && `REJECTED DOCUMENTS (${filteredDocs.length})`}
+                {kpiFilter === 'cancelled' && `CANCELLED DOCUMENTS (${filteredDocs.length})`}
               </h2>
             </div>
 
@@ -1052,7 +1065,7 @@ export default function Dashboard({
             filteredDocs.map((doc) => (
               <div
                 key={doc.id}
-                onClick={() => onViewDocument(doc.id)}
+                onClick={() => handleOpenDocument(doc.id)}
                 className="bg-white border border-[#EAE6DD] rounded-[7px] px-3 py-1.5 hover:border-[#003F28] hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-2.5 cursor-pointer group"
               >
                 {/* Left Side: Icon & Details */}

@@ -49,7 +49,7 @@ if not fallback_matches:
     print('  [PASSED] Zero hardcoded fallback workflow strings found.')
 else:
     audit_passed = False
-    print(f'  [FAILED] Hardcoded fallback strings found: {fallback_matches}')
+    print(f'  [FAILED] Hardcoded fallback strings found: {fallback_matches}') 
     errors.append(f'Hardcoded fallback strings found: {fallback_matches}')
 print('\n[4/4] Verifying Zero Hardcoded Passwords in Source Code...')
 password_matches = []
