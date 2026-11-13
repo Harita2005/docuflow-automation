@@ -531,6 +531,11 @@ export default function WorkTrackerPage({
           );
           if (!isPending) return false;
         } else if (statusFilter === "in_progress" || statusFilter === "progress" || statusFilter === "active") {
+          const isAdminRole = currentUserRole === "admin" || currentUserRole === "system_admin" || currentUserRole === "superadmin" || (currentUserRole || "").toLowerCase().includes("admin");
+          if (!isAdminRole) {
+            // Strictly only that person's approved document approvals for non-admin
+            if (!doc.has_approved) return false;
+          }
           // Align with Dashboard PROGRESS card: all active non-terminal statuses (Pending, In Progress, Hold)
           const isNonTerminalActive = !isTerminalOrApproved(doc) && (
             st.includes("pending") ||

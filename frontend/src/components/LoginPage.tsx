@@ -31,13 +31,6 @@ interface LoginPageProps {
   onClearKickedReason?: () => void;
 }
 
-interface SessionConflictData {
-  deviceInfo: string;
-  createdAt?: string;
-  message?: string;
-  onConfirm: () => void;
-}
-
 export default function LoginPage({
   onLoginSuccess,
   kickedReason,
@@ -45,6 +38,13 @@ export default function LoginPage({
 }: LoginPageProps) {
   const [employeeId, setEmployeeId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Clear any kicked reason automatically so collision alerts do not appear
+  useEffect(() => {
+    if (kickedReason && onClearKickedReason) {
+      onClearKickedReason();
+    }
+  }, [kickedReason, onClearKickedReason]);
 
   // 1 = Employee ID, 2 = Choose MFA Method, 3 = Verification (Code or QR Scan)
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -74,10 +74,6 @@ export default function LoginPage({
   const [totpQrSvg, setTotpQrSvg] = useState("");
   const [totpSecret, setTotpSecret] = useState("");
   const [showManualKey, setShowManualKey] = useState(false);
-
-  // Active session conflict
-  const [sessionConflict, setSessionConflict] =
-    useState<SessionConflictData | null>(null);
 
   const otpBoxesRef = useRef<(HTMLInputElement | null)[]>([]);
   const [focusedOtpIndex, setFocusedOtpIndex] = useState<number | null>(0);
@@ -483,6 +479,9 @@ export default function LoginPage({
         const methods: MFAMethod[] = Array.isArray(data.available_methods)
           ? data.available_methods
           : [];
+        if ((data.email_otp_available || true) && !methods.includes("EMAIL")) {
+          methods.push("EMAIL");
+        }
         setAvailableMethods(methods);
         setMaskedEmail(data.masked_email || "");
         setMaskedPhone(data.masked_phone || "");
@@ -559,7 +558,7 @@ export default function LoginPage({
           );
         }
 
-        const target = method === "EMAIL" ? maskedEmail : maskedPhone;
+        const target = data.destination || (method === "EMAIL" ? (maskedEmail || "communication@ramrajcotton.net") : maskedPhone);
         setOtpSentNotice(
           data.message ||
             `A verification code has been dispatched to ${target}.`
@@ -686,7 +685,7 @@ export default function LoginPage({
 
   const handleVerifyOtp = async (
     e: React.FormEvent,
-    forceLogin = false
+    forceLogin = true
   ) => {
     e.preventDefault();
 
@@ -718,7 +717,7 @@ export default function LoginPage({
             ticket: mfaTicket,
             method: "PASSWORD",
             code: pwd,
-            force_login: forceLogin,
+            force_login: true,
             device_info: getDeviceLabel(),
           }),
         });
@@ -731,19 +730,9 @@ export default function LoginPage({
           );
         }
 
-        // Active session conflict handling
+        // Active session conflict handling: auto-proceed seamlessly without popup
         if (data.active_session_conflict) {
-          setSessionConflict({
-            deviceInfo:
-              data.active_device_info ||
-              "Another device/browser",
-            createdAt: data.session_created_at,
-            message: data.message,
-            onConfirm: () => {
-              setSessionConflict(null);
-              void handleVerifyOtp(e, true);
-            },
-          });
+          void handleVerifyOtp(e, true);
           return;
         }
 
@@ -791,7 +780,7 @@ export default function LoginPage({
           ticket: mfaTicket,
           method: selectedMethod,
           code: code,
-          force_login: forceLogin,
+          force_login: true,
           device_info: getDeviceLabel(),
         }),
       });
@@ -804,20 +793,9 @@ export default function LoginPage({
         );
       }
 
-      // Existing session conflict handling
+      // Existing session conflict handling: auto-proceed seamlessly without popup
       if (data.active_session_conflict) {
-        setSessionConflict({
-          deviceInfo:
-            data.active_device_info ||
-            "Another device/browser",
-          createdAt: data.session_created_at,
-          message: data.message,
-          onConfirm: () => {
-            setSessionConflict(null);
-            void handleVerifyOtp(e, true);
-          },
-        });
-
+        void handleVerifyOtp(e, true);
         return;
       }
 
@@ -935,30 +913,6 @@ export default function LoginPage({
       <main className="flex-1 flex flex-col justify-between px-8 sm:px-16 lg:px-24 py-8 bg-[#FAF8F3] relative min-h-screen">
         <div className="hidden lg:block h-2" />
         <div className="w-full max-w-md mx-auto my-auto py-4">
-          {/* Session kicked alert */}
-          {kickedReason && (
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-
-              <div className="flex-1 text-xs text-amber-800">
-                <span className="font-bold">
-                  Session Replaced:{" "}
-                </span>
-                {kickedReason}
-              </div>
-
-              {onClearKickedReason && (
-                <button
-                  type="button"
-                  onClick={onClearKickedReason}
-                  className="text-amber-500 hover:text-amber-800"
-                  aria-label="Dismiss session alert"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          )}
 
           {/* Global error */}
           {otpError && (
@@ -1459,48 +1413,27 @@ export default function LoginPage({
                   ) : null}
 
                   {/* 2. EMAIL OTP */}
-                  {availableMethods.includes("EMAIL") ? (
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void handleSelectMethod("EMAIL")}
-                      className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs"
-                    >
-                      <div className="flex items-center space-x-3.5">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#003F29] flex items-center justify-center shrink-0">
-                          <Mail className="h-5 w-5" />
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void handleSelectMethod("EMAIL")}
+                    className="w-full p-4 border rounded-xl flex items-center justify-between transition-all duration-200 text-left cursor-pointer border-gray-200 hover:border-[#003F29] hover:bg-emerald-50/50 bg-white shadow-xs"
+                  >
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-100/80 text-[#003F29] flex items-center justify-center shrink-0">
+                        <Mail className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          Email OTP
                         </div>
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            Email OTP
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {maskedEmail ? `Send code to ${maskedEmail}` : "Registered email"}
-                          </div>
+                        <div className="text-xs text-gray-500">
+                          {maskedEmail ? `Send code to ${maskedEmail}` : "Send code to communication@ramrajcotton.net"}
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-gray-400" />
-                    </button>
-                  ) : (
-                    <div className="w-full p-4 border border-gray-200 rounded-xl flex items-center justify-between bg-gray-50 opacity-60">
-                      <div className="flex items-center space-x-3.5">
-                        <div className="w-10 h-10 rounded-lg bg-gray-200 text-gray-400 flex items-center justify-center shrink-0">
-                          <Mail className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-semibold text-gray-700">
-                            Email OTP
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Email OTP is not configured yet
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded">
-                        Disabled
-                      </span>
                     </div>
-                  )}
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </button>
 
                   {/* 2. SMS OTP */}
                   {availableMethods.includes("SMS") ? (
@@ -1957,51 +1890,6 @@ export default function LoginPage({
           </div>
         </footer>
       </main>
-
-      {/* =============================================================== */}
-      {/* ACTIVE SESSION CONFLICT MODAL */}
-      {/* =============================================================== */}
-
-      {sessionConflict && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-amber-600">
-              <AlertTriangle className="h-6 w-6 shrink-0" />
-
-              <h3 className="text-base font-bold text-gray-900">
-                Session Conflict
-              </h3>
-            </div>
-
-            <p className="text-xs text-gray-600 leading-relaxed">
-              This account is currently active on{" "}
-              <span className="font-semibold">
-                {sessionConflict.deviceInfo}
-              </span>
-              . Logging in here will terminate the other
-              session.
-            </p>
-
-            <div className="flex space-x-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setSessionConflict(null)}
-                className="flex-1 py-2 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={sessionConflict.onConfirm}
-                className="flex-1 py-2 bg-[#003F29] text-white rounded-lg text-xs font-semibold hover:bg-[#002E1E]"
-              >
-                Sign In Here
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -4364,7 +4364,8 @@ export default function DocumentDetails({
                     onClick={() => {
                       setShowNextActionModal(false);
                       onRefreshDocument();
-                      handleBack();
+                      localStorage.setItem("workTrackerStatusFilter", "in_progress");
+                      navigate("/work-tracker", { state: { from: location.pathname } });
                     }}
                     className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >

@@ -51,7 +51,7 @@ export default function Dashboard({
     }
   };
   const [activeDocType, setActiveDocType] = useState<string>("ALL");
-  const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected' | 'cancelled'>('pending');
+  const [kpiFilter, setKpiFilter] = useState<'pending' | 'hold' | 'rejected' | 'cancelled' | 'progress'>('pending');
   const [pendingScope, setPendingScope] = useState<'my' | 'all'>(() => {
     const r = (currentUserRole || localStorage.getItem("currentUserRole") || "").toLowerCase().trim();
     return r.includes("admin") ? "all" : "my";
@@ -338,9 +338,12 @@ export default function Dashboard({
 
   const calculatedProgress = baseDocs.filter(d => {
     if (isHoldStatus(d.status) || isRejectedForDashboard(d) || isCancelledForDashboard(d)) return false;
-    const isAssigned = isAssignedToUser(d);
-    const inProgressOrPending = isProgressStatus(d.status) || isPendingStatus(d.status) || d.has_approved;
-    return (isSuperUser || isAssigned || d.has_approved || isActionRequiredForUser(d)) && inProgressOrPending;
+    if (isAdmin) {
+      // Admin sees ALL in progress across the system
+      return isProgressStatus(d.status) || isPendingStatus(d.status) || Boolean(d.has_approved);
+    }
+    // All others need only that person's approved document approvals
+    return Boolean(d.has_approved);
   }).length;
   const progressCount = calculatedProgress;
 
@@ -359,7 +362,7 @@ export default function Dashboard({
     ? Math.round((approvedCount / (currentUserRole === "admin" ? displayDocs.length : (activeTotal + approvedCount))) * 100) 
     : 0;
 
-  // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected, or Cancelled)
+  // Documents for the current selected queue in Dashboard (Pending by default, or Hold, or Rejected, or Cancelled, or Progress)
   const currentStatusDocs = kpiFilter === 'hold'
     ? baseDocs.filter(d => (isSuperUser || isAssignedToUser(d) || d.has_rejected) && isHoldStatus(d.status))
     : kpiFilter === 'rejected'
@@ -370,7 +373,17 @@ export default function Dashboard({
         })
       : kpiFilter === 'cancelled'
         ? baseDocs.filter(d => isCancelledForDashboard(d))
-        : activePendingDocs;
+        : kpiFilter === 'progress'
+          ? baseDocs.filter(d => {
+              if (isHoldStatus(d.status) || isRejectedForDashboard(d) || isCancelledForDashboard(d)) return false;
+              if (isAdmin) {
+                // Admin sees all company in-progress documents
+                return isProgressStatus(d.status) || isPendingStatus(d.status) || Boolean(d.has_approved);
+              }
+              // All others see strictly documents that this person approved
+              return Boolean(d.has_approved);
+            })
+          : activePendingDocs;
 
   // Time range filter helper
   const isInTimeRange = (dateStr: string): boolean => {
@@ -403,7 +416,11 @@ export default function Dashboard({
   };
 
   // Dynamic Doc Type Pills Filter list for the current active queue
-  const currentQueueLabel = kpiFilter === 'pending' ? (effectivePendingScope === 'my' ? 'MY PENDING' : 'ALL PENDING') : `ALL ${kpiFilter.toUpperCase()}`;
+  const currentQueueLabel = kpiFilter === 'pending'
+    ? (effectivePendingScope === 'my' ? 'MY PENDING' : 'ALL PENDING')
+    : kpiFilter === 'progress'
+      ? (isAdmin ? 'ALL IN PROGRESS' : 'MY APPROVED IN PROGRESS')
+      : `ALL ${kpiFilter.toUpperCase()}`;
 
   // Dynamically group currentStatusDocs by document_type (no hardcoding)
   const docTypeCountsMap = useMemo(() => {
@@ -437,8 +454,11 @@ export default function Dashboard({
       activeDocType !== "ALL DOCUMENTS" &&
       activeDocType !== "ALL PENDING" &&
       activeDocType !== "MY PENDING" &&
+      activeDocType !== "ALL IN PROGRESS" &&
+      activeDocType !== "MY APPROVED IN PROGRESS" &&
       activeDocType !== "ALL HOLD" &&
-      activeDocType !== "ALL REJECTED"
+      activeDocType !== "ALL REJECTED" &&
+      activeDocType !== "ALL CANCELLED"
     ) {
       let docType = (d.document_type || "").toUpperCase().trim();
       let targetType = activeDocType.toUpperCase().trim();
@@ -741,31 +761,27 @@ export default function Dashboard({
           <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#EF4444] rounded-b-xl"></div>
         </div>
 
-        {/* Card 4: PROGRESS (Navigates to Work Tracker) */}
+        {/* Card 4: PROGRESS (Filter in Dashboard / Shortcut to Tracker) */}
         <div 
           role="button"
           tabIndex={0}
-          aria-label="Navigate to Work Tracker"
+          aria-label="Filter In Progress Documents"
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
-              if (onNavigateToWorkTracker) {
-                onNavigateToWorkTracker("in_progress");
-              } else if (setCurrentView) {
-                localStorage.setItem("workTrackerStatusFilter", "in_progress");
-                setCurrentView("work-tracker");
-              }
+              setKpiFilter('progress');
+              setActiveDocType('ALL');
             }
           }}
           onClick={() => {
-            if (onNavigateToWorkTracker) {
-              onNavigateToWorkTracker("in_progress");
-            } else if (setCurrentView) {
-              localStorage.setItem("workTrackerStatusFilter", "in_progress");
-              setCurrentView("work-tracker");
-            }
+            setKpiFilter('progress');
+            setActiveDocType('ALL');
           }}
-          title="Click to open Work Tracker"
-          className="bg-white border border-[#E8E4DA] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/20 rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer"
+          title={isAdmin ? "Click to view All Company In-Progress documents" : "Click to view your Approved In-Progress documents"}
+          className={`bg-white border rounded-xl p-2 min-h-[82px] flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:shadow-md transition-all duration-200 cursor-pointer ${
+            kpiFilter === 'progress'
+              ? 'border-[#2563EB] ring-2 ring-[#2563EB]/40 bg-[#EFF6FF]'
+              : 'border-[#E8E4DA] hover:border-blue-400'
+          }`}
         >
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1">
@@ -776,10 +792,29 @@ export default function Dashboard({
                 PROGRESS
               </span>
             </div>
-            <span className="text-[7.5px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1 py-0.2 rounded border border-[#BFDBFE]/60 group-hover:bg-[#2563EB] group-hover:text-white transition-all flex items-center gap-0.5">
-              <span>TRACKER</span>
-              <ArrowRight className="h-2 w-2" />
-            </span>
+            <div className="flex items-center gap-1">
+              {kpiFilter === 'progress' ? (
+                <span className="text-[7px] font-black bg-[#2563EB] text-white px-1 py-0.2 rounded">
+                  ACTIVE
+                </span>
+              ) : null}
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onNavigateToWorkTracker) {
+                    onNavigateToWorkTracker("in_progress");
+                  } else if (setCurrentView) {
+                    localStorage.setItem("workTrackerStatusFilter", "in_progress");
+                    setCurrentView("work-tracker");
+                  }
+                }}
+                className="text-[7.5px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1 py-0.2 rounded border border-[#BFDBFE]/60 hover:bg-[#2563EB] hover:text-white transition-all flex items-center gap-0.5 cursor-pointer"
+                title="Open full Work Tracker page"
+              >
+                <span>TRACKER</span>
+                <ArrowRight className="h-2 w-2" />
+              </span>
+            </div>
           </div>
 
           <div className="flex items-baseline justify-between my-auto px-0.5">
@@ -791,7 +826,7 @@ export default function Dashboard({
               </span>
             )}
             <span className="text-[8px] font-extrabold text-[#2563EB] bg-[#EAF3FF] px-1.5 py-0.5 rounded border border-[#BFDBFE]/60">
-              {progressPercent}% OF ACTIVE
+              {isAdmin ? `${progressPercent}% OF ACTIVE` : 'MY APPROVED'}
             </span>
           </div>
 
@@ -799,18 +834,18 @@ export default function Dashboard({
           <div className="w-full space-y-0.5 mt-1">
             <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
               <div 
-                className="h-full rounded-full bg-[#3B82F6] transition-all duration-500"
+                className="h-full rounded-full bg-[#2563EB] transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(progressCount > 0 ? 5 : 0, progressPercent))}%` }}
               />
             </div>
             <div className="flex items-center justify-between text-[7px] font-bold text-slate-600 uppercase tracking-wider">
-              <span>WORK TRACKER</span>
-              <span>{progressCount} OF {activeTotal}</span>
+              <span>{isAdmin ? 'ALL IN PROGRESS' : 'APPROVED BY ME'}</span>
+              <span>{progressCount} {isAdmin ? `OF ${activeTotal}` : 'DOCS'}</span>
             </div>
           </div>
 
           {/* Curved Bottom Accent Line */}
-          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#3B82F6] rounded-b-xl"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#2563EB] rounded-b-xl"></div>
         </div>
 
         {/* Card 5: APPROVED (Navigates to Approved Documents page) */}
@@ -898,6 +933,7 @@ export default function Dashboard({
                 {kpiFilter === 'hold' && `HOLD DOCUMENTS (${filteredDocs.length})`}
                 {kpiFilter === 'rejected' && `REJECTED DOCUMENTS (${filteredDocs.length})`}
                 {kpiFilter === 'cancelled' && `CANCELLED DOCUMENTS (${filteredDocs.length})`}
+                {kpiFilter === 'progress' && (isAdmin ? `ALL IN PROGRESS DOCUMENTS (${filteredDocs.length})` : `MY APPROVED IN PROGRESS DOCUMENTS (${filteredDocs.length})`)}
               </h2>
             </div>
 
@@ -1156,12 +1192,16 @@ export default function Dashboard({
               <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                 {kpiFilter === 'pending' && pendingScope === 'my'
                   ? "No Pending Approvals Assigned to You"
-                  : `No documents found for status: ${kpiFilter.toUpperCase()}`}
+                  : kpiFilter === 'progress'
+                    ? (isAdmin ? "No In-Progress Documents Found" : "No Approved Documents In Progress")
+                    : `No documents found for status: ${kpiFilter.toUpperCase()}`}
               </p>
               <p className="text-[9.5px] text-slate-500 mt-1 max-w-md mx-auto">
                 {kpiFilter === 'pending' && pendingScope === 'my'
                   ? "All caught up! You have no documents currently awaiting your stage approval."
-                  : "Try resetting your document type or date range filters."}
+                  : kpiFilter === 'progress'
+                    ? (isAdmin ? "There are currently no active in-progress documents." : "When you approve a document that continues to subsequent stages, it will appear here.")
+                    : "Try resetting your document type or date range filters."}
               </p>
               {kpiFilter === 'pending' && pendingScope === 'my' && isAdmin && allPendingDocs.length > 0 && (
                 <button

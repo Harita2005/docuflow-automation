@@ -295,7 +295,8 @@ async def login(
         show_dev_otp = should_show_dev_otp()
         email_available = is_email_otp_available(db=db)
         available_methods = ['PASSWORD']
-        if (email_available or show_dev_otp) and user.email and '@' in user.email:
+        effective_email = (user.email or os.getenv("SMTP_USER") or os.getenv("SMTP_FROM") or "communication@ramrajcotton.net").strip()
+        if (email_available or show_dev_otp) and effective_email and '@' in effective_email:
             available_methods.append('EMAIL')
         if user.phone_number and user.phone_number.strip():
             available_methods.append('SMS')
@@ -313,7 +314,7 @@ async def login(
             'email_otp_available': email_available or show_dev_otp,
             'selected_method': None,
             'initial_otp_sent': False,
-            'masked_email': mask_email(user.email) if user.email else '',
+            'masked_email': mask_email(effective_email) if effective_email else '',
             'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
             'has_authenticator_setup': has_auth_setup,
             'active_session_conflict': False,
@@ -410,7 +411,8 @@ async def login(
         show_dev_otp = should_show_dev_otp()
         email_available = is_email_otp_available(db=db)
         available_methods = ['PASSWORD']
-        if (email_available or show_dev_otp) and user.email and '@' in user.email:
+        effective_email = (user.email or os.getenv("SMTP_USER") or os.getenv("SMTP_FROM") or "communication@ramrajcotton.net").strip()
+        if (email_available or show_dev_otp) and effective_email and '@' in effective_email:
             available_methods.append('EMAIL')
         if user.phone_number and user.phone_number.strip():
             available_methods.append('SMS')
@@ -428,7 +430,7 @@ async def login(
             'email_otp_available': email_available or show_dev_otp,
             'selected_method': None,
             'initial_otp_sent': False,
-            'masked_email': mask_email(user.email) if user.email else '',
+            'masked_email': mask_email(effective_email) if effective_email else '',
             'masked_phone': mask_phone(user.phone_number) if user.phone_number else '',
             'has_authenticator_setup': has_auth_setup,
             'active_session_conflict': False,
@@ -438,22 +440,7 @@ async def login(
             'message': 'Password verified. Please complete secondary two-factor authentication.',
         }
 
-    # For non-MFA users: check active session concurrency conflict
-    if user.active_session_id and not force_login:
-        return {
-            'token': None,
-            'access_token': None,
-            'token_type': 'bearer',
-            'expires_in': 0,
-            'user': None,
-            'mfa_required': False,
-            'active_session_conflict': True,
-            'active_device_info': user.active_device_info or 'Another Browser / Device',
-            'session_created_at': user.session_created_at.isoformat() + 'Z' if user.session_created_at else None,
-            'message': f"User '{user.employee_name or user.username}' is currently logged in on another device/browser.",
-        }
-
-    # If MFA is disabled and session conflict is either resolved or force_login=True:
+    # If MFA is disabled and credentials match, establish session directly
     new_session_id = str(uuid.uuid4())
     device_label = device_info or 'Direct API Client'
     had_prior_session = bool(user.active_session_id)
@@ -463,11 +450,11 @@ async def login(
     user.last_activity_at = datetime.datetime.utcnow()
     user.last_login = datetime.datetime.utcnow()
     invalidate_user_cache(user.username)
-    if had_prior_session and force_login:
+    if had_prior_session:
         try:
             from app.routers.events import broadcast_event
             broadcast_event('SESSION_KICKED', {'user_id': user.id, 'username': user.username, 'new_device': device_label, 'timestamp': datetime.datetime.utcnow().isoformat()})
-            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was displaced by [{device_label}] via force_login. Prior session terminated.', ip_address=client_ip))
+            db.add(AuditLog(invoice_id=None, user=user.employee_name or user.name or user.username, action='Session Replaced', stage='Authentication', notes=f'Active session on [{user.employee_name}] was displaced by [{device_label}]. Prior session terminated.', ip_address=client_ip))
         except Exception as e:
             logger.debug('Handled exception: %s', e)
 
@@ -557,10 +544,11 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Email verification is not available right now. Please use your authenticator app or contact your administrator.",
             )
-        if not user.email or '@' not in user.email:
+        target_email = (user.email or os.getenv("SMTP_USER") or os.getenv("SMTP_FROM") or "communication@ramrajcotton.net").strip()
+        if not target_email or '@' not in target_email:
             raise HTTPException(status_code=400, detail='No registered email address found for this user.')
         code = generate_numeric_otp(6)
-        destination = mask_email(user.email)
+        destination = mask_email(target_email)
         if is_email_otp_available(db=db):
             config = db.query(NotificationProviderConfig).first()
             config_dict = None
@@ -573,7 +561,7 @@ def send_otp(request: MFASendOTPRequest, db: Session=Depends(get_db)):
                     'sender_email': config.sender_email,
                     'sender_name': config.sender_name,
                 }
-            success, delivery_msg = send_email_otp(user.email, user.employee_name or user.name, code, config_dict)
+            success, delivery_msg = send_email_otp(target_email, user.employee_name or user.name, code, config_dict)
             strict_check = getattr(settings, "STRICT_SMTP_CHECK", False) or os.getenv("STRICT_SMTP_CHECK", "").lower() in ("1", "true", "yes")
             if not success and strict_check and not show_dev_otp:
                 raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Email delivery failed: {delivery_msg}")
@@ -774,8 +762,6 @@ def verify_mfa(request: MFAVerifyRequest, req: Request, db: Session=Depends(get_
             delete_mfa_ticket(request.ticket)
             raise HTTPException(status_code=400, detail='Too many invalid attempts. Session locked. Please sign in again.')
         raise HTTPException(status_code=400, detail='Invalid verification code. Please check and try again.')
-    if user.active_session_id and (not request.force_login):
-        return {'token': None, 'access_token': None, 'token_type': 'bearer', 'expires_in': 0, 'user': None, 'mfa_required': False, 'active_session_conflict': True, 'active_device_info': user.active_device_info or 'Another Browser / Device', 'session_created_at': user.session_created_at.isoformat() + 'Z' if user.session_created_at else None, 'message': f"User '{user.employee_name or user.username}' is currently logged in on another device/browser."}
     client_ip = extract_client_ip(req)
     new_session_id = str(uuid.uuid4())
     device_label = request.device_info or 'Web Browser'

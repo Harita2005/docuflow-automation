@@ -1166,8 +1166,13 @@ def get_all_invoices(
                 if not (is_pending_status or (is_curr and is_active_flow)):
                     continue
             elif s_req in ['in_progress', 'tracking', 'progress']:
-                if not ((has_appr or user_is_admin or is_member_of_flow or is_curr or (is_unrouted and is_uploader_role)) and is_active_flow):
-                    continue
+                if user_is_admin:
+                    if not is_active_flow:
+                        continue
+                else:
+                    # Non-admin in progress: strictly only documents that this user approved
+                    if not (has_appr and is_active_flow):
+                        continue
             elif s_req == 'approved':
                 if not (inv.status in ['Approved', 'Settled', 'Paid'] and (user_is_admin or has_appr)):
                     continue
@@ -1422,8 +1427,10 @@ def get_work_tracker_documents(status: Optional[str] = Query(None), db: Session=
                 if not ('hold' in (inv.status or '').lower() or 'pause' in (inv.status or '').lower() or 'wait' in (inv.status or '').lower()):
                     continue
             elif s_req in ['in_progress', 'progress', 'active', 'workflow']:
-                # All active non-terminal statuses: Pending, In Progress, Hold
-                pass
+                if not user_is_admin:
+                    # Non-admin in progress: strictly only documents that this user approved
+                    if not (has_approved_any_stage or has_approved_curr_stage):
+                        continue
 
         inv_res = InvoiceResponse.model_validate(inv)
         inv_res.assigned_to = assigned_target or inv.assigned_approver
