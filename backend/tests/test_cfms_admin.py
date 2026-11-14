@@ -339,3 +339,148 @@ def test_audit_query_forwarding(env):
     assert target == "/internal/v1/audit?from=2026-11-01&to=2026-11-10&status=FAILED&type=MANUAL&q=login&page=2&pageSize=50"
     assert env.client.get("/api/admin/cfms/audit?status=BOGUS").status_code == 422
     assert env.client.get("/api/admin/cfms/calendar?month=2026-13").status_code == 422
+
+
+# ----------------------------------------------------------------------------- 7 User Profiles RBAC Test
+def test_rbac_seven_user_profiles(env):
+    """
+    Verifies backend authorization across the 7 user profiles:
+      1. Regular user (no cfms permissions) -> 403 everywhere
+      2. Normal administrator (role="Admin", without explicit cfms:admin) -> view, sync, settings OK; admin FORBIDDEN
+      3. User with cfms:view only -> GET endpoints 200, mutations 403
+      4. User with cfms:sync only -> sync endpoints 202, others 403
+      5. User with cfms:settings only -> email endpoints 200, others 403
+      6. User with explicitly granted cfms:admin -> password & login-test OK
+      7. Superuser (is_superuser=True) -> cfms:admin granted automatically
+    """
+    def _mock_reply(req: httpx.Request):
+        p = str(req.url.path)
+        if req.method == "GET" or "/email/" in p or "/schedule" in p:
+            return httpx.Response(200, json={"ok": True})
+        if "password" in p:
+            return httpx.Response(204)
+        return httpx.Response(202, json={"ok": True})
+
+    env.fake.reply = _mock_reply
+
+    # 1. Regular user (no permissions)
+    regular_user = SimpleNamespace(username="regular-bob", role="Employee", role_id=10, is_active=True, is_superuser=False)
+    env.state["user"] = regular_user
+    env.state["granted"] = set()
+    env.state["role_codes"] = set()
+    assert env.client.get("/api/admin/cfms/permissions").json()["permissions"] == []
+    assert env.client.get("/api/admin/cfms/settings").status_code == 403
+    assert env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"}, headers=idem()).status_code == 403
+    assert env.client.put("/api/admin/cfms/email/sender", json={"sender": "a@ramrajcotton.net"}).status_code == 403
+    assert env.client.put("/api/admin/cfms/salesforce/password", json={"newPassword": "abcdefgh", "confirmPassword": "abcdefgh"}, headers=idem()).status_code == 403
+
+    # 2. Normal administrator (has view/sync/settings, but NOT cfms:admin)
+    normal_admin = SimpleNamespace(username="normal-admin", role="Admin", role_id=1, is_active=True, is_superuser=False)
+    env.state["user"] = normal_admin
+    env.state["granted"] = {"cfms:view", "cfms:sync", "cfms:settings"}
+    env.state["role_codes"] = set()
+    perms = env.client.get("/api/admin/cfms/permissions").json()["permissions"]
+    assert "cfms:admin" not in perms
+    assert set(perms) == {"cfms:view", "cfms:sync", "cfms:settings"}
+    assert env.client.get("/api/admin/cfms/settings").status_code == 200
+    assert env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"}, headers=idem()).status_code == 202
+    assert env.client.put("/api/admin/cfms/email/sender", json={"sender": "a@ramrajcotton.net"}).status_code == 200
+    assert env.client.put("/api/admin/cfms/salesforce/password", json={"newPassword": "abcdefgh", "confirmPassword": "abcdefgh"}, headers=idem()).status_code == 403
+    assert env.client.post("/api/admin/cfms/salesforce/login-test", headers=idem()).status_code == 403
+
+    # 3. User with cfms:view only
+    view_user = SimpleNamespace(username="viewer", role="Auditor", role_id=2, is_active=True, is_superuser=False)
+    env.state["user"] = view_user
+    env.state["granted"] = {"cfms:view"}
+    env.state["role_codes"] = set()
+    assert env.client.get("/api/admin/cfms/permissions").json()["permissions"] == ["cfms:view"]
+    assert env.client.get("/api/admin/cfms/settings").status_code == 200
+    assert env.client.get("/api/admin/cfms/calendar?month=2026-11").status_code == 200
+    assert env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"}, headers=idem()).status_code == 403
+    assert env.client.put("/api/admin/cfms/email/sender", json={"sender": "a@ramrajcotton.net"}).status_code == 403
+    assert env.client.put("/api/admin/cfms/salesforce/password", json={"newPassword": "abcdefgh", "confirmPassword": "abcdefgh"}, headers=idem()).status_code == 403
+
+    # 4. User with cfms:sync only
+    sync_user = SimpleNamespace(username="syncer", role="SyncOperator", role_id=3, is_active=True, is_superuser=False)
+    env.state["user"] = sync_user
+    env.state["granted"] = {"cfms:sync"}
+    env.state["role_codes"] = set()
+    assert env.client.get("/api/admin/cfms/permissions").json()["permissions"] == ["cfms:sync"]
+    assert env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"}, headers=idem()).status_code == 202
+    assert env.client.get("/api/admin/cfms/settings").status_code == 403
+    assert env.client.put("/api/admin/cfms/email/sender", json={"sender": "a@ramrajcotton.net"}).status_code == 403
+
+    # 5. User with cfms:settings only
+    settings_user = SimpleNamespace(username="email-admin", role="EmailManager", role_id=4, is_active=True, is_superuser=False)
+    env.state["user"] = settings_user
+    env.state["granted"] = {"cfms:settings"}
+    env.state["role_codes"] = set()
+    assert env.client.get("/api/admin/cfms/permissions").json()["permissions"] == ["cfms:settings"]
+    assert env.client.put("/api/admin/cfms/email/sender", json={"sender": "a@ramrajcotton.net"}).status_code == 200
+    assert env.client.get("/api/admin/cfms/settings").status_code == 403
+    assert env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"}, headers=idem()).status_code == 403
+
+    # 6. User with explicitly granted cfms:admin
+    super_role_user = SimpleNamespace(username="super-role-user", role="FeedbackAdmin", role_id=5, is_active=True, is_superuser=False)
+    env.state["user"] = super_role_user
+    env.state["granted"] = {"cfms:view", "cfms:sync", "cfms:settings"}
+    env.state["role_codes"] = {"cfms:admin"}
+    assert "cfms:admin" in env.client.get("/api/admin/cfms/permissions").json()["permissions"]
+    assert env.client.put("/api/admin/cfms/salesforce/password", json={"newPassword": "abcdefgh", "confirmPassword": "abcdefgh"}, headers=idem()).status_code == 204
+    assert env.client.post("/api/admin/cfms/salesforce/login-test", headers=idem()).status_code == 202
+
+    # 7. Superuser (is_superuser=True)
+    superuser = SimpleNamespace(username="root-admin", role="CustomRole", role_id=99, is_active=True, is_superuser=True)
+    env.state["user"] = superuser
+    env.state["granted"] = {"cfms:view", "cfms:sync", "cfms:settings"}
+    env.state["role_codes"] = set()
+    assert "cfms:admin" in env.client.get("/api/admin/cfms/permissions").json()["permissions"]
+    assert env.client.put("/api/admin/cfms/salesforce/password", json={"newPassword": "abcdefgh", "confirmPassword": "abcdefgh"}, headers=idem()).status_code == 204
+
+
+def test_tls_ca_verification_and_hmac_tampering(env, monkeypatch):
+    """
+    Verifies HTTPS CA verification configuration and HMAC tampering detection:
+      - Plaintext HTTP URL is rejected by client configuration.
+      - Missing CA certificate is rejected by client configuration.
+      - Simulated SSL verification failure returns HTTP 502 CFMS_UNAVAILABLE.
+      - Tampered HMAC signature changes result in rejection.
+    """
+    # 1. Plaintext HTTP rejected
+    monkeypatch.setenv("CFMS_API_URL", "http://host.docker.internal:8444")
+    with pytest.raises(cfms_client.CfmsNotConfigured, match="must use https"):
+        cfms_client._config()
+
+    # 2. Missing CA file rejected
+    monkeypatch.setenv("CFMS_API_URL", "https://host.docker.internal:8444")
+    monkeypatch.setenv("CFMS_API_CA_FILE", "/nonexistent/path/ca.crt")
+    with pytest.raises(cfms_client.CfmsNotConfigured, match="CFMS_API_CA_FILE is missing"):
+        cfms_client._config()
+
+    # Restore valid CA file
+    monkeypatch.setenv("CFMS_API_CA_FILE", _CA.name)
+
+    # 3. Simulated SSL certificate error returns 502 CFMS_UNAVAILABLE
+    def raise_ssl_error(req):
+        raise httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed", request=req)
+    env.fake.reply = raise_ssl_error
+    r = env.client.get("/api/admin/cfms/settings")
+    assert r.status_code == 502
+    assert r.json()["error"]["code"] == "CFMS_UNAVAILABLE"
+
+    # 4. Independent HMAC tampering check
+    args = ["k1", "1700000000", "req-1", "POST", "/internal/v1/sync/now", b'{"date":"2026-11-01"}', "alice", "cfms:sync", "idem-1"]
+    base_sig = cfms_client.sign(SECRET, *args)
+    # Altering actor
+    args_tampered_actor = list(args)
+    args_tampered_actor[6] = "mallory"
+    assert cfms_client.sign(SECRET, *args_tampered_actor) != base_sig
+    # Altering permissions
+    args_tampered_perms = list(args)
+    args_tampered_perms[7] = "cfms:admin"
+    assert cfms_client.sign(SECRET, *args_tampered_perms) != base_sig
+    # Altering body
+    args_tampered_body = list(args)
+    args_tampered_body[5] = b'{"date":"2026-11-02"}'
+    assert cfms_client.sign(SECRET, *args_tampered_body) != base_sig
+
