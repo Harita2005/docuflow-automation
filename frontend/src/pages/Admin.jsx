@@ -11,6 +11,7 @@ const AdminBackups = lazy(() => import('../components/AdminBackups.jsx'));
 const ChecklistConditionBuilder = lazy(() => import('../components/ChecklistConditionBuilder.jsx'));
 const DapiSyncBackHub = lazy(() => import('../components/dapi-sync-back/DapiSyncBackHub.tsx'));
 const AuditLogsPage = lazy(() => import('../components/AuditLogsPage.tsx'));
+const CustomerFeedbackSettings = lazy(() => import('../components/cfms/CustomerFeedbackSettings.jsx'));
 
 const TabLoadingFallback = () => (
   <div className="flex items-center justify-center p-12 text-slate-400 text-xs gap-2">
@@ -52,7 +53,7 @@ export default function Admin() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem("adminActiveTab");
-    if (stored && ["rbac", "raci", "inapp", "audit", "system", "callbacks"].includes(stored)) {
+    if (stored && ["rbac", "raci", "inapp", "audit", "system", "callbacks", "customer-feedback"].includes(stored)) {
       return stored;
     }
     return "rbac";
@@ -64,6 +65,22 @@ export default function Admin() {
   useEffect(() => {
     localStorage.setItem("adminActiveTab", activeTab);
   }, [activeTab]);
+
+  // Customer Feedback (CFMS): the tab is shown only with a cfms:* permission (server-side RBAC).
+  const [cfmsPermissions, setCfmsPermissions] = useState([]);
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    fetch('/api/admin/cfms/permissions', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => (r.ok ? r.json() : { permissions: [] }))
+      .then((d) => setCfmsPermissions(Array.isArray(d.permissions) ? d.permissions : []))
+      .catch(() => setCfmsPermissions([]));
+  }, []);
+  useEffect(() => {
+    if (activeTab === "customer-feedback" && cfmsPermissions.length === 0) {
+      const t = setTimeout(() => setActiveTab((cur) => (cur === "customer-feedback" ? "rbac" : cur)), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [activeTab, cfmsPermissions]);
 
   useEffect(() => {
     const handleSetTab = (e) => {
@@ -496,6 +513,14 @@ export default function Admin() {
             >
               Third-Party App Sync
             </button>
+            {cfmsPermissions.length > 0 && (
+              <button
+                onClick={() => setActiveTab("customer-feedback")}
+                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "customer-feedback" ? "bg-[#FFBF00] text-[#002F20] font-bold shadow-sm" : "text-emerald-50/85 hover:bg-white/10 hover:text-white border border-transparent"}`}
+              >
+                Customer Feedback
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -521,6 +546,7 @@ export default function Admin() {
                   {activeTab === 'raci' && 'Email & RACI'}
                   {activeTab === 'inapp' && 'In-App Notifications'}
                   {activeTab === 'audit' && 'Audit Logs'}
+                  {activeTab === 'customer-feedback' && 'Customer Feedback'}
                 </h1>
                 <p className="text-[9px] text-slate-500 mt-0.5 leading-none">
                   {hasChanges 
@@ -986,6 +1012,12 @@ export default function Admin() {
     {activeTab === "system" && (
       <div className="w-full animate-fadeIn transition-all">
         <AdminSystem />
+      </div>
+    )}
+
+    {activeTab === "customer-feedback" && cfmsPermissions.length > 0 && (
+      <div className="w-full flex-1 min-h-0 overflow-y-auto custom-scrollbar animate-fadeIn transition-all">
+        <CustomerFeedbackSettings permissions={cfmsPermissions} />
       </div>
     )}
     </Suspense>

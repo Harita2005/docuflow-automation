@@ -14,6 +14,7 @@ from .services.mfa_service import invalidate_legacy_and_all_tickets
 from .routers.audit import router as audit_router
 from .routers.auth import router as auth_router
 from .routers.callback_integrations import router as callback_integrations_router
+from .routers.cfms_admin import router as cfms_admin_router, install_exception_handlers as install_cfms_handlers
 from .routers.conditions import router as conditions_router
 from .routers.documents import router as documents_router
 from .routers.events import router as events_router
@@ -108,8 +109,14 @@ async def lifespan(app: FastAPI):
                     start_archive_scheduler()
                 except Exception as arch_err:
                     logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
+
+                try:
+                    from .services.cfms_scheduler import start_cfms_scheduler
+                    start_cfms_scheduler(check_interval=30)
+                except Exception as cfms_sched_err:
+                    logger.warning(f"Starting CFMS scheduler deferred: {cfms_sched_err}")
             else:
-                logger.info("Background jobs (sync retry & archive scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
+                logger.info("Background jobs (sync retry, archive scheduler & CFMS scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
             # Non-blocking pre-warm of PaddleOCR and Ollama for instant first-upload response
             def _warm_up_ai():
                 try:
@@ -151,6 +158,12 @@ async def lifespan(app: FastAPI):
             stop_archive_scheduler()
         except Exception as arch_stop_err:
             logger.warning(f"Shutdown archive scheduler cleanup: {arch_stop_err}")
+
+        try:
+            from .services.cfms_scheduler import stop_cfms_scheduler
+            stop_cfms_scheduler()
+        except Exception as cfms_stop_err:
+            logger.warning(f"Shutdown CFMS scheduler cleanup: {cfms_stop_err}")
 
 
 is_production = (settings.ENVIRONMENT or "").strip().lower() in ("production", "prod")
@@ -203,6 +216,9 @@ app.include_router(callback_integrations_router)
 app.include_router(sync_router)
 app.include_router(sync_alias_router)
 app.include_router(m2m_sync_router)
+# Customer Feedback (CFMS) administration proxy: /api/admin/cfms/* -> CFMS internal API (server-side only)
+app.include_router(cfms_admin_router)
+install_cfms_handlers(app)
 
 # ---------------------------------------------------------------------------
 # Root Health Endpoint

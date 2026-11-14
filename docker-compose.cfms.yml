@@ -1,0 +1,32 @@
+# Customer Feedback (CFMS) integration override - adds the CFMS internal API connection to the backend.
+# Used ONLY when explicitly combined with the main file, so existing deployments are unaffected:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cfms.yml up -d --build backend frontend
+#
+# Prerequisites on the Ubuntu host (see docs/cfms-integration.md; never commit these files):
+#   /etc/docuflow/secrets/cfms_api_secret   the shared HMAC secret (root:root 0600, one line)
+#   /etc/cfms/tls/cfms-ca.crt               CA certificate that signed the CFMS API certificate
+# The secret reaches the container as a Docker secret file; it is never an environment value, never sent
+# to the frontend, and never written to the repository.
+services:
+  backend:
+    environment:
+      - CFMS_API_URL=${CFMS_API_URL:-https://host.docker.internal:8444}
+      - CFMS_API_KEY_ID=${CFMS_API_KEY_ID:?Set CFMS_API_KEY_ID (the key id registered in CFMS_API_KEYS)}
+      - CFMS_API_SECRET_FILE=/run/secrets/cfms_api_secret
+      - CFMS_API_CA_FILE=/run/cfms/cfms-ca.crt
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ${CFMS_API_CA_HOST_FILE:-/etc/cfms/tls/cfms-ca.crt}
+        target: /run/cfms/cfms-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - cfms_api_secret
+
+secrets:
+  cfms_api_secret:
+    file: ${CFMS_API_SECRET_HOST_FILE:-/etc/docuflow/secrets/cfms_api_secret}
