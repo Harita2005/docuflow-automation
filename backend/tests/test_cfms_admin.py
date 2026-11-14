@@ -242,6 +242,76 @@ def test_network_retry_uses_new_request_id_and_same_idempotency_key(env):
     assert attempts[0][1] == attempts[1][1] == key
 
 
+def test_sync_now_complete_idempotency_flow(env):
+    """
+    Validates complete sync now flow:
+    - Invalid UUID formats (e.g. timestamp-random, plain strings) are rejected with 400
+    - Valid UUIDv4 is accepted, forwarded unchanged, and HMAC-signed
+    - Duplicate request with same key returns the existing job without creating a new one
+    - New synchronization request gets a new key
+    """
+    env.state["role_codes"] = {"cfms:sync"}
+
+    # 1. Invalid UUID formats rejected before reaching CFMS
+    invalid_keys = [
+        "1794654876123-0.893719472648",  # old fallback pattern
+        "not-a-uuid",
+        "12345",
+        "11111111-1111-1111-1111-111111111111",  # version 1, not 4
+        "",
+    ]
+    for bad_key in invalid_keys:
+        r = env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"},
+                            headers={"Idempotency-Key": bad_key})
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] in ("IDEMPOTENCY_KEY_REQUIRED", "INVALID_IDEMPOTENCY_KEY")
+    assert len(env.fake.requests) == 0  # None reached CFMS
+
+    # 2. Mock CFMS idempotency behavior
+    created_jobs = {}
+
+    def mock_cfms(req):
+        key = req.headers.get("idempotency-key")
+        if key in created_jobs:
+            return httpx.Response(202, json=created_jobs[key], headers={"Idempotent-Replayed": "true"})
+        job = {"jobId": f"J-{len(created_jobs) + 1}", "status": "PROCESSING"}
+        created_jobs[key] = job
+        return httpx.Response(202, json=job)
+
+    env.fake.reply = mock_cfms
+
+    # 3. First manual SYNC NOW request with valid UUIDv4
+    key1 = str(uuid.uuid4())
+    r1 = env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"},
+                         headers={"Idempotency-Key": key1})
+    assert r1.status_code == 202
+    assert r1.json()["jobId"] == "J-1"
+    assert len(env.fake.requests) == 1
+    sent1 = env.fake.requests[0]
+    assert sent1.headers["idempotency-key"] == key1.lower()
+    assert sent1.headers["x-cfms-signature"] == expected_signature(sent1)
+
+    # 4. Duplicate request with SAME key (re-click or network retry) -> returns original job without duplicate
+    r1_dup = env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-01"},
+                             headers={"Idempotency-Key": key1})
+    assert r1_dup.status_code == 202
+    assert r1_dup.json()["jobId"] == "J-1"  # same job returned
+    assert len(created_jobs) == 1
+
+    # 5. New synchronization request receives NEW key -> creates new job
+    cfms_admin.limiter.reset()  # reset rate window for second manual sync
+    key2 = str(uuid.uuid4())
+    assert key2 != key1
+    r2 = env.client.post("/api/admin/cfms/sync/now", json={"reportDate": "2026-11-02"},
+                         headers={"Idempotency-Key": key2})
+    assert r2.status_code == 202
+    assert r2.json()["jobId"] == "J-2"
+    assert len(created_jobs) == 2
+    sent2 = env.fake.requests[2]
+    assert sent2.headers["idempotency-key"] == key2.lower()
+    assert sent2.headers["x-cfms-signature"] == expected_signature(sent2)
+
+
 def test_cfms_unreachable_is_502(env):
     env.fake.fail_times = 2
     r = env.client.get("/api/admin/cfms/settings")

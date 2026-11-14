@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent as domFireEvent, waitFor, within } from '@testing-library/dom';
-import CustomerFeedbackSettings, { monthGrid, previewSlots, splitAddresses, shiftMonth, istToday, cfmsApi } from './CustomerFeedbackSettings.jsx';
+import CustomerFeedbackSettings, { monthGrid, previewSlots, splitAddresses, shiftMonth, istToday, cfmsApi, generateUUIDv4 } from './CustomerFeedbackSettings.jsx';
 
 // The npm workspace hoists React 18 (with @testing-library/react) to the repository root while the frontend
 // uses React 19, so these tests render with the frontend's own react-dom and query with @testing-library/dom.
@@ -80,6 +80,29 @@ describe('helpers', () => {
     await cfmsApi('PUT', '/email/sender', { body: { sender: 'a@x.com' }, idempotencyKey: 'ignored' });
     expect(global.fetch.mock.calls[0][1].headers['Idempotency-Key']).toBeUndefined();
   });
+  it('generateUUIDv4 produces RFC 4122 v4 compliant UUIDs across secure and insecure environments', () => {
+    const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // 1. Standard execution
+    const u1 = generateUUIDv4();
+    const u2 = generateUUIDv4();
+    expect(u1).toMatch(UUID_V4_RE);
+    expect(u2).toMatch(UUID_V4_RE);
+    expect(u1).not.toBe(u2);
+
+    // 2. Insecure HTTP context simulation (crypto.randomUUID is undefined)
+    const origRandomUUID = globalThis.crypto?.randomUUID;
+    try {
+      if (globalThis.crypto) {
+        delete globalThis.crypto.randomUUID;
+      }
+      const uInsecure = generateUUIDv4();
+      expect(uInsecure).toMatch(UUID_V4_RE);
+    } finally {
+      if (globalThis.crypto && origRandomUUID) {
+        globalThis.crypto.randomUUID = origRandomUUID;
+      }
+    }
+  });
 });
 
 describe('CustomerFeedbackSettings', () => {
@@ -134,7 +157,7 @@ describe('CustomerFeedbackSettings', () => {
     const posts = calls.filter((c) => c.key === 'POST /sync/now');
     expect(posts).toHaveLength(1);
     expect(posts[0].body).toEqual({ reportDate: istToday() });
-    expect(posts[0].init.headers['Idempotency-Key']).toMatch(/[0-9a-f-]{36}/);
+    expect(posts[0].init.headers['Idempotency-Key']).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     await screen.findByText(/COMPLETED/);
   });
 
