@@ -712,7 +712,47 @@ CATALOGUE = [
         "supported_scopes": "ALL",
         "legacy_code": "sync:execute",
     },
+    # --- Customer Feedback (CFMS) administration, Settings > Customer Feedback ---
+    {
+        "code": "cfms:view",
+        "name": "View Customer Feedback Settings, Calendar and Audit Logs",
+        "module": "cfms",
+        "subpage": "settings",
+        "action": "VIEW",
+        "supported_scopes": "ALL",
+        "legacy_code": None,
+    },
+    {
+        "code": "cfms:sync",
+        "name": "Schedule / Run Customer Feedback Synchronization",
+        "module": "cfms",
+        "subpage": "sync",
+        "action": "EXECUTE",
+        "supported_scopes": "ALL",
+        "legacy_code": None,
+    },
+    {
+        "code": "cfms:settings",
+        "name": "Edit Customer Feedback E-mail Settings",
+        "module": "cfms",
+        "subpage": "email",
+        "action": "EDIT",
+        "supported_scopes": "ALL",
+        "legacy_code": None,
+    },
+    {
+        "code": "cfms:admin",
+        "name": "Customer Feedback Super Admin (Salesforce password, login test, schedule)",
+        "module": "cfms",
+        "subpage": "admin",
+        "action": "ADMIN",
+        "supported_scopes": "ALL",
+        "legacy_code": None,
+    },
 ]
+
+# Never assigned automatically to the Administrator role: Super Admin only (grant explicitly).
+NOT_AUTO_ASSIGNED_TO_ADMIN = {"cfms:admin"}
 
 def seed_catalogue():
     db_url = settings.get_database_url()
@@ -755,7 +795,7 @@ def seed_catalogue():
         # 2. Assign all permissions to Administrator role
         admin_role = db.query(Role).filter(Role.code.ilike("admin")).first()
         if admin_role:
-            all_perms = db.query(Permission).all()
+            all_perms = [p for p in db.query(Permission).all() if p.code not in NOT_AUTO_ASSIGNED_TO_ADMIN]
             assigned_to_admin = 0
             for perm in all_perms:
                 rp = db.query(RolePermission).filter(
