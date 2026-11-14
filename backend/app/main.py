@@ -109,8 +109,14 @@ async def lifespan(app: FastAPI):
                     start_archive_scheduler()
                 except Exception as arch_err:
                     logger.warning(f"Starting database archival scheduler deferred: {arch_err}")
+
+                try:
+                    from .services.cfms_scheduler import start_cfms_scheduler
+                    start_cfms_scheduler(check_interval=30)
+                except Exception as cfms_sched_err:
+                    logger.warning(f"Starting CFMS scheduler deferred: {cfms_sched_err}")
             else:
-                logger.info("Background jobs (sync retry & archive scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
+                logger.info("Background jobs (sync retry, archive scheduler & CFMS scheduler) disabled (set RUN_BACKGROUND_JOBS=true to enable).")
             # Non-blocking pre-warm of PaddleOCR and Ollama for instant first-upload response
             def _warm_up_ai():
                 try:
@@ -152,6 +158,12 @@ async def lifespan(app: FastAPI):
             stop_archive_scheduler()
         except Exception as arch_stop_err:
             logger.warning(f"Shutdown archive scheduler cleanup: {arch_stop_err}")
+
+        try:
+            from .services.cfms_scheduler import stop_cfms_scheduler
+            stop_cfms_scheduler()
+        except Exception as cfms_stop_err:
+            logger.warning(f"Shutdown CFMS scheduler cleanup: {cfms_stop_err}")
 
 
 is_production = (settings.ENVIRONMENT or "").strip().lower() in ("production", "prod")

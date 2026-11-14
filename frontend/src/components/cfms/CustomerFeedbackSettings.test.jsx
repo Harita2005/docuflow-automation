@@ -100,7 +100,7 @@ describe('CustomerFeedbackSettings', () => {
     if (day) fireEvent.click(day);
     expect(screen.queryByText('Sync Now')).toBeNull();
     fireEvent.click(within(tabs).getByText('Automation Schedule'));
-    await screen.findByText(/cfms:admin permission/);
+    expect(screen.queryByText(/cfms:admin permission/)).toBeNull();
     expect(screen.queryByText('Save Schedule')).toBeNull();
   });
 
@@ -117,7 +117,7 @@ describe('CustomerFeedbackSettings', () => {
     expect((await screen.findByRole('button', { name: new RegExp(`^${today}`) })).disabled).toBe(false);
   });
 
-  it('Sync Now asks for confirmation, sends ONE Idempotency-Key per click and polls the job', async () => {
+  it('Sync Now immediately triggers synchronization, sends ONE Idempotency-Key per click and polls the job', async () => {
     mockFetch({
       'GET /settings': () => [200, SETTINGS],
       'GET /calendar': () => [200, { month: istToday().slice(0, 7), dates: {} }],
@@ -128,9 +128,8 @@ describe('CustomerFeedbackSettings', () => {
     });
     render(<CustomerFeedbackSettings permissions={ALL} />);
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${istToday()}`) }));
+    expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
     fireEvent.click(screen.getByText('Sync Now'));
-    expect(screen.getByText(`Synchronize report date ${istToday()} now? Records already in DocuFlow are skipped.`)).toBeTruthy();
-    fireEvent.click(screen.getByText('Synchronize'));
     await waitFor(() => expect(calls.some((c) => c.key === 'GET /jobs/J-7')).toBe(true));
     const posts = calls.filter((c) => c.key === 'POST /sync/now');
     expect(posts).toHaveLength(1);
@@ -139,26 +138,53 @@ describe('CustomerFeedbackSettings', () => {
     await screen.findByText(/COMPLETED/);
   });
 
-  it('Automation Schedule shows the fixed production banner and saves as "not active until approved"', async () => {
+  it('Automation Schedule contains ONLY Enable Automation, Execution Time, and Save Schedule', async () => {
     mockFetch({
       'GET /settings': () => [200, SETTINGS],
       'GET /calendar': () => [200, { month: '2026-11', dates: {} }],
       'GET /jobs': () => [200, { jobs: [] }],
-      'GET /schedule': () => [200, SETTINGS.schedule],
-      'PUT /schedule': () => [200, { ...SETTINGS.schedule, pending: { startTime: '09:00', attempts: 2, intervalMinutes: 30, slots: ['09:00', '09:30'], effectiveFrom: '2099-01-01' } }]
+      'GET /schedule': () => [200, { enabled: false, executionTime: '10:00', timezone: 'Asia/Kolkata' }],
+      'PUT /schedule': () => [200, { enabled: true, executionTime: '14:30', timezone: 'Asia/Kolkata' }]
     });
     render(<CustomerFeedbackSettings permissions={ALL} />);
     fireEvent.click(within(screen.getByRole('tablist')).getByText('Automation Schedule'));
-    await screen.findByText('Production schedule in use: 10:00, 11:00, 12:00, 13:00 IST (4 attempts).');
-    fireEvent.click(screen.getByText('Save Schedule'));
-    await screen.findByText(/Saved - not active until approved\. Changes take effect from the next day/);
-    expect(calls.find((c) => c.key === 'PUT /schedule').body).toEqual({ startTime: '10:00', attempts: 3, intervalMinutes: 60 });
+
+    await screen.findByRole('heading', { name: 'Automation Schedule' });
+    expect(screen.getByText('Times are India Standard Time (IST)')).toBeTruthy();
+    const toggle = screen.getByRole('switch', { name: 'Enable Automation' });
+    expect(toggle.checked).toBe(false);
+    const timeInput = screen.getByLabelText('Execution Time');
+    expect(timeInput.value).toBe('10:00');
+    const saveBtn = screen.getByText('Save Schedule');
+    expect(saveBtn).toBeTruthy();
+
+    expect(screen.queryByText(/Production schedule in use/i)).toBeNull();
+    expect(screen.queryByText(/Current \(saved\)/i)).toBeNull();
+    expect(screen.queryByText(/Pending/i)).toBeNull();
+    expect(screen.queryByText(/Attempts/i)).toBeNull();
+    expect(screen.queryByText(/Interval/i)).toBeNull();
+    expect(screen.queryByText(/Frequency/i)).toBeNull();
+    expect(screen.queryByText(/Weekday/i)).toBeNull();
+    expect(screen.queryByText(/Next execution time/i)).toBeNull();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(calls.some((c) => c.key === 'PUT /schedule' && c.body.enabled === true)).toBe(true));
+    await screen.findByText('Automation enabled successfully.');
+    expect(toggle.checked).toBe(true);
+
+    fireEvent.change(timeInput, { target: { value: '14:30' } });
+    fireEvent.click(saveBtn);
+
+    await screen.findByText('Schedule saved successfully.');
+    const puts = calls.filter((c) => c.key === 'PUT /schedule');
+    expect(puts[puts.length - 1].body).toEqual({ enabled: true, executionTime: '14:30' });
   });
 
   it('Salesforce password: fields are cleared after the response and never stored', async () => {
     mockFetch({ 'GET /settings': () => [200, SETTINGS], 'GET /calendar': () => [200, { month: '2026-11', dates: {} }], 'GET /jobs': () => [200, { jobs: [] }], 'PUT /salesforce/password': () => [204, null] });
     render(<CustomerFeedbackSettings permissions={ALL} />);
     fireEvent.click(within(screen.getByRole('tablist')).getByText('Salesforce Login'));
+    expect(screen.queryByLabelText(/Username/i)).toBeNull();
     const [pw, confirm] = screen.getAllByLabelText(/password/i).filter((e) => e.type === 'password');
     expect(pw.getAttribute('autocomplete')).toBe('new-password');
     fireEvent.change(pw, { target: { value: 'Secret-Pass-123' } });
@@ -206,5 +232,22 @@ describe('CustomerFeedbackSettings', () => {
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'FAILED' } });
     fireEvent.click(screen.getByText('Apply'));
     await waitFor(() => expect(calls.some((c) => c.key === 'GET /audit' && c.url.includes('status=FAILED') && c.url.includes('pageSize=50'))).toBe(true));
+  });
+
+  it('does not display service not configured error banners on 503 and renders Automation Schedule tab', async () => {
+    mockFetch({
+      'GET /settings': () => [503, { error: { code: 'CFMS_NOT_CONFIGURED', message: 'The Customer Feedback service is not configured on this server.' } }],
+      'GET /calendar': () => [503, { error: { code: 'CFMS_NOT_CONFIGURED', message: 'The Customer Feedback service is not configured on this server.' } }],
+      'GET /jobs': () => [503, { error: { code: 'CFMS_NOT_CONFIGURED', message: 'The Customer Feedback service is not configured on this server.' } }],
+      'GET /schedule': () => [503, { error: { code: 'CFMS_NOT_CONFIGURED', message: 'The Customer Feedback service is not configured on this server.' } }]
+    });
+    render(<CustomerFeedbackSettings permissions={ALL} />);
+    const tabs = screen.getByRole('tablist');
+    const scheduleTab = within(tabs).getByText('Automation Schedule');
+    expect(scheduleTab).toBeTruthy();
+    expect(screen.queryByText(/The Customer Feedback service is not configured on this server/i)).toBeNull();
+    fireEvent.click(scheduleTab);
+    expect(screen.queryByText(/The Customer Feedback service is not configured on this server/i)).toBeNull();
+    expect(screen.queryByText(/cfms:admin permission/)).toBeNull();
   });
 });

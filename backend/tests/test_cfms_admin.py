@@ -285,6 +285,10 @@ def test_schedule_validation(env):
     assert r.status_code == 422
     env.fake.reply = lambda req: httpx.Response(200, json={"mode": "fixed"})
     assert env.client.put("/api/admin/cfms/schedule", json={"startTime": "10:00", "attempts": 6, "intervalMinutes": 15}).status_code == 200
+    r_simple = env.client.put("/api/admin/cfms/schedule", json={"enabled": True, "executionTime": "15:45"})
+    assert r_simple.status_code == 200
+    assert r_simple.json()["enabled"] is True
+    assert r_simple.json()["executionTime"] == "15:45"
 
 
 def test_email_validation(env):

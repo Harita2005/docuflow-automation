@@ -66,7 +66,7 @@ class TokenResponse(BaseModel):
     model_config = pydantic.ConfigDict(extra="allow")
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
+    current_password: Optional[str] = None
     new_password: str
 
 class ForgotPasswordRequest(BaseModel):

@@ -93,11 +93,19 @@ class Settings(BaseSettings):
         trust_cert = "yes" if self.trust_server_certificate else "no"
 
         if self.DB_USER and self.DB_PASSWORD:
-            user = quote_plus(self.DB_USER)
-            pwd = quote_plus(self.DB_PASSWORD)
-            return (
-                f"mssql+pyodbc://{user}:{pwd}@{host}:{port}/{self.DB_NAME}?driver={driver}&TrustServerCertificate={trust_cert}"
-            )
+            from sqlalchemy.engine import URL
+            return URL.create(
+                drivername="mssql+pyodbc",
+                username=self.DB_USER,
+                password=self.DB_PASSWORD,
+                host=host,
+                port=port,
+                database=self.DB_NAME,
+                query={
+                    "driver": self.DB_DRIVER,
+                    "TrustServerCertificate": trust_cert,
+                },
+            ).render_as_string(hide_password=False)
         return (
             f"mssql+pyodbc://@{host}:{port}/{self.DB_NAME}?driver={driver}&trusted_connection=yes&TrustServerCertificate={trust_cert}"
         )

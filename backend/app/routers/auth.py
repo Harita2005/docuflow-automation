@@ -839,9 +839,12 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be empty.")
     if len(new_pwd) < 6:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 6 characters long.")
-    # Validate current password
-    if not check_user_password(current_user, curr_pwd, db):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+    # Validate current password if provided or required
+    if curr_pwd:
+        if not check_user_password(current_user, curr_pwd, db):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+    elif not getattr(current_user, "must_change_password", False):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is required.")
     # Disallow setting new password equal to employee_id
     norm_new = re.sub(r'[\s_\-]+', '', new_pwd.upper())
     norm_emp = re.sub(r'[\s_\-]+', '', (current_user.employee_id or '').upper())

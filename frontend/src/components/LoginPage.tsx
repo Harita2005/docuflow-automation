@@ -946,26 +946,6 @@ export default function LoginPage({
               </div>
 
               <form onSubmit={handleSubmitFirstTimeChange} className="space-y-4 pt-1">
-                {/* Current password (Employee ID) */}
-                <div className="space-y-1.5">
-                  <label htmlFor="firsttime-current-password" className="text-xs font-semibold text-gray-800">
-                    Current Password / Employee ID
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                      <Lock className="h-4 w-4" />
-                    </div>
-                    <input
-                      id="firsttime-current-password"
-                      name="current_password"
-                      type="text"
-                      disabled
-                      value={passwordInput || pendingAuthData?.user?.employee_id || employeeId}
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono"
-                    />
-                  </div>
-                </div>
-
                 {/* New password */}
                 <div className="space-y-1.5">
                   <label htmlFor="firsttime-new-password" className="text-xs font-semibold text-gray-800">

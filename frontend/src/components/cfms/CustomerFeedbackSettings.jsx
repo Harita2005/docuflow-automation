@@ -6,7 +6,7 @@
  * for the retry of that click. Controls are hidden without permission; the backend still enforces them.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Clock, KeyRound, Mail, ScrollText, Loader2, RefreshCw, ChevronLeft, ChevronRight, Trash2, ShieldAlert, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Clock3, KeyRound, Mail, ScrollText, Loader2, RefreshCw, ChevronLeft, ChevronRight, Trash2, ShieldAlert, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 const BASE = '/api/admin/cfms';
 const IDEMPOTENT = new Set(['POST /sync/now', 'POST /sync/schedule', 'POST /salesforce/login-test', 'PUT /salesforce/password']);
@@ -108,7 +108,11 @@ const Card = ({ title, subtitle, icon: Icon, children, actions }) => (
   <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
     <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100">
       <div className="flex items-center gap-2">
-        {Icon && <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[#003F28] to-[#00452B] text-white flex items-center justify-center"><Icon className="h-3.5 w-3.5" /></div>}
+        {Icon && (
+          <div className="h-7 w-7 rounded-md bg-gradient-to-br from-[#003F28] to-[#00452B] text-white flex items-center justify-center shrink-0">
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          </div>
+        )}
         <div>
           <h3 className="text-xs font-bold text-slate-900">{title}</h3>
           {subtitle && <p className="text-[10px] text-slate-500">{subtitle}</p>}
@@ -120,8 +124,22 @@ const Card = ({ title, subtitle, icon: Icon, children, actions }) => (
   </div>
 );
 
+const isServiceNotConfigured = (content) => {
+  if (!content) return false;
+  if (typeof content === 'string') {
+    return content.includes('Customer Feedback service is not configured') || content.includes('CFMS_NOT_CONFIGURED');
+  }
+  if (Array.isArray(content)) {
+    return content.some(isServiceNotConfigured);
+  }
+  if (content?.props?.children) {
+    return isServiceNotConfigured(content.props.children);
+  }
+  return false;
+};
+
 const Notice = ({ type = 'info', children }) => {
-  if (!children) return null;
+  if (!children || isServiceNotConfigured(children)) return null;
   const cls = type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-700';
   return <div role={type === 'error' ? 'alert' : 'status'} className={`text-[11px] border rounded-md px-3 py-2 ${cls}`}>{children}</div>;
 };
@@ -176,7 +194,6 @@ function CalendarSync({ can, onChanged }) {
   const [jobs, setJobs] = useState([]);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(null);
-  const [confirm, setConfirm] = useState(false);
 
   const [reload, setReload] = useState(0); // bump to refresh calendar and recent requests
 
@@ -208,16 +225,16 @@ function CalendarSync({ can, onChanged }) {
     cfmsApi('GET', `/audit?q=${encodeURIComponent(selected)}&page=1&pageSize=1`).then((r) => setLastRun(r.ok ? (r.data.rows || [])[0] || null : null)).catch(() => setLastRun(null));
   }, [selected]);
 
-  const act = async (kind) => {
+  const act = async () => {
     const key = newKey();
-    setBusy(kind); setMsg(null);
+    setBusy('now'); setMsg(null);
     try {
-      const r = await cfmsApi('POST', kind === 'now' ? '/sync/now' : '/sync/schedule', { body: { reportDate: selected }, idempotencyKey: key });
+      const r = await cfmsApi('POST', '/sync/now', { body: { reportDate: selected }, idempotencyKey: key });
       if (!r.ok) { setMsg({ type: 'error', text: r.message }); return; }
-      if (kind === 'now') { setMsg({ type: 'info', text: `Synchronization of ${selected} started. Checking progress every 5 seconds...` }); poller.start(r.data.jobId); }
-      else setMsg({ type: 'success', text: `Report date ${selected} scheduled for ${fmtIst(r.data.runAt)}.` });
+      setMsg({ type: 'info', text: `Synchronization of ${selected} started. Checking progress every 5 seconds...` });
+      poller.start(r.data.jobId);
       refresh();
-    } catch { setMsg({ type: 'error', text: 'The DocuFlow server could not be reached.' }); } finally { setBusy(null); setConfirm(false); }
+    } catch { setMsg({ type: 'error', text: 'The DocuFlow server could not be reached.' }); } finally { setBusy(null); }
   };
 
   const cancel = async (jobId) => {
@@ -275,23 +292,16 @@ function CalendarSync({ can, onChanged }) {
               </div>
               {can.sync ? (
                 <div className="flex flex-wrap gap-2">
-                  <Btn variant="secondary" busy={busy === 'schedule'} disabled={Boolean(busy)} onClick={() => act('schedule')}>Schedule</Btn>
-                  <Btn busy={busy === 'now'} disabled={Boolean(busy) || (poller.job && !TERMINAL.has(poller.job.status))} onClick={() => setConfirm(true)}>Sync Now</Btn>
+                  <Btn busy={busy === 'now'} disabled={Boolean(busy) || (poller.job && !TERMINAL.has(poller.job.status))} onClick={act}>Sync Now</Btn>
                 </div>
               ) : <p className="text-[10px] text-slate-500">You can view the calendar. Synchronization needs the cfms:sync permission.</p>}
-              {confirm && (
-                <div className="border border-amber-200 bg-amber-50 rounded-md p-3 space-y-2" role="dialog" aria-label="Confirm synchronization">
-                  <p className="text-[11px] text-amber-900">Synchronize report date {selected} now? Records already in DocuFlow are skipped.</p>
-                  <div className="flex gap-2"><Btn busy={busy === 'now'} onClick={() => act('now')}>Synchronize</Btn><Btn variant="secondary" onClick={() => setConfirm(false)}>Cancel</Btn></div>
-                </div>
-              )}
               {poller.job && !TERMINAL.has(poller.job.status) && <Notice>Job {poller.job.jobId}: {poller.job.status}...</Notice>}
             </>
           )}
           <Notice type={msg?.type}>{msg?.text}</Notice>
         </Card>
 
-        <Card title="Recent requests" subtitle="Last 20 synchronization and login-test jobs" icon={Clock} actions={<Btn variant="secondary" aria-label="Refresh" onClick={() => setReload((n) => n + 1)}><RefreshCw className="h-3 w-3" /></Btn>}>
+        <Card title="Recent requests" subtitle="Last 20 synchronization and login-test jobs" icon={Clock3} actions={<Btn variant="secondary" aria-label="Refresh" onClick={() => setReload((n) => n + 1)}><RefreshCw className="h-3 w-3" /></Btn>}>
           {jobs.length === 0 ? <p className="text-[11px] text-slate-500">No requests yet.</p> : (
             <div className="overflow-x-auto"><table className="w-full text-[11px]">
               <thead><tr className="text-left text-[10px] text-slate-500"><th className="py-1">Type</th><th>Report date</th><th>Status</th><th>Requested</th><th>Run at</th><th /></tr></thead>
@@ -312,65 +322,104 @@ function CalendarSync({ can, onChanged }) {
 
 // ---------------------------------------------------------------- 2. Automation Schedule
 function AutomationSchedule({ can }) {
-  const [view, setView] = useState(null);
-  const [form, setForm] = useState({ startTime: '10:00', attempts: 3, intervalMinutes: 60 });
+  const [enabled, setEnabled] = useState(false);
+  const [executionTime, setExecutionTime] = useState('10:00');
   const [msg, setMsg] = useState(null);
-  const [errors, setErrors] = useState([]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const r = await cfmsApi('GET', '/schedule').catch(() => null);
     if (r && r.ok) {
-      setView(r.data);
-      const src = r.data.pending || r.data.current;
-      if (src) setForm({ startTime: src.startTime, attempts: src.attempts, intervalMinutes: src.intervalMinutes });
-    } else if (r) setMsg({ type: 'error', text: r.message });
+      if (typeof r.data?.enabled === 'boolean') {
+        setEnabled(r.data.enabled);
+      }
+      const time = r.data?.execution_time || r.data?.executionTime || r.data?.startTime;
+      if (time) {
+        setExecutionTime(time);
+      }
+    } else if (r) {
+      if (r.message && !r.message.includes('Customer Feedback service is not configured') && r.data?.error?.code !== 'CFMS_NOT_CONFIGURED') {
+        setMsg({ type: 'error', text: r.message });
+      }
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const preview = previewSlots(form.startTime, form.attempts, form.intervalMinutes);
-  const save = async () => {
-    setBusy(true); setMsg(null); setErrors([]);
-    const r = await cfmsApi('PUT', '/schedule', { body: { startTime: form.startTime, attempts: Number(form.attempts), intervalMinutes: Number(form.intervalMinutes) } }).catch(() => null);
+  const toggleAutomation = async (newVal) => {
+    if (!can.admin || busy) return;
+    setBusy(true); setMsg(null);
+    const r = await cfmsApi('PUT', '/schedule', { body: { enabled: newVal, executionTime } }).catch(() => null);
     setBusy(false);
-    if (!r) { setMsg({ type: 'error', text: 'The DocuFlow server could not be reached.' }); return; }
-    if (!r.ok) { setErrors(r.data?.errors || []); setMsg({ type: 'error', text: r.message }); return; }
-    setView(r.data);
-    setMsg({ type: 'success', text: 'Saved - not active until approved. Changes take effect from the next day (IST).' });
+    if (!r) {
+      setMsg({ type: 'error', text: 'The DocuFlow server could not be reached.' });
+      return;
+    }
+    if (!r.ok) {
+      setMsg({ type: 'error', text: r.message || 'Failed to update schedule in database.' });
+      return;
+    }
+    if (typeof r.data?.enabled === 'boolean') {
+      setEnabled(r.data.enabled);
+    } else {
+      setEnabled(newVal);
+    }
+    if (r.data?.execution_time || r.data?.executionTime) {
+      setExecutionTime(r.data.execution_time || r.data.executionTime);
+    }
+    setMsg({ type: 'success', text: `Automation ${newVal ? 'enabled' : 'disabled'} successfully.` });
   };
 
-  const slots = (s) => (s && s.slots ? s.slots.join(', ') : '-');
+  const save = async () => {
+    if (!can.admin || busy) return;
+    setBusy(true); setMsg(null);
+    const r = await cfmsApi('PUT', '/schedule', { body: { enabled, executionTime } }).catch(() => null);
+    setBusy(false);
+    if (!r) { setMsg({ type: 'error', text: 'The DocuFlow server could not be reached.' }); return; }
+    if (!r.ok) {
+      setMsg({ type: 'error', text: r.message || 'Failed to update schedule in database.' });
+      return;
+    }
+    if (typeof r.data?.enabled === 'boolean') setEnabled(r.data.enabled);
+    if (r.data?.execution_time || r.data?.executionTime) {
+      setExecutionTime(r.data.execution_time || r.data.executionTime);
+    }
+    setMsg({ type: 'success', text: 'Schedule saved successfully.' });
+  };
+
   return (
-    <Card title="Automation Schedule" subtitle="Times are India Standard Time (IST)" icon={Clock}>
-      {view && view.mode === 'fixed' && (
-        <Notice type="warning">Production schedule in use: {(view.production?.slots || ['10:00', '11:00', '12:00', '13:00']).join(', ')} IST ({view.production?.attempts ?? 4} attempts).</Notice>
-      )}
-      {view && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
-          <div className="border border-slate-200 rounded-md p-3"><div className="font-bold text-slate-800 mb-1">Current (saved)</div>
-            <div>{view.current ? `${view.current.startTime}, ${view.current.attempts} attempt(s), every ${view.current.intervalMinutes} min` : '-'}</div>
-            <div className="text-slate-500">Slots: {slots(view.current)}</div>
-            {view.mode === 'fixed' && <div className="text-amber-700 font-bold mt-1">Saved - not active until approved</div>}</div>
-          <div className="border border-slate-200 rounded-md p-3"><div className="font-bold text-slate-800 mb-1">Pending</div>
-            {view.pending ? (<><div>{`${view.pending.startTime}, ${view.pending.attempts} attempt(s), every ${view.pending.intervalMinutes} min`}</div>
-              <div className="text-slate-500">Slots: {slots(view.pending)}</div><div className="text-slate-500">Effective from: {view.pending.effectiveFrom}</div>
-              {view.mode === 'fixed' && <div className="text-amber-700 font-bold mt-1">Saved - not active until approved</div>}</>) : <div>-</div>}</div>
+    <Card title="Automation Schedule" subtitle="Times are India Standard Time (IST)" icon={Clock3}>
+      <div className="space-y-4 max-w-sm">
+        <label className="relative inline-flex items-center cursor-pointer select-none">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Enable Automation"
+            checked={enabled}
+            onChange={(e) => toggleAutomation(e.target.checked)}
+            disabled={!can.admin || busy}
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#003F28]"></div>
+          <span className="ml-3 text-xs font-bold text-slate-800">Enable Automation</span>
+        </label>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-600 mb-1">Execution Time</label>
+          <input
+            type="time"
+            aria-label="Execution Time"
+            className={inputCls}
+            value={executionTime}
+            onChange={(e) => setExecutionTime(e.target.value)}
+            disabled={!can.admin || busy}
+          />
         </div>
-      )}
-      {can.admin ? (
-        <div className="border-t border-slate-100 pt-3 space-y-2">
-          <div className="grid grid-cols-3 gap-2">
-            <label className="text-[10px] font-bold text-slate-600">Start time (IST)<input type="time" className={inputCls} value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></label>
-            <label className="text-[10px] font-bold text-slate-600">Attempts (1-6)<input type="number" min="1" max="6" className={inputCls} value={form.attempts} onChange={(e) => setForm({ ...form, attempts: e.target.value })} /></label>
-            <label className="text-[10px] font-bold text-slate-600">Interval (15-240 min)<input type="number" min="15" max="240" className={inputCls} value={form.intervalMinutes} onChange={(e) => setForm({ ...form, intervalMinutes: e.target.value })} /></label>
-          </div>
-          <p className="text-[11px] text-slate-600">Preview: {preview ? preview.join(', ') + ' IST' : 'invalid values (the last attempt must be before 23:59 IST)'}</p>
-          <p className="text-[10px] text-slate-500">Saving does not change production. Saved values apply from the next day (IST), and only after the configurable scheduler is approved.</p>
-          {errors.length > 0 && <ul className="text-[11px] text-red-700 list-disc pl-5">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
-          <Btn busy={busy} disabled={!preview} onClick={save}>Save Schedule</Btn>
-        </div>
-      ) : <p className="text-[10px] text-slate-500">Changing the schedule needs the cfms:admin permission.</p>}
-      <Notice type={msg?.type}>{msg?.text}</Notice>
+
+        {can.admin && (
+          <Btn busy={busy} onClick={save}>Save Schedule</Btn>
+        )}
+        <Notice type={msg?.type}>{msg?.text}</Notice>
+      </div>
     </Card>
   );
 }
@@ -419,14 +468,13 @@ function SalesforceLogin({ settings }) {
   const running = poller.job && !TERMINAL.has(poller.job.status);
   return (
     <Card title="Salesforce Login" subtitle="Super Admin only. The password is sent to CFMS and never stored in the browser." icon={KeyRound}>
-      <label className="block text-[10px] font-bold text-slate-600">Username<input className={`${inputCls} bg-slate-50`} value={sf.username || ''} readOnly /></label>
       <div className="text-[10px] text-slate-500">
         {sf.passwordUpdatedAt ? `Password last changed by ${sf.passwordUpdatedBy || '-'} on ${fmtIst(sf.passwordUpdatedAt)}.` : 'Password change date unknown.'}
         {sf.lastLoginTest ? ` Last login test: ${sf.lastLoginTest.result} (${fmtIst(sf.lastLoginTest.at)}, ${sf.lastLoginTest.by || '-'}).` : ''}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <label className="text-[10px] font-bold text-slate-600">New password<input type="password" autoComplete="new-password" className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} maxLength={256} /></label>
-        <label className="text-[10px] font-bold text-slate-600">Confirm password<input type="password" autoComplete="new-password" className={inputCls} value={confirm} onChange={(e) => setConfirm(e.target.value)} maxLength={256} /></label>
+        <label className="text-[10px] font-bold text-slate-600">New password<input type="password" autoComplete="new-password" required className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} maxLength={256} /></label>
+        <label className="text-[10px] font-bold text-slate-600">Confirm password<input type="password" autoComplete="new-password" required className={inputCls} value={confirm} onChange={(e) => setConfirm(e.target.value)} maxLength={256} /></label>
       </div>
       {mismatch && <p className="text-[11px] text-red-700">The passwords do not match.</p>}
       <div className="flex flex-wrap gap-2">
@@ -578,7 +626,7 @@ function AuditLogs({ refreshToken }) {
 // ---------------------------------------------------------------- container
 const SECTIONS = [
   { id: 'calendar', label: 'Calendar & Sync', icon: CalendarDays, perm: 'cfms:view' },
-  { id: 'schedule', label: 'Automation Schedule', icon: Clock, perm: 'cfms:view' },
+  { id: 'schedule', label: 'Automation Schedule', icon: Clock3, perm: 'cfms:view' },
   { id: 'salesforce', label: 'Salesforce Login', icon: KeyRound, perm: 'cfms:admin' },
   { id: 'email', label: 'Email Settings', icon: Mail, perm: 'cfms:settings' },
   { id: 'audit', label: 'Audit Logs', icon: ScrollText, perm: 'cfms:view' }
@@ -595,7 +643,17 @@ export default function CustomerFeedbackSettings({ permissions = [] }) {
   const loadSettings = useCallback(async () => {
     if (!can.view) return;
     const r = await cfmsApi('GET', '/settings').catch(() => null);
-    if (r && r.ok) { setSettings(r.data); setError(null); } else setError(r ? r.message : 'The DocuFlow server could not be reached.');
+    if (r && r.ok) {
+      setSettings(r.data);
+      setError(null);
+    } else {
+      const errText = r ? r.message : 'The DocuFlow server could not be reached.';
+      if (errText && (errText.includes('Customer Feedback service is not configured') || r?.data?.error?.code === 'CFMS_NOT_CONFIGURED')) {
+        setError(null);
+      } else {
+        setError(errText);
+      }
+    }
   }, [can.view]);
   useEffect(() => { loadSettings(); }, [loadSettings]);
   useEffect(() => { if (section && !visible.some((s) => s.id === section)) setSection(visible[0]?.id || null); }, [visible, section]);
@@ -609,7 +667,7 @@ export default function CustomerFeedbackSettings({ permissions = [] }) {
         {visible.map((s) => (
           <button key={s.id} type="button" role="tab" aria-selected={section === s.id} onClick={() => setSection(s.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${section === s.id ? 'bg-[#FFBF00] text-[#002F20] shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-            <s.icon className="h-3.5 w-3.5" />{s.label}
+            <s.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>{s.label}</span>
           </button>
         ))}
       </div>

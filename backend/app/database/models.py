@@ -58,6 +58,7 @@ __all__ = [
     "IntegrationAuditHistory",
     "DocumentTypeFieldConfiguration",
     "ArchiveSetting",
+    "CfmsAutomationSchedule",
 ]
 class Division(Base):
     __tablename__ = "divisions"
@@ -1438,4 +1439,26 @@ class ArchiveSetting(Base):
         default=datetime.datetime.utcnow,
         onupdate=datetime.datetime.utcnow,
     )
+
+
+# ---------------------------------------------------------------------------
+# CFMS Customer Feedback Automation Schedule
+# ---------------------------------------------------------------------------
+
+class CfmsAutomationSchedule(Base):
+    __tablename__ = "cfms_automation_schedule"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    enabled = Column(Boolean, default=False, nullable=False)
+    execution_time = Column(String(10), default="10:00", nullable=False)  # HH:MM in Asia/Kolkata
+    last_run_date = Column(String(10), nullable=True)  # YYYY-MM-DD (IST) to ensure run once per day & survive restarts
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_status = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
+
 
